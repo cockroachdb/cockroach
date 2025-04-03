@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -84,7 +85,7 @@ func requireRelocationFailure(
 			nonVoterTargets,
 			true, /* transferLeaseToFirstVoter */
 		)
-		if kv.IsExpectedRelocateError(err) {
+		if kvtestutils.IsExpectedRelocateError(err) {
 			return err
 		}
 		require.Regexp(t, errRegExp, err)

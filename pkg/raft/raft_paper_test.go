@@ -180,7 +180,7 @@ func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 		r.becomeCandidate()
 	}
 
-	for i := int64(1); i < 2*et; i++ {
+	for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
 		r.tick()
 	}
 	r.advanceMessagesAfterAppend()
@@ -309,6 +309,7 @@ func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
 	et := int64(10)
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	r.electionTimeoutJitter = et
 	timeouts := make(map[int64]bool)
 	for round := int64(0); round < 50*et; round++ {
 		switch state {
@@ -661,22 +662,22 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
-	term := uint64(8)
+	ents := index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
+	term := uint64(9)
 	for i, tt := range [][]pb.Entry{
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
-		index(0).terms(0, 1, 1, 1, 4, 4, 4, 4),
-		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6),
+		index(1).terms(1, 1, 1, 4, 4),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
+		index(1).terms(1, 1, 1, 4, 4, 4, 4),
+		index(1).terms(1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		leadStorage.Append(ents)
+		require.NoError(t, leadStorage.Append(ents))
 		lead := newTestRaft(1, 10, 1, leadStorage)
 		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		followerStorage.Append(tt)
+		require.NoError(t, followerStorage.Append(tt))
 		follower := newTestRaft(2, 10, 1, followerStorage)
 		follower.loadState(pb.HardState{Term: term - 1})
 		// It is necessary to have a three-node cluster.
@@ -712,7 +713,7 @@ func TestVoteRequest(t *testing.T) {
 		})
 		r.readMessages()
 
-		for i := int64(1); i < r.electionTimeout*2; i++ {
+		for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
 			r.tickElection()
 		}
 
@@ -823,7 +824,7 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	// ignore further messages to refresh followers' commit index
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
+	r.raftLog.appliedTo(r.raftLog.committed)
 	r.raftLog.stableTo(r.raftLog.unstable.mark())
 }
 

@@ -41,7 +41,8 @@ func StorePlanDiagram(
 		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		flowSpecs := p.GenerateFlowSpecs()
+		flowSpecs, cleanup := p.GenerateFlowSpecs()
+		defer cleanup(flowSpecs)
 		_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs,
 			execinfrapb.DiagramFlags{})
 		if err != nil {

@@ -8,19 +8,16 @@ package base
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
@@ -29,8 +26,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// This file implements method receivers for members of server.Config struct
-// -- 'Stores' and 'JoinList', which satisfies pflag's value interface
+// This file implements method receivers for server.Config struct
+// -- 'Stores', which satisfies pflag's value interface
 
 // MinimumStoreSize is the smallest size in bytes that a store can have. This
 // number is based on config's defaultZoneConfig's RangeMaxBytes, which is
@@ -51,109 +48,6 @@ func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 		return "", errors.Wrapf(err, "could not find absolute path for %s %s", fieldName, p)
 	}
 	return ret, nil
-}
-
-// SizeSpec contains size in different kinds of formats supported by CLI(%age, bytes).
-type SizeSpec struct {
-	// InBytes is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size. This value is not
-	// actually used by the engine and thus not enforced.
-	InBytes int64
-	Percent float64
-}
-
-type intInterval struct {
-	min *int64
-	max *int64
-}
-
-type floatInterval struct {
-	min *float64
-	max *float64
-}
-
-// NewSizeSpec parses the string passed into a --size flag and returns a
-// SizeSpec if it is correctly parsed.
-func NewSizeSpec(
-	field redact.SafeString, value string, bytesRange *intInterval, percentRange *floatInterval,
-) (SizeSpec, error) {
-	var size SizeSpec
-	if fractionRegex.MatchString(value) {
-		percentFactor := 100.0
-		factorValue := value
-		if value[len(value)-1] == '%' {
-			percentFactor = 1.0
-			factorValue = value[:len(value)-1]
-		}
-		var err error
-		size.Percent, err = strconv.ParseFloat(factorValue, 64)
-		size.Percent *= percentFactor
-		if err != nil {
-			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
-		}
-		if percentRange != nil {
-			if (percentRange.min != nil && size.Percent < *percentRange.min) ||
-				(percentRange.max != nil && size.Percent > *percentRange.max) {
-				return SizeSpec{}, errors.Newf(
-					"%s size (%s) must be between %f%% and %f%%",
-					field,
-					value,
-					*percentRange.min,
-					*percentRange.max,
-				)
-			}
-		}
-	} else {
-		var err error
-		size.InBytes, err = humanizeutil.ParseBytes(value)
-		if err != nil {
-			return SizeSpec{}, errors.Wrapf(err, "could not parse %s size (%s)", field, value)
-		}
-		if bytesRange != nil {
-			if bytesRange.min != nil && size.InBytes < *bytesRange.min {
-				return SizeSpec{}, errors.Newf("%s size (%s) must be larger than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.min))
-			}
-			if bytesRange.max != nil && size.InBytes > *bytesRange.max {
-				return SizeSpec{}, errors.Newf("%s size (%s) must be smaller than %s",
-					field, value, humanizeutil.IBytes(*bytesRange.max))
-			}
-		}
-	}
-	return size, nil
-}
-
-// String returns a string representation of the SizeSpec. This is part
-// of pflag's value interface.
-func (ss *SizeSpec) String() string {
-	var buffer bytes.Buffer
-	if ss.InBytes != 0 {
-		fmt.Fprintf(&buffer, "--size=%s,", humanizeutil.IBytes(ss.InBytes))
-	}
-	if ss.Percent != 0 {
-		fmt.Fprintf(&buffer, "--size=%s%%,", humanize.Ftoa(ss.Percent))
-	}
-	return buffer.String()
-}
-
-// Type returns the underlying type in string form. This is part of pflag's
-// value interface.
-func (ss *SizeSpec) Type() string {
-	return "SizeSpec"
-}
-
-var _ pflag.Value = &SizeSpec{}
-
-// Set adds a new value to the StoreSpecValue. It is the important part of
-// pflag's value interface.
-func (ss *SizeSpec) Set(value string) error {
-	spec, err := NewSizeSpec("specified", value, nil, nil)
-	if err != nil {
-		return err
-	}
-	ss.InBytes = spec.InBytes
-	ss.Percent = spec.Percent
-	return nil
 }
 
 // ProvisionedRateSpec is an optional part of the StoreSpec.
@@ -199,8 +93,8 @@ func newStoreProvisionedRateSpec(
 // to the --store flag.
 type StoreSpec struct {
 	Path        string
-	Size        SizeSpec
-	BallastSize *SizeSpec
+	Size        storagepb.SizeSpec
+	BallastSize *storagepb.SizeSpec
 	InMemory    bool
 	Attributes  roachpb.Attributes
 	// StickyVFSID is a unique identifier associated with a given store which
@@ -214,10 +108,8 @@ type StoreSpec struct {
 	// delete_range_flush_delay=2s
 	// flush_split_bytes=4096
 	PebbleOptions string
-	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
-	// through to C CCL code to set up encryption-at-rest.  Must be set if and
-	// only if encryption is enabled, otherwise left empty.
-	EncryptionOptions []byte
+	// EncryptionOptions is set if encryption is enabled.
+	EncryptionOptions *storagepb.EncryptionOptions
 	// ProvisionedRateSpec is optional.
 	ProvisionedRateSpec ProvisionedRateSpec
 }
@@ -232,15 +124,15 @@ func (ss StoreSpec) String() string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.Size.InBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.InBytes))
+	if ss.Size.Capacity > 0 {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Capacity))
 	}
 	if ss.Size.Percent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
 	}
 	if ss.BallastSize != nil {
-		if ss.BallastSize.InBytes > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.InBytes))
+		if ss.BallastSize.Capacity > 0 {
+			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Capacity))
 		}
 		if ss.BallastSize.Percent > 0 {
 			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
@@ -275,22 +167,8 @@ func (ss StoreSpec) String() string {
 
 // IsEncrypted returns whether the StoreSpec has encryption enabled.
 func (ss StoreSpec) IsEncrypted() bool {
-	return len(ss.EncryptionOptions) > 0
+	return ss.EncryptionOptions != nil
 }
-
-// fractionRegex is the regular expression that recognizes whether
-// the specified size is a fraction of the total available space.
-// Proportional sizes can be expressed as fractional numbers, either
-// in absolute value or with a trailing "%" sign. A fractional number
-// without a trailing "%" must be recognized by the presence of a
-// decimal separator; numbers without decimal separators are plain
-// sizes in bytes (separate case in the parsing).
-// The first part of the regexp matches NNN.[MMM]; the second part
-// [NNN].MMM, and the last part matches explicit percentages with or
-// without a decimal separator.
-// Values smaller than 1% and 100% are rejected after parsing using
-// a separate check.
-var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%))$`)
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
@@ -354,11 +232,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64 = MinimumStoreSize
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
-			ss.Size, err = NewSizeSpec(
+			ss.Size, err = storagepb.NewSizeSpec(
 				"store",
 				value,
-				&intInterval{min: &minBytesAllowed},
-				&floatInterval{min: &minPercent, max: &maxPercent},
+				&storagepb.IntInterval{Min: &minBytesAllowed},
+				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -367,11 +245,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64
 			var minPercent float64 = 0
 			var maxPercent float64 = 50
-			ballastSize, err := NewSizeSpec(
+			ballastSize, err := storagepb.NewSizeSpec(
 				"ballast",
 				value,
-				&intInterval{min: &minBytesAllowed},
-				&floatInterval{min: &minPercent, max: &maxPercent},
+				&storagepb.IntInterval{Min: &minBytesAllowed},
+				&storagepb.FloatInterval{Min: &minPercent, Max: &maxPercent},
 			)
 			if err != nil {
 				return StoreSpec{}, err
@@ -448,7 +326,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Path != "" {
 			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
 		}
-		if ss.Size.Percent == 0 && ss.Size.InBytes == 0 {
+		if ss.Size.Percent == 0 && ss.Size.Capacity == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
 		if ss.BallastSize != nil {
@@ -567,57 +445,51 @@ func (ssl *StoreSpecList) Set(value string) error {
 	return nil
 }
 
-// JoinListType is a slice of strings that implements pflag's value
-// interface.
-type JoinListType []string
+// PopulateWithEncryptionOpts iterates through the EncryptionSpecList and looks
+// for matching paths in the StoreSpecList and WAL failover config. Any
+// unmatched EncryptionSpec causes an error.
+func PopulateWithEncryptionOpts(
+	storeSpecs StoreSpecList,
+	walFailoverConfig *storagepb.WALFailover,
+	encryptionSpecs storagepb.EncryptionSpecList,
+) error {
+	for _, es := range encryptionSpecs.Specs {
+		var found bool
+		for i := range storeSpecs.Specs {
+			if !es.PathMatches(storeSpecs.Specs[i].Path) {
+				continue
+			}
 
-// String returns a string representation of all the JoinListType. This is part
-// of pflag's value interface.
-func (jls JoinListType) String() string {
-	var buffer bytes.Buffer
-	for _, jl := range jls {
-		fmt.Fprintf(&buffer, "--join=%s ", jl)
-	}
-	// Trim the extra space from the end if it exists.
-	if l := buffer.Len(); l > 0 {
-		buffer.Truncate(l - 1)
-	}
-	return buffer.String()
-}
+			// Found a matching path.
+			if storeSpecs.Specs[i].EncryptionOptions != nil {
+				return fmt.Errorf("store with path %s already has an encryption setting",
+					storeSpecs.Specs[i].Path)
+			}
 
-// Type returns the underlying type in string form. This is part of pflag's
-// value interface.
-func (jls *JoinListType) Type() string {
-	return "string"
-}
+			storeSpecs.Specs[i].EncryptionOptions = &es.Options
+			found = true
+			break
+		}
 
-// Set adds a new value to the JoinListType. It is the important part of
-// pflag's value interface.
-func (jls *JoinListType) Set(value string) error {
-	if strings.TrimSpace(value) == "" {
-		// No value, likely user error.
-		return errors.New("no address specified in --join")
-	}
-	for _, v := range strings.Split(value, ",") {
-		v = strings.TrimSpace(v)
-		if v == "" {
-			// --join=a,,b  equivalent to --join=a,b
-			continue
+		for _, externalPath := range [2]storagepb.ExternalPath{walFailoverConfig.Path, walFailoverConfig.PrevPath} {
+			if !externalPath.IsSet() || !es.PathMatches(externalPath.Path) {
+				continue
+			}
+			// NB: The external paths WALFailoverConfig.Path and
+			// WALFailoverConfig.PrevPath are only ever set in single-store
+			// configurations. In multi-store with among-stores failover mode, these
+			// will be empty (so we won't encounter the same path twice).
+			if externalPath.Encryption != nil {
+				return fmt.Errorf("WAL failover path %s already has an encryption setting",
+					externalPath.Path)
+			}
+			externalPath.Encryption = &es.Options
+			found = true
 		}
-		// Try splitting the address. This validates the format
-		// of the address and tolerates a missing delimiter colon
-		// between the address and port number.
-		addr, port, err := addr.SplitHostPort(v, "")
-		if err != nil {
-			return err
+
+		if !found {
+			return fmt.Errorf("no usage of path %s found for encryption setting: %v", es.Path, es)
 		}
-		// Default the port if unspecified.
-		if len(port) == 0 {
-			port = DefaultPort
-		}
-		// Re-join the parts. This guarantees an address that
-		// will be valid for net.SplitHostPort().
-		*jls = append(*jls, net.JoinHostPort(addr, port))
 	}
 	return nil
 }

@@ -1,0 +1,27 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.sem.idxtype;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype";
+
+import "gogoproto/gogo.proto";
+
+// T represents different types of indexes that can be defined on a table.
+enum T {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // FORWARD is a standard relational index, containing at most one entry for
+  // each row in the table (if a partial index, a table row may not have a
+  // corresponding entry in the index).
+  FORWARD = 0;
+  // INVERTED indexes can contain multiple entries for each row in the table,
+  // which is useful for indexing collection or composite data types like JSONB,
+  // ARRAY, and GEOGRAPHY.
+  INVERTED = 1;
+  // VECTOR indexes high-dimensional vectors to enable rapid similarity search
+  // using an approximate nearest neighbor (ANN) algorithm.
+  VECTOR = 2;
+};

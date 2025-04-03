@@ -628,6 +628,9 @@ type CumulativeTestCaseSpec struct {
 	// DatabaseName contains the name of the database on which the schema change
 	// is applied.
 	DatabaseName string
+
+	// CreateDatabaseStmt contains the CREATE DATABASE statement for the database.
+	CreateDatabaseStmt string
 }
 
 func (cs CumulativeTestCaseSpec) run(t *testing.T, fn func(t *testing.T)) bool {
@@ -659,6 +662,7 @@ func cumulativeTestForEachPostCommitStage(
 		var postCommitCount, postCommitNonRevertibleCount int
 		var after [][]string
 		var dbName string
+		var createDatabaseStmt string
 		prepfn := func(db *gosql.DB, p scplan.Plan) {
 			for _, s := range p.Stages {
 				switch s.Phase {
@@ -673,6 +677,8 @@ func cumulativeTestForEachPostCommitStage(
 			dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
 			if ok {
 				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+				res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", dbName))
+				createDatabaseStmt = res[0][0]
 			}
 			after = tdb.QueryStr(t, fetchDescriptorStateQuery)
 		}
@@ -694,6 +700,7 @@ func cumulativeTestForEachPostCommitStage(
 				StagesCount:        postCommitCount,
 				After:              after,
 				DatabaseName:       dbName,
+				CreateDatabaseStmt: createDatabaseStmt,
 			})
 		}
 		for stageOrdinal := 1; stageOrdinal <= postCommitNonRevertibleCount; stageOrdinal++ {
@@ -704,6 +711,7 @@ func cumulativeTestForEachPostCommitStage(
 				StagesCount:        postCommitNonRevertibleCount,
 				After:              after,
 				DatabaseName:       dbName,
+				CreateDatabaseStmt: createDatabaseStmt,
 			})
 		}
 		var hasFailed bool
@@ -872,14 +880,15 @@ func executeSchemaChangeTxn(
 			_, err = conn.ExecContext(
 				ctx, "SET experimental_enable_temp_tables=true",
 			)
-			_, err = conn.ExecContext(
-				ctx, "SET enable_row_level_security=true",
-			)
 			if err != nil {
 				return err
 			}
 			var tx *gosql.Tx
 			tx, err = conn.BeginTx(ctx, nil)
+			if err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, "SET LOCAL autocommit_before_ddl = false")
 			if err != nil {
 				return err
 			}

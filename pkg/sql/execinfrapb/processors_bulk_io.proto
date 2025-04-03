@@ -33,10 +33,7 @@ import "cloud/cloudpb/external_storage.proto";
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 message BackfillerSpec {
-  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
-  // dropped, the new way to send the job tag is using 'job_tag' in the
-  // SetupFlowRequest message.
-  optional int64 job_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  reserved 13; // job_id
   enum Type {
     Invalid = 0;
     Column = 1;
@@ -64,9 +61,9 @@ message BackfillerSpec {
   optional uint64 update_chunk_size_threshold_bytes = 14 [(gogoproto.nullable) = false];
 
   // WriteAsOf is the time that the backfill entries should be written.
-  // Note: Older nodes may also use this as the read time instead of readAsOf.
   optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
+  // This is only used by the column backfiller.
   optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   // IndexesToBackfill is the set of indexes to backfill. This is populated only
@@ -82,12 +79,13 @@ message BackfillerSpec {
   // timestamp, even if the request gets pushed server-side. This ensures the
   // writes comply with the timestamp cache and closed timestamp. See also
   // AddSSTableRequest.SSTTimestampToRequestTimestamp.
-  //
-  // Note that older nodes do not respect this flag so callers should
-  // check MVCCAddSSTable before setting this option.
   optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
 
-  // NEXTID: 15.
+  // SourceIndexID is the source index that will be used for this backfill. If
+  // the value of 0 is specified then the primary index will be used implicitly.
+  optional uint32 source_index_id = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+
+  // NEXTID: 17.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -537,7 +535,8 @@ message LogicalReplicationWriterSpec {
 
     optional string metrics_label = 11 [(gogoproto.nullable) = false];
 
-    // Next ID: 13.
+    repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 13;
+    // Next ID: 14.
 }
 
 message LogicalReplicationOfflineScanSpec {

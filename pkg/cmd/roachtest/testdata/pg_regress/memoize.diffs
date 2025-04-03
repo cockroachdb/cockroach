@@ -1,0 +1,569 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --label=/mnt/data1/postgres/src/test/regress/results/memoize.out /mnt/data1/postgres/src/test/regress/expected/memoize.out /mnt/data1/postgres/src/test/regress/results/memoize.out
+--- /mnt/data1/postgres/src/test/regress/expected/memoize.out
++++ /mnt/data1/postgres/src/test/regress/results/memoize.out
+@@ -28,36 +28,48 @@
+     end loop;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ -- Ensure we get a memoize node on the inner side of the nested loop
+ SET enable_hashjoin TO off;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan TO off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT explain_memoize('
+ SELECT COUNT(*),AVG(t1.unique1) FROM tenk1 t1
+ INNER JOIN tenk1 t2 ON t1.unique1 = t2.twenty
+ WHERE t2.unique1 < 1000;', false);
+-                                      explain_memoize                                      
+--------------------------------------------------------------------------------------------
+- Aggregate (actual rows=1 loops=N)
+-   ->  Nested Loop (actual rows=1000 loops=N)
+-         ->  Seq Scan on tenk1 t2 (actual rows=1000 loops=N)
+-               Filter: (unique1 < 1000)
+-               Rows Removed by Filter: 9000
+-         ->  Memoize (actual rows=1 loops=N)
+-               Cache Key: t2.twenty
+-               Cache Mode: logical
+-               Hits: 980  Misses: 20  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-               ->  Index Only Scan using tenk1_unique1 on tenk1 t1 (actual rows=1 loops=N)
+-                     Index Cond: (unique1 = t2.twenty)
+-                     Heap Fetches: N
+-(12 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ -- And check we get the expected results.
+ SELECT COUNT(*),AVG(t1.unique1) FROM tenk1 t1
+ INNER JOIN tenk1 t2 ON t1.unique1 = t2.twenty
+ WHERE t2.unique1 < 1000;
+- count |        avg         
+--------+--------------------
+-  1000 | 9.5000000000000000
++ count |          avg          
++-------+-----------------------
++  1000 | 9.5000000000000000000
+ (1 row)
+ 
+ -- Try with LATERAL joins
+@@ -66,36 +78,46 @@
+ LATERAL (SELECT t2.unique1 FROM tenk1 t2
+          WHERE t1.twenty = t2.unique1 OFFSET 0) t2
+ WHERE t1.unique1 < 1000;', false);
+-                                      explain_memoize                                      
+--------------------------------------------------------------------------------------------
+- Aggregate (actual rows=1 loops=N)
+-   ->  Nested Loop (actual rows=1000 loops=N)
+-         ->  Seq Scan on tenk1 t1 (actual rows=1000 loops=N)
+-               Filter: (unique1 < 1000)
+-               Rows Removed by Filter: 9000
+-         ->  Memoize (actual rows=1 loops=N)
+-               Cache Key: t1.twenty
+-               Cache Mode: binary
+-               Hits: 980  Misses: 20  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-               ->  Index Only Scan using tenk1_unique1 on tenk1 t2 (actual rows=1 loops=N)
+-                     Index Cond: (unique1 = t1.twenty)
+-                     Heap Fetches: N
+-(12 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ -- And check we get the expected results.
+ SELECT COUNT(*),AVG(t2.unique1) FROM tenk1 t1,
+ LATERAL (SELECT t2.unique1 FROM tenk1 t2
+          WHERE t1.twenty = t2.unique1 OFFSET 0) t2
+ WHERE t1.unique1 < 1000;
+- count |        avg         
+--------+--------------------
+-  1000 | 9.5000000000000000
++ count |          avg          
++-------+-----------------------
++  1000 | 9.5000000000000000000
+ (1 row)
+ 
+ -- Reduce work_mem and hash_mem_multiplier so that we see some cache evictions
+ SET work_mem TO '64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET hash_mem_multiplier TO 1.0;
++ERROR:  unrecognized configuration parameter "hash_mem_multiplier"
+ SET enable_mergejoin TO off;
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure we get some evictions.  We're unable to validate the hits and misses
+ -- here as the number of entries that fit in the cache at once will vary
+ -- between different machines.
+@@ -103,61 +125,21 @@
+ SELECT COUNT(*),AVG(t1.unique1) FROM tenk1 t1
+ INNER JOIN tenk1 t2 ON t1.unique1 = t2.thousand
+ WHERE t2.unique1 < 1200;', true);
+-                                      explain_memoize                                      
+--------------------------------------------------------------------------------------------
+- Aggregate (actual rows=1 loops=N)
+-   ->  Nested Loop (actual rows=1200 loops=N)
+-         ->  Seq Scan on tenk1 t2 (actual rows=1200 loops=N)
+-               Filter: (unique1 < 1200)
+-               Rows Removed by Filter: 8800
+-         ->  Memoize (actual rows=1 loops=N)
+-               Cache Key: t2.thousand
+-               Cache Mode: logical
+-               Hits: N  Misses: N  Evictions: N  Overflows: 0  Memory Usage: NkB
+-               ->  Index Only Scan using tenk1_unique1 on tenk1 t1 (actual rows=1 loops=N)
+-                     Index Cond: (unique1 = t2.thousand)
+-                     Heap Fetches: N
+-(12 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ CREATE TABLE flt (f float);
+ CREATE INDEX flt_f_idx ON flt (f);
+ INSERT INTO flt VALUES('-0.0'::float),('+0.0'::float);
+ ANALYZE flt;
+ SET enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- Ensure memoize operates in logical mode
+ SELECT explain_memoize('
+ SELECT * FROM flt f1 INNER JOIN flt f2 ON f1.f = f2.f;', false);
+-                                explain_memoize                                
+--------------------------------------------------------------------------------
+- Nested Loop (actual rows=4 loops=N)
+-   ->  Index Only Scan using flt_f_idx on flt f1 (actual rows=2 loops=N)
+-         Heap Fetches: N
+-   ->  Memoize (actual rows=2 loops=N)
+-         Cache Key: f1.f
+-         Cache Mode: logical
+-         Hits: 1  Misses: 1  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-         ->  Index Only Scan using flt_f_idx on flt f2 (actual rows=2 loops=N)
+-               Index Cond: (f = f1.f)
+-               Heap Fetches: N
+-(10 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ -- Ensure memoize operates in binary mode
+ SELECT explain_memoize('
+ SELECT * FROM flt f1 INNER JOIN flt f2 ON f1.f >= f2.f;', false);
+-                                explain_memoize                                
+--------------------------------------------------------------------------------
+- Nested Loop (actual rows=4 loops=N)
+-   ->  Index Only Scan using flt_f_idx on flt f1 (actual rows=2 loops=N)
+-         Heap Fetches: N
+-   ->  Memoize (actual rows=2 loops=N)
+-         Cache Key: f1.f
+-         Cache Mode: binary
+-         Hits: 0  Misses: 2  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-         ->  Index Only Scan using flt_f_idx on flt f2 (actual rows=2 loops=N)
+-               Index Cond: (f <= f1.f)
+-               Heap Fetches: N
+-(10 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ DROP TABLE flt;
+ -- Exercise Memoize in binary mode with a large fixed width type and a
+ -- varlena type.
+@@ -165,103 +147,65 @@
+ CREATE INDEX strtest_n_idx ON strtest (n);
+ CREATE INDEX strtest_t_idx ON strtest (t);
+ INSERT INTO strtest VALUES('one','one'),('two','two'),('three',repeat(fipshash('three'),100));
++ERROR:  unknown function: fipshash()
+ -- duplicate rows so we get some cache hits
+ INSERT INTO strtest SELECT * FROM strtest;
+ ANALYZE strtest;
+ -- Ensure we get 3 hits and 3 misses
+ SELECT explain_memoize('
+ SELECT * FROM strtest s1 INNER JOIN strtest s2 ON s1.n >= s2.n;', false);
+-                                 explain_memoize                                  
+-----------------------------------------------------------------------------------
+- Nested Loop (actual rows=24 loops=N)
+-   ->  Seq Scan on strtest s1 (actual rows=6 loops=N)
+-   ->  Memoize (actual rows=4 loops=N)
+-         Cache Key: s1.n
+-         Cache Mode: binary
+-         Hits: 3  Misses: 3  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-         ->  Index Scan using strtest_n_idx on strtest s2 (actual rows=4 loops=N)
+-               Index Cond: (n <= s1.n)
+-(8 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ -- Ensure we get 3 hits and 3 misses
+ SELECT explain_memoize('
+ SELECT * FROM strtest s1 INNER JOIN strtest s2 ON s1.t >= s2.t;', false);
+-                                 explain_memoize                                  
+-----------------------------------------------------------------------------------
+- Nested Loop (actual rows=24 loops=N)
+-   ->  Seq Scan on strtest s1 (actual rows=6 loops=N)
+-   ->  Memoize (actual rows=4 loops=N)
+-         Cache Key: s1.t
+-         Cache Mode: binary
+-         Hits: 3  Misses: 3  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-         ->  Index Scan using strtest_t_idx on strtest s2 (actual rows=4 loops=N)
+-               Index Cond: (t <= s1.t)
+-(8 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ DROP TABLE strtest;
+ -- Ensure memoize works with partitionwise join
+ SET enable_partitionwise_join TO on;
++ERROR:  unrecognized configuration parameter "enable_partitionwise_join"
+ CREATE TABLE prt (a int) PARTITION BY RANGE(a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE prt (a int) PARTITION BY RANGE(a)
++                                              ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE prt_p1 PARTITION OF prt FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE prt_p1 PARTITION OF prt FOR VALUES FROM (0) TO (10)
++                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE prt_p2 PARTITION OF prt FOR VALUES FROM (10) TO (20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE prt_p2 PARTITION OF prt FOR VALUES FROM (10) TO (20)
++                    ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO prt VALUES (0), (0), (0), (0);
++ERROR:  relation "prt" does not exist
+ INSERT INTO prt VALUES (10), (10), (10), (10);
++ERROR:  relation "prt" does not exist
+ CREATE INDEX iprt_p1_a ON prt_p1 (a);
++ERROR:  relation "prt_p1" does not exist
+ CREATE INDEX iprt_p2_a ON prt_p2 (a);
++ERROR:  relation "prt_p2" does not exist
+ ANALYZE prt;
++ERROR:  relation "prt" does not exist
+ SELECT explain_memoize('
+ SELECT * FROM prt t1 INNER JOIN prt t2 ON t1.a = t2.a;', false);
+-                                     explain_memoize                                      
+-------------------------------------------------------------------------------------------
+- Append (actual rows=32 loops=N)
+-   ->  Nested Loop (actual rows=16 loops=N)
+-         ->  Index Only Scan using iprt_p1_a on prt_p1 t1_1 (actual rows=4 loops=N)
+-               Heap Fetches: N
+-         ->  Memoize (actual rows=4 loops=N)
+-               Cache Key: t1_1.a
+-               Cache Mode: logical
+-               Hits: 3  Misses: 1  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-               ->  Index Only Scan using iprt_p1_a on prt_p1 t2_1 (actual rows=4 loops=N)
+-                     Index Cond: (a = t1_1.a)
+-                     Heap Fetches: N
+-   ->  Nested Loop (actual rows=16 loops=N)
+-         ->  Index Only Scan using iprt_p2_a on prt_p2 t1_2 (actual rows=4 loops=N)
+-               Heap Fetches: N
+-         ->  Memoize (actual rows=4 loops=N)
+-               Cache Key: t1_2.a
+-               Cache Mode: logical
+-               Hits: 3  Misses: 1  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-               ->  Index Only Scan using iprt_p2_a on prt_p2 t2_2 (actual rows=4 loops=N)
+-                     Index Cond: (a = t1_2.a)
+-                     Heap Fetches: N
+-(21 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ -- Ensure memoize works with parameterized union-all Append path
+ SET enable_partitionwise_join TO off;
++ERROR:  unrecognized configuration parameter "enable_partitionwise_join"
+ SELECT explain_memoize('
+ SELECT * FROM prt_p1 t1 INNER JOIN
+ (SELECT * FROM prt_p1 UNION ALL SELECT * FROM prt_p2) t2
+ ON t1.a = t2.a;', false);
+-                                   explain_memoize                                   
+--------------------------------------------------------------------------------------
+- Nested Loop (actual rows=16 loops=N)
+-   ->  Index Only Scan using iprt_p1_a on prt_p1 t1 (actual rows=4 loops=N)
+-         Heap Fetches: N
+-   ->  Memoize (actual rows=4 loops=N)
+-         Cache Key: t1.a
+-         Cache Mode: logical
+-         Hits: 3  Misses: 1  Evictions: Zero  Overflows: 0  Memory Usage: NkB
+-         ->  Append (actual rows=4 loops=N)
+-               ->  Index Only Scan using iprt_p1_a on prt_p1 (actual rows=4 loops=N)
+-                     Index Cond: (a = t1.a)
+-                     Heap Fetches: N
+-               ->  Index Only Scan using iprt_p2_a on prt_p2 (actual rows=0 loops=N)
+-                     Index Cond: (a = t1.a)
+-                     Heap Fetches: N
+-(14 rows)
+-
++ERROR:  unknown function: explain_memoize()
+ DROP TABLE prt;
++ERROR:  relation "prt" does not exist
+ RESET enable_partitionwise_join;
++ERROR:  unrecognized configuration parameter "enable_partitionwise_join"
+ -- Exercise Memoize code that flushes the cache when a parameter changes which
+ -- is not part of the cache key.
+ -- Ensure we get a Memoize plan
+@@ -272,23 +216,11 @@
+ 	SELECT 1 FROM tenk1 t1
+ 	INNER JOIN tenk1 t2 ON t1.unique1 = t2.hundred
+ 	WHERE t0.ten = t1.twenty AND t0.two <> t2.four OFFSET 0);
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Index Scan using tenk1_unique1 on tenk1 t0
+-   Index Cond: (unique1 < 3)
+-   Filter: (SubPlan 1)
+-   SubPlan 1
+-     ->  Nested Loop
+-           ->  Index Scan using tenk1_hundred on tenk1 t2
+-                 Filter: (t0.two <> four)
+-           ->  Memoize
+-                 Cache Key: t2.hundred
+-                 Cache Mode: logical
+-                 ->  Index Scan using tenk1_unique1 on tenk1 t1
+-                       Index Cond: (unique1 = t2.hundred)
+-                       Filter: (t0.ten = twenty)
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure the above query returns the correct result
+ SELECT unique1 FROM tenk1 t0
+ WHERE unique1 < 3
+@@ -302,49 +234,182 @@
+ (1 row)
+ 
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_mergejoin;
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET work_mem;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET hash_mem_multiplier;
++ERROR:  unrecognized configuration parameter "hash_mem_multiplier"
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_hashjoin;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test parallel plans with Memoize
+ SET min_parallel_table_scan_size TO 0;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_setup_cost TO 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_tuple_cost TO 0;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET max_parallel_workers_per_gather TO 2;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure we get a parallel plan.
+ EXPLAIN (COSTS OFF)
+ SELECT COUNT(*),AVG(t2.unique1) FROM tenk1 t1,
+ LATERAL (SELECT t2.unique1 FROM tenk1 t2 WHERE t1.twenty = t2.unique1) t2
+ WHERE t1.unique1 < 1000;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Nested Loop
+-                     ->  Parallel Bitmap Heap Scan on tenk1 t1
+-                           Recheck Cond: (unique1 < 1000)
+-                           ->  Bitmap Index Scan on tenk1_unique1
+-                                 Index Cond: (unique1 < 1000)
+-                     ->  Memoize
+-                           Cache Key: t1.twenty
+-                           Cache Mode: logical
+-                           ->  Index Only Scan using tenk1_unique1 on tenk1 t2
+-                                 Index Cond: (unique1 = t1.twenty)
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- And ensure the parallel plan gives us the correct results.
+ SELECT COUNT(*),AVG(t2.unique1) FROM tenk1 t1,
+ LATERAL (SELECT t2.unique1 FROM tenk1 t2 WHERE t1.twenty = t2.unique1) t2
+ WHERE t1.unique1 < 1000;
+- count |        avg         
+--------+--------------------
+-  1000 | 9.5000000000000000
++ count |          avg          
++-------+-----------------------
++  1000 | 9.5000000000000000000
+ (1 row)
+ 
+ RESET max_parallel_workers_per_gather;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET parallel_tuple_cost;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET parallel_setup_cost;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET min_parallel_table_scan_size;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++

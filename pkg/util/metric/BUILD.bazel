@@ -61,6 +61,7 @@ go_test(
         "//pkg/testutils/echotest",
         "//pkg/util/buildutil",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",

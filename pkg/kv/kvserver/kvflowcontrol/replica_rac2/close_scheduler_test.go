@@ -84,8 +84,8 @@ func TestStreamCloseScheduler(t *testing.T) {
 			stopper = stop.NewStopper()
 			clock = timeutil.NewManualTime(timeutil.UnixEpoch)
 			raftScheduler = &testingRaftScheduler{clock: clock}
-			closeScheduler = NewStreamCloseScheduler(stopper, clock, raftScheduler)
-			require.NoError(t, closeScheduler.Start(ctx))
+			closeScheduler = NewStreamCloseScheduler(clock, raftScheduler)
+			require.NoError(t, closeScheduler.Start(ctx, stopper))
 			return fmt.Sprintf("now=%vs", clock.Now().Unix())
 
 		case "schedule":

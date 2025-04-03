@@ -122,13 +122,20 @@ func TestConcurrentGrants(t *testing.T) {
 		cg.Go(func() error {
 			wg.Wait()
 			// txn2
-			_, err := db.Exec(fmt.Sprintf("BEGIN PRIORITY %s; GRANT developer TO user2; COMMIT", priority))
+			_, err := db.Exec(fmt.Sprintf(`
+BEGIN PRIORITY %s;
+SET LOCAL autocommit_before_ddl = false;
+GRANT developer TO user2;
+COMMIT`,
+				priority))
 			return err
 		})
 
 		txn1, err := db.Begin()
 		require.NoError(t, err)
 		_, err = txn1.Exec(fmt.Sprintf("SET TRANSACTION PRIORITY %s", priority))
+		require.NoError(t, err)
+		_, err = txn1.Exec("SET LOCAL autocommit_before_ddl = false;")
 		require.NoError(t, err)
 		_, err = txn1.Exec("GRANT developer TO user1")
 		require.NoError(t, err)

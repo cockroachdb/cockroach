@@ -234,6 +234,7 @@ func (r Row) forEachColumn(fn ColumnFn, colIndexes []int) error {
 type ResultColumn struct {
 	colinfo.ResultColumn
 	Computed  bool
+	Nullable  bool
 	ord       int
 	sqlString string
 }
@@ -300,6 +301,7 @@ func NewEventDescriptor(
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
 			Computed:  col.IsComputed(),
+			Nullable:  col.IsNullable(),
 			ord:       ord,
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		}
@@ -688,6 +690,39 @@ func (it iter) Datum(fn DatumFn) error {
 func (it iter) Col(fn ColumnFn) error {
 	return it.r.forEachColumn(fn, it.cols)
 }
+
+// NewSkipIterator returns an iterator that skips columns with the specified name.
+func NewSkipIterator(it Iterator, skipColName string) Iterator {
+	return skipIter{it: it, skipColName: skipColName}
+}
+
+// skipIter wraps an Iterator with the ability to skip one column.
+type skipIter struct {
+	it          Iterator
+	skipColName string
+}
+
+// Col implements Iterator.
+func (s skipIter) Col(fn ColumnFn) error {
+	return s.it.Col(func(col ResultColumn) error {
+		if col.Name == s.skipColName {
+			return nil
+		}
+		return fn(col)
+	})
+}
+
+// Datum implements Iterator.
+func (s skipIter) Datum(fn DatumFn) error {
+	return s.it.Datum(func(d tree.Datum, col ResultColumn) error {
+		if col.Name == s.skipColName {
+			return nil
+		}
+		return fn(d, col)
+	})
+}
+
+var _ Iterator = skipIter{}
 
 // TestingMakeEventRow initializes Row with provided arguments.
 // Exposed for unit tests.

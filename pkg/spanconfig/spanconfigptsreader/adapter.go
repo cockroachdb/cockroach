@@ -7,17 +7,16 @@ package spanconfigptsreader
 
 import (
 	"context"
-	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 // adapter implements the spanconfig.ProtectedTSReader interface and is intended
@@ -72,20 +71,19 @@ func (a *adapter) GetProtectionTimestamps(
 // TestingRefreshPTSState refreshes the in-memory protected timestamp state to
 // at least asOf.
 func TestingRefreshPTSState(
-	ctx context.Context,
-	t *testing.T,
-	protectedTSReader spanconfig.ProtectedTSReader,
-	asOf hlc.Timestamp,
+	ctx context.Context, protectedTSReader spanconfig.ProtectedTSReader, asOf hlc.Timestamp,
 ) error {
 	a, ok := protectedTSReader.(*adapter)
 	if !ok {
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
 	// First refresh the cache past asOf.
-	require.NoError(t, a.cache.Refresh(ctx, asOf))
+	if err := a.cache.Refresh(ctx, asOf); err != nil {
+		return err
+	}
 
 	// Now ensure the KVSubscriber is fresh enough.
-	testutils.SucceedsSoon(t, func() error {
+	return retry.ForDuration(200*time.Second, func() error {
 		_, fresh, err := a.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 		if err != nil {
 			return err
@@ -95,5 +93,4 @@ func TestingRefreshPTSState(
 		}
 		return nil
 	})
-	return nil
 }

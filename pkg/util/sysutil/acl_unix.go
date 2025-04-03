@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !windows && !plan9
-// +build !windows,!plan9
 
 package sysutil
 

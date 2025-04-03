@@ -22,12 +22,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -293,6 +293,24 @@ func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterf
 	return s
 }
 
+var ConfigureSlimTestServer func(params base.TestServerArgs) base.TestServerArgs
+
+func StartSlimServerOnly(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) TestServerInterface {
+	params.SlimServerConfig(slimOpts...)
+	return StartServerOnly(t, params)
+}
+
+func StartSlimServer(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartSlimServerOnly(t, params, slimOpts...)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
+}
+
 // StartServer creates and starts a test server.
 // The returned server should be stopped by calling
 // server.Stopper().Stop().
@@ -338,7 +356,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+	pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
@@ -493,7 +511,7 @@ func WaitForTenantCapabilities(
 	t TestFataler,
 	s TestServerInterface,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilities.ID]string,
+	targetCaps map[tenantcapabilitiespb.ID]string,
 	errPrefix string,
 ) {
 	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)

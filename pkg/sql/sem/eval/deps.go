@@ -547,13 +547,16 @@ type PreparedStatementState interface {
 // interface only work on the gateway node (i.e. not from
 // distributed processors).
 type ClientNoticeSender interface {
-	// BufferClientNotice buffers the notice to send to the client.
-	// This is flushed before the connection is closed.
+	// BufferClientNotice buffers the notice in the command result to send to the
+	// client. This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	// SendClientNotice immediately flushes the notice to the client. This is used
-	// to implement PLpgSQL RAISE statements; most cases should use
+	// SendClientNotice immediately flushes the notice to the client.
+	// SendNotice sends the given notice to the client. The notice will be in
+	// the client communication buffer until it is flushed. Flushing can be forced
+	// to occur immediately by setting immediateFlush to true.
+	// This is used to implement PLpgSQL RAISE statements; most cases should use
 	// BufferClientNotice.
-	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
 }
 
 // DeferredRoutineSender allows a nested routine to send the information needed
@@ -654,7 +657,7 @@ type ChangefeedState interface {
 	SetHighwater(frontier hlc.Timestamp)
 
 	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(checkpoint jobspb.ChangefeedProgress_Checkpoint)
+	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap)
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
@@ -759,4 +762,8 @@ type AsOfSystemTime struct {
 	// This is be zero if there is no maximum bound.
 	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
+
+	// ForBackfill indicates if this AOST expression was added to an operation
+	// that requires a backfill, like CREATE TABLE AS.
+	ForBackfill bool
 }

@@ -7,6 +7,7 @@ package jobs_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,7 +78,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	// Write kA = v1.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job1.InfoStorage(txn)
-		return infoStorage.Write(ctx, kA, v1)
+		return infoStorage.WriteFirstKey(ctx, kA, v1)
 	}))
 	// Write kD = v2.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -363,7 +365,8 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 func TestJobProgressAndStatusAccessors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql := sqlutils.MakeSQLRunner(conn)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
@@ -420,6 +423,7 @@ func TestJobProgressAndStatusAccessors(t *testing.T) {
 		require.Equal(t, 0.5, fraction)
 		require.True(t, resolved.IsEmpty())
 		require.True(t, !before.After(when))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT fraction from system.job_progress_history where job_id = %d", job1.ID()), [][]string{{"0.5"}, {"0.2"}})
 
 		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
 			fraction, resolved, when, err = job2.ProgressStorage().Get(ctx, txn)
@@ -552,6 +556,69 @@ func TestJobProgressAndStatusAccessors(t *testing.T) {
 		require.Equal(t, expJ2Msg, j2Messages)
 	})
 
-	// TODO(dt): lower the retention settings for progress_history and messages to
-	// observe the pruning behavior in action.
+	t.Run("progress-history-retention", func(t *testing.T) {
+		sql.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = 1", "jobs.retained_progress_entries"))
+		defer func() {
+			sql.Exec(t, fmt.Sprintf("RESET CLUSTER SETTING %s", "jobs.retained_progress_entries"))
+		}()
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.ProgressStorage().Set(ctx, txn, 0.8, hlc.Timestamp{})
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.ProgressStorage().Set(ctx, txn, 0.9, hlc.Timestamp{})
+		}))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT fraction from system.job_progress_history where job_id = %d", job1.ID()), [][]string{{"0.9"}})
+	})
+	t.Run("message-retention", func(t *testing.T) {
+		job3 := createJob(3)
+		sql.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = 1", "jobs.retained_messages"))
+		defer func() {
+			sql.Exec(t, fmt.Sprintf("RESET CLUSTER SETTING %s", "jobs.retained_messages"))
+		}()
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job3.Messages().Record(ctx, txn, "k1", "foo")
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job3.Messages().Record(ctx, txn, "k1", "bar")
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job3.Messages().Record(ctx, txn, "k2", "baz")
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job3.Messages().Record(ctx, txn, "k2", "boo")
+		}))
+		var j3Messages []jobs.JobMessage
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			var err error
+			j3Messages, err = job3.Messages().Fetch(ctx, txn)
+			if err != nil {
+				return err
+			}
+			return nil
+		}))
+		// Blank the written timestamps so we can compare to our expectation.
+		for i := range j3Messages {
+			j3Messages[i].Written = time.Time{}
+		}
+		require.Equal(t, []jobs.JobMessage{{Kind: "k2", Message: "boo"}, {Kind: "k1", Message: "bar"}}, j3Messages)
+	})
+
+	t.Run("unique-key-violation-defense", func(t *testing.T) {
+		job4 := createJob(4)
+		sql.Exec(t, "INSERT INTO system.job_progress VALUES ($1, now(), 0.2)", job4.ID())
+		sql.Exec(t, "INSERT INTO system.job_progress VALUES ($1, now(), 0.5)", job4.ID())
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			// Ensure the progress is updated and the duplicate job_id record is removed.
+			return job4.ProgressStorage().Set(ctx, txn, 0.8, hlc.Timestamp{})
+		}))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT fraction from system.job_progress where job_id = %d", job4.ID()), [][]string{{"0.8"}})
+
+		sql.Exec(t, "INSERT INTO system.job_status VALUES ($1, now(), 'a')", job4.ID())
+		sql.Exec(t, "INSERT INTO system.job_status VALUES ($1, now(), 'b')", job4.ID())
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			// Ensure the status is updated and the duplicate job_id record is removed.
+			return job4.StatusStorage().Set(ctx, txn, "c")
+		}))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.job_status where job_id = %d", job4.ID()), [][]string{{"c"}})
+	})
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -168,6 +169,59 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	SlimTestSeverConfig *SlimTestServerConfig
+}
+
+type slimOptions struct {
+	EnableSpanConfigJob bool
+	EnableAutoStats     bool
+	EnableTimeseries    bool
+	EnableAllUpgrades   bool
+}
+
+type SlimServerOption func(*slimOptions)
+
+func WithSpanConfigJob() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableSpanConfigJob = true
+	}
+}
+
+func WithAutoStats() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAutoStats = true
+	}
+}
+
+func WithTimeseries() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableTimeseries = true
+	}
+}
+
+func WithAllUpgrades() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAllUpgrades = true
+	}
+}
+
+func processOptions(opts []SlimServerOption) *slimOptions {
+	ret := &slimOptions{}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
+}
+
+func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
+	a.SlimTestSeverConfig = &SlimTestServerConfig{
+		Options: *processOptions(opts),
+	}
+}
+
+type SlimTestServerConfig struct {
+	Options slimOptions
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -465,6 +519,34 @@ func TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
 	}
 }
 
+// TestSkippedForExternalModeDueToPerformance can be used to disable selecting
+// the external process virtual cluster due to significant performance
+// degradation compared to other modes. However, the goal is to eventually make
+// it work efficiently in external mode.
+//
+// It should link to a github issue with label C-investigation.
+func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestDoesNotWorkWithExternalProcessMode disables selecting the external
+// process virtual cluster for tests that are not functional in that mode and
+// require further investigation. Any test using this function should reference
+// a GitHub issue tagged with "C-investigation" describing the underlying
+// problem.
+func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
+	return DefaultTestTenantOptions{
+		testBehavior:           ttSharedProcess,
+		allowAdditionalTenants: true,
+		issueNum:               issueNumber,
+		label:                  "C-investigation",
+	}
+}
+
 // InternalNonDefaultDecision builds a sentinel value used inside a
 // mechanism in serverutils. Should not be used by tests directly.
 func InternalNonDefaultDecision(
@@ -490,8 +572,8 @@ var (
 	// with no special attributes.
 	DefaultTestStoreSpec = StoreSpec{
 		InMemory: true,
-		Size: SizeSpec{
-			InBytes: 512 << 20,
+		Size: storagepb.SizeSpec{
+			Capacity: 512 << 20,
 		},
 	}
 )
@@ -509,7 +591,7 @@ func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("in-mem temp storage"),
+		Name:      mon.MakeName("in-mem temp storage"),
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
 		Settings:  st,

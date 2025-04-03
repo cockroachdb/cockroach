@@ -67,13 +67,13 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus Status,
+	jobState State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 ) error {
-	// For now, only interested in failed status.
-	if jobStatus == StatusFailed {
+	// For now, only interested in failed state.
+	if jobState == StateFailed {
 		DefaultHandleFailedRun(schedule, "job %d failed", jobID)
 	}
 	return nil

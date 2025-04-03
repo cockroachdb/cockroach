@@ -183,4 +183,3 @@ SELECT * FROM d.t;
 5
 
 subtest end
-

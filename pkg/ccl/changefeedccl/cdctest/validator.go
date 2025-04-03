@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -198,8 +199,7 @@ type beforeAfterValidator struct {
 	table          string
 	primaryKeyCols []string
 	resolved       map[string]hlc.Timestamp
-	fullTableName  bool
-	keyInValue     bool
+	diff           bool
 
 	failures []string
 }
@@ -207,9 +207,7 @@ type beforeAfterValidator struct {
 // NewBeforeAfterValidator returns a Validator verifies that the "before" and
 // "after" fields in each row agree with the source table when performing AS OF
 // SYSTEM TIME lookups before and at the row's timestamp.
-func NewBeforeAfterValidator(
-	sqlDB *gosql.DB, table string, option ChangefeedOption,
-) (Validator, error) {
+func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, diff bool) (Validator, error) {
 	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
@@ -218,8 +216,7 @@ func NewBeforeAfterValidator(
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
-		fullTableName:  option.FullTableName,
-		keyInValue:     option.KeyInValue,
+		diff:           diff,
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil
@@ -229,19 +226,6 @@ func NewBeforeAfterValidator(
 func (v *beforeAfterValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
-	if v.fullTableName {
-		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"topic %s does not match expected table d.public.%s", topic, v.table,
-			))
-		}
-	} else {
-		if topic != v.table {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"topic %s does not match expected table %s", topic, v.table,
-			))
-		}
-	}
 	keyJSON, err := json.ParseJSON(key)
 	if err != nil {
 		return err
@@ -258,26 +242,6 @@ func (v *beforeAfterValidator) NoteRow(
 		return err
 	}
 
-	if v.keyInValue {
-		keyString := keyJSON.String()
-		keyInValueJSON, err := valueJSON.FetchValKey("key")
-		if err != nil {
-			return err
-		}
-
-		if keyInValueJSON == nil {
-			v.failures = append(v.failures, fmt.Sprintf(
-				"no key in value, expected key value %s", keyString))
-		} else {
-			keyInValueString := keyInValueJSON.String()
-			if keyInValueString != keyString {
-				v.failures = append(v.failures, fmt.Sprintf(
-					"key in value %s does not match expected key value %s",
-					keyInValueString, keyString))
-			}
-		}
-	}
-
 	afterJSON, err := valueJSON.FetchValKey("after")
 	if err != nil {
 		return err
@@ -292,6 +256,15 @@ func (v *beforeAfterValidator) NoteRow(
 	// updated timestamp.
 	if err := v.checkRowAt("after", keyJSONAsArray, afterJSON, updated); err != nil {
 		return err
+	}
+
+	if !v.diff {
+		// If the diff option is not specified in the change feed,
+		// we don't expect the rows to contain a "before" field.
+		if beforeJson != nil {
+			return errors.Errorf(`expected before to be nil, got %s`, beforeJson.String())
+		}
+		return nil
 	}
 
 	if v.resolved[partition].IsEmpty() && (beforeJson == nil || beforeJson.Type() == json.NullJSONType) {
@@ -385,6 +358,177 @@ func (v *beforeAfterValidator) NoteResolved(partition string, resolved hlc.Times
 
 // Failures implements the Validator interface.
 func (v *beforeAfterValidator) Failures() []string {
+	return v.failures
+}
+
+type mvccTimestampValidator struct {
+	failures []string
+}
+
+// NewMvccTimestampValidator returns a Validator that verifies that the emitted
+// row includes the mvcc_timestamp field and that its value is not later than
+// the updated timestamp
+func NewMvccTimestampValidator() Validator {
+	return &mvccTimestampValidator{}
+}
+
+// NoteRow implements the Validator interface.
+func (v *mvccTimestampValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	valueJSON, err := json.ParseJSON(value)
+	if err != nil {
+		return err
+	}
+
+	mvccJSON, err := valueJSON.FetchValKey("mvcc_timestamp")
+	if err != nil {
+		return err
+	}
+	if mvccJSON == nil {
+		v.failures = append(v.failures, "expected MVCC timestamp, got nil")
+		return nil
+	}
+
+	mvccJSONText, err := mvccJSON.AsText()
+	if err != nil {
+		return err
+	}
+
+	if *mvccJSONText > updated.AsOfSystemTime() {
+		v.failures = append(v.failures, fmt.Sprintf(
+			`expected MVCC timestamp to be earlier or equal to updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), *mvccJSONText))
+	}
+
+	// This check is primarily a sanity check. Even in tests, we see the mvcc
+	// timestamp regularly differ from the updated timestamp by over 5 seconds.
+	// Asserting that the two are within an hour of each other should always pass.
+	if *mvccJSONText < updated.AddDuration(-time.Hour).AsOfSystemTime() {
+		v.failures = append(v.failures, fmt.Sprintf(
+			`expected MVCC timestamp to be within an hour of updated timestamp (%s), got %s`,
+			updated.AsOfSystemTime(), *mvccJSONText))
+	}
+
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *mvccTimestampValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *mvccTimestampValidator) Failures() []string {
+	return v.failures
+}
+
+type keyInValueValidator struct {
+	primaryKeyCols []string
+	failures       []string
+}
+
+// NewKeyInValueValidator returns a Validator that verifies that the emitted row
+// includes the key inside a field named "key" inside the value. It should be
+// used only when key_in_value is specified in the changefeed.
+func NewKeyInValueValidator(sqlDB *gosql.DB, table string) (Validator, error) {
+	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
+	}
+
+	return &keyInValueValidator{
+		primaryKeyCols: primaryKeyCols,
+	}, nil
+}
+
+// NoteRow implements the Validator interface.
+func (v *keyInValueValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	keyJSON, err := json.ParseJSON(key)
+	if err != nil {
+		return err
+	}
+
+	valueJSON, err := json.ParseJSON(value)
+	if err != nil {
+		return err
+	}
+
+	keyString := keyJSON.String()
+	keyInValueJSON, err := valueJSON.FetchValKey("key")
+	if err != nil {
+		return err
+	}
+
+	if keyInValueJSON == nil {
+		v.failures = append(v.failures, fmt.Sprintf(
+			"no key in value, expected key value %s", keyString))
+	} else {
+		keyInValueString := keyInValueJSON.String()
+		if keyInValueString != keyString {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"key in value %s does not match expected key value %s",
+				keyInValueString, keyString))
+		}
+	}
+
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *keyInValueValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *keyInValueValidator) Failures() []string {
+	return v.failures
+}
+
+type topicValidator struct {
+	table         string
+	fullTableName bool
+
+	failures []string
+}
+
+// NewTopicValidator returns a Validator that verifies that the topic field of
+// the row agrees with the name of the table. In the case the full_table_name
+// option is specified, it checks the topic includes the db and schema name.
+func NewTopicValidator(table string, fullTableName bool) Validator {
+	return &topicValidator{
+		table:         table,
+		fullTableName: fullTableName,
+	}
+}
+
+// NoteRow implements the Validator interface.
+func (v *topicValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	if v.fullTableName {
+		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table d.public.%s", topic, v.table))
+		}
+	} else {
+		if topic != v.table {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"topic %s does not match expected table %s", topic, v.table))
+		}
+	}
+	return nil
+}
+
+// NoteResolved implements the Validator interface.
+func (v *topicValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return nil
+}
+
+// Failures implements the Validator interface.
+func (v *topicValidator) Failures() []string {
 	return v.failures
 }
 
@@ -523,23 +667,19 @@ func (v *FingerprintValidator) fetchTableColTypes(
 	tableName string, updated hlc.Timestamp,
 ) (map[string]*types.T, error) {
 	parts := strings.Split(tableName, ".")
-	var table string
-	switch len(parts) {
-	case 1:
-		table = parts[0]
-	case 2:
-		table = parts[1]
-	default:
-		return nil, errors.Errorf("could not parse table %s", parts)
+	var dbName string
+	if len(parts) == 2 {
+		dbName = parts[0] + "."
 	}
 
 	colToType := make(map[string]*types.T)
-	if err := v.sqlDBFunc(func(db *gosql.DB) error {
+	if err := v.sqlDBFunc(func(sqlDB *gosql.DB) error {
 		var rows *gosql.Rows
 		queryStr := fmt.Sprintf(`SELECT a.attname AS column_name, t.oid AS type_oid, t.typname AS type_name
-		FROM pg_attribute a JOIN pg_type t ON a.atttypid = t.oid AS OF SYSTEM TIME '%s'
-		WHERE a.attrelid = $1::regclass AND a.attnum > 0`, updated.AsOfSystemTime())
-		rows, err := db.Query(queryStr, table)
+		FROM %spg_catalog.pg_attribute a JOIN %spg_catalog.pg_type t ON a.atttypid = t.oid AS OF SYSTEM TIME '%s'
+		WHERE a.attrelid = $1::regclass AND a.attnum > 0`, dbName, dbName, updated.AsOfSystemTime())
+
+		rows, err := sqlDB.Query(queryStr, tableName)
 		if err != nil {
 			return err
 		}
@@ -571,7 +711,7 @@ func (v *FingerprintValidator) fetchTableColTypes(
 			colToType[keyColumn] = types.OidToType[oid.Oid(oidNum)]
 		}
 		if len(results) == 0 {
-			return errors.Errorf("no columns found for table %s", table)
+			return errors.Errorf("no columns found for table %s", tableName)
 		}
 		return nil
 	}); err != nil {
@@ -664,32 +804,16 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		stmtBuf.WriteString(`)`)
 
 		// Also verify that the key matches the value.
-		type wrapper struct {
-			After map[string]interface{} `json:"after"`
-		}
-		var value wrapper
-		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
-			return err
-		}
-		primaryKeyDatums := make([]interface{}, len(v.primaryKeyCols))
 		for idx, primaryKeyCol := range v.primaryKeyCols {
-			primaryKeyDatums[idx] = value.After[primaryKeyCol]
-		}
-		primaryKeyJSON, err := gojson.Marshal(primaryKeyDatums)
-		if err != nil {
-			return err
-		}
-
-		rowKey := row.key
-		if len(primaryKeyDatums) > 1 {
-			// format the key using the Go marshaller; otherwise, differences
-			// in formatting could lead to the comparison below failing
-			rowKey = asGoJSON(row.key)
-		}
-		if string(primaryKeyJSON) != rowKey {
-			v.failures = append(v.failures,
-				fmt.Sprintf(`key %s did not match expected key %s for value %s`,
-					rowKey, primaryKeyJSON, row.value))
+			valueJSON, err := afterJSON.FetchValKey(primaryKeyCol)
+			if err != nil {
+				return err
+			}
+			if rowKeyValue := keyJSONAsArray[idx]; valueJSON != rowKeyValue {
+				v.failures = append(v.failures,
+					fmt.Sprintf(`key %s did not match expected key %s for value %s`,
+						primaryKeyCol, rowKeyValue, valueJSON))
+			}
 		}
 	} else {
 		// DELETE
@@ -955,23 +1079,4 @@ func fetchPrimaryKeyCols(sqlDB *gosql.DB, tableStr string) ([]string, error) {
 		return nil, errors.Errorf("no primary key information found for %s", tableStr)
 	}
 	return primaryKeyCols, nil
-}
-
-// asGoJSON tries to unmarshal the given string as JSON; if
-// successful, the struct is marshalled back to JSON. This is to
-// enforce the default formatting of the standard library marshaller,
-// allowing comparisons of JSON strings when we don't control the
-// formatting of the strings.
-func asGoJSON(s string) string {
-	var obj interface{}
-	if err := gojson.Unmarshal([]byte(s), &obj); err != nil {
-		return s
-	}
-
-	blob, err := gojson.Marshal(obj)
-	if err != nil {
-		return s
-	}
-
-	return string(blob)
 }

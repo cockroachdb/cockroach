@@ -6,13 +6,20 @@
 package rpc
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestMetricsRelease verifies that peerMetrics.release() removes tracking for
@@ -81,4 +88,85 @@ func TestMetricsRelease(t *testing.T) {
 
 	// We added one extra peer and one extra locality, verify counts.
 	require.Equal(t, expectedCount, verifyAllFields(m, 2))
+}
+
+func TestServerRequestInstrumentInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	requestMetrics := NewRequestMetrics()
+
+	ctx := context.Background()
+	req := struct{}{}
+
+	testcase := []struct {
+		methodName   string
+		statusCode   codes.Code
+		shouldRecord bool
+	}{
+		{"rpc/test/method", codes.OK, true},
+		{"rpc/test/method", codes.Internal, true},
+		{"rpc/test/method", codes.Aborted, true},
+		{"rpc/test/notRecorded", codes.OK, false},
+	}
+
+	for _, tc := range testcase {
+		t.Run(fmt.Sprintf("%s %s", tc.methodName, tc.statusCode), func(t *testing.T) {
+			info := &grpc.UnaryServerInfo{FullMethod: tc.methodName}
+			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+				if tc.statusCode == codes.OK {
+					time.Sleep(time.Millisecond)
+					return struct{}{}, nil
+				}
+				return nil, status.Error(tc.statusCode, tc.statusCode.String())
+			}
+			interceptor := NewRequestMetricsInterceptor(requestMetrics, func(fullMethodName string) bool {
+				return tc.shouldRecord
+			})
+			_, err := interceptor(ctx, req, info, handler)
+			if err != nil {
+				require.Equal(t, tc.statusCode, status.Code(err))
+			}
+			var expectedCount uint64
+			if tc.shouldRecord {
+				expectedCount = 1
+			}
+			assertGrpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
+				fmt.Sprintf("%s %s", tc.methodName, tc.statusCode): expectedCount,
+			})
+		})
+	}
+}
+
+func assertGrpcMetrics(
+	t *testing.T, metrics []*io_prometheus_client.Metric, expected map[string]uint64,
+) {
+	t.Helper()
+	actual := map[string]*io_prometheus_client.Histogram{}
+	for _, m := range metrics {
+		var method, statusCode string
+		for _, l := range m.Label {
+			switch *l.Name {
+			case RpcMethodLabel:
+				method = *l.Value
+			case RpcStatusCodeLabel:
+				statusCode = *l.Value
+			}
+		}
+		histogram := m.Histogram
+		require.NotNil(t, histogram, "expected histogram")
+		key := fmt.Sprintf("%s %s", method, statusCode)
+		actual[key] = histogram
+	}
+
+	for key, val := range expected {
+		histogram, ok := actual[key]
+		if val == 0 {
+			require.False(t, ok, "expected `%s` to not exist", key)
+		} else {
+			require.True(t, ok)
+			require.Greater(t, *histogram.SampleSum, float64(0), "expected `%s` to have a SampleSum > 0", key)
+			require.Equal(t, val, *histogram.SampleCount, "expected `%s` to have SampleCount of %d", key, val)
+		}
+	}
 }

@@ -14,7 +14,13 @@ INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
 statement ok
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
+
+retry
+statement ok
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Verify data placement.

@@ -27,15 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -45,10 +44,6 @@ func alterTableAddColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t *tree.AlterTableAddColumn,
 ) {
 	d := t.ColumnDef
-	if t.ColumnDef.Unique.IsUnique {
-		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
-	}
-	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 
 	// Check column non-existence.
 	elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
@@ -100,13 +95,6 @@ func alterTableAddColumn(
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
-	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
-	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		panic(err)
@@ -132,6 +120,17 @@ func alterTableAddColumn(
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
 	}
+
+	idx := cdd.PrimaryKeyOrUniqueIndexDescriptor
+	isRBR := b.QueryByID(tbl.TableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement() != nil
+	if idx != nil {
+		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
+		*idx, err = configureIndexDescForNewIndexPartitioning(b, tbl.TableID, *idx, nil /* partitionByIndex */)
+		if err != nil {
+			return
+		}
+	}
+
 	// Only set PgAttributeNum if it differs from ColumnID.
 	if pgAttNum := desc.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(desc.ID) {
 		spec.col.PgAttributeNum = pgAttNum
@@ -163,10 +162,7 @@ func alterTableAddColumn(
 		!d.Unique.WithoutIndex &&
 		!colinfo.ColumnTypeIsIndexable(spec.colType.Type) {
 		typInfo := spec.colType.Type.DebugString()
-		panic(unimplemented.NewWithIssueDetailf(35730, typInfo,
-			"column %s is of type %s and thus is not indexable",
-			d.Name,
-			spec.colType.Type.Name()))
+		panic(sqlerrors.NewColumnNotIndexableError(d.Name.String(), spec.colType.Type.Name(), typInfo))
 	}
 	// Block unsupported types.
 	switch spec.colType.Type.Oid() {
@@ -284,7 +280,7 @@ func alterTableAddColumn(
 	}
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
-	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
+	if idx != nil {
 		// TODO (xiang): Think it through whether this (i.e. backing is usually
 		// final and sometimes old) is okay.
 		idx.ID = b.NextTableIndexID(tbl.TableID)
@@ -302,6 +298,23 @@ func alterTableAddColumn(
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
+	}
+
+	// Zone configuration logic is only required for REGIONAL BY ROW tables
+	// with newly created indexes.
+	if isRBR && idx != nil {
+		// Configure zone configuration if required. This must happen after
+		// all the IDs have been allocated.
+		if idx.ID == 0 {
+			panic(errors.AssertionFailedf("index %s does not have id", idx.Name))
+		}
+		if err = configureZoneConfigForNewIndexPartitioning(
+			b,
+			tbl.TableID,
+			idx.ID,
+		); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -484,8 +497,8 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 			// recognize this and drop redundant primary indexes appropriately.
 			addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.oldSpec.primary, spec.col, scpb.ToPublic)
 		}
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter1Spec.primary, spec.col, scpb.Transient)
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter2Spec.primary, spec.col, scpb.Transient)
+		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter1Spec.primary, spec.col, scpb.TransientAbsent)
+		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter2Spec.primary, spec.col, scpb.TransientAbsent)
 		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.finalSpec.primary, spec.col, scpb.ToPublic)
 		return inflatedChain.finalSpec.primary
 	}
@@ -508,8 +521,8 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 
 // addStoredColumnToPrimaryIndexTargeting adds a stored column `col` to primary
 // index `idx` and its associated temporary index.
-// The column in primary index is targeting `target` (either ToPublic or Transient),
-// and the column in its temporary index is always targeting Transient.
+// The column in primary index is targeting `target` (either ToPublic or TransientAbsent),
+// and the column in its temporary index is always targeting TransientAbsent.
 func addStoredColumnToPrimaryIndexTargeting(
 	b BuildCtx,
 	tableID catid.DescID,
@@ -518,7 +531,7 @@ func addStoredColumnToPrimaryIndexTargeting(
 	target scpb.TargetStatus,
 ) {
 	addIndexColumnToInternal(b, tableID, idx.IndexID, col.ColumnID, scpb.IndexColumn_STORED, target)
-	addIndexColumnToInternal(b, tableID, idx.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED, scpb.Transient)
+	addIndexColumnToInternal(b, tableID, idx.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED, scpb.TransientAbsent)
 }
 
 func addIndexColumnToInternal(
@@ -556,7 +569,7 @@ func addIndexColumnToInternal(
 	switch target {
 	case scpb.ToPublic:
 		b.Add(&indexCol)
-	case scpb.Transient:
+	case scpb.TransientAbsent:
 		b.AddTransient(&indexCol)
 	default:
 		panic(errors.AssertionFailedf("programming error: add index column element "+
@@ -680,7 +693,8 @@ func addSecondaryIndexTargetsForAddColumn(
 		TableID:       tbl.TableID,
 		IndexID:       desc.ID,
 		IsUnique:      desc.Unique,
-		IsInverted:    desc.Type == descpb.IndexDescriptor_INVERTED,
+		IsInverted:    desc.Type == idxtype.INVERTED,
+		Type:          desc.Type,
 		SourceIndexID: newPrimaryIdx.IndexID,
 		IsNotVisible:  desc.NotVisible,
 		Invisibility:  desc.Invisibility,

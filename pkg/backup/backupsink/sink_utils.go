@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 )
 
 // ElidedPrefix returns the prefix of the key that is elided by the given mode.
@@ -81,7 +81,7 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// The data/ prefix, including a /, is intended to group SSTs in most of the
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
-		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+		unique.GenerateUniqueInt(unique.ProcessUniqueID(nodeID)))
 }
 
 // isContiguousSpan returns true if the first span ends where the second span begins.

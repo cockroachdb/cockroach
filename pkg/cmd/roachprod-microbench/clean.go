@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/parser"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,7 +35,9 @@ func newClean(config cleanConfig) (*clean, error) {
 	return &clean{cleanConfig: config, inputFile: file}, nil
 }
 
-func (c *clean) writeCleanOutputToFile(cleanedBenchmarkOutputLog benchmarkExtractionResult) error {
+func (c *clean) writeCleanOutputToFile(
+	cleanedBenchmarkOutputLog parser.BenchmarkParseResults,
+) error {
 
 	if err := os.MkdirAll(filepath.Dir(c.outputFilePath), os.ModePerm); err != nil {
 		return err
@@ -46,7 +49,7 @@ func (c *clean) writeCleanOutputToFile(cleanedBenchmarkOutputLog benchmarkExtrac
 	}
 	defer outputFile.Close()
 
-	for _, benchmarkResult := range cleanedBenchmarkOutputLog.results {
+	for _, benchmarkResult := range cleanedBenchmarkOutputLog.Results {
 		if _, writeErr := outputFile.WriteString(
 			fmt.Sprintf("%s\n", strings.Join(benchmarkResult, " "))); writeErr != nil {
 			return errors.Wrap(writeErr, "failed to write benchmark result to file")
@@ -64,7 +67,7 @@ func (c *clean) cleanBenchmarkOutputLog() error {
 		return err
 	}
 
-	cleanedBenchmarkOutputLog := extractBenchmarkResults(string(rawBenchmarkLogs))
+	cleanedBenchmarkOutputLog := parser.ExtractBenchmarkResults(string(rawBenchmarkLogs))
 	if err = c.writeCleanOutputToFile(cleanedBenchmarkOutputLog); err != nil {
 		return err
 	}

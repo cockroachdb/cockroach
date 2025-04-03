@@ -217,6 +217,7 @@ type replicateTPCC struct {
 	duration       time.Duration
 	repairOrderIDs bool
 	tolerateErrors bool
+	readOnly       bool
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -230,9 +231,11 @@ func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeList
 func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
 	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
 		Flag("warehouses", tpcc.warehouses).
+		Flag("ramp", "2m").
 		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
 		MaybeOption(tpcc.tolerateErrors, "tolerate-errors").
 		MaybeOption(tpcc.repairOrderIDs, "repair-order-ids").
+		MaybeFlag(tpcc.readOnly, "mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
 	return cmd.String()
@@ -501,7 +504,7 @@ type replicationDriver struct {
 	rs replicationSpec
 
 	// beforeWorkloadHook is called before the main workload begins.
-	beforeWorkloadHook func()
+	beforeWorkloadHook func(ctx context.Context) error
 
 	// cutoverStarted closes once the driver issues a cutover commmand.
 	cutoverStarted chan struct{}
@@ -612,7 +615,7 @@ func (rd *replicationDriver) setupC2C(
 	rd.c = c
 	rd.metrics = &c2cMetrics{}
 	rd.replicationStartHook = func(ctx context.Context, sp *replicationDriver) {}
-	rd.beforeWorkloadHook = func() {}
+	rd.beforeWorkloadHook = func(_ context.Context) error { return nil }
 	rd.cutoverStarted = make(chan struct{})
 
 	if !c.IsLocal() {
@@ -718,7 +721,9 @@ func (rd *replicationDriver) startReplicationStream(ctx context.Context) int {
 }
 
 func (rd *replicationDriver) runWorkload(ctx context.Context) error {
-	rd.beforeWorkloadHook()
+	if err := rd.beforeWorkloadHook(ctx); err != nil {
+		return err
+	}
 	return rd.rs.workload.runDriver(ctx, rd.c, rd.t, rd.setup)
 }
 
@@ -774,14 +779,14 @@ func (rd *replicationDriver) stopReplicationStream(
 			return res.Err()
 		}
 		require.NoError(rd.t, res.Scan(&status, &payloadBytes))
-		if jobs.Status(status) == jobs.StatusFailed {
+		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				rd.t.Fatalf("job failed: %s", payload.Error)
 			}
 			rd.t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := jobs.StateSucceeded, jobs.State(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -1168,6 +1173,7 @@ func registerClusterToCluster(r registry.Registry) {
 			pdSize:    1000,
 
 			workload:           replicateTPCC{warehouses: 1000, tolerateErrors: true},
+			withReaderWorkload: replicateTPCC{warehouses: 500, readOnly: true, tolerateErrors: true},
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
@@ -1547,7 +1553,7 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
 	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOB $1]`,
 		dstJobID).Scan(&jobStatus)
-	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
+	require.Equal(rd.t, jobs.StateRunning, jobs.State(jobStatus))
 
 	streamIngestProgress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 
@@ -1658,9 +1664,15 @@ func registerClusterReplicationResilience(r registry.Registry) {
 
 				shutdownSetupDone := make(chan struct{})
 
-				rrd.beforeWorkloadHook = func() {
-					// Ensure the workload begins after c2c jobs have been set up.
-					<-shutdownSetupDone
+				rrd.beforeWorkloadHook = func(ctx context.Context) error {
+					// Ensure the workload begins after c2c jobs have been set up, or
+					// return early if context was cancelled.
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-shutdownSetupDone:
+						return nil
+					}
 				}
 
 				rrd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
@@ -1700,7 +1712,11 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				defer mainMonitor.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
-				<-shutdownSetupDone
+				select {
+				case <-shutdownSetupDone:
+				case <-ctx.Done():
+					return
+				}
 
 				// Eagerly listen to cutover signal to exercise node shutdown during actual cutover.
 				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='5s'`)

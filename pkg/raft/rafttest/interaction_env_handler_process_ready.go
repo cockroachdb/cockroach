@@ -48,27 +48,58 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	// TODO(tbg): Allow simulating crashes here.
 	n := &env.Nodes[idx]
 	rd := n.Ready()
-	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
-	if !n.Config.AsyncStorageWrites {
+	if !n.asyncWrites {
+		send, _ := raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
+		// When imitating a synchronous writes API, print only the outgoing
+		// messages. The self-addressed responses conditional to storage syncs are
+		// skipped, for compatibility with existing tests.
+		// TODO(pav-kv): print all messages.
+		fork := rd
+		fork.Messages, _ = raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
+		env.Output.WriteString(raft.DescribeReady(fork, defaultEntryFormatter))
+
+		// TODO(pav-kv): use the same code paths as the asynchronous writes.
 		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
 			return err
 		}
-		if err := processApply(n, rd.CommittedEntries); err != nil {
-			return err
+
+		if !rd.Committed.Empty() {
+			ls := n.RawNode.LogSnapshot()
+			apply, err := ls.Slice(rd.Committed, n.Config.MaxCommittedSizePerReady)
+			if err != nil {
+				return err
+			}
+			// TODO(pav-kv): move printing to processApply when the async write path
+			// is refactored to also use LogSnapshot.
+			env.Output.WriteString("Applying:\n")
+			env.Output.WriteString(raft.DescribeEntries(apply, defaultEntryFormatter))
+			if err := processApply(n, apply); err != nil {
+				return err
+			}
+			n.AckApplied(apply)
 		}
+
+		env.Messages = append(env.Messages, send...)
+		n.AdvanceHack(rd)
+		return nil
 	}
 
+	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
+
+	if span := rd.Committed; !span.Empty() {
+		if was := n.ApplyWork; span.After > was.Last {
+			n.ApplyWork = span
+		} else {
+			n.ApplyWork.Last = span.Last
+		}
+		n.AckApplying(span.Last)
+	}
 	for _, m := range rd.Messages {
 		if raft.IsLocalMsgTarget(m.To) {
-			if !n.Config.AsyncStorageWrites {
-				panic("unexpected local msg target")
-			}
 			switch m.Type {
 			case raftpb.MsgStorageAppend:
 				n.AppendWork = append(n.AppendWork, m)
-			case raftpb.MsgStorageApply:
-				n.ApplyWork = append(n.ApplyWork, m)
 			default:
 				panic(fmt.Sprintf("unexpected message type %s", m.Type))
 			}
@@ -77,8 +108,5 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		}
 	}
 
-	if !n.Config.AsyncStorageWrites {
-		n.Advance(rd)
-	}
 	return nil
 }

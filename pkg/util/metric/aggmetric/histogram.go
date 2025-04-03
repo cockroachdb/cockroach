@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -78,7 +77,7 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 			// Atomically rotate the histogram window for the
 			// parent histogram, and all the child histograms.
 			a.h.Tick()
-			a.childSet.apply(func(childItem btree.Item) {
+			a.childSet.apply(func(childItem MetricItem) {
 				childHist, ok := childItem.(*Histogram)
 				if !ok {
 					panic(errors.AssertionFailedf(
@@ -88,7 +87,7 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 				childHist.h.Tick()
 			})
 		})
-	a.init(childLabels)
+	a.initWithBTreeStorageType(childLabels)
 	return a
 }
 
@@ -142,7 +141,7 @@ func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return a.h.ToPrometheusMetric()
 }
 
-// AddChild adds a Counter to this AggCounter. This method panics if a Counter
+// AddChild adds a Counter to this AggHistogram. This method panics if a Counter
 // already exists for this set of labelVals.
 func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	child := &Histogram{
@@ -152,6 +151,37 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	}
 	a.add(child)
 	return child
+}
+
+// RecordValue adds the given value to the histogram for the given label values. If a
+// histogram with the given label values doesn't exist yet, it creates a new
+// histogram and increments it. Panics if the number of label values doesn't
+// match the number of labels defined for this histogram.
+// Recording a value in excess of the configured maximum value for that histogram
+// results in recording the maximum value instead.
+func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
+	if len(a.labels) != len(labelVals) {
+		panic(errors.AssertionFailedf(
+			"cannot increment child with %d label values %v to a metric with %d labels %v",
+			len(labelVals), labelVals, len(a.labels), a.labels))
+	}
+
+	// If the child already exists, update it.
+	if child, ok := a.get(labelVals...); ok {
+		child.(*Histogram).RecordValue(v)
+		return
+	}
+
+	// Otherwise, create a new child and update it.
+	child := a.AddChild(labelVals...)
+	child.RecordValue(v)
+}
+
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggHistogram) RemoveChild(labelVals ...string) {
+	key := &Histogram{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
 }
 
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the

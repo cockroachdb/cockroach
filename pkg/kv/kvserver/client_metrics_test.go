@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -155,7 +156,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	// them everywhere.
 	{
 		act := fmt.Sprintf("%+v", result.Metrics{})
-		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0}"
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 LeaseTransferLocksWritten:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0}"
 		if act != exp {
 			t.Errorf("need to update this test due to added fields: %v", act)
 		}
@@ -252,8 +253,8 @@ func TestStoreMetrics(t *testing.T) {
 			InMemory:    true,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: base.SizeSpec{
-				InBytes: 512 << 20, /* 512 MiB */
+			Size: storagepb.SizeSpec{
+				Capacity: 512 << 20, /* 512 MiB */
 			},
 		}
 		stickyServerArgs[i] = base.TestServerArgs{

@@ -417,6 +417,8 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return d.IPAddr.String(), nil
 	case *tree.DJSON:
 		return d.JSON.String(), nil
+	case *tree.DJsonpath:
+		return d.String(), nil
 	case *tree.DTimeTZ:
 		return d.TimeTZ.String(), nil
 	case *tree.DBox2D:

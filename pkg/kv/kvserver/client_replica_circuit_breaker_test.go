@@ -686,15 +686,25 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 						skip.IgnoreLintf(t, "subtest does not apply to %s", m)
 					}
 
-					ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-					defer cancel()
-					const maxWait = 5 * time.Second
-					tBegin := timeutil.Now()
-					err := tc.SendCtx(ctx, n1, req)
 					// For epoch leases usually logs [NotLeaseHolderError] lease
 					// acquisition canceled because context canceled. While for leader
 					// leases, there should be no error since we propose a leader lease
 					// regardless of whether the LeadSupportUntil is in the future or not.
+					// Therefore, we set a longer timeout for leader leases to avoid it
+					// flaking in race/deadlock builds.
+					var ctx context.Context
+					var cancel context.CancelFunc
+					if leaseType == roachpb.LeaseLeader {
+						ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+					} else {
+						ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+					}
+
+					defer cancel()
+					const maxWait = 5 * time.Second
+					tBegin := timeutil.Now()
+					err := tc.SendCtx(ctx, n1, req)
+
 					t.Log(err)
 					switch leaseType {
 					case roachpb.LeaseEpoch:

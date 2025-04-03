@@ -369,7 +369,7 @@ lock t
  ├── key columns: k:1
  ├── lock columns: (12-20)
  ├── locking: for-share
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── fd: ()-->(2)
  └── select

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -214,7 +215,7 @@ func verifyIterateReplicaKeySpans(
 					require.NoError(t, err)
 					require.True(t, span.Contains(bounds), "%s not contained in %s", bounds, span)
 					for _, rk := range iter.EngineRangeKeys() {
-						ts, err := storage.DecodeMVCCTimestampSuffix(rk.Version)
+						ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Version)
 						require.NoError(t, err)
 						mvccRangeKey := storage.MVCCRangeKey{
 							StartKey:  bounds.Key.Clone(),

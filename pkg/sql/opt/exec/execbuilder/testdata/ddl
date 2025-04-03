@@ -137,8 +137,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1 -> <undecoded>
-fetched: /t/t_pkey/1/b -> 1
+fetched: /t/t_pkey/1:cf=0 -> <undecoded>
+fetched: /t/t_pkey/1/b:cf=1 -> 1
 output row: [1 1]
 
 user root

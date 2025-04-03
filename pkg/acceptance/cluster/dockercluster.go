@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -484,7 +485,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNod
 	for _, store := range node.stores {
 		storeSpec := base.StoreSpec{
 			Path: store.dir,
-			Size: base.SizeSpec{InBytes: int64(store.config.MaxRanges) * maxRangeBytes},
+			Size: storagepb.SizeSpec{Capacity: int64(store.config.MaxRanges) * maxRangeBytes},
 		}
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
@@ -773,6 +774,7 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
 		w, err := os.Create(file)
 		maybePanic(err)
+		//nolint:deferloop TODO(#137605)
 		defer w.Close()
 		maybePanic(n.Logs(ctx, w))
 		log.Infof(ctx, "node %d: stderr at %s", i, file)

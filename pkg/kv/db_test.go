@@ -949,34 +949,43 @@ func testDBTxnRetryLimit(t *testing.T, isoLevel isolation.Level) {
 	defer s.Stopper().Stop(ctx)
 
 	// Configure a low retry limit.
-	const maxRetries = 7
-	const maxAttempts = maxRetries + 1
-	kv.MaxInternalTxnAutoRetries.Override(ctx, &s.ClusterSettings().SV, maxRetries)
-
-	// Run the txn, aborting it on each attempt.
-	attempts := 0
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		attempts++
-		require.NoError(t, txn.SetIsoLevel(isoLevel))
-		require.NoError(t, txn.Put(ctx, "a", "1"))
-
-		{
-			// High priority txn - will abort the other txn each attempt.
-			hpTxn := kv.NewTxn(ctx, db, 0)
-			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
-			require.NoError(t, hpTxn.Put(ctx, "a", "hp txn"))
-			require.NoError(t, hpTxn.Commit(ctx))
+	const maxRetriesSetting = 7
+	const maxRetriesExplicit = 4
+	kv.MaxInternalTxnAutoRetries.Override(ctx, &s.ClusterSettings().SV, maxRetriesSetting)
+	testutils.RunTrueAndFalse(t, "explicitRetryLimit", func(t *testing.T, explicitRetryLimit bool) {
+		maxAttempts := maxRetriesSetting + 1
+		if explicitRetryLimit {
+			maxAttempts = maxRetriesExplicit + 1
 		}
 
-		// Read, so that we'll get a retryable error.
-		_, err := txn.Get(ctx, "a")
+		// Run the txn, aborting it on each attempt.
+		attempts := 0
+		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if explicitRetryLimit {
+				txn.SetMaxAutoRetries(maxRetriesExplicit)
+			}
+			attempts++
+			require.NoError(t, txn.SetIsoLevel(isoLevel))
+			require.NoError(t, txn.Put(ctx, "a", "1"))
+
+			{
+				// High priority txn - will abort the other txn each attempt.
+				hpTxn := kv.NewTxn(ctx, db, 0)
+				require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+				require.NoError(t, hpTxn.Put(ctx, "a", "hp txn"))
+				require.NoError(t, hpTxn.Commit(ctx))
+			}
+
+			// Read, so that we'll get a retryable error.
+			_, err := txn.Get(ctx, "a")
+			require.Error(t, err)
+			require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
+			return err
+		})
 		require.Error(t, err)
-		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
-		return err
+		require.Regexp(t, "Terminating retry loop and returning error", err)
+		require.Equal(t, maxAttempts, attempts)
 	})
-	require.Error(t, err)
-	require.Regexp(t, "Terminating retry loop and returning error", err)
-	require.Equal(t, maxAttempts, attempts)
 }
 
 func TestPreservingSteppingOnSenderReplacement(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -51,30 +52,34 @@ func BenchmarkInsights(b *testing.B) {
 			var sessions sync.WaitGroup
 			sessions.Add(numSessions)
 			writer := provider.Writer()
-			statements := make([]insights.Statement, b.N)
-			transactions := make([]insights.Transaction, b.N)
+			statements := make([]sqlstats.RecordedStmtStats, b.N)
+			transactions := make([]sqlstats.RecordedTxnStats, b.N)
 			for i := 0; i < numSessions; i++ {
+				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				for j := 0; j < numTransactionsPerSession; j++ {
-					statements[numTransactionsPerSession*i+j] = insights.Statement{
+					statements[numTransactionsPerSession*i+j] = sqlstats.RecordedStmtStats{
+						SessionID: sessionID,
 						// Spread across 6 different statement fingerprints.
 						FingerprintID: appstatspb.StmtFingerprintID(j % 6),
 						// Choose latencies in 20ms, 40ms, 60ms, 80ms, 100ms, 120ms, 140ms.
 						// As configured above, only latencies >=100ms are noteworthy.
 						// Since 7 is relatively prime to 6, we'll spread these across all fingerprints.
-						LatencyInSeconds: float64(j%7+1) * 0.02,
+						ServiceLatencySec: float64(j%7+1) * 0.02,
 					}
+				}
+				transactions[i] = sqlstats.RecordedTxnStats{
+					SessionID: sessionID,
 				}
 			}
 
 			b.ResetTimer()
 			for i := 0; i < numSessions; i++ {
-				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				go func(i int) {
 					defer sessions.Done()
 					for j := 0; j < numTransactionsPerSession; j++ {
 						idx := numTransactionsPerSession*i + j
-						writer.ObserveStatement(sessionID, &statements[idx])
-						writer.ObserveTransaction(sessionID, &transactions[idx])
+						writer.ObserveStatement(&statements[idx])
+						writer.ObserveTransaction(&transactions[idx])
 					}
 				}(i)
 			}

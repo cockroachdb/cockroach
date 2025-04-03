@@ -28,13 +28,13 @@ type txnKVStreamer struct {
 	lockStrength   lock.Strength
 	lockDurability lock.Durability
 	rawMVCCValues  bool
+	reverse        bool
 
 	// spans contains the last set of spans provided in SetupNextFetch. The
 	// original span is only needed when handling Get responses, so each span is
-	// nil-ed out when it resulted in a Scan request (i.e. it had both Key and
-	// EndKey set).
-	spans       roachpb.Spans
-	spanIDs     []int
+	// nil-ed out when it resulted in a Scan or ReverseScan request (i.e. it had
+	// both Key and EndKey set).
+	spans       identifiableSpans
 	reqsScratch []kvpb.RequestUnion
 
 	acc *mon.BoundAccount
@@ -61,11 +61,13 @@ func newTxnKVStreamer(
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
 	rawMVCCValues bool,
+	reverse bool,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
 		streamer:       streamer,
 		lockStrength:   GetKeyLockingStrength(lockStrength),
 		lockDurability: GetKeyLockingDurability(lockDurability),
+		reverse:        reverse,
 		acc:            acc,
 		rawMVCCValues:  rawMVCCValues,
 	}
@@ -86,12 +88,35 @@ func (f *txnKVStreamer) SetupNextFetch(
 		return errors.AssertionFailedf("unexpected non-zero bytes limit for txnKVStreamer")
 	}
 	f.reset(ctx)
+
+	// Since the streamer takes ownership of the spans slice, we don't need to
+	// perform the deep copy. Notably, the spans might be modified (when the
+	// streamer receives the resume spans), but the streamer will always keep the
+	// memory accounting up to date.
+	f.spans = identifiableSpans{
+		Spans:   spans,
+		spanIDs: spanIDs,
+	}
+	if f.reverse {
+		// Reverse scans receive the spans in decreasing order. Note that we
+		// need to be this tricky since we're updating the spans in place.
+		i, j := 0, f.spans.Len()-1
+		for i < j {
+			f.spans.swap(i, j)
+			i++
+			j--
+		}
+	}
+	scanName := "Scan"
+	if f.reverse {
+		scanName = "ReverseScan"
+	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		lockStr := ""
 		if f.lockStrength != lock.None {
 			lockStr = fmt.Sprintf(" lock %s (%s)", f.lockStrength.String(), f.lockDurability.String())
 		}
-		log.VEventf(ctx, 2, "Scan %s%s", spans.BoundedString(1024 /* bytesHint */), lockStr)
+		log.VEventf(ctx, 2, "%s %s%s", scanName, spans.BoundedString(1024 /* bytesHint */), lockStr)
 	}
 	// Make sure to nil out the requests past the length that will be used in
 	// spansToRequests so that we lose references to the underlying Get and Scan
@@ -110,7 +135,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.rawMVCCValues, f.lockStrength, f.lockDurability, reqsScratch)
+	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, f.reverse, f.rawMVCCValues, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		// Mark this error as having come from the storage layer. This will
 		// allow us to avoid creating a sentry report since this error isn't
@@ -128,8 +153,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	//   Thus, in order to not double-count memory usage, we do no accounting
 	//   here.
 	spansMemUsage := roachpb.SpanOverhead * int64(cap(spans))
-	f.spans = spans
-	f.spanIDs = spanIDs
+
 	// Keep the reference to the requests slice in order to reuse in the future.
 	f.reqsScratch = reqs
 	reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
@@ -137,10 +161,10 @@ func (f *txnKVStreamer) SetupNextFetch(
 }
 
 func (f *txnKVStreamer) getSpanID(resultPosition int) int {
-	if f.spanIDs == nil {
+	if f.spans.spanIDs == nil {
 		return resultPosition
 	}
-	return f.spanIDs[resultPosition]
+	return f.spans.spanIDs[resultPosition]
 }
 
 // proceedWithLastResult processes the result which must be already set on the
@@ -162,14 +186,14 @@ func (f *txnKVStreamer) proceedWithLastResult(
 			f.releaseLastResult(ctx)
 			return true, KVBatchFetcherResponse{}, nil
 		}
-		origSpan := f.spans[result.Position]
+		origSpan := f.spans.Spans[result.Position]
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
 		ret.KVs = f.getResponseScratch[:]
 		return false, ret, nil
 	}
-	scan := result.ScanResp
-	if len(scan.BatchResponses) > 0 {
-		ret.BatchResponse, f.lastResultState.remainingBatches = scan.BatchResponses[0], scan.BatchResponses[1:]
+	batchResponses := kvstreamer.GetScanBatchResponses(result.ScanResp)
+	if len(batchResponses) > 0 {
+		ret.BatchResponse, f.lastResultState.remainingBatches = batchResponses[0], batchResponses[1:]
 	}
 	// We're consciously ignoring scan.Rows argument since the Streamer
 	// guarantees to always produce Scan responses using BATCH_RESPONSE format.

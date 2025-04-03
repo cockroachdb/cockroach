@@ -243,7 +243,9 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		if err := p.canDropFunction(ctx, fn); err != nil {
 			return err
 		}
-		if err := p.dropFunctionImpl(ctx, fn); err != nil {
+		// We use DropRestrict here since we've already collected all the functions
+		// in the schema so they will be dropped explicitly.
+		if err := p.dropFunctionImpl(ctx, fn, tree.DropRestrict); err != nil {
 			return err
 		}
 	}

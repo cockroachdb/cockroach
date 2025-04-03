@@ -448,6 +448,9 @@ func IterateReplicaKeySpans(
 // IterateReplicaKeySpansShared is a shared-replicate version of
 // IterateReplicaKeySpans. See definitions of this method for how it is
 // implemented.
+//
+// The impl of this method along with a comment is in
+// engineccl/shared_storage.go.
 var IterateReplicaKeySpansShared func(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,

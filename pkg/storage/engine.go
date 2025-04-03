@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,13 +31,6 @@ import (
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
-
-// DefaultStorageEngine represents the default storage engine to use.
-var DefaultStorageEngine enginepb.EngineType
-
-func init() {
-	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "pebble"))
-}
 
 // SimpleMVCCIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleMVCCIterator implementations are thread safe unless otherwise
@@ -621,19 +613,6 @@ type Reader interface {
 	PinEngineStateForIterators(readCategory fs.ReadCategory) error
 }
 
-// EventuallyFileOnlyReader is a specialized Reader that supports a method to
-// wait on a transition to being a file-only reader that does not pin any
-// keys in-memory.
-type EventuallyFileOnlyReader interface {
-	Reader
-	// WaitForFileOnly blocks the calling goroutine until this reader has
-	// transitioned to a file-only reader that does not pin any in-memory state.
-	// If an error is returned, this transition did not succeed. The Duration
-	// argument specifies how long to wait for before attempting a flush to
-	// force a transition to a file-only snapshot.
-	WaitForFileOnly(ctx context.Context, gracePeriodBeforeFlush time.Duration) error
-}
-
 // Writer is the write interface to an engine's data.
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -818,17 +797,36 @@ type Writer interface {
 	// Writer implementations, this is a no-op.
 	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
 
-	// SingleClearEngineKey removes the most recent write to the item from the db
-	// with the given key. Whether older writes of the item will come back
-	// to life if not also removed with SingleClear is undefined. See the
-	// following:
-	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
-	// for details on the SingleDelete operation that this method invokes. Note
-	// that clear actually removes entries from the storage engine, rather than
-	// inserting MVCC tombstones. This is a low-level interface that must not be
-	// called from outside the storage package. It is part of the interface
-	// because there are structs that wrap Writer and implement the Writer
-	// interface, that are not part of the storage package.
+	// SingleClearEngineKey removes the most recent write to the item from the
+	// db with the given key, using Pebble's SINGLEDEL operation. This
+	// originally resembled the semantics of RocksDB
+	// (https://github.com/facebook/rocksdb/wiki/Single-Delete), but was
+	// strengthened in Pebble such that sequences (from more recent to older)
+	// like SINGLEDEL#20, SET#17, DEL#15, ... work as intended since there has
+	// been only one SET more recent than the last DEL. These also work if the
+	// DEL is replaced by a RANGEDEL, since RANGEDELs are used extensively to
+	// drop all the data for a replica, which may then be recreated in the
+	// future. The behavior is non-deterministic and definitely not what the
+	// caller wants if there are multiple SETs/MERGEs etc. immediately older
+	// than the SINGLEDEL.
+	//
+	// Note that using SINGLEDEL requires the caller to not duplicate SETs
+	// without knowing about it. That is, the caller cannot rely simply on
+	// idempotent writes for correctness, if they are going to be later deleted
+	// using SINGLEDEL. A current case where duplication without knowledge can
+	// happen is sstable ingestion for "global" keys, say during import and
+	// schema change. SSTable ingestion via the KV-layer's AddSSTable changes
+	// the replicated state machine, but does not atomically update the
+	// RangeAppliedState.RaftAppliedIndex, so on a node crash the SSTable
+	// ingestion will be repeated due to replaying the Raft log. Hence,
+	// SingleClearEngineKey must not be used for global keys e.g. do not
+	// consider using it for MVCC GC.
+	//
+	// This operation actually removes entries from the storage engine, rather
+	// than inserting MVCC tombstones. This is a low-level interface that must
+	// not be called from outside the storage package. It is part of the
+	// interface because there are structs that wrap Writer and implement the
+	// Writer interface, that are not part of the storage package.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	SingleClearEngineKey(key EngineKey) error
@@ -932,6 +930,8 @@ type Engine interface {
 	Compact() error
 	// Env returns the filesystem environment used by the Engine.
 	Env() *fs.Env
+	// Excise removes all data for the given span from the engine.
+	Excise(ctx context.Context, span roachpb.Span) error
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
@@ -991,36 +991,37 @@ type Engine interface {
 	// underlying Engine. The batch accumulates all mutations and applies them
 	// atomically on a call to Commit().
 	NewWriteBatch() WriteBatch
-	// NewSnapshot returns a new instance of a read-only snapshot engine. A
-	// snapshot provides a consistent view of the database across multiple
-	// iterators. If a caller only needs a single consistent iterator, they
-	// should create an iterator directly off the engine instead.
+	// NewSnapshot returns a read-only, point-in-time snapshot of selected key
+	// spans of the engine.
 	//
-	// Acquiring a snapshot is instantaneous and is inexpensive if quickly
-	// released. Snapshots are released by invoking Close(). Open snapshots
-	// prevent compactions from reclaiming space or removing tombstones for any
-	// keys written after the snapshot is acquired. This can be problematic
-	// during rebalancing or large ingestions, so they should be used sparingly
-	// and briefly.
+	// A snapshot provides a consistent view of the provided key spans of the
+	// database across multiple iterators. If a caller only needs a consistent
+	// iterator for a short duration, they should create an iterator directly
+	// off the engine instead. The provided key ranges must be non-overlapping.
+	// If no key ranges are provided, the snapshot will cover the entire key
+	// space.
 	//
-	// Note that snapshots must not be used after the original engine has been
-	// stopped.
-	NewSnapshot() Reader
-	// NewEventuallyFileOnlySnapshot returns a new instance of a read-only
-	// eventually file-only snapshot. This type of snapshot incurs lower write-amp
-	// than a regular Snapshot opened with NewSnapshot, however it incurs a greater
-	// space-amp on disk for the duration of this snapshot's lifetime. There's
-	// also a chance that its conversion to a file-only snapshot could get
-	// errored out if an excise operation were to conflict with one of the passed
-	// in KeyRanges. Note that if no keyRanges are passed in, a file-only snapshot
-	// is created from the start; this is usually not desirable as it makes no
-	// deterministic guarantees about what will be readable (anything in memtables
-	// will not be visible). Snapshot guarantees are only provided for keys
-	// in the passed-in keyRanges; reads are not guaranteed to be consistent
-	// outside of these bounds.
-	NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) EventuallyFileOnlyReader
-	// Type returns engine type.
-	Type() enginepb.EngineType
+	// Snapshots that don't cover the entirety of the key space will require
+	// that their non-prefix iterators specify lower and upper bounds and that
+	// those bounds fall within the snapshotted ranges. Reading outside of the
+	// snapshotted ranges must be avoided because the data visible outside the
+	// snapshotted key ranges is not guaranteed to be consistent between
+	// iterators created from the same snapshot. Callers should take care to
+	// constrain their reads to the snapshotted key ranges, setting appropriate
+	// iterator bounds and seek keys.
+	//
+	// Acquiring a snapshot is inexpensive if quickly released. Snapshots are
+	// released by invoking Close(). Like open iterators, open snapshots may
+	// prevent the deletion of sstables that have already been compacted. This
+	// can result in increased space amplification for the duration of the
+	// snapshot's lifetime. Unlike an open iterator, an open snapshot will NOT
+	// pin memtables at the time of its creation. However, flushes of memtables
+	// that existed at the time of snapshot creation may retain more keys than
+	// otherwise necessary, increasing space and write amplification from the
+	// flush.
+	//
+	// Note that snapshots must be closed before the Engine is closed.
+	NewSnapshot(keyRanges ...roachpb.Span) Reader
 	// IngestLocalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
 	IngestLocalFiles(ctx context.Context, paths []string) error

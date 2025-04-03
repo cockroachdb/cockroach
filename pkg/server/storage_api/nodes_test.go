@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -221,15 +221,11 @@ func TestNodesGRPCResponse(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 
-	if srv.TenantController().StartedDefaultTestTenant() {
+	if srv.DeploymentMode().IsExternal() {
 		// Enable access to the nodes endpoint for the test tenant.
-		_, err := srv.SystemLayer().SQLConn(t).Exec(
-			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-
-		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanViewNodeInfo: "true",
-		}, "")
+		require.NoError(t, srv.GrantTenantCapabilities(
+			ctx, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}))
 	}
 
 	var request serverpb.NodesRequest

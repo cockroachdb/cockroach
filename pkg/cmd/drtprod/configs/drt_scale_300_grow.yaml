@@ -1,0 +1,36 @@
+# Yaml for creating and configuring the drt-scale cluster. This also configures Datadog.
+# Build the roachprod and roachtest binaries (using --cross) before running this script
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-scale-300:151-300
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+      - command: stage
+        args:
+          - $CLUSTER
+          - release
+          - v25.1.1
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          # add flag to set provisioned throughput on each store according to their cloud provider limits
+          enable-fluent-sink: true
+          store-count: 4
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"

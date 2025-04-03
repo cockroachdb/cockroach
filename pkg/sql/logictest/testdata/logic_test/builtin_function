@@ -203,6 +203,14 @@ SELECT concat('foo'::concat_enum, ' ', 64.532, ' ', 'baz'::concat_enum, ' ', 42,
 ----
 foo 64.532 baz 42 f {"foo": "bar"} {1,2,3}
 
+statement ok
+PREPARE concat_stmt AS SELECT concat("foo"."a", $1::STRING) FROM foo
+
+query T
+EXECUTE concat_stmt(':')
+----
+1:
+
 query T
 SELECT substr('RoacH', 2, 3)
 ----
@@ -420,13 +428,55 @@ SELECT concat_ws(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error unknown signature: concat_ws\(string, string, int, unknown, int\)
+query T
 SELECT concat_ws(',', 'abcde', 2, NULL, 22)
+----
+abcde,2,22
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
 ----
 def
+
+query T
+SELECT split_part('abc,def,ghi,jkl', ',', -2)
+----
+ghi
+
+statement error pq: split_part\(\): field position must not be zero
+SELECT split_part('abc,def,ghi,jkl', ',', 0)
+
+# To maintain compatibility with postgres, if the separator is not found and
+# the request is for the first or last field, return the entire input text.
+query T
+SELECT split_part('joeuser@mydatabase', '', 1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '', -1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', 1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', -1)
+----
+joeuser@mydatabase
+
+query T
+SELECT split_part('joeuser@mydatabase', '', 2)
+----
+·
+
+query T
+SELECT split_part('joeuser@mydatabase', '?', -2)
+----
+·
 
 query T
 SELECT repeat('Pg', 4)
@@ -1075,14 +1125,13 @@ SELECT pow(0::int, 3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 ----
 0 1 1
 
-statement error integer out of range
+statement error pgcode 2201F zero raised to a negative power is undefined
 SELECT pow(0::int, -3::int)
 
-# TODO(mjibson): This uses the decimal implementation internally, which
-# returns NaN, hence the below error. However postgres returns 1 for this,
-# which we should probably match.
-statement error integer out of range
+query I
 SELECT pow(0::int, 0::int)
+----
+1
 
 query RRR
 SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
@@ -1094,16 +1143,11 @@ SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
 9.8696044010893571205
 
-query R
+statement error pgcode 2201F zero raised to a negative power is undefined
 SELECT power(0::decimal, -1)
-----
-Infinity
 
-# TODO(mjibson): Postgres returns an error for this.
-query R
+statement error pgcode 2201F a negative number raised to a non-integer power yields a complex result
 SELECT power(-1, -.1)
-----
-NaN
 
 query RR
 SELECT radians(-45.0), radians(45.0)
@@ -2632,6 +2676,19 @@ SELECT format('|%-*s|', -10, 'foo')
 ----
 |foo       |
 
+statement
+PREPARE format_stmt AS SELECT format('|%*s|', $1::INT, $2::STRING)
+
+query T
+EXECUTE format_stmt(10, 'foo')
+----
+|       foo|
+
+query T
+EXECUTE format_stmt(-10, 'foo')
+----
+|foo       |
+
 # Escaping $ into \x24 only needed in testlogic or prepared statements
 query T
 SELECT format(E'Testing %3\x24s, %2\x24s, %1\x24s', 'one', 'two', 'three')
@@ -2698,6 +2755,20 @@ query I
 SELECT width_bucket(1, array[]::int[]);
 ----
 0
+
+query I
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10);
+----
+11
+
+query I
+SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
+----
+0
+
+statement error pgcode 2201G pq: width_bucket\(\): operand, lower bound, and upper bound cannot be NaN
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+
 
 # Sanity check pg_type_is_visible.
 query BBB
@@ -3014,6 +3085,33 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 1  1
 2  0
+
+statement ok
+PREPARE nn_stmt AS SELECT num_nulls(42, $1::STRING, a, b),
+                          num_nulls(b, $1, 42, a),
+                          num_nulls(a, b, $1, 42),
+                          num_nulls($1, a, b, 42),
+                          num_nonnulls(42, $1, a, b),
+                          num_nonnulls(b, $1, 42, a),
+                          num_nonnulls(a, b, $1, 42),
+                          num_nonnulls($1, a, b, 42)
+                     FROM nulls_test
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt(NULL)
+----
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
+2  2  2  2  2  2  2  2
+3  3  3  3  1  1  1  1
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt('foo')
+----
+0  0  0  0  4  4  4  4
+1  1  1  1  3  3  3  3
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
 
 subtest pb_to_json
 
@@ -4406,5 +4504,107 @@ query T
 SELECT crdb_internal.type_is_indexable(NULL);
 ----
 NULL
+
+subtest substring_index
+
+# Test basic behavior of substring_index
+query T
+SELECT substring_index('www.cockroachlabs.com', '.', 2);
+----
+www.cockroachlabs
+
+query T
+SELECT substring_index('www.cockroachlabs.com', '.', -2);
+----
+cockroachlabs.com
+
+query T
+SELECT substring_index('hello.world.example.com', '.', 3);
+----
+hello.world.example
+
+query T
+SELECT substring_index('hello.world.example.com', '.', -1);
+----
+com
+
+# Test when count is 0, should return empty string
+query T
+SELECT substring_index('111-22222-3333', '-', 0);
+----
+·
+
+# Test when count exceeds available delimiters, should return full string
+query T
+SELECT substring_index('example.com', '.', 5);
+----
+example.com
+
+query T
+SELECT substring_index('example.com', '.', -5);
+----
+example.com
+
+# Test when delimiter is not found in the string, should return full string
+query T
+SELECT substring_index('no.delimiters.here', ':', 1);
+----
+no.delimiters.here
+
+query T
+SELECT substring_index('singleword', '.', 1);
+----
+singleword
+
+# Test when input is empty, should return empty string
+query T
+SELECT substring_index('', '.', 1);
+----
+·
+
+
+# Test when delimiter is empty, should return empty string
+query T
+SELECT substring_index('teststring', '', 1);
+----
+·
+
+# Test NULL behavior, should return NULL if any argument is NULL
+query T
+SELECT substring_index(NULL, '.', 1);
+----
+NULL
+
+query T
+SELECT substring_index('test.string', NULL, 1);
+----
+NULL
+
+query T
+SELECT substring_index('test.string', '.', NULL);
+----
+NULL
+
+# Test with multi-character delimiters
+query T
+SELECT substring_index('apple--banana--cherry--date', '--', 2);
+----
+apple--banana
+
+query T
+SELECT substring_index('apple--banana--cherry--date', '--', -2);
+----
+cherry--date
+
+# Test when the string contains repeated delimiters
+query T
+SELECT substring_index('a..b..c..d', '..', 2);
+----
+a..b
+
+query T
+SELECT substring_index('a..b..c..d', '..', -2);
+----
+c..d
 
 subtest end

@@ -97,7 +97,7 @@ SELECT * FROM a WHERE x + y < 10
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
- ├── stats: [rows=1333.333]
+ ├── stats: [rows=1333.33]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -114,7 +114,7 @@ SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=3.333334, distinct(1)=3.33333, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.33333, null(1,2)=0]
+ ├── stats: [rows=3.33333, distinct(1)=3.33333, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.33333, null(1,2)=0]
  ├── key: (1)
  ├── fd: ()-->(2)
  ├── scan a
@@ -179,14 +179,14 @@ SELECT y FROM idx WHERE y < 5 AND z < 10
 ----
 project
  ├── columns: y:2(int!null)
- ├── stats: [rows=311.1111]
+ ├── stats: [rows=311.111]
  └── select
       ├── columns: y:2(int!null) z:3(int!null)
-      ├── stats: [rows=311.1111, distinct(2)=33.3333, null(2)=0, distinct(3)=33.3333, null(3)=0, distinct(2,3)=311.111, null(2,3)=0]
+      ├── stats: [rows=311.111, distinct(2)=33.3333, null(2)=0, distinct(3)=33.3333, null(3)=0, distinct(2,3)=311.111, null(2,3)=0]
       ├── scan idx@yz
       │    ├── columns: y:2(int!null) z:3(int)
       │    ├── constraint: /-2/3/1: (/4/NULL - /NULL)
-      │    └── stats: [rows=333.3333, distinct(2)=33.3333, null(2)=0]
+      │    └── stats: [rows=333.333, distinct(2)=33.3333, null(2)=0]
       └── filters
            └── z:3 < 10 [type=bool, outer=(3), constraints=(/3: (/NULL - /9]; tight)]
 
@@ -235,11 +235,11 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:10(int!null)
- ├── stats: [rows=0.9999734]
+ ├── stats: [rows=0.999973]
  └── group-by (hash)
       ├── columns: col0:2(int) count_rows:10(int!null)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=0.9999734, distinct(2)=0.999973, null(2)=0.999973]
+      ├── stats: [rows=0.999973, distinct(2)=0.999973, null(2)=0.999973]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── select
@@ -340,7 +340,7 @@ SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bo
 select
  ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
  ├── cardinality: [0 - 8]
- ├── stats: [rows=0.08000001, distinct(1)=0.08, null(1)=0, distinct(2)=0.08, null(2)=0, distinct(3)=0.08, null(3)=0, distinct(2,3)=0.08, null(2,3)=0, distinct(1-3)=0.08, null(1-3)=0]
+ ├── stats: [rows=0.08, distinct(1)=0.08, null(1)=0, distinct(2)=0.08, null(2)=0, distinct(3)=0.08, null(3)=0, distinct(2,3)=0.08, null(2,3)=0, distinct(1-3)=0.08, null(1-3)=0]
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── scan district
@@ -407,7 +407,7 @@ WHERE name='andy'
 ----
 select
  ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
- ├── stats: [rows=2.297132, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=2.29713, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(2), (1)-->(3), (1)==(8), (8)==(1)
  ├── project
  │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:6(int) item_id:7(int) customer_id:8(int!null) year:9(int)
@@ -583,7 +583,7 @@ SELECT * FROM uvw WHERE u=v AND u=10
 ----
 select
  ├── columns: u:1(int!null) v:2(int!null) w:3(int)
- ├── stats: [rows=0.9108108, distinct(1)=0.910811, null(1)=0, distinct(2)=0.910811, null(2)=0, distinct(1,2)=0.910811, null(1,2)=0]
+ ├── stats: [rows=0.910811, distinct(1)=0.910811, null(1)=0, distinct(2)=0.910811, null(2)=0, distinct(1,2)=0.910811, null(1,2)=0]
  ├── fd: ()-->(1,2)
  ├── scan uvw
  │    ├── columns: u:1(int) v:2(int) w:3(int)
@@ -597,7 +597,7 @@ SELECT * FROM (SELECT * FROM uvw WHERE u=10) WHERE u=v
 ----
 select
  ├── columns: u:1(int!null) v:2(int!null) w:3(int)
- ├── stats: [rows=1.035371, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1.03537, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
  ├── select
  │    ├── columns: u:1(int!null) v:2(int) w:3(int)
@@ -694,19 +694,19 @@ WHERE
 index-join lineitem
  ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
  ├── stable
- ├── stats: [rows=111.1111, distinct(11)=33.3333, null(11)=0]
+ ├── stats: [rows=111.111, distinct(11)=33.3333, null(11)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)
  └── select
       ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
       ├── stable
-      ├── stats: [rows=111.1111]
+      ├── stats: [rows=111.111]
       ├── key: (1,4)
       ├── fd: (1,4)-->(11)
       ├── scan lineitem@l_sd
       │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
       │    ├── constraint: /11/1/4: [/'1995-09-01' - ]
-      │    ├── stats: [rows=333.3333, distinct(1)=98.2658, null(1)=0, distinct(4)=98.2658, null(4)=0, distinct(11)=33.3333, null(11)=0]
+      │    ├── stats: [rows=333.333, distinct(1)=98.2658, null(1)=0, distinct(4)=98.2658, null(4)=0, distinct(11)=33.3333, null(11)=0]
       │    ├── key: (1,4)
       │    └── fd: (1,4)-->(11)
       └── filters
@@ -855,14 +855,14 @@ SELECT * FROM t_json_arr WHERE b @> '{"a":"b"}'
 index-join t_json_arr
  ├── columns: a:1(int!null) b:2(jsonb!null) c:3(jsonb) d:4(int[])
  ├── immutable
- ├── stats: [rows=555.5556]
+ ├── stats: [rows=555.556]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t_json_arr@b_idx,inverted
       ├── columns: a:1(int!null)
       ├── inverted constraint: /7/1
       │    └── spans: ["a"/"b", "a"/"b"]
-      ├── stats: [rows=555.5556, distinct(7)=500, null(7)=0]
+      ├── stats: [rows=555.556, distinct(7)=500, null(7)=0]
       └── key: (1)
 
 # Should generate a zigzag join on the inverted index. Row count should be
@@ -895,7 +895,7 @@ SELECT * FROM t_json_arr WHERE c @> '{"a":"b"}'
 select
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb!null) d:4(int[])
  ├── immutable
- ├── stats: [rows=555.5556]
+ ├── stats: [rows=555.556]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t_json_arr
@@ -932,7 +932,7 @@ SELECT * FROM t_json_arr WHERE d @> ARRAY[1]
 select
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb) d:4(int[]!null)
  ├── immutable
- ├── stats: [rows=555.5556]
+ ├── stats: [rows=555.556]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t_json_arr
@@ -1031,12 +1031,12 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 project
  ├── columns: x:1(int!null) z:2(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=7.401281e-06]
+ ├── stats: [rows=7.40128e-06]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
       ├── cardinality: [0 - 4]
-      ├── stats: [rows=7.401281e-06, distinct(1)=7.40128e-06, null(1)=0, distinct(2)=7.40128e-06, null(2)=0, distinct(3)=7.40128e-06, null(3)=0, distinct(1,2)=7.40128e-06, null(1,2)=0, distinct(1-3)=7.40128e-06, null(1-3)=0]
+      ├── stats: [rows=7.40128e-06, distinct(1)=7.40128e-06, null(1)=0, distinct(2)=7.40128e-06, null(2)=0, distinct(3)=7.40128e-06, null(3)=0, distinct(1,2)=7.40128e-06, null(1,2)=0, distinct(1-3)=7.40128e-06, null(1-3)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2)
       ├── scan b
@@ -1056,7 +1056,7 @@ SELECT * FROM a WHERE x + y < 10
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
- ├── stats: [rows=1666.667]
+ ├── stats: [rows=1666.67]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
@@ -1073,7 +1073,7 @@ SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=3.341688, distinct(1)=3.34169, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.34169, null(1,2)=0]
+ ├── stats: [rows=3.34169, distinct(1)=3.34169, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=3.34169, null(1,2)=0]
  ├── key: (1)
  ├── fd: ()-->(2)
  ├── scan a
@@ -1575,12 +1575,12 @@ SELECT * FROM nation WHERE n_name = 'FRANCE' OR n_name = 'GERMANY'
 ----
 select
  ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- ├── stats: [rows=1000000, distinct(2)=2, null(2)=0]
+ ├── stats: [rows=1e+06, distinct(2)=2, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan nation
  │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- │    ├── stats: [rows=1000000, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -1596,7 +1596,7 @@ select
  ├── fd: (1)-->(2-4)
  ├── scan nation
  │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- │    ├── stats: [rows=1000000, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -1612,7 +1612,7 @@ select
  ├── fd: (1)-->(2-4)
  ├── scan nation
  │    ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- │    ├── stats: [rows=1000000, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
+ │    ├── stats: [rows=1e+06, distinct(1)=1e+06, null(1)=0, distinct(2)=2, null(2)=0, distinct(3)=100000, null(3)=0, distinct(4)=100000, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -1672,7 +1672,7 @@ SELECT * FROM hist_and_distinct WHERE a = 10 AND b = 10 AND c = 10 AND d >= 10 A
 ----
 select
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=0.3000001, distinct(1)=0.3, null(1)=0, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0, distinct(4)=0.3, null(4)=0, distinct(1-3)=0.3, null(1-3)=0, distinct(1-4)=0.3, null(1-4)=0]
+ ├── stats: [rows=0.3, distinct(1)=0.3, null(1)=0, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0, distinct(4)=0.3, null(4)=0, distinct(1-3)=0.3, null(1-3)=0, distinct(1-4)=0.3, null(1-4)=0]
  │   histogram(1)=  0 0.3
  │                <--- 10
  ├── fd: ()-->(1-3)
@@ -1930,7 +1930,7 @@ SELECT * FROM data WHERE user_id = '679d3e56-b985-63d2-5442-e4ba7a8479e3'
 ----
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
- ├── stats: [rows=10.01603, distinct(1)=1, null(1)=0]
+ ├── stats: [rows=10.016, distinct(1)=1, null(1)=0]
  │   histogram(1)=  0                  10.016
  │                <--- '679d3e56-b985-63d2-5442-e4ba7a8479e3'
  ├── fd: ()-->(1)
@@ -1947,7 +1947,7 @@ SELECT * FROM data WHERE name = 'abc'
 ----
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
- ├── stats: [rows=10.01603, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=10.016, distinct(2)=1, null(2)=0]
  │   histogram(2)=  0 10.016
  │                <--- 'abc'
  ├── fd: ()-->(2)
@@ -1966,7 +1966,7 @@ SELECT * FROM data WHERE created = '2020-04-11 06:25:41+00:00'
 ----
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz!null)
- ├── stats: [rows=1.000001, distinct(3)=1, null(3)=0]
+ ├── stats: [rows=1, distinct(3)=1, null(3)=0]
  │   histogram(3)=  0             1
  │                <--- '2020-04-11 06:25:41+00'
  ├── fd: ()-->(3)
@@ -1987,7 +1987,7 @@ SELECT * FROM data WHERE name >= 'bbb'
 ----
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
- ├── stats: [rows=3090.897, distinct(2)=309.433, null(2)=0]
+ ├── stats: [rows=3090.9, distinct(2)=309.433, null(2)=0]
  │   histogram(2)=  0    0    3089.9   1
  │                <--- 'bbb' -------- 'c'
  ├── scan data
@@ -2059,11 +2059,11 @@ SELECT * FROM b WHERE x = 1 AND z = 2
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=5.654455]
+ ├── stats: [rows=5.65446]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
-      ├── stats: [rows=5.654455, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+      ├── stats: [rows=5.65446, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
       ├── key: (3)
       ├── fd: ()-->(1,2), (3)-->(4,5)
       ├── scan b
@@ -2626,14 +2626,14 @@ SELECT * FROM disjunction WHERE a = 'foo' OR b = 'foo' OR c = 'foo' LIMIT 5
 limit
  ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=2.998501]
+ ├── stats: [rows=2.9985]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── distinct-on
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  │    ├── grouping columns: k:1(int!null)
  │    ├── internal-ordering: +1
- │    ├── stats: [rows=2.998501]
+ │    ├── stats: [rows=2.9985]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 5.00
@@ -2641,7 +2641,7 @@ limit
  │    │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  │    │    ├── left columns: k:7(int) a:8(string) b:9(string) c:10(string)
  │    │    ├── right columns: k:13(int) a:14(string) b:15(string) c:16(string)
- │    │    ├── stats: [rows=2.999501]
+ │    │    ├── stats: [rows=2.9995]
  │    │    ├── ordering: +1
  │    │    ├── index-join disjunction
  │    │    │    ├── columns: k:7(int!null) a:8(string!null) b:9(string) c:10(string)
@@ -2717,12 +2717,12 @@ SELECT * FROM disjunction WHERE (a = 'foo' OR b = 'foo') AND c = 'foo' LIMIT 5
 limit
  ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=0.0009997504]
+ ├── stats: [rows=0.00099975]
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── select
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
- │    ├── stats: [rows=0.0009997504, distinct(4)=0.00099975, null(4)=0]
+ │    ├── stats: [rows=0.00099975, distinct(4)=0.00099975, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3)
  │    ├── limit hint: 5.00
@@ -2865,7 +2865,7 @@ limit
  ├── distinct-on
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string)
  │    ├── grouping columns: k:1(int!null)
- │    ├── stats: [rows=59.88008]
+ │    ├── stats: [rows=59.8801]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 5.00
@@ -2962,12 +2962,12 @@ SELECT * FROM disjunction WHERE (a LIKE 'foo%' OR b LIKE 'foo%') AND c LIKE 'foo
 limit
  ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=0.07992001]
+ ├── stats: [rows=0.07992]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1(int!null) a:2(string) b:3(string) c:4(string!null)
- │    ├── stats: [rows=0.07992001, distinct(4)=0.07992, null(4)=0]
+ │    ├── stats: [rows=0.07992, distinct(4)=0.07992, null(4)=0]
  │    │   histogram(4)=  0 0.03996 0.03996    0
  │    │                <--- 'foo' --------- 'fop'
  │    ├── key: (1)
@@ -3104,7 +3104,7 @@ SELECT * FROM ab WHERE a=1 AND b=1
 ----
 select
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- ├── stats: [rows=6658.579, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ ├── stats: [rows=6658.58, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  │   histogram(1)=  0 6658.6
  │                <---- 1 --
  │   histogram(2)=  0 6658.6
@@ -3317,11 +3317,11 @@ union
  ├── columns: rowid:9(int!null)
  ├── left columns: t85499.rowid:2(int)
  ├── right columns: t85499.rowid:6(int)
- ├── stats: [rows=1111.111, distinct(9)=1111.11, null(9)=0]
+ ├── stats: [rows=1111.11, distinct(9)=1111.11, null(9)=0]
  ├── key: (9)
  ├── select
  │    ├── columns: t85499.rowid:2(int!null)
- │    ├── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0]
+ │    ├── stats: [rows=111.111, distinct(2)=111.111, null(2)=0]
  │    ├── key: (2)
  │    ├── scan t85499
  │    │    ├── columns: t85499.rowid:2(int!null)
@@ -4014,12 +4014,12 @@ left-join (lookup table1)
  ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  ├── key columns: [4 5] = [10 11]
  ├── lookup columns are key
- ├── stats: [rows=1.245162, distinct(10)=1, null(10)=0.0814548, distinct(11)=1.16371, null(11)=0.0814548]
+ ├── stats: [rows=1.24516, distinct(10)=1, null(10)=0.0814548, distinct(11)=1.16371, null(11)=0.0814548]
  ├── key: (2,4,5)
  ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
  ├── index-join table2
  │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
- │    ├── stats: [rows=1.245162, distinct(1)=1, null(1)=0, distinct(4)=1.07, null(4)=0, distinct(5)=1.24516, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(4)=1.07, null(4)=0, distinct(5)=1.24516, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
  │    │   histogram(1)=  0 1.2452
  │    │                <--- 'b' -
  │    │   histogram(6)=  0 1.2452
@@ -4031,7 +4031,7 @@ left-join (lookup table1)
  │    └── scan table2@table2_col6_col7_idx
  │         ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  │         ├── constraint: /6/7/1/2/4/5: [/'f'/'x'/'b' - /'f'/'x'/'b']
- │         ├── stats: [rows=1.245162, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │         ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
  │         │   histogram(1)=  0 1.2452
  │         │                <--- 'b' -
  │         │   histogram(6)=  0 1.2452
@@ -4067,12 +4067,12 @@ WHERE
 left-join (hash)
  ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- ├── stats: [rows=2623.017, distinct(10)=1, null(10)=2123.01, distinct(11)=500.011, null(11)=2123.01]
+ ├── stats: [rows=2623.02, distinct(10)=1, null(10)=2123.01, distinct(11)=500.011, null(11)=2123.01]
  ├── key: (2,4,5)
  ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
  ├── select
  │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
- │    ├── stats: [rows=2623.017, distinct(1)=1, null(1)=0, distinct(4)=4, null(4)=0, distinct(5)=2622.96, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    ├── stats: [rows=2623.02, distinct(1)=1, null(1)=0, distinct(4)=4, null(4)=0, distinct(5)=2622.96, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
  │    │   histogram(1)=  0 2623
  │    │                <--- 'b'
  │    │   histogram(6)=  0 2623
@@ -4095,7 +4095,7 @@ left-join (hash)
  ├── scan table1
  │    ├── columns: table1.col1:10(string!null) table1.col2:11(string!null) table1.col3:12(int!null)
  │    ├── constraint: /10/11: [/'e' - /'e']
- │    ├── stats: [rows=2000.002, distinct(10)=1, null(10)=0, distinct(11)=2000, null(11)=0]
+ │    ├── stats: [rows=2000, distinct(10)=1, null(10)=0, distinct(11)=2000, null(11)=0]
  │    │   histogram(10)=  0 2000
  │    │                 <--- 'e'
  │    ├── key: (11)
@@ -4447,10 +4447,10 @@ SELECT c0 FROM t00 WHERE (c0 = 1 AND (c1 = 1 OR c2 = 1)) OR
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=3.333333]
+ ├── stats: [rows=3.33333]
  └── select
       ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
-      ├── stats: [rows=3.333333]
+      ├── stats: [rows=3.33333]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int) c2:3(int) c3:4(int) c4:5(int) c5:6(int)
       │    └── stats: [rows=10]

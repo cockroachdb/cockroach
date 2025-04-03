@@ -133,14 +133,13 @@ func ExplainVec(
 			for _, flow := range sortedFlows {
 				var cleanup func()
 				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, recordingStats)
-				// We need to delay the cleanup until after the tree has been
-				// formatted.
-				defer cleanup()
 				if err != nil {
 					conversionErr = err
+					cleanup()
 					return
 				}
 				formatChains(root, flow.sqlInstanceID, opChains, verbose)
+				cleanup()
 			}
 		}
 	}); err != nil {

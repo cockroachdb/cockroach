@@ -17,9 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -171,8 +173,9 @@ type Index interface {
 	IsCreatedExplicitly() bool
 	GetInvisibility() float64
 	GetPredicate() string
-	GetType() descpb.IndexDescriptor_Type
+	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
+	GetVecConfig() vecpb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
@@ -221,6 +224,18 @@ type Index interface {
 	// InvertedColumnKind returns the kind of the inverted column of the inverted
 	// index.
 	InvertedColumnKind() catpb.InvertedIndexColumnKind
+
+	// VectorColumnName returns the name of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnName() string
+
+	// VectorColumnID returns the ColumnID of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnID() descpb.ColumnID
 
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
@@ -535,6 +550,26 @@ type CheckConstraint interface {
 	IsHashShardingConstraint() bool
 }
 
+// CheckConstraintValidator interface is designed for evaluating whether check
+// constraints are violated. It represents a subset of the CheckConstraint
+// interface, excluding certain elements that are not applicable to synthetic
+// constraints added for row-level security.
+type CheckConstraintValidator interface {
+	// GetName returns the name of this constraint update mutation.
+	GetName() string
+
+	// GetExpr returns the check expression as a string.
+	GetExpr() string
+
+	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
+	// to enforce row-level security policies.
+	IsRLSConstraint() bool
+
+	// IsCheckFailed returns true if the constraint was violated based on the
+	// input given.
+	IsCheckFailed(boolVal, isNull bool) bool
+}
+
 // ForeignKeyConstraint is an interface around a check constraint.
 type ForeignKeyConstraint interface {
 	WithoutIndexConstraint
@@ -765,6 +800,11 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
+// ForEachVectorIndex is like ForEachIndex over VectorIndexes().
+func ForEachVectorIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.VectorIndexes(), f)
+}
+
 // ForEachNonPrimaryIndex is like ForEachIndex over
 // NonPrimaryIndexes().
 func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -831,10 +871,16 @@ func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.NonDropIndexes(), test)
 }
 
-// FindPartialIndex returns the first index in PartialIndex() for which test
+// FindPartialIndex returns the first index in PartialIndexes() for which test
 // returns true.
 func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindVectorIndex returns the first index in VectorIndexes() for which test
+// returns true.
+func FindVectorIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.VectorIndexes(), test)
 }
 
 // FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()

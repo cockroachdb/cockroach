@@ -51,6 +51,12 @@ func (v verifyingLockTable) Clear(disable bool) {
 	v.lt.Clear(disable)
 }
 
+// ClearGE implements the lockTable interface.
+func (v verifyingLockTable) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
+	defer v.lt.verify()
+	return v.lt.ClearGE(key)
+}
+
 // ScanAndEnqueue implements the lockTable interface.
 func (v verifyingLockTable) ScanAndEnqueue(
 	req Request, guard lockTableGuard,
@@ -104,6 +110,12 @@ func (v verifyingLockTable) QueryLockTableState(
 	span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return v.lt.QueryLockTableState(span, opts)
+}
+
+func (v verifyingLockTable) ExportUnreplicatedLocks(
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+) {
+	v.lt.ExportUnreplicatedLocks(span, exporter)
 }
 
 // Metrics implements the lockTable interface.

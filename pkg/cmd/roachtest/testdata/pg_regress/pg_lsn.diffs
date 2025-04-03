@@ -1,0 +1,71 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/pg_lsn.out --label=/mnt/data1/postgres/src/test/regress/results/pg_lsn.out /mnt/data1/postgres/src/test/regress/expected/pg_lsn.out /mnt/data1/postgres/src/test/regress/results/pg_lsn.out
+--- /mnt/data1/postgres/src/test/regress/expected/pg_lsn.out
++++ /mnt/data1/postgres/src/test/regress/results/pg_lsn.out
+@@ -8,37 +8,18 @@
+ -- Incorrect input
+ INSERT INTO PG_LSN_TBL VALUES ('G/0');
+ ERROR:  invalid input syntax for type pg_lsn: "G/0"
+-LINE 1: INSERT INTO PG_LSN_TBL VALUES ('G/0');
+-                                       ^
+ INSERT INTO PG_LSN_TBL VALUES ('-1/0');
+ ERROR:  invalid input syntax for type pg_lsn: "-1/0"
+-LINE 1: INSERT INTO PG_LSN_TBL VALUES ('-1/0');
+-                                       ^
+ INSERT INTO PG_LSN_TBL VALUES (' 0/12345678');
+-ERROR:  invalid input syntax for type pg_lsn: " 0/12345678"
+-LINE 1: INSERT INTO PG_LSN_TBL VALUES (' 0/12345678');
+-                                       ^
+ INSERT INTO PG_LSN_TBL VALUES ('ABCD/');
+ ERROR:  invalid input syntax for type pg_lsn: "ABCD/"
+-LINE 1: INSERT INTO PG_LSN_TBL VALUES ('ABCD/');
+-                                       ^
+ INSERT INTO PG_LSN_TBL VALUES ('/ABCD');
+ ERROR:  invalid input syntax for type pg_lsn: "/ABCD"
+-LINE 1: INSERT INTO PG_LSN_TBL VALUES ('/ABCD');
+-                                       ^
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('16AE7F7', 'pg_lsn');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('16AE7F7', 'pg_lsn');
+-                     message                     | detail | hint | sql_error_code 
+--------------------------------------------------+--------+------+----------------
+- invalid input syntax for type pg_lsn: "16AE7F7" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- Min/Max aggregation
+ SELECT MIN(f1), MAX(f1) FROM PG_LSN_TBL;
+  min |        max        
+@@ -142,22 +123,11 @@
+        generate_series(1, 5) k
+   WHERE i <= 10 AND j > 0 AND j <= 10
+   ORDER BY f;
+-                                QUERY PLAN                                
+---------------------------------------------------------------------------
+- Sort
+-   Sort Key: (((((i.i)::text || '/'::text) || (j.j)::text))::pg_lsn)
+-   ->  HashAggregate
+-         Group Key: ((((i.i)::text || '/'::text) || (j.j)::text))::pg_lsn
+-         ->  Nested Loop
+-               ->  Function Scan on generate_series k
+-               ->  Materialize
+-                     ->  Nested Loop
+-                           ->  Function Scan on generate_series j
+-                                 Filter: ((j > 0) AND (j <= 10))
+-                           ->  Function Scan on generate_series i
+-                                 Filter: (i <= 10)
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT DISTINCT (i || '/' || j)::pg_lsn f
+   FROM generate_series(1, 10) i,
+        generate_series(1, 10) j,

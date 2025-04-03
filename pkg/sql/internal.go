@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -181,7 +181,7 @@ func MakeInternalExecutorMemMonitor(
 	memMetrics MemoryMetrics, settings *cluster.Settings,
 ) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:       mon.MakeMonitorName("internal SQL executor"),
+		Name:       mon.MakeName("internal SQL executor"),
 		CurCount:   memMetrics.CurBytesCount,
 		MaxHist:    memMetrics.MaxBytesHist,
 		Settings:   settings,
@@ -303,7 +303,7 @@ func (ie *InternalExecutor) initConnEx(
 	}
 	clientComm.rowsAffectedState.numRewindsLimit = ieRowsAffectedRetryLimit.Get(&ie.s.cfg.Settings.SV)
 
-	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName)
+	applicationStats := ie.s.localSqlStats.GetApplicationStats(sd.ApplicationName)
 	sds := sessiondata.NewStack(sd)
 	defaults := SessionDefaults(map[string]string{
 		"application_name": sd.ApplicationName,
@@ -384,7 +384,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	sdMutIterator *sessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
-	applicationStats sqlstats.ApplicationStats,
+	applicationStats *ssmemstorage.Container,
 	attributeToUser bool,
 ) (ex *connExecutor, _ error) {
 
@@ -477,6 +477,9 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ex.QualityOfService(),
 		isolation.Serializable,
 		txn.GetOmitInRangefeeds(),
+		// TODO(yuzefovich): re-evaluate whether we want to allow buffered
+		// writes for internal executor.
+		false, /* bufferedWritesEnabled */
 	)
 
 	// Modify the Collection to match the parent executor's Collection.

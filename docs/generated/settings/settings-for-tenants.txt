@@ -78,6 +78,7 @@ feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALY
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	application
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	system-visible
 kv.closed_timestamp.follower_reads.enabled (alias: kv.closed_timestamp.follower_reads_enabled)	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible
+kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled	boolean	false	if enabled, observed network latency between leaseholders and their furthest follower will be used to adjust closed timestamp policies for rangesranges configured to serve global reads. kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.	system-visible
 kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	system-visible
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
@@ -96,6 +97,7 @@ kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
 kv.transaction.randomized_anchor_key.enabled	boolean	false	dictates whether a transactions anchor key is randomized or not	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
+kv.transaction.write_buffering.enabled	boolean	false	if enabled, transactional writes are buffered on the client	application
 kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
@@ -110,6 +112,7 @@ server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client con
 server.auth_log.sql_sessions.enabled	boolean	false	if set, log verbose SQL session authentication events to the SESSIONS log channel (note: may hinder performance on loaded nodes). Session start and end events are always logged regardless of this setting; disable the SESSIONS log channel to suppress them.	application
 server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	application
 server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	application
+server.child_metrics.include_aggregate.enabled	boolean	true	include the reporting of the aggregate time series when child metrics are enabled. This cluster setting has no effect if child metrics are disabled.	application
 server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	application
 server.clock.forward_jump_check.enabled (alias: server.clock.forward_jump_check_enabled)	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	application
 server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	application
@@ -143,6 +146,7 @@ server.oidc_authentication.client_id	string		sets OIDC client id	application
 server.oidc_authentication.client_secret	string		sets OIDC client secret	application
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	application
+server.oidc_authentication.provider.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while authenticating through the OIDC provider	application
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
@@ -328,8 +332,6 @@ sql.metrics.statement_details.enabled	boolean	true	collect per-statement query s
 sql.metrics.statement_details.gateway_node.enabled	boolean	false	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	application
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	application
 sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory	application
-sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint	application
-sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected	application
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.	application
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics	application
 sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)	application
@@ -342,10 +344,12 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statistics collection mode	application
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
+sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
 sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	application
@@ -359,6 +363,7 @@ sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	ap
 sql.stats.histogram_samples.count	integer	0	number of rows sampled for histogram construction during table statistics collection. Not setting this or setting a value of 0 means that a reasonable sample size will be automatically picked based on the table size.	application
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	application
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	application
+sql.stats.non_indexed_json_histograms.enabled	boolean	false	set to true to collect table statistics histograms on non-indexed JSON columns	application
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	application
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	application
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	application
@@ -386,6 +391,7 @@ sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
 sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
 sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
+sql.vecindex.stalled_op.timeout	duration	100ms	amount of time before other vector index workers will assist with a stalled background fixup	application
 storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
 storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
@@ -402,5 +408,6 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	false	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
-ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.3-upgrading-to-1000025.1-step-018	set the active cluster version in the format '<major>.<minor>'	application
+ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
+ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
+version	version	1000025.1-upgrading-to-1000025.2-step-006	set the active cluster version in the format '<major>.<minor>'	application

@@ -550,26 +550,37 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	"crdb_internal.transaction_contention_events": {
 		customQueryUnredacted: `
+with fingerprint_queries as (
+	SELECT distinct fingerprint_id, metadata->> 'query' as query  
+	FROM system.statement_statistics
+),
+transaction_fingerprints as (
+		SELECT distinct fingerprint_id, transaction_fingerprint_id
+		FROM system.statement_statistics
+), 
+transaction_queries as (
+		SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
+		FROM fingerprint_queries fq
+		JOIN transaction_fingerprints tf on tf.fingerprint_id = fq.fingerprint_id
+		GROUP BY tf.transaction_fingerprint_id
+)
 SELECT collection_ts,
        contention_duration,
        waiting_txn_id,
        waiting_txn_fingerprint_id,
        waiting_stmt_fingerprint_id,
-       s.metadata ->> 'query'                      AS waiting_stmt_query,
+       fq.query                      AS waiting_stmt_query,
        blocking_txn_id,
        blocking_txn_fingerprint_id,
-       array_agg(distinct ss.metadata ->> 'query') AS blocking_txn_queries_unordered,
+       tq.queries AS blocking_txn_queries_unordered,
        contending_pretty_key,
        index_name,
        table_name,
        database_name
 FROM crdb_internal.transaction_contention_events
-         LEFT JOIN system.statement_statistics AS s ON waiting_stmt_fingerprint_id = s.fingerprint_id
-         LEFT JOIN system.statement_statistics AS ss ON ss.transaction_fingerprint_id = blocking_txn_fingerprint_id
-WHERE ss.transaction_fingerprint_id != '\x0000000000000000' AND s.fingerprint_id != '\x0000000000000000'
-GROUP BY collection_ts, contention_duration, waiting_txn_id, waiting_txn_fingerprint_id, blocking_txn_id,
-         blocking_txn_fingerprint_id, waiting_stmt_fingerprint_id, contending_pretty_key, s.metadata ->> 'query',
-         index_name, table_name, database_name
+LEFT JOIN fingerprint_queries fq ON fq.fingerprint_id = waiting_stmt_fingerprint_id
+LEFT JOIN transaction_queries tq ON tq.transaction_fingerprint_id = blocking_txn_fingerprint_id
+WHERE fq.fingerprint_id != '\x0000000000000000' AND tq.transaction_fingerprint_id != '\x0000000000000000'
 `,
 		customQueryUnredactedFallback: `
 SELECT collection_ts,
@@ -928,9 +939,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"index_recommendations",
 			"latency_seconds_min",
 			"latency_seconds_max",
-			"latency_seconds_p50",
-			"latency_seconds_p90",
-			"latency_seconds_p99",
 		},
 	},
 	"crdb_internal.node_transaction_statistics": {

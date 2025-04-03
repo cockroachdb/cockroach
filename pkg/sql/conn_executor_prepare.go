@@ -225,7 +225,7 @@ func (ex *connExecutor) prepare(
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
-		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
+		if err := ex.maybeAdjustTxnForDDL(ctx, stmt); err != nil {
 			return err
 		}
 
@@ -285,9 +285,9 @@ func (ex *connExecutor) prepare(
 		if origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		} else {
-			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
+			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction | tree.FmtSimple)
 			f.FormatNode(stmt.AST)
-			redactableStmt := redact.SafeString(f.CloseAndGetString())
+			redactableStmt := redact.RedactableString(f.CloseAndGetString())
 			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
@@ -388,6 +388,11 @@ func (ex *connExecutor) execBind(
 		if !ex.isAllowedInAbortedTxn(ps.AST) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
+	}
+
+	// Check if we need to auto-commit the transaction due to DDL.
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ps.AST); ev != nil {
+		return ev, payload
 	}
 
 	portalName := bindCmd.PortalName

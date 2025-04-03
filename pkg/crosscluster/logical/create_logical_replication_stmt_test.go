@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -51,7 +52,7 @@ func TestResolveDestinationObjects(t *testing.T) {
 	require.NoError(t, err)
 
 	resolveObjects := func(destResources tree.LogicalReplicationResources, createTables bool) (resolved ResolvedDestObjects, err error) {
-		err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, _ *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, _ *descs.Collection) error {
 			opName := redact.SafeString("resolve")
 			sessionData := sql.NewInternalSessionData(ctx, execCfg.Settings, opName)
 			sessionData.Database = "defaultdb"

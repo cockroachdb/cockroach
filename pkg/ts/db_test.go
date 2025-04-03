@@ -74,11 +74,11 @@ type testModelRunner struct {
 func newTestModelRunner(t *testing.T) testModelRunner {
 	st := cluster.MakeTestingClusterSettings()
 	workerMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("timeseries-test-worker"),
+		Name:     mon.MakeName("timeseries-test-worker"),
 		Settings: st,
 	})
 	resultMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("timeseries-test-result"),
+		Name:     mon.MakeName("timeseries-test-result"),
 		Settings: st,
 	})
 	return testModelRunner{

@@ -105,13 +105,14 @@ func getUDTsForTable(
 		}
 		typeDescriptors = append(typeDescriptors, *typeDesc.TypeDesc())
 	}
-	return typeDescriptors, nil, nil
+	return typeDescriptors, foundTypeDescriptors, nil
 }
 
 // IngestExternalCatalog ingests the tables in the external catalog into into
 // the database and schema.
 //
-// TODO: provide a list of databaseID/schemaID pairs to ingest into.
+// TODO: provide a more general list of rewrite rules other than the ingesting
+// table names and the ingesting parent schema and db id.
 func IngestExternalCatalog(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -122,6 +123,7 @@ func IngestExternalCatalog(
 	databaseID descpb.ID,
 	schemaID descpb.ID,
 	setOffline bool,
+	ingestingUnqualifiedTableNames []string,
 ) (externalpb.ExternalCatalog, error) {
 
 	ingestedCatalog := externalpb.ExternalCatalog{}
@@ -133,7 +135,7 @@ func IngestExternalCatalog(
 	}
 	tablesToWrite := make([]catalog.TableDescriptor, 0, len(externalCatalog.Tables))
 	var originalParentID descpb.ID
-	for _, table := range externalCatalog.Tables {
+	for i, table := range externalCatalog.Tables {
 		if originalParentID == 0 {
 			originalParentID = table.ParentID
 		} else if originalParentID != table.ParentID {
@@ -150,6 +152,7 @@ func IngestExternalCatalog(
 			// other things.
 			mutTable.SetOffline("")
 		}
+		mutTable.Name = ingestingUnqualifiedTableNames[i]
 		mutTable.UnexposedParentSchemaID = schemaID
 		mutTable.ParentID = dbDesc.GetID()
 		mutTable.Version = 1
@@ -160,6 +163,7 @@ func IngestExternalCatalog(
 	return ingestedCatalog, ingesting.WriteDescriptors(
 		ctx, txn.KV(), user, descsCol, nil, nil, tablesToWrite, nil, nil,
 		tree.RequestedDescriptors, nil /* extra */, "", true,
+		false, /*allowCrossDatabaseRefs*/
 	)
 }
 
@@ -254,6 +258,9 @@ func DropIngestedExternalCatalog(
 	for _, t := range mutableTables {
 		if err := descsCol.WriteDescToBatch(ctx, kvTrace, t, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
+		}
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, t, b); err != nil {
+			return errors.Wrap(err, "writing namespace delete to batch")
 		}
 	}
 	return txn.KV().Run(ctx, b)

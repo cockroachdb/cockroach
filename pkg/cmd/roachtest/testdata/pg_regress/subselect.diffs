@@ -1,0 +1,1403 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/subselect.out --label=/mnt/data1/postgres/src/test/regress/results/subselect.out /mnt/data1/postgres/src/test/regress/expected/subselect.out /mnt/data1/postgres/src/test/regress/results/subselect.out
+--- /mnt/data1/postgres/src/test/regress/expected/subselect.out
++++ /mnt/data1/postgres/src/test/regress/results/subselect.out
+@@ -181,14 +181,7 @@
+   FROM SUBSELECT_TBL upper
+   WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+                WHERE f2 = CAST(f3 AS integer));
+- Correlated Field | Second Field 
+-------------------+--------------
+-                1 |            3
+-                2 |            4
+-                3 |            5
+-                6 |            8
+-(4 rows)
+-
++ERROR:  unsupported comparison operator: <float> IN <tuple{int}>
+ SELECT f1 AS "Correlated Field"
+   FROM SUBSELECT_TBL
+   WHERE (f1, f2) IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
+@@ -204,17 +197,9 @@
+ 
+ -- Subselects without aliases
+ SELECT count FROM (SELECT COUNT(DISTINCT name) FROM road);
+- count 
+--------
+-  2911
+-(1 row)
+-
++ERROR:  relation "road" does not exist
+ SELECT COUNT(*) FROM (SELECT DISTINCT name FROM road);
+- count 
+--------
+-  2911
+-(1 row)
+-
++ERROR:  relation "road" does not exist
+ SELECT * FROM (SELECT * FROM int4_tbl), (VALUES (123456)) WHERE f1 = column1;
+    f1   | column1 
+ --------+---------
+@@ -230,24 +215,14 @@
+ ----+------------------+-------------------
+   0 |              123 |               456
+   0 |              123 |  4567890123456789
+-  0 | 4567890123456789 | -4567890123456789
+   0 | 4567890123456789 |               123
+   0 | 4567890123456789 |  4567890123456789
++  0 | 4567890123456789 | -4567890123456789
+ (5 rows)
+ 
+ \sv view_unnamed_ss
+ CREATE OR REPLACE VIEW public.view_unnamed_ss AS
+- SELECT unnamed_subquery.a1,
+-    unnamed_subquery_1.q1,
+-    unnamed_subquery_1.q2
+-   FROM ( SELECT unnamed_subquery_2.a1
+-           FROM ( SELECT abs(int4_tbl.f1) AS a1
+-                   FROM int4_tbl) unnamed_subquery_2) unnamed_subquery,
+-    ( SELECT int8_tbl.q1,
+-            int8_tbl.q2
+-           FROM int8_tbl) unnamed_subquery_1
+-  WHERE unnamed_subquery.a1 < 10 AND unnamed_subquery_1.q1 > unnamed_subquery.a1
+-  ORDER BY unnamed_subquery_1.q1, unnamed_subquery_1.q2
++SELECT "?subquery1?".a1, "?subquery3?".q1, "?subquery3?".q2 FROM (SELECT "?subquery2?".a1 FROM (SELECT abs(f1) AS a1 FROM root.public.int4_tbl) AS "?subquery2?") AS "?subquery1?", (SELECT int8_tbl.q1, int8_tbl.q2 FROM root.public.int8_tbl) AS "?subquery3?" WHERE (a1 < 10) AND (q1 > a1) ORDER BY q1, q2
+ DROP VIEW view_unnamed_ss;
+ -- Test matching of locking clause to correct alias
+ CREATE VIEW view_unnamed_ss_locking AS
+@@ -256,14 +231,7 @@
+   FOR UPDATE OF unnamed_subquery;
+ \sv view_unnamed_ss_locking
+ CREATE OR REPLACE VIEW public.view_unnamed_ss_locking AS
+- SELECT unnamed_subquery.f1,
+-    unnamed_subquery_1.q1,
+-    unnamed_subquery_1.q2
+-   FROM ( SELECT int4_tbl.f1
+-           FROM int4_tbl) unnamed_subquery,
+-    int8_tbl unnamed_subquery_1
+-  WHERE unnamed_subquery.f1 = unnamed_subquery_1.q1
+- FOR UPDATE OF unnamed_subquery_1
++SELECT "?subquery1?".f1, unnamed_subquery.q1, unnamed_subquery.q2 FROM (SELECT int4_tbl.f1 FROM root.public.int4_tbl) AS "?subquery1?", root.public.int8_tbl AS unnamed_subquery WHERE f1 = q1 FOR UPDATE OF unnamed_subquery
+ DROP VIEW view_unnamed_ss_locking;
+ --
+ -- Use some existing tables in the regression test
+@@ -284,12 +252,7 @@
+ 
+ select q1, float8(count(*)) / (select count(*) from int8_tbl)
+ from int8_tbl group by q1 order by q1;
+-        q1        | ?column? 
+-------------------+----------
+-              123 |      0.4
+- 4567890123456789 |      0.6
+-(2 rows)
+-
++ERROR:  unsupported binary operator: <float> / <int>
+ -- Unspecified-type literals in output columns should resolve as text
+ SELECT *, pg_typeof(f1) FROM
+   (SELECT 'foo' AS f1 FROM generate_series(1,3)) ss ORDER BY 1;
+@@ -302,42 +265,25 @@
+ 
+ -- ... unless there's context to suggest differently
+ explain (verbose, costs off) select '42' union all select '43';
+-         QUERY PLAN         
+-----------------------------
+- Append
+-   ->  Result
+-         Output: '42'::text
+-   ->  Result
+-         Output: '43'::text
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select '42' union all select '43'
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off) select '42' union all select 43;
+-     QUERY PLAN     
+---------------------
+- Append
+-   ->  Result
+-         Output: 42
+-   ->  Result
+-         Output: 43
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select '42' union all select 43
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check materialization of an initplan reference (bug #14524)
+ explain (verbose, costs off)
+ select 1 = all (select (select 1));
+-            QUERY PLAN             
+------------------------------------
+- Result
+-   Output: (SubPlan 2)
+-   SubPlan 2
+-     ->  Materialize
+-           Output: ($0)
+-           InitPlan 1 (returns $0)
+-             ->  Result
+-                   Output: 1
+-           ->  Result
+-                 Output: $0
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select 1 = all (select (select 1));
+  ?column? 
+ ----------
+@@ -350,40 +296,27 @@
+ explain (costs off)
+ select * from int4_tbl o where exists
+   (select 1 from int4_tbl i where i.f1=o.f1 limit null);
+-             QUERY PLAN             
+-------------------------------------
+- Hash Semi Join
+-   Hash Cond: (o.f1 = i.f1)
+-   ->  Seq Scan on int4_tbl o
+-   ->  Hash
+-         ->  Seq Scan on int4_tbl i
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ select * from int4_tbl o where not exists
+   (select 1 from int4_tbl i where i.f1=o.f1 limit 1);
+-             QUERY PLAN             
+-------------------------------------
+- Hash Anti Join
+-   Hash Cond: (o.f1 = i.f1)
+-   ->  Seq Scan on int4_tbl o
+-   ->  Hash
+-         ->  Seq Scan on int4_tbl i
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ select * from int4_tbl o where exists
+   (select 1 from int4_tbl i where i.f1=o.f1 limit 0);
+-              QUERY PLAN              
+---------------------------------------
+- Seq Scan on int4_tbl o
+-   Filter: (SubPlan 1)
+-   SubPlan 1
+-     ->  Limit
+-           ->  Seq Scan on int4_tbl i
+-                 Filter: (f1 = o.f1)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ --
+ -- Test cases to catch unpleasant interactions between IN-join processing
+ -- and subquery pullup.
+@@ -550,7 +483,6 @@
+ (11 rows)
+ 
+ DROP TABLE orderstest cascade;
+-NOTICE:  drop cascades to view orders_view
+ --
+ -- Test cases to catch situations where rule rewriter fails to propagate
+ -- hasSubLinks flag correctly.  Per example from Kyle Bateman.
+@@ -569,27 +501,57 @@
+     select * from shipped where ttype = 'wt';
+ create rule shipped_view_insert as on insert to shipped_view do instead
+     insert into shipped values('wt', new.ordnum, new.partnum, new.value);
++ERROR:  at or near "shipped_view_insert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule shipped_view_insert as on insert to shipped_view do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into parts (partnum, cost) values (1, 1234.56);
+ insert into shipped_view (ordnum, partnum, value)
+     values (0, 1, (select cost from parts where partnum = '1'));
++ERROR:  "shipped_view" is not a table
+ select * from shipped_view;
+- ttype | ordnum | partnum |  value  
+--------+--------+---------+---------
+- wt    |      0 | 1       | 1234.56
+-(1 row)
++ ttype | ordnum | partnum | value 
++-------+--------+---------+-------
++(0 rows)
+ 
+ create rule shipped_view_update as on update to shipped_view do instead
+     update shipped set partnum = new.partnum, value = new.value
+         where ttype = new.ttype and ordnum = new.ordnum;
++ERROR:  at or near "shipped_view_update": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule shipped_view_update as on update to shipped_view do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update shipped_view set value = 11
+     from int4_tbl a join int4_tbl b
+       on (a.f1 = (select f1 from int4_tbl c where c.f1=b.f1))
+     where ordnum = a.f1;
++ERROR:  "shipped_view" is not a table
+ select * from shipped_view;
+  ttype | ordnum | partnum | value 
+ -------+--------+---------+-------
+- wt    |      0 | 1       |    11
+-(1 row)
++(0 rows)
+ 
+ select f1, ss1 as relabel from
+     (select *, (select sum(f1) from int4_tbl b where f1 >= a.f1) as ss1
+@@ -639,23 +601,10 @@
+ insert into float_table values (1), (2), (3);
+ select * from float_table
+   where float_col in (select num_col from numeric_table);
+- float_col 
+------------
+-         1
+-         2
+-         3
+-(3 rows)
+-
++ERROR:  unsupported comparison operator: <float> IN <tuple{decimal}>
+ select * from numeric_table
+   where num_col in (select float_col from float_table);
+-         num_col         
+--------------------------
+-                       1
+- 1.000000000000000000001
+-                       2
+-                       3
+-(4 rows)
+-
++ERROR:  unsupported comparison operator: <decimal> IN <tuple{float}>
+ --
+ -- Test case for bug #4290: bogus calculation of subplan param sets
+ --
+@@ -717,7 +666,7 @@
+ (1 row)
+ 
+ select (select (a.*)::text) from view_a a;
+-  a   
++ text 
+ ------
+  (42)
+ (1 row)
+@@ -729,22 +678,22 @@
+ select q from (select max(f1) from int4_tbl group by f1 order by f1) q;
+        q       
+ ---------------
+- (-2147483647)
+- (-123456)
+  (0)
+  (123456)
++ (-123456)
+  (2147483647)
++ (-2147483647)
+ (5 rows)
+ 
+ with q as (select max(f1) from int4_tbl group by f1 order by f1)
+   select q from q;
+        q       
+ ---------------
+- (-2147483647)
+- (-123456)
+  (0)
+  (123456)
++ (-123456)
+  (2147483647)
++ (-2147483647)
+ (5 rows)
+ 
+ --
+@@ -760,6 +709,7 @@
+     ( select f1, array(select q1 from int8_tbl) as arr
+       from text_tbl ) ss
+   where road.name = ss.f1 );
++ERROR:  relation "road" does not exist
+ rollback;
+ --
+ -- Test case for sublinks pushed down into subselects via join alias expansion
+@@ -840,18 +790,11 @@
+ --
+ explain (verbose, costs off)
+ select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+-             QUERY PLAN              
+--------------------------------------
+- Result
+-   Output: (hashed SubPlan 1)
+-   SubPlan 1
+-     ->  Append
+-           ->  Result
+-                 Output: 'bar'::name
+-           ->  Result
+-                 Output: 'bar'::name
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+  ?column? 
+ ----------
+@@ -864,23 +807,13 @@
+ --
+ explain (verbose, costs off)
+ select row(row(row(1))) = any (select row(row(1)));
+-                QUERY PLAN                 
+--------------------------------------------
+- Result
+-   Output: (SubPlan 1)
+-   SubPlan 1
+-     ->  Materialize
+-           Output: '("(1)")'::record
+-           ->  Result
+-                 Output: '("(1)")'::record
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select row(row(row(1))) = any (select row(row(1)));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tuple{tuple{tuple{int}}}> = ANY <tuple{tuple{tuple{int}}}>
+ --
+ -- Test case for premature memory release during hashing of subplan output
+ --
+@@ -896,91 +829,67 @@
+ --
+ -- this fails by default, of course
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+-ERROR:  operator does not exist: bigint = text
+-LINE 1: select * from int8_tbl where q1 in (select c1 from inner_tex...
+-                                        ^
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unsupported comparison operator: <int> IN <tuple{string}>
+ begin;
+ -- make an operator to allow it to succeed
+ create function bogus_int8_text_eq(int8, text) returns boolean
+ language sql as 'select $1::text = $2';
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ create operator = (procedure=bogus_int8_text_eq, leftarg=int8, rightarg=text);
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create operator = (procedure=bogus_int8_text_eq, leftarg=int8, rightarg=text)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ explain (costs off)
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+-           QUERY PLAN           
+---------------------------------
+- Seq Scan on int8_tbl
+-   Filter: (hashed SubPlan 1)
+-   SubPlan 1
+-     ->  Seq Scan on inner_text
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+- q1  |        q2        
+------+------------------
+- 123 |              456
+- 123 | 4567890123456789
+-(2 rows)
+-
++ERROR:  unsupported comparison operator: <int> IN <tuple{string}>
+ -- inlining of this function results in unusual number of hash clauses,
+ -- which we can still cope with
+ create or replace function bogus_int8_text_eq(int8, text) returns boolean
+ language sql as 'select $1::text = $2 and $1::text = $2';
+ explain (costs off)
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+-           QUERY PLAN           
+---------------------------------
+- Seq Scan on int8_tbl
+-   Filter: (hashed SubPlan 1)
+-   SubPlan 1
+-     ->  Seq Scan on inner_text
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+- q1  |        q2        
+------+------------------
+- 123 |              456
+- 123 | 4567890123456789
+-(2 rows)
+-
++ERROR:  unsupported comparison operator: <int> IN <tuple{string}>
+ -- inlining of this function causes LHS and RHS to be switched,
+ -- which we can't cope with, so hashing should be abandoned
+ create or replace function bogus_int8_text_eq(int8, text) returns boolean
+ language sql as 'select $2 = $1::text';
+ explain (costs off)
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+-              QUERY PLAN              
+---------------------------------------
+- Seq Scan on int8_tbl
+-   Filter: (SubPlan 1)
+-   SubPlan 1
+-     ->  Materialize
+-           ->  Seq Scan on inner_text
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int8_tbl where q1 in (select c1 from inner_text);
+- q1  |        q2        
+------+------------------
+- 123 |              456
+- 123 | 4567890123456789
+-(2 rows)
+-
++ERROR:  unsupported comparison operator: <int> IN <tuple{string}>
+ rollback;  -- to get rid of the bogus operator
++WARNING:  there is no transaction in progress
+ --
+ -- Test resolution of hashed vs non-hashed implementation of EXISTS subplan
+ --
+ explain (costs off)
+ select count(*) from tenk1 t
+ where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Aggregate
+-   ->  Seq Scan on tenk1 t
+-         Filter: ((hashed SubPlan 2) OR (ten < 0))
+-         SubPlan 2
+-           ->  Index Only Scan using tenk1_unique1 on tenk1 k
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from tenk1 t
+ where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+  count 
+@@ -992,19 +901,11 @@
+ select count(*) from tenk1 t
+ where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+   and thousand = 1;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on tenk1 t
+-         Recheck Cond: (thousand = 1)
+-         Filter: ((SubPlan 1) OR (ten < 0))
+-         ->  Bitmap Index Scan on tenk1_thous_tenthous
+-               Index Cond: (thousand = 1)
+-         SubPlan 1
+-           ->  Index Only Scan using tenk1_unique1 on tenk1 k
+-                 Index Cond: (unique1 = t.unique2)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from tenk1 t
+ where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+   and thousand = 1;
+@@ -1015,44 +916,38 @@
+ 
+ -- It's possible for the same EXISTS to get resolved both ways
+ create temp table exists_tbl (c1 int, c2 int, c3 int) partition by list (c1);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create temp table exists_tbl (c1 int, c2 int, c3 int) partition by list (c1)
++                                                                            ^
++HINT:  try \h CREATE TABLE
+ create temp table exists_tbl_null partition of exists_tbl for values in (null);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create temp table exists_tbl_null partition of exists_tbl for values in (null)
++                                  ^
++HINT:  try \h CREATE TABLE
+ create temp table exists_tbl_def partition of exists_tbl default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create temp table exists_tbl_def partition of exists_tbl default
++                                 ^
++HINT:  try \h CREATE TABLE
+ insert into exists_tbl select x, x/2, x+1 from generate_series(0,10) x;
++ERROR:  relation "exists_tbl" does not exist
+ analyze exists_tbl;
++ERROR:  relation "exists_tbl" does not exist
+ explain (costs off)
+ select * from exists_tbl t1
+   where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Append
+-   ->  Seq Scan on exists_tbl_null t1_1
+-         Filter: ((SubPlan 1) OR (c3 < 0))
+-         SubPlan 1
+-           ->  Append
+-                 ->  Seq Scan on exists_tbl_null t2_1
+-                       Filter: (t1_1.c1 = c2)
+-                 ->  Seq Scan on exists_tbl_def t2_2
+-                       Filter: (t1_1.c1 = c2)
+-   ->  Seq Scan on exists_tbl_def t1_2
+-         Filter: ((hashed SubPlan 2) OR (c3 < 0))
+-         SubPlan 2
+-           ->  Append
+-                 ->  Seq Scan on exists_tbl_null t2_4
+-                 ->  Seq Scan on exists_tbl_def t2_5
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from exists_tbl t1
+   where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+- c1 | c2 | c3 
+-----+----+----
+-  0 |  0 |  1
+-  1 |  0 |  2
+-  2 |  1 |  3
+-  3 |  1 |  4
+-  4 |  2 |  5
+-  5 |  2 |  6
+-(6 rows)
+-
++ERROR:  relation "exists_tbl" does not exist
+ --
+ -- Test case for planner bug with nested EXISTS handling
+ --
+@@ -1071,64 +966,35 @@
+ explain (verbose, costs off)
+   select x, x from
+     (select (select now()) as x from (values(1),(2)) v(y)) ss;
+-        QUERY PLAN         
+----------------------------
+- Values Scan on "*VALUES*"
+-   Output: $0, $1
+-   InitPlan 1 (returns $0)
+-     ->  Result
+-           Output: now()
+-   InitPlan 2 (returns $1)
+-     ->  Result
+-           Output: now()
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+   select x, x from
+     (select (select random()) as x from (values(1),(2)) v(y)) ss;
+-            QUERY PLAN            
+-----------------------------------
+- Subquery Scan on ss
+-   Output: ss.x, ss.x
+-   ->  Values Scan on "*VALUES*"
+-         Output: $0
+-         InitPlan 1 (returns $0)
+-           ->  Result
+-                 Output: random()
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+   select x, x from
+     (select (select now() where y=y) as x from (values(1),(2)) v(y)) ss;
+-                              QUERY PLAN                              
+-----------------------------------------------------------------------
+- Values Scan on "*VALUES*"
+-   Output: (SubPlan 1), (SubPlan 2)
+-   SubPlan 1
+-     ->  Result
+-           Output: now()
+-           One-Time Filter: ("*VALUES*".column1 = "*VALUES*".column1)
+-   SubPlan 2
+-     ->  Result
+-           Output: now()
+-           One-Time Filter: ("*VALUES*".column1 = "*VALUES*".column1)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+   select x, x from
+     (select (select random() where y=y) as x from (values(1),(2)) v(y)) ss;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Subquery Scan on ss
+-   Output: ss.x, ss.x
+-   ->  Values Scan on "*VALUES*"
+-         Output: (SubPlan 1)
+-         SubPlan 1
+-           ->  Result
+-                 Output: random()
+-                 One-Time Filter: ("*VALUES*".column1 = "*VALUES*".column1)
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ --
+ -- Test rescan of a hashed subplan (the use of random() is to prevent the
+ -- sub-select from being pulled up, which would result in not hashing)
+@@ -1140,24 +1006,11 @@
+          random() as r
+   from onek i where i.unique1 = o.unique1 ) ss
+ where o.ten = 0;
+-                                                                                         QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Aggregate
+-   Output: sum((((hashed SubPlan 1)))::integer)
+-   ->  Nested Loop
+-         Output: ((hashed SubPlan 1))
+-         ->  Seq Scan on public.onek o
+-               Output: o.unique1, o.unique2, o.two, o.four, o.ten, o.twenty, o.hundred, o.thousand, o.twothousand, o.fivethous, o.tenthous, o.odd, o.even, o.stringu1, o.stringu2, o.string4
+-               Filter: (o.ten = 0)
+-         ->  Index Scan using onek_unique1 on public.onek i
+-               Output: (hashed SubPlan 1), random()
+-               Index Cond: (i.unique1 = o.unique1)
+-               SubPlan 1
+-                 ->  Seq Scan on public.int4_tbl
+-                       Output: int4_tbl.f1
+-                       Filter: (int4_tbl.f1 <= o.hundred)
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select sum(ss.tst::int) from
+   onek o cross join lateral (
+   select i.ten in (select f1 from int4_tbl where f1 <= o.hundred) as tst,
+@@ -1180,23 +1033,11 @@
+     select * from onek i2 where i2.unique1 = o.unique2
+   ) ss
+ where o.ten = 1;
+-                                  QUERY PLAN                                  
+-------------------------------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop
+-         ->  Seq Scan on onek o
+-               Filter: (ten = 1)
+-         ->  Subquery Scan on ss
+-               ->  HashSetOp Except
+-                     ->  Append
+-                           ->  Subquery Scan on "*SELECT* 1"
+-                                 ->  Index Scan using onek_unique1 on onek i1
+-                                       Index Cond: (unique1 = o.unique1)
+-                           ->  Subquery Scan on "*SELECT* 2"
+-                                 ->  Index Scan using onek_unique1 on onek i2
+-                                       Index Cond: (unique1 = o.unique2)
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from
+   onek o cross join lateral (
+     select * from onek i1 where i1.unique1 = o.unique1
+@@ -1223,23 +1064,11 @@
+     select * from x
+   ) ss
+ where o.ten = 1;
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop
+-         ->  Seq Scan on onek o
+-               Filter: (ten = 1)
+-         ->  Memoize
+-               Cache Key: o.four
+-               Cache Mode: binary
+-               ->  CTE Scan on x
+-                     CTE x
+-                       ->  Recursive Union
+-                             ->  Result
+-                             ->  WorkTable Scan on x x_1
+-                                   Filter: (a < 10)
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select sum(o.four), sum(ss.a) from
+   onek o cross join lateral (
+     with recursive x(a) as
+@@ -1250,11 +1079,7 @@
+     select * from x
+   ) ss
+ where o.ten = 1;
+- sum  | sum  
+-------+------
+- 1700 | 5350
+-(1 row)
+-
++ERROR:  recursive query "x" column 1 has type int4 in non-recursive term but type int overall
+ --
+ -- Check we don't misoptimize a NOT IN where the subquery returns no rows.
+ --
+@@ -1315,15 +1140,11 @@
+   (3 not in (select * from (values (1), (2)) ss1)),
+   (false)
+ ) ss;
+-               QUERY PLAN               
+-----------------------------------------
+- Values Scan on "*VALUES*"
+-   Output: "*VALUES*".column1
+-   SubPlan 1
+-     ->  Values Scan on "*VALUES*_1"
+-           Output: "*VALUES*_1".column1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from
+ (values
+   (3 not in (select * from (values (1), (2)) ss1)),
+@@ -1342,20 +1163,11 @@
+ select * from int4_tbl where
+   (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+   (select ten from tenk1 b);
+-                                                                                      QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Nested Loop Semi Join
+-   Output: int4_tbl.f1
+-   Join Filter: (CASE WHEN (hashed SubPlan 1) THEN int4_tbl.f1 ELSE NULL::integer END = b.ten)
+-   ->  Seq Scan on public.int4_tbl
+-         Output: int4_tbl.f1
+-   ->  Seq Scan on public.tenk1 b
+-         Output: b.unique1, b.unique2, b.two, b.four, b.ten, b.twenty, b.hundred, b.thousand, b.twothousand, b.fivethous, b.tenthous, b.odd, b.even, b.stringu1, b.stringu2, b.string4
+-   SubPlan 1
+-     ->  Index Only Scan using tenk1_unique1 on public.tenk1 a
+-           Output: a.unique1
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int4_tbl where
+   (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+   (select ten from tenk1 b);
+@@ -1370,36 +1182,14 @@
+ explain (verbose, costs off)
+ select * from int4_tbl o where (f1, f1) in
+   (select f1, generate_series(1,50) / 10 g from int4_tbl i group by f1);
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Nested Loop Semi Join
+-   Output: o.f1
+-   Join Filter: (o.f1 = "ANY_subquery".f1)
+-   ->  Seq Scan on public.int4_tbl o
+-         Output: o.f1
+-   ->  Materialize
+-         Output: "ANY_subquery".f1, "ANY_subquery".g
+-         ->  Subquery Scan on "ANY_subquery"
+-               Output: "ANY_subquery".f1, "ANY_subquery".g
+-               Filter: ("ANY_subquery".f1 = "ANY_subquery".g)
+-               ->  Result
+-                     Output: i.f1, ((generate_series(1, 50)) / 10)
+-                     ->  ProjectSet
+-                           Output: generate_series(1, 50), i.f1
+-                           ->  HashAggregate
+-                                 Output: i.f1
+-                                 Group Key: i.f1
+-                                 ->  Seq Scan on public.int4_tbl i
+-                                       Output: i.f1
+-(19 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int4_tbl o where (f1, f1) in
+   (select f1, generate_series(1,50) / 10 g from int4_tbl i group by f1);
+- f1 
+-----
+-  0
+-(1 row)
+-
++ERROR:  unsupported binary operator: <int> / <int> (returning <int4>)
+ --
+ -- check for over-optimization of whole-row Var referencing an Append plan
+ --
+@@ -1409,13 +1199,13 @@
+           select 4,5,6.0 where f1 <= 0
+          ) q )
+ from int4_tbl;
+-     q     
+------------
+- (4,5,6.0)
++    q    
++---------
++ (4,5,6)
+  (1,2,3)
+- (4,5,6.0)
++ (4,5,6)
+  (1,2,3)
+- (4,5,6.0)
++ (4,5,6)
+ (5 rows)
+ 
+ --
+@@ -1433,26 +1223,11 @@
+         select true as b, 2 as id
+     ) as t2
+ where b and f1 >= 0;
+-                 QUERY PLAN                 
+---------------------------------------------
+- Nested Loop
+-   Output: i4.f1, ((i4.f1 > 1)), (1)
+-   ->  Seq Scan on public.int4_tbl i4
+-         Output: i4.f1
+-         Filter: (i4.f1 >= 0)
+-   ->  Append
+-         ->  Subquery Scan on t1
+-               Output: (i4.f1 > 1), 1
+-               Filter: (i4.f1 > 1)
+-               ->  Sort
+-                     Output: (random())
+-                     Sort Key: (random())
+-                     ->  Result
+-                           Output: random()
+-         ->  Result
+-               Output: true, 2
+-(16 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from
+     int4_tbl i4,
+     lateral (
+@@ -1497,7 +1272,7 @@
+ select nextval('ts1');
+  nextval 
+ ---------
+-      11
++   10001
+ (1 row)
+ 
+ --
+@@ -1514,16 +1289,11 @@
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, 8);
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Subquery Scan on ss
+-   Output: ss.x, ss.u
+-   Filter: tattle(ss.x, 8)
+-   ->  ProjectSet
+-         Output: 9, unnest('{1,2,3,11,12,13}'::integer[])
+-         ->  Result
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, 8);
+@@ -1545,22 +1315,29 @@
+ 
+ -- if we pretend it's stable, we get different results:
+ alter function tattle(x int, y int) stable;
++ERROR:  volatile statement not allowed in stable function: BEGIN
++RAISE NOTICE 'x = %, y = %', x, y;
++RETURN x > y;
++END;
++
+ explain (verbose, costs off)
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, 8);
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- ProjectSet
+-   Output: 9, unnest('{1,2,3,11,12,13}'::integer[])
+-   ->  Result
+-         One-Time Filter: tattle(9, 8)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, 8);
+ NOTICE:  x = 9, y = 8
++NOTICE:  x = 9, y = 8
++NOTICE:  x = 9, y = 8
++NOTICE:  x = 9, y = 8
++NOTICE:  x = 9, y = 8
++NOTICE:  x = 9, y = 8
+  x | u  
+ ---+----
+  9 |  1
+@@ -1576,16 +1353,11 @@
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, u);
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Subquery Scan on ss
+-   Output: ss.x, ss.u
+-   Filter: tattle(ss.x, ss.u)
+-   ->  ProjectSet
+-         Output: 9, unnest('{1,2,3,11,12,13}'::integer[])
+-         ->  Result
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from
+   (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+   where tattle(x, u);
+@@ -1632,26 +1404,21 @@
+     end loop;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ select * from explain_sq_limit();
+-                        explain_sq_limit                        
+-----------------------------------------------------------------
+- Limit (actual rows=3 loops=1)
+-   ->  Subquery Scan on x (actual rows=3 loops=1)
+-         ->  Sort (actual rows=3 loops=1)
+-               Sort Key: sq_limit.c1, sq_limit.pk
+-               Sort Method: top-N heapsort  Memory: xxx
+-               ->  Seq Scan on sq_limit (actual rows=8 loops=1)
+-(6 rows)
+-
++ERROR:  unknown function: explain_sq_limit()
+ select * from (select pk,c2 from sq_limit order by c1,pk) as x limit 3;
+  pk | c2 
+ ----+----
+   1 |  1
+-  5 |  1
+   2 |  2
++  3 |  3
+ (3 rows)
+ 
+ drop function explain_sq_limit();
++ERROR:  unknown function: explain_sq_limit()
+ drop table sq_limit;
+ --
+ -- Ensure that backward scan direction isn't propagated into
+@@ -1661,14 +1428,13 @@
+ declare c1 scroll cursor for
+  select * from generate_series(1,4) i
+   where i <> all (values (2),(3));
++ERROR:  unimplemented: DECLARE SCROLL CURSOR
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/77102/_version_
+ move forward all in c1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ fetch backward all in c1;
+- i 
+----
+- 4
+- 1
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ commit;
+ --
+ -- Tests for CTE inlining behavior
+@@ -1677,112 +1443,64 @@
+ explain (verbose, costs off)
+ with x as (select * from (select f1 from subselect_tbl) ss)
+ select * from x where f1 = 1;
+-            QUERY PLAN            
+-----------------------------------
+- Seq Scan on public.subselect_tbl
+-   Output: subselect_tbl.f1
+-   Filter: (subselect_tbl.f1 = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Explicitly request materialization
+ explain (verbose, costs off)
+ with x as materialized (select * from (select f1 from subselect_tbl) ss)
+ select * from x where f1 = 1;
+-                QUERY PLAN                
+-------------------------------------------
+- CTE Scan on x
+-   Output: x.f1
+-   Filter: (x.f1 = 1)
+-   CTE x
+-     ->  Seq Scan on public.subselect_tbl
+-           Output: subselect_tbl.f1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Stable functions are safe to inline
+ explain (verbose, costs off)
+ with x as (select * from (select f1, now() from subselect_tbl) ss)
+ select * from x where f1 = 1;
+-            QUERY PLAN             
+------------------------------------
+- Seq Scan on public.subselect_tbl
+-   Output: subselect_tbl.f1, now()
+-   Filter: (subselect_tbl.f1 = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Volatile functions prevent inlining
+ explain (verbose, costs off)
+ with x as (select * from (select f1, random() from subselect_tbl) ss)
+ select * from x where f1 = 1;
+-                  QUERY PLAN                  
+-----------------------------------------------
+- CTE Scan on x
+-   Output: x.f1, x.random
+-   Filter: (x.f1 = 1)
+-   CTE x
+-     ->  Seq Scan on public.subselect_tbl
+-           Output: subselect_tbl.f1, random()
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- SELECT FOR UPDATE cannot be inlined
+ explain (verbose, costs off)
+ with x as (select * from (select f1 from subselect_tbl for update) ss)
+ select * from x where f1 = 1;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- CTE Scan on x
+-   Output: x.f1
+-   Filter: (x.f1 = 1)
+-   CTE x
+-     ->  Subquery Scan on ss
+-           Output: ss.f1
+-           ->  LockRows
+-                 Output: subselect_tbl.f1, subselect_tbl.ctid
+-                 ->  Seq Scan on public.subselect_tbl
+-                       Output: subselect_tbl.f1, subselect_tbl.ctid
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Multiply-referenced CTEs are inlined only when requested
+ explain (verbose, costs off)
+ with x as (select * from (select f1, now() as n from subselect_tbl) ss)
+ select * from x, x x2 where x.n = x2.n;
+-                QUERY PLAN                 
+--------------------------------------------
+- Merge Join
+-   Output: x.f1, x.n, x2.f1, x2.n
+-   Merge Cond: (x.n = x2.n)
+-   CTE x
+-     ->  Seq Scan on public.subselect_tbl
+-           Output: subselect_tbl.f1, now()
+-   ->  Sort
+-         Output: x.f1, x.n
+-         Sort Key: x.n
+-         ->  CTE Scan on x
+-               Output: x.f1, x.n
+-   ->  Sort
+-         Output: x2.f1, x2.n
+-         Sort Key: x2.n
+-         ->  CTE Scan on x x2
+-               Output: x2.f1, x2.n
+-(16 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+ with x as not materialized (select * from (select f1, now() as n from subselect_tbl) ss)
+ select * from x, x x2 where x.n = x2.n;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Result
+-   Output: subselect_tbl.f1, now(), subselect_tbl_1.f1, now()
+-   One-Time Filter: (now() = now())
+-   ->  Nested Loop
+-         Output: subselect_tbl.f1, subselect_tbl_1.f1
+-         ->  Seq Scan on public.subselect_tbl
+-               Output: subselect_tbl.f1, subselect_tbl.f2, subselect_tbl.f3
+-         ->  Materialize
+-               Output: subselect_tbl_1.f1
+-               ->  Seq Scan on public.subselect_tbl subselect_tbl_1
+-                     Output: subselect_tbl_1.f1
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Multiply-referenced CTEs can't be inlined if they contain outer self-refs
+ explain (verbose, costs off)
+ with recursive x(a) as
+@@ -1792,26 +1510,11 @@
+     select z.a || z1.a as a from z cross join z as z1
+     where length(z.a || z1.a) < 5))
+ select * from x;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- CTE Scan on x
+-   Output: x.a
+-   CTE x
+-     ->  Recursive Union
+-           ->  Values Scan on "*VALUES*"
+-                 Output: "*VALUES*".column1
+-           ->  Nested Loop
+-                 Output: (z.a || z1.a)
+-                 Join Filter: (length((z.a || z1.a)) < 5)
+-                 CTE z
+-                   ->  WorkTable Scan on x x_1
+-                         Output: x_1.a
+-                 ->  CTE Scan on z
+-                       Output: z.a
+-                 ->  CTE Scan on z z1
+-                       Output: z1.a
+-(16 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ with recursive x(a) as
+   ((values ('a'), ('b'))
+    union all
+@@ -1824,24 +1527,24 @@
+  a
+  b
+  aa
+- ab
+- ba
+  bb
++ aa
++ bb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
++ aaaa
++ bbbb
+  aaaa
+- aaab
+- aaba
+- aabb
+- abaa
+- abab
+- abba
+- abbb
+- baaa
+- baab
+- baba
+- babb
+- bbaa
+- bbab
+- bbba
+  bbbb
+ (22 rows)
+ 
+@@ -1853,19 +1556,11 @@
+     select z.a || z.a as a from z
+     where length(z.a || z.a) < 5))
+ select * from x;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- CTE Scan on x
+-   Output: x.a
+-   CTE x
+-     ->  Recursive Union
+-           ->  Values Scan on "*VALUES*"
+-                 Output: "*VALUES*".column1
+-           ->  WorkTable Scan on x x_1
+-                 Output: (x_1.a || x_1.a)
+-                 Filter: (length((x_1.a || x_1.a)) < 5)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ with recursive x(a) as
+   ((values ('a'), ('b'))
+    union all
+@@ -1887,42 +1582,35 @@
+ explain (verbose, costs off)
+ with x as (select * from int4_tbl)
+ select * from (with y as (select * from x) select * from y) ss;
+-         QUERY PLAN          
+------------------------------
+- Seq Scan on public.int4_tbl
+-   Output: int4_tbl.f1
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+ with x as materialized (select * from int4_tbl)
+ select * from (with y as (select * from x) select * from y) ss;
+-             QUERY PLAN              
+--------------------------------------
+- CTE Scan on x
+-   Output: x.f1
+-   CTE x
+-     ->  Seq Scan on public.int4_tbl
+-           Output: int4_tbl.f1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure that we inline the currect CTE when there are
+ -- multiple CTEs with the same name
+ explain (verbose, costs off)
+ with x as (select 1 as y)
+ select * from (with x as (select 2 as y) select * from x) ss;
+- QUERY PLAN  
+--------------
+- Result
+-   Output: 2
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Row marks are not pushed into CTEs
+ explain (verbose, costs off)
+ with x as (select * from subselect_tbl)
+ select * from x for update;
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Seq Scan on public.subselect_tbl
+-   Output: subselect_tbl.f1, subselect_tbl.f2, subselect_tbl.f3
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>

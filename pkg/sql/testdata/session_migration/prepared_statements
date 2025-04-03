@@ -62,6 +62,29 @@ query
 SELECT * FROM t2
 ----
 
+exec
+BEGIN
+----
+
+# Test for preparing a DECLARE CURSOR statement. We have observed errors in
+# some cases; see https://github.com/cockroachdb/cockroach/issues/136518.
+
+wire_prepare s_declare_cursor
+DECLARE c CURSOR FOR WITH cte AS (SELECT b FROM t2 WHERE a = $1) SELECT * FROM cte
+----
+
+wire_exec s_declare_cursor 1
+----
+
+query
+FETCH 1 FROM c
+----
+
+exec
+COMMIT
+----
+
+
 let $x
 SELECT encode(crdb_internal.serialize_session(), 'hex')
 ----
@@ -124,6 +147,22 @@ wire_query s5
 wire_query s6 0
 ----
 1 cat
+
+exec
+BEGIN
+----
+
+wire_exec s_declare_cursor 1
+----
+
+query
+FETCH 1 FROM c
+----
+cat
+
+exec
+COMMIT
+----
 
 reset
 ----

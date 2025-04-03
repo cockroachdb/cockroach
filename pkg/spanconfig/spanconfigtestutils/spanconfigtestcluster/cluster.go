@@ -73,6 +73,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		require.NoError(h.t, err)
 
 		tenantSQLDB := tenantState.SQLConn(h.t)
+		tenantSQLDB.SetMaxOpenConns(1)
 
 		tenantState.db = sqlutils.MakeSQLRunner(tenantSQLDB)
 		tenantState.cleanup = func() {}

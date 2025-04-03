@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -133,6 +133,11 @@ func (tc *TestCluster) SystemLayer(idx int) serverutils.ApplicationLayerInterfac
 // cluster.
 func (tc *TestCluster) StorageLayer(idx int) serverutils.StorageLayerInterface {
 	return tc.Server(idx).StorageLayer()
+}
+
+// DefaultTenantDeploymentMode implements TestClusterInterface.
+func (tc *TestCluster) DefaultTenantDeploymentMode() serverutils.DeploymentMode {
+	return tc.Server(0).DeploymentMode()
 }
 
 // stopServers stops the stoppers for each individual server in the cluster.
@@ -1152,8 +1157,8 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 }
 
 // MaybeWaitForLeaseUpgrade waits until the lease held for the given range
-// descriptor is upgraded to an epoch-based one, but only if we expect the lease
-// to be upgraded.
+// descriptor is upgraded to an epoch-based or leader lease, but only if we
+// expect the lease to be upgraded.
 func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
 ) {
@@ -2082,9 +2087,20 @@ func (tc *TestCluster) SplitTable(
 	}
 }
 
+// GrantTenantCapabilities implements TestClusterInterface.
+func (tc *TestCluster) GrantTenantCapabilities(
+	ctx context.Context,
+	t serverutils.TestFataler,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilitiespb.ID]string,
+) {
+	require.NoError(t, tc.Server(0).TenantController().GrantTenantCapabilities(ctx, tenID, targetCaps))
+	tc.WaitForTenantCapabilities(t, tenID, targetCaps)
+}
+
 // WaitForTenantCapabilities implements TestClusterInterface.
 func (tc *TestCluster) WaitForTenantCapabilities(
-	t serverutils.TestFataler, tenID roachpb.TenantID, targetCaps map[tenantcapabilities.ID]string,
+	t serverutils.TestFataler, tenID roachpb.TenantID, targetCaps map[tenantcapabilitiespb.ID]string,
 ) {
 	for i, ts := range tc.Servers {
 		serverutils.WaitForTenantCapabilities(t, ts, tenID, targetCaps, fmt.Sprintf("server %d", i))

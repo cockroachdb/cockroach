@@ -74,9 +74,6 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	stubDropUnusedDuration := time.Hour
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			UnusedIndexRecommendKnobs: &idxusage.UnusedIndexRecommendationTestingKnobs{
 				GetCreatedAt:   stubTime.getCreatedAt,

@@ -176,16 +176,14 @@ func checkRestoreCovering(
 		var last roachpb.Key
 		for i, b := range backups {
 			var coveredLater bool
-			introducedSpanFrontier.Entries(func(s roachpb.Span,
-				ts hlc.Timestamp) (done spanUtils.OpResult) {
+			for s, ts := range introducedSpanFrontier.Entries() {
 				if span.Overlaps(s) {
 					if b.EndTime.Less(ts) {
 						coveredLater = true
 					}
-					return spanUtils.StopMatch
+					break
 				}
-				return spanUtils.ContinueMatch
-			})
+			}
 			if coveredLater {
 				// Skip spans that were later re-introduced. See makeSimpleImportSpans
 				// for explanation.

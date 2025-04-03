@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -77,12 +78,12 @@ func TestIngester(t *testing.T) {
 				}, store, nil),
 			)
 
-			ingester.Start(ctx, stopper)
+			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			for _, e := range tc.observations {
 				if e.statementID != 0 {
-					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
+					ingester.ObserveStatement(&sqlstats.RecordedStmtStats{SessionID: e.SessionID(), StatementID: e.StatementID()})
 				} else {
-					ingester.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
+					ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{SessionID: e.SessionID(), TransactionID: e.TransactionID()})
 				}
 			}
 
@@ -93,7 +94,7 @@ func TestIngester(t *testing.T) {
 					numInsights++
 				})
 				return numInsights == tc.totalTxnInsights
-			}, 1*time.Second, 50*time.Millisecond)
+			}, 1*time.Second, 10*time.Millisecond)
 
 			// See that the insights we were expecting are the ones that
 			// arrived. We allow the provider to do whatever it needs to, so
@@ -144,9 +145,9 @@ func TestIngester_Clear(t *testing.T) {
 	}
 	for _, o := range ingesterObservations {
 		if o.statementID != 0 {
-			ingester.ObserveStatement(o.SessionID(), &Statement{ID: o.StatementID()})
+			ingester.ObserveStatement(&sqlstats.RecordedStmtStats{SessionID: o.SessionID(), StatementID: o.StatementID()})
 		} else {
-			ingester.ObserveTransaction(o.SessionID(), &Transaction{ID: o.TransactionID()})
+			ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{SessionID: o.SessionID(), TransactionID: o.TransactionID()})
 		}
 	}
 	empty := event{}
@@ -177,8 +178,8 @@ func TestIngester_Disabled(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st), nil))
-	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
-	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	ingester.ObserveStatement(&sqlstats.RecordedStmtStats{})
+	ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
@@ -210,7 +211,7 @@ func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *test
 		// twice. With no consumer of the channel running and no safeguards in
 		// place, this operation would block, which would be bad.
 		for i := 0; i < 2*bufferSize+1; i++ {
-			ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
+			ingester.ObserveStatement(&sqlstats.RecordedStmtStats{})
 		}
 		done <- struct{}{}
 	}()

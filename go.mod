@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.22.8
+go 1.23.7
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
@@ -10,17 +10,17 @@ go 1.22.8
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.31.0
-	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
-	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.28.0
-	golang.org/x/oauth2 v0.7.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
-	golang.org/x/text v0.21.0
-	golang.org/x/time v0.3.0
-	golang.org/x/tools v0.24.0
+	golang.org/x/crypto v0.36.0
+	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
+	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
+	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/net v0.38.0
+	golang.org/x/oauth2 v0.28.0
+	golang.org/x/sync v0.12.0
+	golang.org/x/sys v0.31.0
+	golang.org/x/text v0.23.0
+	golang.org/x/time v0.11.0
+	golang.org/x/tools v0.31.0
 )
 
 // The following dependencies are key infrastructure dependencies and
@@ -57,20 +57,20 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/cli v0.4.3 // indirect
 	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/aws/aws-sdk-go v1.40.37
-	github.com/aws/aws-sdk-go-v2 v1.31.0
-	github.com/aws/aws-sdk-go-v2/config v1.27.31
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.30
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.12 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.18 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.18 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/databasemigrationservice v1.41.0
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.34.0
-	github.com/aws/aws-sdk-go-v2/service/iam v1.18.3
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.20 // indirect
-	github.com/aws/aws-sdk-go-v2/service/rds v1.84.0
-	github.com/aws/aws-sdk-go-v2/service/sso v1.22.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.30.5
+	github.com/aws/aws-sdk-go-v2 v1.36.3
+	github.com/aws/aws-sdk-go-v2/config v1.29.9
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.62
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.30 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.34 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/databasemigrationservice v1.51.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.207.1
+	github.com/aws/aws-sdk-go-v2/service/iam v1.40.1
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/rds v1.94.1
+	github.com/aws/aws-sdk-go-v2/service/sso v1.25.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17
 )
 
 // If any of the following dependencies get update as a side-effect
@@ -78,13 +78,13 @@ require (
 // the SQL team.
 require (
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.14.0
+	github.com/jackc/pgconn v1.14.3
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.2
+	github.com/jackc/pgproto3/v2 v2.3.3
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgtype v1.14.0
-	github.com/jackc/pgx/v4 v4.18.1
+	github.com/jackc/pgtype v1.14.1
+	github.com/jackc/pgx/v4 v4.18.3
 )
 
 require (
@@ -92,12 +92,12 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.15
-	github.com/BurntSushi/toml v1.2.1
+	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
-	github.com/DataExMachina-dev/side-eye-go v0.0.0-20250102012104-645b45402adf
+	github.com/DataExMachina-dev/side-eye-go v0.0.0-20250129155449-07ef0520771b
 	github.com/IBM/sarama v1.43.1
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
@@ -111,13 +111,13 @@ require (
 	github.com/apache/arrow/go/v11 v11.0.0
 	github.com/apache/pulsar-client-go v0.12.0
 	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.0
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.16
-	github.com/aws/aws-sdk-go-v2/service/kafka v1.37.1
-	github.com/aws/aws-sdk-go-v2/service/kms v1.35.5
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.61.0
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.33.0
-	github.com/aws/smithy-go v1.21.0
-	github.com/axiomhq/hyperloglog v0.2.0
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.65
+	github.com/aws/aws-sdk-go-v2/service/kafka v1.39.1
+	github.com/aws/aws-sdk-go-v2/service/kms v1.38.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.1
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.35.1
+	github.com/aws/smithy-go v1.22.3
+	github.com/axiomhq/hyperloglog v0.2.5
 	github.com/axiomhq/hyperloglog/000 v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
@@ -136,13 +136,14 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250116205404-7c863c9c3bd8
-	github.com/cockroachdb/redact v1.1.5
+	github.com/cockroachdb/pebble v0.0.0-20250328210930-0f1c564b0912
+	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06
 	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
+	github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.6.18
 	github.com/coreos/go-oidc v2.2.1+incompatible
@@ -151,7 +152,7 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v24.0.6+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/dustin/go-humanize v1.0.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
@@ -164,7 +165,7 @@ require (
 	github.com/go-openapi/strfmt v0.22.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/status v1.1.0
-	github.com/google/flatbuffers v2.0.8+incompatible
+	github.com/google/flatbuffers v23.1.21+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v42 v42.0.0
@@ -179,12 +180,12 @@ require (
 	github.com/guptarohit/asciigraph v0.7.3
 	github.com/influxdata/influxdb-client-go/v2 v2.3.1-0.20210518120617-5d1fff431040
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
-	github.com/jackc/pgx/v5 v5.4.2
+	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
-	github.com/kisielk/errcheck v1.7.0
+	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.17.8
 	github.com/klauspost/pgzip v1.2.5
@@ -212,7 +213,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
-	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36
+	github.com/petermattis/goid v0.0.0-20250211185408-f2b9d978cd7a
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pierrre/geohash v1.0.0
 	github.com/pires/go-proxyproto v0.7.0
@@ -230,11 +231,11 @@ require (
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
-	github.com/snowflakedb/gosnowflake v1.3.4
+	github.com/snowflakedb/gosnowflake v1.6.25
 	github.com/spf13/afero v1.9.2
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
 	github.com/twpayne/go-geom v1.4.2
@@ -251,25 +252,24 @@ require (
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.27.0
+	golang.org/x/term v0.30.0
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	honnef.co/go/tools v0.4.5
+	honnef.co/go/tools v0.5.1
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
-	cloud.google.com/go/compute v1.19.1 // indirect
-	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v0.13.0 // indirect
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	git.sr.ht/~sbinet/gg v0.6.0 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
-	github.com/99designs/keyring v1.2.1 // indirect
+	github.com/99designs/keyring v1.2.2 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.8.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
@@ -292,16 +292,17 @@ require (
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
 	github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/apache/arrow/go/v12 v12.0.1 // indirect
 	github.com/apache/thrift v0.16.0 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.16 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.16 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.5 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.34 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.6.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.18.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.1 // indirect
 	github.com/aymanbagabas/go-osc52 v1.0.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
@@ -311,11 +312,10 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964 // indirect
+	github.com/cockroachdb/swiss v0.0.0-20250304010804-34a2c6a59016 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -324,6 +324,8 @@ require (
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
+	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
+	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
 	github.com/go-fonts/liberation v0.3.2 // indirect
@@ -365,7 +367,7 @@ require (
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
-	github.com/jackc/puddle/v2 v2.2.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.7.6 // indirect
@@ -376,8 +378,9 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kamstrup/intmap v0.5.1 // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
@@ -423,7 +426,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.1 // indirect
 	github.com/slok/go-http-metrics v0.10.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
@@ -496,3 +499,15 @@ replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20
 // TODO(yuzefovich): remove this version once compatibility with 24.3 is no
 // longer needed.
 replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
+
+// Note: This forked dependency adds a commit that opens up some
+// private APIs to enable us to make some perf improvements to
+// histogram updates in particular.
+// See pkg/util/metric/metric.go for usage.
+// See https://github.com/cockroachdb/client_golang/pulls for merged changes.
+replace github.com/prometheus/client_golang => github.com/cockroachdb/client_golang v0.0.0-20250124161916-2d4b7d300341
+
+// Can be removed when we upgrade past v1.7.1. (see https://github.com/snowflakedb/gosnowflake/issues/970)
+replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake v1.6.25
+
+replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5

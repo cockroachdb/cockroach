@@ -315,7 +315,7 @@ type BackfillerTracker interface {
 // PeriodicProgressFlusher is used to write updates to backfill progress
 // periodically.
 type PeriodicProgressFlusher interface {
-	StartPeriodicUpdates(ctx context.Context, tracker BackfillerProgressFlusher) (stop func() error)
+	StartPeriodicUpdates(ctx context.Context, tracker BackfillerProgressFlusher) (stop func())
 }
 
 // BackfillerProgressReader is used by the backfill execution layer to read

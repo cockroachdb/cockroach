@@ -856,23 +856,35 @@ func (og *operationGenerator) canApplyUniqueConstraint(
 		}
 	}
 
-	return og.scanBool(ctx, tx,
+	// We will compare counts of distinct rows with all rows. We pull out each
+	// component separately, even though we only care about the (distinct == all)
+	// boolean result so that it gets logged in the test output.
+	type countComp struct {
+		DistinctCount     int
+		AllCount          int
+		DistinctEqualsAll bool
+	}
+	res, err := CollectOne(ctx, og, tx, pgx.RowToStructByPos[countComp],
 		fmt.Sprintf(`
-		SELECT (
+		WITH distinct_count AS (
 	       SELECT count(*)
 	         FROM (
 	               SELECT DISTINCT %s
 	                 FROM %s
 	                WHERE %s
 	              )
-	      )
-	      = (
+    ), all_count AS (
 	        SELECT count(*)
 	          FROM %s
 	         WHERE %s
-	       );
+		)
+    SELECT dc.count, ac.count, dc.count = ac.count
+		FROM distinct_count dc, all_count ac;
 	`, columnNames, tableName.String(), whereNotNullClause.String(), tableName.String(), whereNotNullClause.String()))
-
+	if err != nil {
+		return false, errors.Wrapf(err, "count query failure: %q", err)
+	}
+	return res.DistinctEqualsAll, err
 }
 
 func (og *operationGenerator) columnContainsNull(
@@ -1011,11 +1023,13 @@ SELECT COALESCE(
 }
 
 func (og *operationGenerator) constraintExists(
-	ctx context.Context, tx pgx.Tx, constraintName string,
+	ctx context.Context, tx pgx.Tx, tableName, constraintName tree.Name,
 ) (bool, error) {
+	// Note: information_schema.table_constraints contains constraints that are
+	// in the dropping state, but pg_constraint.constraints does not.
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
-		SELECT * FROM pg_catalog.pg_constraint WHERE conname = $1
-	 )`, constraintName)
+		SELECT * FROM information_schema.table_constraints WHERE table_name = $1 AND constraint_name = $2
+	 )`, string(tableName), string(constraintName))
 }
 
 func (og *operationGenerator) rowsSatisfyFkConstraint(
@@ -1771,4 +1785,33 @@ WITH tab_json AS (
 	}
 
 	return constraints, nil
+}
+
+// tableHasUniqueConstraintMutation determines if a table has any unique constraint
+// mutation ongoing. This means either being added or dropped.
+func (og *operationGenerator) tableHasUniqueConstraintMutation(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+		WITH table_desc AS (
+			SELECT crdb_internal.pb_to_json(
+				'desc',
+				descriptor,
+				false
+			)->'table' as d
+			FROM system.descriptor
+			WHERE id = $1::REGCLASS
+		)
+		SELECT EXISTS (
+			SELECT * FROM (
+			SELECT jsonb_array_elements(
+				CASE WHEN d->'mutations' IS NULL
+				THEN '[]'::JSONB
+				ELSE d->'mutations'
+				END
+			) as m
+			FROM table_desc)
+			WHERE (m->>'direction')::STRING IN ('ADD', 'DROP')
+			AND (m->'index'->>'unique')::BOOL IS TRUE
+		);`, tableName)
 }

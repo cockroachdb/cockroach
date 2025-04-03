@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -115,6 +116,11 @@ type optSchema struct {
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
 	return cat.StableID(os.PostgresDescriptorID())
+}
+
+// Version is part of the cat.Object interface.
+func (os *optSchema) Version() uint64 {
+	return uint64(os.schema.GetVersion())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -412,6 +418,19 @@ func (oc *optCatalog) CheckPrivilege(
 	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, user)
 }
 
+func (oc *optCatalog) IsOwner(
+	ctx context.Context, o cat.Object, user username.SQLUsername,
+) (bool, error) {
+	if o.ID() == cat.DefaultStableID {
+		return oc.planner.UserHasOwnership(ctx, syntheticprivilege.GlobalPrivilegeObject, user)
+	}
+	desc, err := getDescFromCatalogObjectForPermissions(o)
+	if err != nil {
+		return false, err
+	}
+	return oc.planner.UserHasOwnership(ctx, desc, user)
+}
+
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	desc, err := getDescFromCatalogObjectForPermissions(o)
@@ -435,6 +454,13 @@ func (oc *optCatalog) CheckExecutionPrivilege(
 // HasAdminRole is part of the cat.Catalog interface.
 func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
+}
+
+// UserHasAdminRole is part of the cat.Catalog interface.
+func (oc *optCatalog) UserHasAdminRole(
+	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	return oc.planner.UserHasAdminRole(ctx, user)
 }
 
 // HasRoleOption is part of the cat.Catalog interface.
@@ -507,6 +533,13 @@ func (oc *optCatalog) Optimizer() interface{} {
 // GetCurrentUser is part of the cat.Catalog interface.
 func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
+}
+
+// LeaseByStableID is part of the cat.Catalog interface.
+func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID) (uint64, error) {
+	// Lease the descriptor, so that schema changes cannot move forward
+	// after the current version.
+	return oc.planner.Descriptors().LockDescriptorWithLease(ctx, oc.planner.txn, descpb.ID(stableID))
 }
 
 // GetDependencyDigest is part of the cat.Catalog interface.
@@ -671,6 +704,11 @@ func (ov *optView) ID() cat.StableID {
 	return cat.StableID(ov.desc.GetID())
 }
 
+// Version is part of the cat.Object interface.
+func (ov *optView) Version() uint64 {
+	return uint64(ov.desc.GetVersion())
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ov *optView) PostgresDescriptorID() catid.DescID {
 	return ov.desc.GetID()
@@ -742,6 +780,11 @@ func newOptSequence(desc catalog.TableDescriptor) *optSequence {
 // ID is part of the cat.Object interface.
 func (os *optSequence) ID() cat.StableID {
 	return cat.StableID(os.desc.GetID())
+}
+
+// Version is part of the cat.Object interface.
+func (os *optSequence) Version() uint64 {
+	return uint64(os.desc.GetVersion())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -823,6 +866,11 @@ type optTable struct {
 
 	triggers []optTrigger
 
+	// Row-level security (RLS) fields
+	rlsEnabled bool
+	rlsForced  bool
+	policies   cat.Policies
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
@@ -853,7 +901,7 @@ func newOptTable(
 	// Add one for each inverted index column.
 	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
 	for _, index := range secondaryIndexes {
-		if index.GetType() == descpb.IndexDescriptor_INVERTED {
+		if index.GetType() == idxtype.INVERTED {
 			numCols++
 		}
 	}
@@ -1002,7 +1050,7 @@ func newOptTable(
 				}
 			}
 		}
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == idxtype.INVERTED {
 			// The inverted column of an inverted index is special: in the
 			// descriptors, it looks as if the table column is part of the
 			// index; in fact the key contains values *derived* from that
@@ -1012,7 +1060,7 @@ func newOptTable(
 			invertedColumnName := idx.InvertedColumnName()
 			invertedColumnType := idx.InvertedColumnKeyType()
 
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(invertedColumnID)
+			invertedSourceColOrdinal, _ := ot.LookupColumnOrdinal(invertedColumnID)
 
 			// Add an inverted column that refers to the inverted index key.
 			invertedCol, invertedColOrd := newColumn()
@@ -1098,8 +1146,20 @@ func newOptTable(
 		ot.families[i].init(ot, &desc.GetFamilies()[i+1])
 	}
 
+	// Store row-level security information
+	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
+	ot.rlsForced = desc.IsRowLevelSecurityForced()
+	ot.policies = getOptPolicies(desc.GetPolicies())
+
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
+	if ot.rlsEnabled {
+		// Add a placeholder constraint for RLS. The actual constraint contents
+		// are determined at runtime based on the role and command requiring it.
+		synthesizedChecks = append(synthesizedChecks, optCheckConstraint{
+			isRLSConstraint: true,
+		})
+	}
 	for i := 0; i < ot.ColumnCount(); i++ {
 		col := ot.Column(i)
 		if col.IsMutation() {
@@ -1137,7 +1197,7 @@ func newOptTable(
 			validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 			columnCount: len(check.CheckDesc().ColumnIDs),
 			lookupColumnOrdinal: func(j int) (int, error) {
-				return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
+				return ot.LookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
 			},
 		})
 	}
@@ -1167,6 +1227,11 @@ func newOptTable(
 // ID is part of the cat.Object interface.
 func (ot *optTable) ID() cat.StableID {
 	return cat.StableID(ot.desc.GetID())
+}
+
+// Version is part of the cat.Object interface.
+func (ot *optTable) Version() uint64 {
+	return uint64(ot.desc.GetVersion())
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
@@ -1466,9 +1531,23 @@ func (ot *optTable) Trigger(i int) cat.Trigger {
 	return &ot.triggers[i]
 }
 
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
+
+// IsRowLevelSecurityForced is part of the cat.Table interface.
+func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
+
+// Policies is part of the cat.Table interface.
+func (ot *optTable) Policies() *cat.Policies {
+	if !ot.rlsEnabled {
+		return nil
+	}
+	return &ot.policies
+}
+
+// LookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+func (ot *optTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -1609,7 +1688,7 @@ func (oi *optIndex) init(
 		notNull := true
 		for i := 0; i < idx.NumKeyColumns(); i++ {
 			id := idx.GetKeyColumnID(i)
-			ord, _ := tab.lookupColumnOrdinal(id)
+			ord, _ := tab.LookupColumnOrdinal(id)
 			if tab.Column(ord).IsNullable() {
 				notNull = false
 				break
@@ -1637,7 +1716,7 @@ func (oi *optIndex) init(
 	}
 
 	// Populate columnOrds.
-	inverted := oi.IsInverted()
+	inverted := oi.Type() == idxtype.INVERTED
 	numKeyCols := idx.NumKeyColumns()
 	numKeySuffixCols := idx.NumKeySuffixColumns()
 	oi.columnOrds = make([]int, oi.numCols)
@@ -1647,11 +1726,11 @@ func (oi *optIndex) init(
 		case inverted && i == numKeyCols-1:
 			ord = oi.invertedColOrd
 		case i < numKeyCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		case i < numKeyCols+numKeySuffixCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
 		default:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
 		}
 		oi.columnOrds[i] = ord
 	}
@@ -1667,20 +1746,14 @@ func (oi *optIndex) Name() tree.Name {
 	return tree.Name(oi.idx.GetName())
 }
 
+// Type is part of the cat.Index interface.
+func (oi *optIndex) Type() idxtype.T {
+	return oi.idx.GetType()
+}
+
 // IsUnique is part of the cat.Index interface.
 func (oi *optIndex) IsUnique() bool {
 	return oi.idx.IsUnique()
-}
-
-// IsInverted is part of the cat.Index interface.
-func (oi *optIndex) IsInverted() bool {
-	return oi.idx.GetType() == descpb.IndexDescriptor_INVERTED
-}
-
-// IsVector is part of the cat.Index interface.
-func (oi *optIndex) IsVector() bool {
-	// TODO(#137370): check the index type.
-	return false
 }
 
 // GetInvisibility is part of the cat.Index interface.
@@ -1710,7 +1783,7 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 
 // PrefixColumnCount is part of the cat.Index interface.
 func (oi *optIndex) PrefixColumnCount() int {
-	if !oi.IsInverted() && !oi.IsVector() {
+	if !oi.Type().AllowsPrefixColumns() {
 		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return oi.idx.NumKeyColumns() - 1
@@ -1729,7 +1802,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 
 // InvertedColumn is part of the cat.Index interface.
 func (oi *optIndex) InvertedColumn() cat.IndexColumn {
-	if !oi.IsInverted() {
+	if oi.Type() != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
@@ -1738,7 +1811,7 @@ func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 
 // VectorColumn is part of the cat.Index interface.
 func (oi *optIndex) VectorColumn() cat.IndexColumn {
-	if !oi.IsVector() {
+	if oi.Type() != idxtype.VECTOR {
 		panic(errors.AssertionFailedf("non-vector indexes do not have inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
@@ -1835,9 +1908,10 @@ func (op *optPartition) PartitionByListPrefixes() []tree.Datums {
 // optCheckConstraint implements cat.CheckConstraint. See that interface
 // for more information on the fields.
 type optCheckConstraint struct {
-	constraint  string
-	validated   bool
-	columnCount int
+	constraint      string
+	validated       bool
+	columnCount     int
+	isRLSConstraint bool
 
 	// lookupColumnOrdinal returns the table column ordinal of the ith column in
 	// this constraint.
@@ -1868,6 +1942,11 @@ func (oc *optCheckConstraint) ColumnOrdinal(i int) int {
 		panic(err)
 	}
 	return ord
+}
+
+// IsRLSConstraint is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) IsRLSConstraint() bool {
+	return oc.isRLSConstraint
 }
 
 type optTableStat struct {
@@ -2029,7 +2108,7 @@ func (oi *optFamily) ColumnCount() int {
 
 // Column is part of the cat.Family interface.
 func (oi *optFamily) Column(i int) cat.FamilyColumn {
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.desc.ColumnIDs[i])
 	return cat.FamilyColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
@@ -2081,7 +2160,7 @@ func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 		))
 	}
 	optTab := convertTableToOptTable(tab)
-	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
+	ord, _ := optTab.LookupColumnOrdinal(u.columns[i])
 	return ord
 }
 
@@ -2169,7 +2248,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	}
 
 	tab := convertTableToOptTable(originTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
+	ord, _ := tab.LookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -2182,7 +2261,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 		))
 	}
 	tab := convertTableToOptTable(referencedTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
+	ord, _ := tab.LookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -2357,6 +2436,11 @@ func (ot *optVirtualTable) ID() cat.StableID {
 	return ot.id
 }
 
+// Version is part of the cat.Object interface.
+func (ot *optVirtualTable) Version() uint64 {
+	return uint64(ot.desc.GetVersion())
+}
+
 // PostgresDescriptorID is part of the cat.Object interface.
 func (ot *optVirtualTable) PostgresDescriptorID() catid.DescID {
 	return ot.desc.GetID()
@@ -2463,7 +2547,7 @@ func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
 		validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 		columnCount: len(check.CheckDesc().ColumnIDs),
 		lookupColumnOrdinal: func(j int) (int, error) {
-			return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
+			return ot.LookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
 		},
 	}
 }
@@ -2574,6 +2658,15 @@ func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
 	panic(errors.AssertionFailedf("no triggers"))
 }
 
+// IsRowLevelSecurityEnabled is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
+
+// IsRowLevelSecurityForced is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
+
+// Policies is part of the cat.Table interface.
+func (ot *optVirtualTable) Policies() *cat.Policies { return nil }
+
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -2606,6 +2699,11 @@ func (oi *optVirtualIndex) Name() tree.Name {
 	return tree.Name(oi.idx.GetName())
 }
 
+// Type is part of the cat.Index interface.
+func (oi *optVirtualIndex) Type() idxtype.T {
+	return idxtype.FORWARD
+}
+
 // IsUnique is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsUnique() bool {
 	if oi.idx == nil {
@@ -2613,16 +2711,6 @@ func (oi *optVirtualIndex) IsUnique() bool {
 		return false
 	}
 	return oi.idx.IsUnique()
-}
-
-// IsInverted is part of the cat.Index interface.
-func (oi *optVirtualIndex) IsInverted() bool {
-	return false
-}
-
-// IsVector is part of the cat.Index interface.
-func (oi *optVirtualIndex) IsVector() bool {
-	return false
 }
 
 // GetInvisibility is part of the cat.Index interface.
@@ -2663,9 +2751,9 @@ func (oi *optVirtualIndex) PrefixColumnCount() int {
 	panic(errors.AssertionFailedf("virtual indexes cannot be inverted or vector indexes"))
 }
 
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// LookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+func (ot *optVirtualTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -2682,7 +2770,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 	length := oi.idx.NumKeyColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+		ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
@@ -2694,7 +2782,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 
 	i -= length + 1
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
@@ -2923,6 +3011,33 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 		}
 	}
 	return triggers
+}
+
+// getOptPolicies maps from descpb.PolicyDescriptor to cat.Policies
+func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
+	policies := cat.Policies{
+		Permissive:  make([]cat.Policy, 0, len(descPolicies)),
+		Restrictive: make([]cat.Policy, 0, len(descPolicies)),
+	}
+	for i := range descPolicies {
+		descPolicy := &descPolicies[i]
+		policy := cat.Policy{
+			Name:               tree.Name(descPolicy.Name),
+			ID:                 descPolicy.ID,
+			UsingExpr:          descPolicy.UsingExpr,
+			UsingColumnIDs:     descPolicy.UsingColumnIDs,
+			WithCheckExpr:      descPolicy.WithCheckExpr,
+			WithCheckColumnIDs: descPolicy.WithCheckColumnIDs,
+			Command:            descPolicy.Command,
+		}
+		policy.InitRoles(descPolicy.RoleNames)
+		if descPolicy.Type != catpb.PolicyType_RESTRICTIVE {
+			policies.Permissive = append(policies.Permissive, policy)
+		} else {
+			policies.Restrictive = append(policies.Restrictive, policy)
+		}
+	}
+	return policies
 }
 
 // collectTypes walks the given column's default and computed expression,

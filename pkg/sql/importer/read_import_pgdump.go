@@ -642,7 +642,7 @@ func readPostgresStmt(
 			Name:             stmt.Name,
 			Columns:          stmt.Columns,
 			Storing:          stmt.Storing,
-			Inverted:         stmt.Inverted,
+			Type:             stmt.Type,
 			PartitionByIndex: stmt.PartitionByIndex,
 			StorageParams:    stmt.StorageParams,
 			// Postgres doesn't support NotVisible Index, so NotVisible is not populated here.

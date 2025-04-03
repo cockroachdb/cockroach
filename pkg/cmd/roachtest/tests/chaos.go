@@ -170,7 +170,7 @@ func (ch *Chaos) Runner(
 				// Use a one-off context to restart the node because ours is
 				// already canceled.
 				tCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
+				defer cancel() //nolint:deferloop
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
 				settings := install.MakeClusterSettings()

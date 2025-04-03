@@ -100,3 +100,64 @@ func (i *immediateVisitor) RemovePolicyRole(ctx context.Context, op scop.RemoveP
 		"role %q does not exist in policy %d on table %d",
 		op.Role.RoleName, op.Role.PolicyID, op.Role.TableID)
 }
+
+func (i *immediateVisitor) SetPolicyWithCheckExpression(
+	ctx context.Context, op scop.SetPolicyWithCheckExpression,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.TableID, op.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.WithCheckExpr = op.Expr
+	policy.WithCheckColumnIDs = op.ColumnIDs
+	return nil
+}
+
+func (i *immediateVisitor) SetPolicyUsingExpression(
+	ctx context.Context, op scop.SetPolicyUsingExpression,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.TableID, op.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.UsingExpr = op.Expr
+	policy.UsingColumnIDs = op.ColumnIDs
+	return nil
+}
+
+func (i *immediateVisitor) SetPolicyForwardReferences(
+	ctx context.Context, op scop.SetPolicyForwardReferences,
+) error {
+	policy, err := i.checkOutPolicy(ctx, op.Deps.TableID, op.Deps.PolicyID)
+	if err != nil {
+		return err
+	}
+	policy.DependsOnTypes = op.Deps.UsesTypeIDs
+	policy.DependsOnRelations = op.Deps.UsesRelationIDs
+	policy.DependsOnFunctions = op.Deps.UsesFunctionIDs
+	return nil
+}
+
+func (i *immediateVisitor) EnableRowLevelSecurityMode(
+	ctx context.Context, op scop.EnableRowLevelSecurityMode,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	tbl.RowLevelSecurityEnabled = op.Enabled
+	return nil
+}
+
+func (i *immediateVisitor) ForcedRowLevelSecurityMode(
+	ctx context.Context, op scop.ForcedRowLevelSecurityMode,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	tbl.RowLevelSecurityForced = op.Forced
+	return nil
+}

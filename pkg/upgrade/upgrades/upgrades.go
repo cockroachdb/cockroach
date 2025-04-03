@@ -90,6 +90,25 @@ var upgrades = []upgradebase.Upgrade{
 		backfillJobsTablesAndColumns,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore jobs tables"),
 	),
+
+	newFirstUpgrade(clusterversion.V25_2_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"add new sql activity flush job",
+		clusterversion.V25_2_AddSqlActivityFlushJob.Version(),
+		upgrade.NoPrecondition,
+		addSqlActivityFlushJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"set new ui.default_timezone setting to ui.display_timezone value",
+		clusterversion.V25_2_SetUiDefaultTimezoneSetting.Version(),
+		upgrade.NoPrecondition,
+		setUiDefaultTimezone,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

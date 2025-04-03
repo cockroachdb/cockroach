@@ -1,0 +1,411 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=/mnt/data1/postgres/src/test/regress/results/text.out /mnt/data1/postgres/src/test/regress/expected/text.out /mnt/data1/postgres/src/test/regress/results/text.out
+--- /mnt/data1/postgres/src/test/regress/expected/text.out
++++ /mnt/data1/postgres/src/test/regress/results/text.out
+@@ -24,9 +24,7 @@
+ -- As of 8.3 we have removed most implicit casts to text, so that for example
+ -- this no longer works:
+ select length(42);
+-ERROR:  function length(integer) does not exist
+-LINE 1: select length(42);
+-               ^
++ERROR:  unknown signature: length(int)
+ HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- But as a special exception for usability's sake, we still allow implicit
+ -- casting to text in concatenations, so long as the other input is text or
+@@ -45,10 +43,7 @@
+ 
+ -- but not this:
+ select 3 || 4.0;
+-ERROR:  operator does not exist: integer || numeric
+-LINE 1: select 3 || 4.0;
+-                 ^
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unsupported binary operator: <int> || <decimal>
+ /*
+  * various string functions
+  */
+@@ -59,11 +54,7 @@
+ (1 row)
+ 
+ select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
+-        concat        
+-----------------------
+- 123hellotf03-09-2010
+-(1 row)
+-
++ERROR:  unknown function: to_date()
+ select concat_ws('#','one');
+  concat_ws 
+ -----------
+@@ -71,11 +62,7 @@
+ (1 row)
+ 
+ select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
+-         concat_ws          
+-----------------------------
+- 1#2#3#hello#t#f#03-09-2010
+-(1 row)
+-
++ERROR:  unknown function: to_date()
+ select concat_ws(',',10,20,null,30);
+  concat_ws 
+ -----------
+@@ -125,51 +112,113 @@
+ select quote_literal('abc''');
+  quote_literal 
+ ---------------
+- 'abc'''
++ e'abc\''
+ (1 row)
+ 
+ select quote_literal(e'\\');
+  quote_literal 
+ ---------------
+- E'\\'
++ e'\\'
+ (1 row)
+ 
+ -- check variadic labeled argument
+ select concat(variadic array[1,2,3]);
+- concat 
+---------
+- 123
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat(variadic array[1,2,3])
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select concat_ws(',', variadic array[1,2,3]);
+- concat_ws 
+------------
+- 1,2,3
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat_ws(',', variadic array[1,2,3])
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select concat_ws(',', variadic NULL::int[]);
+- concat_ws 
+------------
+- 
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat_ws(',', variadic NULL::int[])
++                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select concat(variadic NULL::int[]) is NULL;
+- ?column? 
+-----------
+- t
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat(variadic NULL::int[]) is NULL
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select concat(variadic '{}'::int[]) = '';
+- ?column? 
+-----------
+- t
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat(variadic '{}'::int[]) = ''
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ --should fail
+ select concat_ws(',', variadic 10);
+-ERROR:  VARIADIC argument must be an array
+-LINE 1: select concat_ws(',', variadic 10);
+-                                       ^
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select concat_ws(',', variadic 10)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ /*
+  * format
+  */
+@@ -205,12 +254,11 @@
+ 
+ -- should fail
+ select format('Hello %s %s', 'World');
+-ERROR:  too few arguments for format()
++ERROR:  format(): error parsing format string: not enough arguments
+ select format('Hello %s');
+-ERROR:  too few arguments for format()
++ERROR:  format(): error parsing format string: not enough arguments
+ select format('Hello %x', 20);
+-ERROR:  unrecognized format() type specifier "x"
+-HINT:  For a single "%" use "%%".
++ERROR:  format(): error parsing format string: unrecognized verb x
+ -- check literal and sql identifiers
+ select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
+                  format                 
+@@ -238,7 +286,7 @@
+ 
+ -- should fail, sql identifier cannot be NULL
+ select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
+-ERROR:  null values cannot be formatted as an SQL identifier
++ERROR:  format(): error parsing format string: NULL cannot be formatted as a SQL identifier
+ -- check positional placeholders
+ select format('%1$s %3$s', 1, 2, 3);
+  format 
+@@ -254,19 +302,17 @@
+ 
+ -- should fail
+ select format('%1$s %4$s', 1, 2, 3);
+-ERROR:  too few arguments for format()
++ERROR:  format(): error parsing format string: not enough arguments
+ select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+-ERROR:  too few arguments for format()
++ERROR:  format(): error parsing format string: not enough arguments
+ select format('%0$s', 'Hello');
+-ERROR:  format specifies argument 0, but arguments are numbered from 1
++ERROR:  format(): error parsing format string: positions must be positive and 1-indexed
+ select format('%*0$s', 'Hello');
+-ERROR:  format specifies argument 0, but arguments are numbered from 1
++ERROR:  format(): error parsing format string: positions must be positive and 1-indexed
+ select format('%1$', 1);
+-ERROR:  unterminated format() type specifier
+-HINT:  For a single "%" use "%%".
++ERROR:  format(): error parsing format string: unterminated format specifier
+ select format('%1$1', 1);
+-ERROR:  unterminated format() type specifier
+-HINT:  For a single "%" use "%%".
++ERROR:  format(): error parsing format string: unterminated format specifier
+ -- check mix of positional and ordered placeholders
+ select format('Hello %s %1$s %s', 'World', 'Hello again');
+             format             
+@@ -282,56 +328,136 @@
+ 
+ -- check variadic labeled arguments
+ select format('%s, %s', variadic array['Hello','World']);
+-    format    
+---------------
+- Hello, World
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%s, %s', variadic array['Hello','World'])
++                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select format('%s, %s', variadic array[1, 2]);
+- format 
+---------
+- 1, 2
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%s, %s', variadic array[1, 2])
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select format('%s, %s', variadic array[true, false]);
+- format 
+---------
+- t, f
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%s, %s', variadic array[true, false])
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select format('%s, %s', variadic array[true, false]::text[]);
+-   format    
+--------------
+- true, false
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%s, %s', variadic array[true, false]::text[])
++                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- check variadic with positional placeholders
+ select format('%2$s, %1$s', variadic array['first', 'second']);
+-    format     
+----------------
+- second, first
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%2$s, %1$s', variadic array['first', 'second'])
++                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select format('%2$s, %1$s', variadic array[1, 2]);
+- format 
+---------
+- 2, 1
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('%2$s, %1$s', variadic array[1, 2])
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- variadic argument can be array type NULL, but should not be referenced
+ select format('Hello', variadic NULL::int[]);
+- format 
+---------
+- Hello
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format('Hello', variadic NULL::int[])
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- variadic argument allows simulating more than FUNC_MAX_ARGS parameters
+ select format(string_agg('%s',','), variadic array_agg(i))
+ from generate_series(1,200) g(i);
+-                                                                                                                                                                                                                                                                                                                                                       format                                                                                                                                                                                                                                                                                                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select format(string_agg('%s',','), variadic array_agg(i))
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- check field widths and left, right alignment
+ select format('>>%10s<<', 'Hello');

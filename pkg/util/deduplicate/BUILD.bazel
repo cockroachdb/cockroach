@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "deduplicate",
+    srcs = ["deduplicate.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/deduplicate",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "deduplicate_test",
+    srcs = ["deduplicate_test.go"],
+    embed = [":deduplicate"],
+)

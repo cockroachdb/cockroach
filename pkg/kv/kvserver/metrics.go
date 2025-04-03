@@ -90,6 +90,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAsleepCount = metric.Metadata{
+		Name:        "replicas.asleep",
+		Help:        "Number of asleep replicas. Similarly to quiesced replicas, asleep replicas do not tick in Raft.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaUninitializedCount = metric.Metadata{
 		Name:        "replicas.uninitialized",
 		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
@@ -177,6 +183,12 @@ var (
 		Name:        "leases.transfers.error",
 		Help:        "Number of failed lease transfers",
 		Measurement: "Lease Transfers",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseTransferLocksWrittenCount = metric.Metadata{
+		Name:        "leases.transfers.locks_written",
+		Help:        "Number of locks written to storage during lease transfers",
+		Measurement: "Locks Written",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaLeaseExpirationCount = metric.Metadata{
@@ -2323,7 +2335,7 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
 	metaEncryptionAlgorithm = metric.Metadata{
 		Name:        "rocksdb.encryption.algorithm",
-		Help:        "Algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
+		Help:        "Algorithm in use for encryption-at-rest, see storage/enginepb/key_registry.proto",
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
 	}
@@ -2614,6 +2626,7 @@ type StoreMetrics struct {
 	RaftLeaderInvalidLeaseCount   *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
+	AsleepCount                   *metric.Gauge
 	UninitializedCount            *metric.Gauge
 	RaftFlowStateCounts           [tracker.StateCount]*metric.Gauge
 
@@ -2632,6 +2645,7 @@ type StoreMetrics struct {
 	LeaseRequestLatency            metric.IHistogram
 	LeaseTransferSuccessCount      *metric.Counter
 	LeaseTransferErrorCount        *metric.Counter
+	LeaseTransferLocksWritten      *metric.Counter
 	LeaseExpirationCount           *metric.Gauge
 	LeaseEpochCount                *metric.Gauge
 	LeaseLeaderCount               *metric.Gauge
@@ -3317,6 +3331,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderInvalidLeaseCount:   metric.NewGauge(metaRaftLeaderInvalidLeaseCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		AsleepCount:                   metric.NewGauge(metaAsleepCount),
 		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
 		RaftFlowStateCounts:           raftFlowStateGaugeSlice(),
 
@@ -3338,6 +3353,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		}),
 		LeaseTransferSuccessCount:      metric.NewCounter(metaLeaseTransferSuccessCount),
 		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
+		LeaseTransferLocksWritten:      metric.NewCounter(metaLeaseTransferLocksWrittenCount),
 		LeaseExpirationCount:           metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:                metric.NewGauge(metaLeaseEpochCount),
 		LeaseLeaderCount:               metric.NewGauge(metaLeaseLeaderCount),
@@ -4058,6 +4074,8 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.LeaseTransferSuccess = 0
 	sm.LeaseTransferErrorCount.Inc(int64(metric.LeaseTransferError))
 	metric.LeaseTransferError = 0
+	sm.LeaseTransferLocksWritten.Inc(int64(metric.LeaseTransferLocksWritten))
+	metric.LeaseTransferLocksWritten = 0
 
 	sm.ResolveCommitCount.Inc(int64(metric.ResolveCommit))
 	metric.ResolveCommit = 0

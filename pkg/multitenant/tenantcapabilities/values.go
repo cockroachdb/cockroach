@@ -6,13 +6,15 @@
 package tenantcapabilities
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/errors"
 )
 
 // MustGetValueByID will get the value for the capability corresponding to
 // the requested ID. If the ID is not valid, this function will panic.
-func MustGetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) Value {
+func MustGetValueByID(
+	t *tenantcapabilitiespb.TenantCapabilities, id tenantcapabilitiespb.ID,
+) Value {
 	v, err := GetValueByID(t, id)
 	if err != nil {
 		panic(err)
@@ -23,39 +25,41 @@ func MustGetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) Value {
 // MustGetBoolByID will get the bool value for the capability corresponding to
 // the requested ID. If the ID is not valid or the capability is not a bool
 // capability, this function will panic.
-func MustGetBoolByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) bool {
+func MustGetBoolByID(t *tenantcapabilitiespb.TenantCapabilities, id tenantcapabilitiespb.ID) bool {
 	return MustGetValueByID(t, id).(BoolValue).Get()
 }
 
 // GetValueByID looks up the capability value by ID. It returns an
 // error if the ID is not valid.
-func GetValueByID(t *tenantcapabilitiespb.TenantCapabilities, id ID) (Value, error) {
+func GetValueByID(
+	t *tenantcapabilitiespb.TenantCapabilities, id tenantcapabilitiespb.ID,
+) (Value, error) {
 	switch id {
-	case CanAdminRelocateRange:
+	case tenantcapabilitiespb.CanAdminRelocateRange:
 		return (*boolValue)(&t.CanAdminRelocateRange), nil
-	case CanAdminScatter:
+	case tenantcapabilitiespb.CanAdminScatter:
 		return (*invertedBoolValue)(&t.DisableAdminScatter), nil
-	case CanAdminSplit:
+	case tenantcapabilitiespb.CanAdminSplit:
 		return (*invertedBoolValue)(&t.DisableAdminSplit), nil
-	case CanAdminUnsplit:
+	case tenantcapabilitiespb.CanAdminUnsplit:
 		return (*boolValue)(&t.CanAdminUnsplit), nil
-	case CanCheckConsistency:
+	case tenantcapabilitiespb.CanCheckConsistency:
 		return (*boolValue)(&t.CanCheckConsistency), nil
-	case CanUseNodelocalStorage:
+	case tenantcapabilitiespb.CanUseNodelocalStorage:
 		return (*boolValue)(&t.CanUseNodelocalStorage), nil
-	case CanViewNodeInfo:
+	case tenantcapabilitiespb.CanViewNodeInfo:
 		return (*boolValue)(&t.CanViewNodeInfo), nil
-	case CanViewTSDBMetrics:
+	case tenantcapabilitiespb.CanViewTSDBMetrics:
 		return (*boolValue)(&t.CanViewTSDBMetrics), nil
-	case ExemptFromRateLimiting:
+	case tenantcapabilitiespb.ExemptFromRateLimiting:
 		return (*boolValue)(&t.ExemptFromRateLimiting), nil
-	case TenantSpanConfigBounds:
+	case tenantcapabilitiespb.TenantSpanConfigBounds:
 		return &spanConfigBoundsValue{b: &t.SpanConfigBounds}, nil
-	case CanDebugProcess:
+	case tenantcapabilitiespb.CanDebugProcess:
 		return (*boolValue)(&t.CanDebugProcess), nil
-	case CanViewAllMetrics:
+	case tenantcapabilitiespb.CanViewAllMetrics:
 		return (*boolValue)(&t.CanViewAllMetrics), nil
-	case CanPrepareTxns:
+	case tenantcapabilitiespb.CanPrepareTxns:
 		return (*boolValue)(&t.CanPrepareTxns), nil
 	default:
 		return nil, errors.AssertionFailedf("unknown capability: %q", id.String())

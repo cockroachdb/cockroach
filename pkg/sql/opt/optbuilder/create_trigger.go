@@ -54,7 +54,7 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 
 	// Resolve the trigger function and check its privileges.
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: ct.FuncName}}
-	typedExpr := inScope.resolveType(&funcExpr, types.Any)
+	typedExpr := inScope.resolveType(&funcExpr, types.AnyElement)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))
@@ -179,6 +179,15 @@ func (b *Builder) buildFunctionForTrigger(
 
 	// The trigger function can reference the NEW and OLD transition relations,
 	// aliased in the trigger definition.
+	if len(ct.Transitions) > 0 {
+		// Save the existing CTEs in the builder and restore them after the function
+		// body is built.
+		prevCTEs := b.ctes
+		b.ctes = nil
+		defer func() {
+			b.ctes = prevCTEs
+		}()
+	}
 	for _, transition := range ct.Transitions {
 		// Build a fake relational expression with a column corresponding to each
 		// column from the table.
@@ -202,12 +211,6 @@ func (b *Builder) buildFunctionForTrigger(
 		}
 		funcScope.ctes[string(transition.Name)] = cte
 		b.addCTE(cte)
-	}
-	if len(ct.Transitions) > 0 {
-		defer func() {
-			// Reset the CTEs in the builder after the function body is built.
-			b.ctes = nil
-		}()
 	}
 
 	// The trigger function takes a set of implicitly-defined parameters, two of

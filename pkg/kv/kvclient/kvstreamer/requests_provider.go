@@ -105,14 +105,24 @@ var _ sort.Interface = &singleRangeBatch{}
 // deepCopyRequests updates the singleRangeBatch to have deep-copies of all KV
 // requests (Gets and Scans).
 func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
+	var numScans, numRevScans int
+	if s.reverse {
+		numRevScans = len(r.reqs) - int(r.numGetsInReqs)
+	} else {
+		numScans = len(r.reqs) - int(r.numGetsInReqs)
+	}
+	scans := make([]struct {
+		req   kvpb.ScanRequest
+		union kvpb.RequestUnion_Scan
+	}, numScans)
+	revScans := make([]struct {
+		req   kvpb.ReverseScanRequest
+		union kvpb.RequestUnion_ReverseScan
+	}, numRevScans)
 	gets := make([]struct {
 		req   kvpb.GetRequest
 		union kvpb.RequestUnion_Get
 	}, r.numGetsInReqs)
-	scans := make([]struct {
-		req   kvpb.ScanRequest
-		union kvpb.RequestUnion_Scan
-	}, len(r.reqs)-int(r.numGetsInReqs))
 	for i := range r.reqs {
 		switch req := r.reqs[i].GetInner().(type) {
 		case *kvpb.GetRequest:
@@ -131,6 +141,15 @@ func (r *singleRangeBatch) deepCopyRequests(s *Streamer) {
 			newScan.req.KeyLockingStrength = s.lockStrength
 			newScan.req.KeyLockingDurability = s.lockDurability
 			newScan.union.Scan = &newScan.req
+			r.reqs[i].Value = &newScan.union
+		case *kvpb.ReverseScanRequest:
+			newScan := revScans[0]
+			revScans = revScans[1:]
+			newScan.req.SetSpan(req.Span())
+			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
+			newScan.req.KeyLockingStrength = s.lockStrength
+			newScan.req.KeyLockingDurability = s.lockDurability
+			newScan.union.ReverseScan = &newScan.req
 			r.reqs[i].Value = &newScan.union
 		}
 	}

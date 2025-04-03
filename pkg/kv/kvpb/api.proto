@@ -24,7 +24,7 @@ import "util/tracing/tracingpb/recorded_span.proto";
 import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
-import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+import "multitenant/tenantcapabilitiespb/capabilities.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -219,6 +219,10 @@ message GetRequest {
   // This option is not compatible for reads over inline values (see
   // https://github.com/cockroachdb/cockroach/issues/131667)
   bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
+
+  // LockNonExisting indicates whether the Get request should acquire a lock
+  // on keys that don't exist.
+  bool lock_non_existing = 5;
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -284,6 +288,10 @@ message PutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   bool blind = 4;
+  // MustAcquireExclusiveLock, if set, indicates that a lock with the strength
+  // no lower than "exclusive" needs to be acquired on the key, even if it
+  // doesn't exist.
+  bool must_acquire_exclusive_lock = 5;
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -339,38 +347,11 @@ message ConditionalPutRequest {
   // the use of this value with transactions.
   bool inline = 7;
 
-  // OriginTimestamp, if set, indicates that the ConditionalPut should
-  // only succeed if the provided timestamp is greater than the
-  // OriginTimestamp field in the MVCCValueHeader of the existing
-  // value (if the value has a non-zero OriginTimestamp) or the MVCC
-  // timestamp of the existing value. If there is no existing value,
-  // the timestamp check succeeds.
-  //
-  // The conditional put request will only succeed if this timestamp
-  // comparison is successful and the expected bytes matches the
-  // actual bytes.
-  //
-  // On success, this timestamp will also be stored in the
-  // OriginTimestamp field of the the MVCCValueHeader for the newly
-  // written value.
-  //
-  // In the proposed use case, the OriginTimestamp is the MVCC version
-  // timestamp of the row on the source cluster and the semantics lead
-  // to idempotent last-write-wins semantics against the "original
-  // MVCC timestamp" of the value on the destination, which is its
-  // MVCC timestamp or, if set, the OriginTimestamp (reflecting that
-  // this value originated from the source cluster).
-  //
-  // Used by logical data replication.
+  // OriginTimestamp is deprecated. If set, it must be equal to the
+  // OriginTimestamp in the batch's WriteOptions.
   util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
 
-  // ShouldWinOriginTimestampTie, if true, indicates that if the "comparison
-  // timestamp" (see comment on OriginTimestamp) and OriginTimestamp are equal,
-  // then the ConditionalPut should succeed (assuming the expected and actual
-  // bytes also match).
-  //
-  // This must only be used in conjunction with OriginTimestamp.
-  bool should_win_origin_timestamp_tie = 9;
+  reserved 9;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -425,6 +406,14 @@ message IncrementResponse {
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // MustAcquireExclusiveLock, if set, indicates that a lock with the strength
+  // no lower than "exclusive" needs to be acquired on the key, even if it
+  // doesn't exist. Note that when MustAcquireExclusiveLock is false, the
+  // FoundKey field in the DeleteResponse may be incorrect when the kvclient has
+  // been configured to buffer writes.
+  //
+  // TODO(ssd): Separate the behaviour of FoundKey to not depend on this flag.
+  bool must_acquire_exclusive_lock = 2;
 }
 
 // A DeleteResponse is the return value from the Delete() method.
@@ -461,10 +450,6 @@ message DeleteRangeRequest {
   // cheaper constant-time write operation (but still requires a scan to check
   // for conflicts and adjust MVCC stats). This option cannot be used in a
   // transaction, and it cannot be combined with Inline or ReturnKeys.
-  //
-  // The caller must check storage.CanUseMVCCRangeTombstones before using this
-  // parameter: it is new in 22.2, and controlled by the default-off cluster
-  // setting storage.mvcc.range_tombstones.enabled.
   bool use_range_tombstone = 5;
   // If enabled together with UseRangeTombstone, the MVCC range tombstone will
   // only be written if there exists point key/tombstones in the span that
@@ -711,6 +696,25 @@ message ScanResponse {
   //
   // If set, rows and batch_responses will not be set.
   ColBatches col_batches = 5 [(gogoproto.nullable) = false];
+}
+
+// ExciseRequest is the argument to the Excise() method, which ends up calling
+// the storage Excise() method. It is used to atomically remove all data in the
+// specified key span.
+// It's used as a recovery tool in the event of data loss. It's a non-MVCC
+// command that will destroy MVCC history, and can result in transactional
+// anomalies like lost portions of transactions, uncommiting committed
+// transactions, and possible other anomalies. It allows for inconsistent
+// follower reads.
+// It can not be applied to non-user spans.
+message ExciseRequest {
+  reserved 2, 3;
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ExciseResponse is the return value from the Excise() method.
+message ExciseResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -2023,9 +2027,6 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
 //
-// MVCC range tombstones are supported in 22.2, but check the
-// MVCCRangeTombstones version gate before writing them.
-//
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
 // guarantees, including ACID, serializability and single-key linearizability:
@@ -2041,9 +2042,9 @@ message AdminVerifyProtectedTimestampResponse {
 //   and closed timestamp, by rewriting SST timestamps to the request timestamp.
 //   Also emits the SST via the range feed.
 //
-// * DisallowConflicts, DisallowShadowing, or DisallowShadowingBelow: ensures
-//   compliance with MVCC, by checking for conflicting keys in existing data
-//   instead of writing blindly.
+// * DisallowConflicts, or DisallowShadowingBelow: ensures compliance with MVCC,
+//   by checking for conflicting keys in existing data instead of writing
+//   blindly.
 //
 // If the above parameters are not enabled, the caller must make sure these
 // guarantees are upheld via other mechanisms. These options are orthogonal,
@@ -2080,10 +2081,7 @@ message AddSSTableRequest {
   // Note that this alone is not sufficient to guarantee MVCC correctness, since
   // it can write below or replace existing committed versions (the tscache is
   // only bumped when the values are subsequently read). Use DisallowConflicts
-  // or DisallowShadowing in addition to guarantee MVCC correctness and
-  // serializability.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
+  // in addition to guarantee MVCC correctness and serializability.
   util.hlc.Timestamp sst_timestamp_to_request_timestamp = 6 [
     (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
 
@@ -2097,28 +2095,20 @@ message AddSSTableRequest {
   // reader has already observed, changing the value at that timestamp and above
   // it. Use with SSTTimestampToRequestTimestamp to guarantee serializability.
   //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
-  //
   // TODO(erikgrinaker): It might be possible to avoid this parameter if we
   // could pick an MVCC timestamp that's guaranteed to not collide with
   // existing keys, see: https://github.com/cockroachdb/cockroach/issues/73047.
   // However, this would always lead to inaccurate MVCC stats.
   bool disallow_conflicts = 7;
 
-  // DisallowShadowing implies DisallowConflicts, and additionally rejects
-  // writing above keys that have an existing/visible value (but will write
-  // above tombstones).
-  //
-  // TODO(erikgrinaker): Consider removing this in 22.1 if all callers have
-  // been migrated to DisallowShadowingBelow.
-  bool disallow_shadowing = 3;
+  reserved 3;
 
   // DisallowShadowingBelow implies DisallowConflicts, and additionally rejects
   // writing above keys that have an existing/visible value (but will write
-  // above tombstones). Unlike DisallowShadowing, it allows shadowing keys
-  // that have a timestamp at or above the given timestamp as long as the
-  // value is identical to the existing value, and also allows idempotent writes
-  // (same key/timestamp/value) at or above the given timestamp.
+  // above tombstones). It allows shadowing keys that have a timestamp at or
+  // above the given timestamp as long as the value is identical to the existing
+  // value, and also allows idempotent writes (same key/timestamp/value) at or
+  // above the given timestamp.
   //
   // This is a specialized method for the IMPORT INTO use-case, where we do not
   // want to shadow existing keys (which could cause them to be GCed before the
@@ -2126,11 +2116,6 @@ message AddSSTableRequest {
   // keys that were previously written by the import itself in the case of a
   // resumption or retry. The equal value requirement is to avoid unique
   // constraint violations.
-  //
-  // If this parameter is used, the value of DisallowShadowing is ignored, so
-  // callers may pass both for forward and backwards compatibility.
-  //
-  // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   util.hlc.Timestamp disallow_shadowing_below = 8 [(gogoproto.nullable) = false];
 
   // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
@@ -2281,6 +2266,10 @@ message SubsumeRequest {
   // The range descriptor for the right-hand side of the merge. Should match
   // the range descriptor of the range evaluating this request.
   RangeDescriptor right_desc = 3 [(gogoproto.nullable) = false];
+
+  // PreserveUnreplicatedLocks instructs the Subsume request to flush any unreplicated
+  // locks to the replicated lock table before returning.
+  bool preserve_unreplicated_locks = 4;
 }
 
 // SubsumeResponse is the response to a SubsumeRequest.
@@ -2566,6 +2555,7 @@ message RequestUnion {
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
     LinkExternalSSTableRequest link_external_sstable = 57;
+    ExciseRequest excise = 58;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2622,6 +2612,7 @@ message ResponseUnion {
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
     LinkExternalSSTableResponse link_external_sstable = 57;
+    ExciseResponse excise = 58;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
@@ -3010,9 +3001,26 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
-  // OriginTimestamp is bound to the MVCCValueHeader of written key in the
-  // batch. Note that a kv client cannot set this if they use CPut's origin
-  // timestamp arg.
+  // OriginTimestamp is used by logical data replication. It is the MVCC
+  // timestamp of the row in the source cluster.
+  //
+  // If set the write will only succeed if the provided timestamp is greater than
+  // the OriginTimestamp field in the MVCCValueHeader of the existing value (if
+  // the value has a non-zero OriginTimestamp) or the MVCC timestamp of the
+  // existing value. If there is no existing value, the timestamp check succeeds.
+	//
+	// The origin_timestamp header is only handled by the put, cput, delete, and
+	// range delete commands.
+  //
+  // On success, this timestamp will also be stored in the
+  // OriginTimestamp field of the the MVCCValueHeader for the newly
+  // written value.
+  //
+  // In LDR, the OriginTimestamp is the MVCC version timestamp of the row on the
+  // source cluster and the semantics leads to idempotent last-write-wins
+  // semantics against the "original" MVCC timestamp of the value on the
+  // destination, which is its MVCC timestamp or, if set, the OriginTimestamp
+  // (reflecting that this value originated from the source cluster).
   util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
@@ -3754,6 +3762,9 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+  // IsLatch, if true, indicates that the contention event was due to waiting to
+  // acquire a latch.
+  bool is_latch = 4;
 }
 
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,

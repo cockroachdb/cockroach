@@ -50,7 +50,10 @@ statement error prepared statement \"a\" does not exist
 DEALLOCATE a
 
 statement ok
-BEGIN
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+SET LOCAL autocommit_before_ddl=off;
 
 statement error DISCARD ALL cannot run inside a transaction block
 DISCARD ALL

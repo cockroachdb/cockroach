@@ -13,7 +13,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/types",
         "@com_github_go_sql_driver_mysql//:mysql",
-        "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_lib_pq//oid",
     ],
 )

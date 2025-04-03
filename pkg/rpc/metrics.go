@@ -6,6 +6,7 @@
 package rpc
 
 import (
+	"context"
 	"strings"
 
 	"github.com/VividCortex/ewma"
@@ -13,6 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	prometheusgo "github.com/prometheus/client_model/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -129,6 +135,13 @@ over this connection.
 		Unit:        metric.Unit_BYTES,
 		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
 		Measurement: "Bytes",
+	}
+	metaRequestDuration = metric.Metadata{
+		Name:        "rpc.server.request.duration.nanos",
+		Help:        "Duration of an grpc request in nanoseconds.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
 	}
 )
 
@@ -333,4 +346,60 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 	// We temporarily increment the inactive count until we actually connect.
 	pm.ConnectionInactive.Inc(1)
 	return pm, lm
+}
+
+const (
+	RpcMethodLabel     = "methodName"
+	RpcStatusCodeLabel = "statusCode"
+)
+
+// RequestMetrics contains metrics for RPC requests.
+type RequestMetrics struct {
+	Duration *metric.HistogramVec
+}
+
+func NewRequestMetrics() *RequestMetrics {
+	return &RequestMetrics{
+		Duration: metric.NewExportedHistogramVec(
+			metaRequestDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RpcMethodLabel, RpcStatusCodeLabel}),
+	}
+}
+
+type RequestMetricsInterceptor grpc.UnaryServerInterceptor
+
+// NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
+// the duration of each RPC. The metric is labeled by the method name and the
+// status code of the RPC. The interceptor will only record durations if
+// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
+func NewRequestMetricsInterceptor(
+	requestMetrics *RequestMetrics, shouldRecord func(fullMethodName string) bool,
+) RequestMetricsInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		if !shouldRecord(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
+		startTime := timeutil.Now()
+		resp, err := handler(ctx, req)
+		duration := timeutil.Since(startTime)
+		var code codes.Code
+		if err != nil {
+			code = status.Code(err)
+		} else {
+			code = codes.OK
+		}
+
+		requestMetrics.Duration.Observe(map[string]string{
+			RpcMethodLabel:     info.FullMethod,
+			RpcStatusCodeLabel: code.String(),
+		}, float64(duration.Nanoseconds()))
+		return resp, err
+	}
 }

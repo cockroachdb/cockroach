@@ -301,6 +301,9 @@ statement ok
 BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
 GRANT SELECT ON crdb_internal.feature_usage TO testuser4
 
 # This should not cache the uncommitted privilege.

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -97,7 +96,7 @@ func runBenchmarkPersistedSqlStatsFlush(
 			db.Exec(b, "SELECT id FROM bench.t1 LIMIT 5")
 		}
 		b.StartTimer()
-		tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, tc.ApplicationLayer(0).AppStopper())
+		tc.Server(0).SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, tc.ApplicationLayer(0).AppStopper())
 		b.StopTimer()
 	}
 }
@@ -384,17 +383,17 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 
-	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	sqlStats := s.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	controller := s.SQLServer().(*sql.Server).GetSQLStatsController()
 	stmtFingerprintLimit := sqlstats.MaxMemSQLStatsStmtFingerprints.Get(&s.ClusterSettings().SV)
 	txnFingerprintLimit := sqlstats.MaxMemSQLStatsTxnFingerprints.Get(&s.ClusterSettings().SV)
 
 	// Fills the in-memory stats for the 'bench' application until the fingerprint limit is reached.
 	fillBenchAppMemStats := func() {
-		appContainer := sqlStats.SQLStats.GetApplicationStats("bench")
-		mockStmtValue := sqlstats.RecordedStmtStats{}
+		appContainer := sqlStats.GetApplicationStats("bench")
 		for i := int64(1); i <= stmtFingerprintLimit; i++ {
-			stmtKey := appstatspb.StatementStatisticsKey{
+			mockStmtValue := &sqlstats.RecordedStmtStats{
 				Query:                    "SELECT 1",
 				App:                      "bench",
 				DistSQL:                  false,
@@ -406,15 +405,17 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 				QuerySummary:             "",
 				TransactionFingerprintID: appstatspb.TransactionFingerprintID(i),
 			}
-			_, err := appContainer.RecordStatement(ctx, stmtKey, mockStmtValue)
+			err := appContainer.RecordStatement(ctx, mockStmtValue)
 			if errors.Is(err, ssmemstorage.ErrFingerprintLimitReached) {
 				break
 			}
 		}
 
 		for i := int64(1); i <= txnFingerprintLimit; i++ {
-			mockTxnValue := sqlstats.RecordedTxnStats{}
-			err := appContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(i), mockTxnValue)
+			mockTxnValue := &sqlstats.RecordedTxnStats{
+				FingerprintID: appstatspb.TransactionFingerprintID(i),
+			}
+			err := appContainer.RecordTransaction(ctx, mockTxnValue)
 			if errors.Is(err, ssmemstorage.ErrFingerprintLimitReached) {
 				break
 			}
@@ -437,7 +438,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 			require.NoError(b, controller.ResetClusterSQLStats(ctx))
 			fillBenchAppMemStats()
 			b.StartTimer()
-			require.True(b, sqlStats.MaybeFlush(ctx, s.AppStopper()))
+			require.True(b, pss.MaybeFlush(ctx, s.AppStopper()))
 			b.StopTimer()
 		}
 	})
@@ -449,7 +450,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			fillBenchAppMemStats()
 			b.StartTimer()
-			require.True(b, sqlStats.MaybeFlush(ctx, s.AppStopper()))
+			require.True(b, pss.MaybeFlush(ctx, s.AppStopper()))
 			b.StopTimer()
 		}
 	})

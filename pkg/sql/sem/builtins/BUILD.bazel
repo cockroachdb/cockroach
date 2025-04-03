@@ -32,7 +32,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
@@ -115,6 +114,7 @@ go_library(
         "//pkg/util/intsets",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
+        "//pkg/util/jsonpath/eval",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/pretty",
@@ -136,6 +136,7 @@ go_library(
         "//pkg/util/tsearch",
         "//pkg/util/ulid",
         "//pkg/util/unaccent",
+        "//pkg/util/unique",
         "//pkg/util/uuid",
         "//pkg/util/vector",
         "@com_github_cockroachdb_apd_v3//:apd",
@@ -179,7 +180,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":builtins"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [

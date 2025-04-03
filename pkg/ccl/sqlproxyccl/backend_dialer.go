@@ -56,7 +56,11 @@ var BackendDial = func(
 		}
 
 		// Forward startup message to the backend connection.
-		if _, err := conn.Write(msg.Encode(nil)); err != nil {
+		buf, err := msg.Encode(nil)
+		if err != nil {
+			return errors.Wrapf(err, "encoding StartingMessage for target server %v", serverAddress)
+		}
+		if _, err := conn.Write(buf); err != nil {
 			return errors.Wrapf(err, "relaying StartupMessage to target server %v", serverAddress)
 		}
 		return nil

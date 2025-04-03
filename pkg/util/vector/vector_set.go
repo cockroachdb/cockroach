@@ -92,6 +92,31 @@ func (vs *Set) SplitAt(offset int) Set {
 	return other
 }
 
+// Slice returns a vector set that contains a subset of "count" vectors,
+// starting at the given offset.
+//
+// NOTE: Slice returns a set that references the same memory as this set.
+// Modifications to one set may be visible in the other set, so callers should
+// typically ensure that both sets are immutable after calling Slice.
+func (vs *Set) Slice(offset, count int) Set {
+	if offset > vs.Count {
+		panic(errors.AssertionFailedf(
+			"slice start %d cannot be greater than set size %d", offset, vs.Count))
+	}
+	if offset+count > vs.Count {
+		panic(errors.AssertionFailedf(
+			"slice end %d cannot be greater than set size %d", offset+count, vs.Count))
+	}
+
+	start := offset * vs.Dims
+	end := (offset + count) * vs.Dims
+	return Set{
+		Dims:  vs.Dims,
+		Count: count,
+		Data:  vs.Data[start:end:end],
+	}
+}
+
 // Add appends a new vector to the set.
 func (vs *Set) Add(v T) {
 	if vs.Dims != len(v) {
@@ -103,7 +128,7 @@ func (vs *Set) Add(v T) {
 }
 
 // AddSet appends all vectors from the given set to this set.
-func (vs *Set) AddSet(vectors *Set) {
+func (vs *Set) AddSet(vectors Set) {
 	if vs.Dims != vectors.Dims {
 		panic(errors.AssertionFailedf(
 			"cannot add vector set with %d dimensions to a set with %d dimensions",

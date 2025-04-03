@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -20,9 +21,15 @@ const (
 	shortStrSize = 8
 )
 
+// Short is an abbreviated version of a UUID containing the first four bytes.
 type Short struct {
 	b [shortSize]byte
 }
+
+var _ redact.SafeValue = Short{}
+
+// SafeValue implements the redact.SafeValue interface.
+func (s Short) SafeValue() {}
 
 // String returns the 8-character hexidecimal representation of the abbreviated
 // UUID.
@@ -30,6 +37,16 @@ func (s Short) String() string {
 	var b [shortStrSize]byte
 	hex.Encode(b[:], s.b[:])
 	return string(b[:])
+}
+
+// ToInt32 returns an int32 representation of the abbreviated UUID.
+func (s Short) ToInt32() int32 {
+	return int32(binary.BigEndian.Uint32(s.b[:]))
+}
+
+// FromInt32 sets the abbreviated UUID from an int32.
+func (s *Short) FromInt32(i int32) {
+	binary.BigEndian.PutUint32(s.b[:], uint32(i))
 }
 
 // Short returns an abbreviated version of the UUID containing the first four

@@ -65,7 +65,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// Permanent error has been hit, so there is no rollback
 	// from here. Only if the status is reverting will these be
 	// treated as fatal.
-	if jobs.IsPermanentJobError(err) && n.job.Status() == jobs.StatusReverting {
+	if jobs.IsPermanentJobError(err) && n.job.State() == jobs.StateReverting {
 		log.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
 		return nil
 	}

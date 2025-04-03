@@ -32,6 +32,7 @@ func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) 
 		for i := range arg.Vals {
 			switch arg.Key {
 			case "log-level":
+				//nolint:deferloop
 				defer func(old int) {
 					env.Output.Lvl = old
 				}(env.Output.Lvl)
@@ -100,9 +101,9 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 		}
 		for _, rn := range nodes {
 			idx := int(rn.Status().ID - 1)
-			if len(rn.ApplyWork) > 0 {
+			if !rn.ApplyWork.Empty() {
 				fmt.Fprintf(env.Output, "> %d processing apply thread\n", idx+1)
-				for len(rn.ApplyWork) > 0 {
+				for !rn.ApplyWork.Empty() {
 					env.withIndent(func() { env.ProcessApplyThread(idx) })
 				}
 				done = false

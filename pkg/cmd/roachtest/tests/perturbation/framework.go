@@ -268,7 +268,9 @@ func setup(p perturbation, acceptableChange float64) variations {
 }
 
 func register(r registry.Registry, p perturbation) {
-	addMetamorphic(r, p)
+	// Metamorphic perturbation tests are currently disabled. See
+	// https://github.com/cockroachdb/cockroach/issues/142148.
+	// addMetamorphic(r, p)
 	addFull(r, p)
 	addDev(r, p)
 }
@@ -382,6 +384,7 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	return err
 }
 
+//lint:ignore U1000 unused
 func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)

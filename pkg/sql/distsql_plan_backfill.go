@@ -40,19 +40,20 @@ func initColumnBackfillerSpec(
 
 func initIndexBackfillerSpec(
 	desc descpb.TableDescriptor,
-	writeAsOf, readAsOf hlc.Timestamp,
+	writeAsOf hlc.Timestamp,
 	writeAtBatchTimestamp bool,
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
+	sourceIndexID descpb.IndexID,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
 		Table:                 desc,
 		WriteAsOf:             writeAsOf,
 		WriteAtBatchTimestamp: writeAtBatchTimestamp,
-		ReadAsOf:              readAsOf,
 		Type:                  execinfrapb.BackfillerSpec_Index,
 		ChunkSize:             chunkSize,
 		IndexesToBackfill:     indexesToBackfill,
+		SourceIndexID:         sourceIndexID,
 	}, nil
 }
 
@@ -82,6 +83,14 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 	}
 
 	p := planCtx.NewPhysicalPlan()
+	var containsRemoteProcessor bool
+	for _, sp := range spanPartitions {
+		if sp.SQLInstanceID != p.GatewaySQLInstanceID {
+			containsRemoteProcessor = true
+			break
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor, false /* allowPartialDistribution */)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
@@ -94,6 +103,7 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 			Spec: execinfrapb.ProcessorSpec{
 				Core:        execinfrapb.ProcessorCoreUnion{Backfiller: ib},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     stageID,
 				ResultTypes: []*types.T{},
 			},
 		}
@@ -151,6 +161,14 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 	}
 
 	p := planCtx.NewPhysicalPlan()
+	var containsRemoteProcessor bool
+	for _, sp := range spanPartitions {
+		if sp.SQLInstanceID != p.GatewaySQLInstanceID {
+			containsRemoteProcessor = true
+			break
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor, false /* allowPartialDistribution */)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ibm := &execinfrapb.IndexBackfillMergerSpec{}
@@ -166,6 +184,7 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 			Spec: execinfrapb.ProcessorSpec{
 				Core:        execinfrapb.ProcessorCoreUnion{IndexBackfillMerger: ibm},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     stageID,
 				ResultTypes: []*types.T{},
 			},
 		}

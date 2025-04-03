@@ -37,6 +37,28 @@ SELECT get_db_survival_goal()
 (system,)
 
 statement ok
+create table alter_survive_db.t();
+
+# When SURVIVE REGION FAILURE is set with 3 regions we must set 5 constraints for 5 replicas.
+# This query shows 5 total constraints, where 1 voter constraint is also a normal constraint.
+query TT nosort,colnames
+show zone configuration for table alter_survive_db.t
+----
+target                           raw_config_sql
+TABLE alter_survive_db.public.t  ALTER TABLE alter_survive_db.public.t CONFIGURE ZONE USING
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 5,
+                                   num_voters = 5,
+                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                   voter_constraints = '{+region=ca-central-1: 2}',
+                                   lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+drop table alter_survive_db.t;
+
+statement ok
 ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
 
 query T nosort

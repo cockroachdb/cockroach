@@ -232,9 +232,9 @@ COMMIT
 # but we do need to run something on this connection to trigger test harness to
 # roll back the txn.
 sql conn=conflict
-ROLLBACK
+BEGIN; ROLLBACK
 ----
-1: ROLLBACK -- pq: there is no transaction in progress
+1: BEGIN; ROLLBACK -- 0 rows
 -- NoTxn       -> NoTxn       #  (none)
 
 sql
@@ -294,9 +294,9 @@ SET lock_timeout = 0
 # but we do need to run something on this connection to trigger test harness to
 # roll back the txn.
 sql conn=conflict
-ROLLBACK
+BEGIN; ROLLBACK
 ----
-1: ROLLBACK -- pq: there is no transaction in progress
+1: BEGIN; ROLLBACK -- 0 rows
 -- NoTxn       -> NoTxn       #  (none)
 
 sql
@@ -316,13 +316,13 @@ subtest rollback_after_ddl/release_normal_savepoint
 # the txn on the config range. The second DDL is the one
 # exercised in the test.
 sql
-BEGIN; CREATE TABLE unused(x INT)
+BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT)
 SAVEPOINT foo
 CREATE TABLE t(x INT)
 RELEASE SAVEPOINT foo
 COMMIT
 ----
-1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+1: BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  (none)
 2: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##...  foo
@@ -339,16 +339,43 @@ DROP TABLE unused; DROP TABLE t
 1: DROP TABLE unused; DROP TABLE t -- 0 rows
 -- NoTxn       -> NoTxn       #  (none)
 
-# Also fine at high priority.
-
+# Test the same thing, but with the default value of autocommit_before_ddl.
+# The SAVEPOINT will appear outside of a transaction, but it is something we
+# ignore if autocommit_before_ddl is on.
 sql
-BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT)
+BEGIN; CREATE TABLE unused(x INT)
 SAVEPOINT foo
 CREATE TABLE t(x INT)
 RELEASE SAVEPOINT foo
 COMMIT
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT) -- 0 rows
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> NoTxn       #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- NoTxn       -> NoTxn       ##...  (none)
+3: CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> NoTxn       ###..  (none)
+4: RELEASE SAVEPOINT foo -- 0 rows
+-- NoTxn       -> NoTxn       ####.  (none)
+5: COMMIT -- 0 rows
+-- NoTxn       -> NoTxn       #####  (none)
+
+sql
+DROP TABLE unused; DROP TABLE t
+----
+1: DROP TABLE unused; DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+# Also fine at high priority.
+
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  (none)
 2: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##...  foo
@@ -372,6 +399,7 @@ subtest rollback_after_ddl/restart_savepoint
 # DDL under a cockroach_restart savepoint can
 # be rolled back.
 sql
+SET autocommit_before_ddl = false;
 BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 ROLLBACK TO SAVEPOINT cockroach_restart
@@ -379,21 +407,26 @@ CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (3)
 COMMIT
 SELECT * FROM t
+RESET autocommit_before_ddl
 ----
-1: BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
--- NoTxn       -> Open        #......  cockroach_restart(r)
-2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
--- Open        -> Open        ##.....  cockroach_restart(r)
-3: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
--- Open        -> Open        #......  cockroach_restart(r)
-4: CREATE TABLE t(x INT) -- 0 rows
--- Open        -> Open        #..#...  cockroach_restart(r)
-5: INSERT INTO t(x) VALUES (3) -- 1 row
--- Open        -> Open        #..##..  cockroach_restart(r)
-6: COMMIT -- 0 rows
--- Open        -> NoTxn       #..###.  (none)
-7: SELECT * FROM t -- 1 row
--- NoTxn       -> NoTxn       #..####  (none)
+1: SET autocommit_before_ddl = false; -- 0 rows
+-- NoTxn       -> NoTxn       #........  (none)
+2: BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        ##.......  cockroach_restart(r)
+3: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ###......  cockroach_restart(r)
+4: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        ##.......  cockroach_restart(r)
+5: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ##..#....  cockroach_restart(r)
+6: INSERT INTO t(x) VALUES (3) -- 1 row
+-- Open        -> Open        ##..##...  cockroach_restart(r)
+7: COMMIT -- 0 rows
+-- Open        -> NoTxn       ##..###..  (none)
+8: SELECT * FROM t -- 1 row
+-- NoTxn       -> NoTxn       ##..####.  (none)
+9: RESET autocommit_before_ddl -- 0 rows
+-- NoTxn       -> NoTxn       ##..#####  (none)
 
 sql
 DROP TABLE t
@@ -404,12 +437,12 @@ DROP TABLE t
 # DDL under a cockroach_restart savepoint cannot
 # be rolled back at high priority, because of #46414.
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 ROLLBACK TO SAVEPOINT cockroach_restart
 ABORT
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #...  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##..  cockroach_restart(r)
@@ -420,13 +453,13 @@ ABORT
 
 # Same error in the aborted state.
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 SELECT undefined
 ROLLBACK TO SAVEPOINT cockroach_restart
 ABORT
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##...  cockroach_restart(r)
@@ -441,13 +474,13 @@ ABORT
 # However it's fine if there's just a release.
 
 sql
-BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
 INSERT INTO t(x) VALUES (1), (2)
 RELEASE SAVEPOINT cockroach_restart
 COMMIT
 SELECT * FROM t
 ----
-1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+1: BEGIN TRANSACTION PRIORITY HIGH; SET LOCAL autocommit_before_ddl = off; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  cockroach_restart(r)
 2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
 -- Open        -> Open        ##...  cockroach_restart(r)
@@ -472,12 +505,12 @@ subtest rollback_after_ddl/regular_savepoint
 # TODO(knz): Lift this limitation.
 
 sql
-BEGIN; CREATE TABLE unused(x INT)
+BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT)
 SAVEPOINT foo
 CREATE TABLE t(x INT)
 ROLLBACK TO SAVEPOINT foo
 ----
-1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+1: BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT) -- 0 rows
 -- NoTxn       -> Open        #...  (none)
 2: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##..  foo
@@ -488,13 +521,13 @@ ROLLBACK TO SAVEPOINT foo
 
 # Ditto in aborted state.
 sql
-BEGIN; CREATE TABLE unused(x INT)
+BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT)
 SAVEPOINT foo
 CREATE TABLE t(x INT)
 SELECT undefined
 ROLLBACK TO SAVEPOINT foo
 ----
-1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+1: BEGIN; SET LOCAL autocommit_before_ddl = false; CREATE TABLE unused(x INT) -- 0 rows
 -- NoTxn       -> Open        #....  (none)
 2: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ##...  foo
@@ -511,6 +544,12 @@ subtest end
 subtest end
 
 subtest invalid_uses
+
+sql
+SET autocommit_before_ddl = false
+----
+1: SET autocommit_before_ddl = false -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
 
 sql
 SAVEPOINT foo
@@ -547,6 +586,12 @@ ROLLBACK TO SAVEPOINT bar
 -- Open        -> Open        ##.  foo
 3: ROLLBACK TO SAVEPOINT bar -- pq: savepoint "bar" does not exist
 -- Open        -> Aborted     XXX  foo
+
+sql
+RESET autocommit_before_ddl
+----
+1: RESET autocommit_before_ddl -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
 
 subtest end
 

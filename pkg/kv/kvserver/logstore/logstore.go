@@ -9,6 +9,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"slices"
 	"sync"
@@ -512,68 +513,65 @@ func logAppend(
 	}, nil
 }
 
-// Compact constructs a write that compacts the raft log from
-// currentTruncatedState up to suggestedTruncatedState. Returns (true, nil) iff
-// the compaction can proceed, and the write has been constructed.
+// Compact prepares a write that removes entries (prev.Index, next.Index] from
+// the raft log, and updates the truncated state to the next one. Does nothing
+// if the interval is empty.
 //
 // TODO(#136109): make this a method of a write-through LogStore data structure,
 // which is aware of the current log state.
 func Compact(
 	ctx context.Context,
-	currentTruncatedState kvserverpb.RaftTruncatedState,
-	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	prev kvserverpb.RaftTruncatedState,
+	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	readWriter storage.ReadWriter,
-) (apply bool, _ error) {
-	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
-		// The suggested truncated state moves us backwards; instruct the caller to
-		// not update the in-memory state.
-		return false, nil
+) error {
+	if next.Index <= prev.Index {
+		// TODO(pav-kv): return an assertion failure error.
+		return nil
 	}
-
 	// Truncate the Raft log from the entry after the previous truncation index to
-	// the new truncation index. This is performed atomically with the raft
-	// command application so that the TruncatedState index is always consistent
-	// with the state of the Raft log itself.
+	// the new truncation index. This is performed atomically with updating the
+	// RaftTruncatedState so that the state of the log is consistent.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := suggestedTruncatedState.Index - currentTruncatedState.Index
+	numTruncatedEntries := next.Index - prev.Index
 	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
+		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
+		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
 		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
-			return false, errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
-				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
+			return errors.Wrapf(err,
+				"unable to clear truncated Raft entries for %+v after index %d",
+				next, prev.Index)
 		}
 	} else {
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
 		// allocating when constructing Raft log keys (16 bytes).
 		prefix := prefixBuf.RaftLogPrefix()
-		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
+		for idx := prev.Index + 1; idx <= next.Index; idx++ {
 			if err := readWriter.ClearUnversioned(
 				keys.RaftLogKeyFromPrefix(prefix, idx),
 				storage.ClearOptions{},
 			); err != nil {
-				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					suggestedTruncatedState, idx)
+				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
+					next, idx)
 			}
 		}
 	}
 
-	// The suggested truncated state moves us forward; apply it and tell the
-	// caller as much.
-	if err := storage.MVCCPutProto(
-		ctx,
-		readWriter,
-		prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{},
-		suggestedTruncatedState,
+	key := prefixBuf.RaftTruncatedStateKey()
+	var value roachpb.Value
+	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+
+	if _, err := storage.MVCCPut(
+		ctx, readWriter, key, hlc.Timestamp{}, value,
 		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
 	); err != nil {
-		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
+		return errors.Wrap(err, "unable to write RaftTruncatedState")
 	}
-
-	return true, nil
+	return nil
 }
 
 // ComputeSize computes the size (in bytes) of the raft log from the storage
@@ -590,9 +588,7 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	// The remaining bytes if one were to truncate [0, 0) gives us the total
-	// number of bytes in sideloaded files.
-	_, totalSideloaded, err := s.Sideload.BytesIfTruncatedFromTo(ctx, 0, 0)
+	_, totalSideloaded, err := s.Sideload.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 	if err != nil {
 		return 0, err
 	}
@@ -601,6 +597,16 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 
 // LoadTerm returns the term of the entry at the given index for the specified
 // range. The result is loaded from the storage engine if it's not in the cache.
+// The valid range for index is [Compacted, LastIndex].
+//
+// There are 3 cases for when the term is not found: (1) the index has been
+// compacted away, (2) index > LastIndex, or (3) there is a gap in the log. In
+// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
+// callers never try to read indices above LastIndex, so an error means (3)
+// which is a serious issue. But if the caller is unsure, they can check the
+// LastIndex to distinguish.
+//
+// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 func LoadTerm(
 	ctx context.Context,
 	rsl StateLoader,
@@ -646,34 +652,38 @@ func LoadTerm(
 		}
 		return kvpb.RaftTerm(entry.Term), nil
 	}
-	// Otherwise, the entry at the given index is not found. This can happen if
-	// the index is ahead of lastIndex, or it has been compacted away.
 
-	lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-	if err != nil {
-		return 0, err
-	}
-	if index > lastIndex {
-		return 0, raft.ErrUnavailable
-	}
-
+	// Otherwise, the entry at the given index is not found. See the function
+	// comment for how this case is handled.
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return 0, err
-	}
-	if index == ts.Index {
+	} else if index == ts.Index {
 		return ts.Term, nil
+	} else if index < ts.Index {
+		return 0, raft.ErrCompacted
 	}
-	if index > ts.Index {
-		return 0, errors.Errorf("there is a gap at index %d", index)
-	}
-	return 0, raft.ErrCompacted
+	return 0, raft.ErrUnavailable
 }
 
-// LoadEntries retrieves entries from the engine. It inlines the sideloaded
-// entries, and caches all the loaded entries. The size of the returned entries
-// does not exceed maxSize, unless only one entry is returned.
+// LoadEntries loads a slice of consecutive log entries in [lo, hi), starting
+// from lo. It inlines the sideloaded entries, and caches all the loaded
+// entries. The size of the returned entries does not exceed maxSize, unless the
+// first entry exceeds the limit (in which case it is returned regardless).
 //
+// The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1.
+//
+// There are 3 cases for when an entry is not found: (1) the lo index has been
+// compacted away, (2) hi > LastIndex+1, or (3) there is a gap in the log. In
+// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
+// callers never try to read indices above LastIndex, so an error means (3)
+// which is a serious issue. But if the caller is unsure, they can check the
+// LastIndex to distinguish.
+//
+// The bytesAccount is used to account for and limit the loaded bytes. It can be
+// nil when the accounting / limiting is not needed.
+//
+// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
@@ -768,30 +778,15 @@ func LoadEntries(
 		return ents, cachedSize, sh.bytes - cachedSize, nil
 	}
 
-	// Did we get any results at all? Because something went wrong.
-	if len(ents) > 0 {
-		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		if lastIndex <= expectedIndex {
-			return nil, 0, 0, raft.ErrUnavailable
-		}
-
-		// We have a gap in the record, if so, return a nasty error.
-		return nil, 0, 0, errors.Errorf("there is a gap in the index record between lo:%d and hi:%d at index:%d", lo, hi, expectedIndex)
-	}
-
-	// No results, was it due to unavailability or truncation?
+	// Something went wrong, and we could not load enough entries.
 	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, 0, 0, err
-	}
-	if ts.Index >= lo {
+	} else if lo <= ts.Index {
 		// The requested lo index has already been truncated.
 		return nil, 0, 0, raft.ErrCompacted
 	}
-	// The requested lo index does not yet exist.
+	// We either have a gap in the log, or hi > LastIndex. Let the caller
+	// distinguish if they need to.
 	return nil, 0, 0, raft.ErrUnavailable
 }

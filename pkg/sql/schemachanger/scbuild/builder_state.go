@@ -62,7 +62,7 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
 	dst := b.getExistingElementState(e)
 	switch target {
-	case scpb.ToAbsent, scpb.ToPublic, scpb.Transient:
+	case scpb.ToAbsent, scpb.ToPublic, scpb.TransientAbsent, scpb.TransientPublic:
 		// Sanity check.
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
@@ -75,7 +75,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 			return
 		}
 		// Set a target for the element but check for concurrent schema changes.
-		_ = b.checkForConcurrentSchemaChanges(e)
+		_ = b.checkForConcurrentSchemaChanges(e, target)
 		b.addNewElementState(elementState{
 			element:  e,
 			initial:  scpb.Status_ABSENT,
@@ -94,7 +94,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	// Check that there are no concurrent schema changes on the descriptors
 	// referenced by this element. Re-assign dst because of potential
 	// re-allocations.
-	dst = b.checkForConcurrentSchemaChanges(e)
+	dst = b.checkForConcurrentSchemaChanges(e, target)
 
 	// We were about to overwrite an element's target and metadata. Assert one
 	// disallowed case: reviving a "ghost" element, that is, add an element that
@@ -108,7 +108,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	// of it and investigate it further if needed.
 	if dst.current == scpb.Status_ABSENT &&
 		dst.target == scpb.ToAbsent &&
-		(target == scpb.ToPublic || target == scpb.Transient) &&
+		(target == scpb.ToPublic || target == scpb.TransientAbsent) &&
 		dst.metadata.IsLinkedToSchemaChange() {
 		panic(scerrors.NotImplementedErrorf(
 			nil,
@@ -156,7 +156,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// the transient path so it can be done but we must take care to migrate
 		// the current status to its transient equivalent if need be in order to
 		// avoid the possibility of a future transition to PUBLIC.
-		if target == scpb.Transient {
+		if target == scpb.TransientAbsent {
 			var ok bool
 			dst.current, ok = scpb.GetTransientEquivalent(dst.current)
 			if !ok {
@@ -167,7 +167,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 			}
 		}
 		return
-	case scpb.Transient:
+	case scpb.TransientAbsent:
 		// Here the new target is either to-absent, which effectively undoes the
 		// incumbent target, or it's to-public. In both cases if the current
 		// status is TRANSIENT_ we need to migrate it to its non-transient
@@ -181,15 +181,29 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
 }
 
-func (b *builderState) checkForConcurrentSchemaChanges(e scpb.Element) *elementState {
+func (b *builderState) checkForConcurrentSchemaChanges(
+	e scpb.Element, targetStatus scpb.TargetStatus,
+) *elementState {
 	b.ensureDescriptors(e)
 	// Check that there are no descriptors which are undergoing a concurrent
 	// schema change which might interfere with this one.
-	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+	checkID := func(id descpb.ID) {
 		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
 			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
 		}
-	})
+	}
+	screl.AllTargetDescIDs(e).ForEach(checkID)
+	// For new namespace elements we need to also check their parents
+	// are not in middle of a schema change. Otherwise, it's possible to
+	// add an new namespace entry inside a dropped SCHEMA or DATABASE.
+	if namespace, ok := (e).(*scpb.Namespace); ok && targetStatus == scpb.ToPublic {
+		if namespace.DatabaseID != descpb.InvalidID {
+			checkID(namespace.DatabaseID)
+		}
+		if namespace.SchemaID != descpb.InvalidID {
+			checkID(namespace.SchemaID)
+		}
+	}
 	// We may have mutated the builder state for this element.
 	// Specifically, the output slice might have grown and have been realloc'ed.
 	return b.getExistingElementState(e)

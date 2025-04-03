@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -575,7 +575,7 @@ func TestServerQueryTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
+	capability := map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
 	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
@@ -642,7 +642,7 @@ func TestServerQueryTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	capability = map[tenantcapabilities.ID]string{tenantcapabilities.CanViewAllMetrics: "true"}
+	capability = map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}
 	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
 
 	tenantResponse, err = tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{

@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -69,7 +68,7 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	}
 
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
-	sqlStats.(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
+	sqlStats.MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
 
 	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
 	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)

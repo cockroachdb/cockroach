@@ -9,16 +9,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
-func executeValidateUniqueIndex(
-	ctx context.Context, deps Dependencies, op *scop.ValidateIndex,
-) error {
+func executeValidateIndex(ctx context.Context, deps Dependencies, op *scop.ValidateIndex) error {
 	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -34,10 +32,16 @@ func executeValidateUniqueIndex(
 	}
 	// Execute the validation operation as a node user.
 	execOverride := sessiondata.NodeUserSessionDataOverride
-	if index.GetType() == descpb.IndexDescriptor_FORWARD {
+	switch index.GetType() {
+	case idxtype.FORWARD:
 		err = deps.Validator().ValidateForwardIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
-	} else {
+	case idxtype.INVERTED:
 		err = deps.Validator().ValidateInvertedIndexes(ctx, deps.TransactionalJobRegistry().CurrentJob(), table, []catalog.Index{index}, execOverride)
+	case idxtype.VECTOR:
+		// TODO(drewk): consider whether we can perform useful validation for
+		// vector indexes.
+	default:
+		return errors.AssertionFailedf("unexpected index type %v", index.GetType())
 	}
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
@@ -112,7 +116,7 @@ func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op)
 func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (err error) {
 	switch op := op.(type) {
 	case *scop.ValidateIndex:
-		if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
+		if err = executeValidateIndex(ctx, deps, op); err != nil {
 			if !scerrors.HasSchemaChangerUserError(err) {
 				return errors.Wrapf(err, "%T: %v", op, op)
 			}

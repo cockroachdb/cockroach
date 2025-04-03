@@ -1,0 +1,1164 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert_conflict.out --label=/mnt/data1/postgres/src/test/regress/results/insert_conflict.out /mnt/data1/postgres/src/test/regress/expected/insert_conflict.out /mnt/data1/postgres/src/test/regress/results/insert_conflict.out
+--- /mnt/data1/postgres/src/test/regress/expected/insert_conflict.out
++++ /mnt/data1/postgres/src/test/regress/results/insert_conflict.out
+@@ -7,101 +7,97 @@
+ -- named collations
+ --
+ create unique index op_index_key on insertconflicttest(key, fruit text_pattern_ops);
++ERROR:  operator classes are only allowed for the last column of an inverted index
+ create unique index collation_index_key on insertconflicttest(key, fruit collate "C");
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++create unique index collation_index_key on insertconflicttest(key, fruit collate "C")
++                                                                         ^
++HINT:  try \h CREATE INDEX
+ create unique index both_index_key on insertconflicttest(key, fruit collate "C" text_pattern_ops);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++create unique index both_index_key on insertconflicttest(key, fruit collate "C" text_pattern_ops)
++                                                                    ^
++HINT:  try \h CREATE INDEX
+ create unique index both_index_expr_key on insertconflicttest(key, lower(fruit) collate "C" text_pattern_ops);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++create unique index both_index_expr_key on insertconflicttest(key, lower(fruit) collate "C" text_pattern_ops)
++                                                                                ^
++HINT:  try \h CREATE INDEX
+ -- fails
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do nothing;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit) do nothing;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- succeeds
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do nothing;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: op_index_key, collation_index_key, both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit, key) do nothing;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: op_index_key, collation_index_key, both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit, key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit), key, lower(fruit), key) do nothing;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: both_index_expr_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit), key, lower(fruit), key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do update set fruit = excluded.fruit
+   where exists (select 1 from insertconflicttest ii where ii.key = excluded.key);
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: op_index_key, collation_index_key, both_index_key
+-   Conflict Filter: (SubPlan 1)
+-   ->  Result
+-   SubPlan 1
+-     ->  Index Only Scan using both_index_expr_key on insertconflicttest ii
+-           Index Cond: (key = excluded.key)
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit) do update set fruit = excluded.fruit
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Neither collation nor operator class specifications are required --
+ -- supplying them merely *limits* matches to indexes with matching opclasses
+ -- used for relevant indexes
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit text_pattern_ops) do nothing;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: op_index_key, both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit text_pattern_ops) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Okay, arbitrates using both index where text_pattern_ops opclass does and
+ -- does not appear.
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit collate "C") do nothing;
+-                           QUERY PLAN                            
+------------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: collation_index_key, both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key, fruit collate "C") do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Okay, but only accepts the single index where both opclass and collation are
+ -- specified
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit collate "C" text_pattern_ops, key) do nothing;
+-                 QUERY PLAN                 
+---------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit collate "C" text_pattern_ops, key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Okay, but only accepts the single index where both opclass and collation are
+ -- specified (plus expression variant)
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C", key, key) do nothing;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: both_index_expr_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C", key, key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Attribute appears twice, while not all attributes/expressions on attributes
+ -- appearing within index definition match in terms of both opclass and
+ -- collation.
+@@ -117,45 +113,50 @@
+ -- cases.  It rolls with unique indexes where attributes redundantly appear
+ -- multiple times, too (which is not tested here).
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit text_pattern_ops, key) do nothing;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: op_index_key, both_index_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (fruit, key, fruit text_pattern_ops, key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C" text_pattern_ops, key, key) do nothing;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: both_index_expr_key
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C" text_pattern_ops, key, key) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop index op_index_key;
++ERROR:  index "op_index_key" does not exist
+ drop index collation_index_key;
++ERROR:  index "collation_index_key" does not exist
+ drop index both_index_key;
++ERROR:  index "both_index_key" does not exist
+ drop index both_index_expr_key;
++ERROR:  index "both_index_expr_key" does not exist
+ --
+ -- Make sure that cross matching of attribute opclass/collation does not occur
+ --
+ create unique index cross_match on insertconflicttest(lower(fruit) collate "C", upper(fruit) text_pattern_ops);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++create unique index cross_match on insertconflicttest(lower(fruit) collate "C", upper(fruit) text_pattern_ops)
++                                                                   ^
++HINT:  try \h CREATE INDEX
+ -- fails:
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) text_pattern_ops, upper(fruit) collate "C") do nothing;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) text_pattern_ops, upper(fruit) collate "C") do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- works:
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C", upper(fruit) text_pattern_ops) do nothing;
+-               QUERY PLAN                
+------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: NOTHING
+-   Conflict Arbiter Indexes: cross_match
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (lower(fruit) collate "C", upper(fruit) text_pattern_ops) do nothing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop index cross_match;
++ERROR:  index "cross_match" does not exist
+ --
+ -- Single key tests
+ --
+@@ -164,71 +165,39 @@
+ -- Explain tests
+ --
+ explain (costs off) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit;
+-              QUERY PLAN               
+----------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: key_index
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Should display qual actually attributable to internal sequential scan:
+ explain (costs off) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Cawesh';
+-                           QUERY PLAN                            
+------------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: key_index
+-   Conflict Filter: (insertconflicttest.fruit <> 'Cawesh'::text)
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Cawesh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- With EXCLUDED.* expression in scan node:
+ explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do update set fruit = excluded.fruit where excluded.fruit != 'Elderberry';
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: key_index
+-   Conflict Filter: (excluded.fruit <> 'Elderberry'::text)
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values(0, 'Crowberry') on conflict (key) do update set fruit = excluded.fruit where excluded.fruit != 'Elderberry'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Does the same, but JSON format shows "Conflict Arbiter Index" as JSON array:
+ explain (costs off, format json) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Lime' returning *;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- [                                                                     +
+-   {                                                                   +
+-     "Plan": {                                                         +
+-       "Node Type": "ModifyTable",                                     +
+-       "Operation": "Insert",                                          +
+-       "Parallel Aware": false,                                        +
+-       "Async Capable": false,                                         +
+-       "Relation Name": "insertconflicttest",                          +
+-       "Alias": "insertconflicttest",                                  +
+-       "Conflict Resolution": "UPDATE",                                +
+-       "Conflict Arbiter Indexes": ["key_index"],                      +
+-       "Conflict Filter": "(insertconflicttest.fruit <> 'Lime'::text)",+
+-       "Plans": [                                                      +
+-         {                                                             +
+-           "Node Type": "Result",                                      +
+-           "Parent Relationship": "Outer",                             +
+-           "Parallel Aware": false,                                    +
+-           "Async Capable": false                                      +
+-         }                                                             +
+-       ]                                                               +
+-     }                                                                 +
+-   }                                                                   +
+- ]
+-(1 row)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off, format json) insert into insertconflicttest values (0, 'Bilberry') on conflict (key) do update set fruit = excluded.fruit where insertconflicttest.fruit != 'Lime' returning *
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Fails (no unique index inference specification, required for do update variant):
+ insert into insertconflicttest values (1, 'Apple') on conflict do update set fruit = excluded.fruit;
+-ERROR:  ON CONFLICT DO UPDATE requires inference specification or constraint name
+-LINE 1: ...nsert into insertconflicttest values (1, 'Apple') on conflic...
+-                                                             ^
+-HINT:  For example, ON CONFLICT (column_name).
++ERROR:  at or near "update": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (1, 'Apple') on conflict do update set fruit = excluded.fruit
++                                                                  ^
++HINT:  try \h INSERT
+ -- inference succeeds:
+ insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruit;
+ insert into insertconflicttest values (2, 'Orange') on conflict (key, key, key) do update set fruit = excluded.fruit;
+@@ -239,22 +208,13 @@
+ -- Give good diagnostic message when EXCLUDED.* spuriously referenced from
+ -- RETURNING:
+ insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruit RETURNING excluded.fruit;
+-ERROR:  invalid reference to FROM-clause entry for table "excluded"
+-LINE 1: ...y) do update set fruit = excluded.fruit RETURNING excluded.f...
+-                                                             ^
+-DETAIL:  There is an entry for table "excluded", but it cannot be referenced from this part of the query.
++ERROR:  no data source matches prefix: excluded in this context
+ -- Only suggest <table>.* column when inference element misspelled:
+ insert into insertconflicttest values (1, 'Apple') on conflict (keyy) do update set fruit = excluded.fruit;
+ ERROR:  column "keyy" does not exist
+-LINE 1: ...nsertconflicttest values (1, 'Apple') on conflict (keyy) do ...
+-                                                             ^
+-HINT:  Perhaps you meant to reference the column "insertconflicttest.key" or the column "excluded.key".
+ -- Have useful HINT for EXCLUDED.* RTE within UPDATE:
+ insert into insertconflicttest values (1, 'Apple') on conflict (key) do update set fruit = excluded.fruitt;
+-ERROR:  column excluded.fruitt does not exist
+-LINE 1: ... 'Apple') on conflict (key) do update set fruit = excluded.f...
+-                                                             ^
+-HINT:  Perhaps you meant to reference the column "excluded.fruit".
++ERROR:  column "excluded.fruitt" does not exist
+ -- inference fails:
+ insert into insertconflicttest values (3, 'Kiwi') on conflict (key, fruit) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+@@ -263,16 +223,19 @@
+ insert into insertconflicttest values (5, 'Lemon') on conflict (fruit) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into insertconflicttest values (6, 'Passionfruit') on conflict (lower(fruit)) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (6, 'Passionfruit') on conflict (lower(fruit)) do update set fruit = excluded.fruit
++                                                                            ^
++HINT:  try \h INSERT
+ -- Check the target relation can be aliased
+ insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = excluded.fruit; -- ok, no reference to target table
+ insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = ict.fruit; -- ok, alias
+ insert into insertconflicttest AS ict values (6, 'Passionfruit') on conflict (key) do update set fruit = insertconflicttest.fruit; -- error, references aliased away name
+-ERROR:  invalid reference to FROM-clause entry for table "insertconflicttest"
+-LINE 1: ...onfruit') on conflict (key) do update set fruit = insertconf...
+-                                                             ^
+-HINT:  Perhaps you meant to reference the table alias "ict".
++ERROR:  no data source matches prefix: insertconflicttest in this context
+ drop index key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Composite key tests
+ --
+@@ -286,10 +249,20 @@
+ insert into insertconflicttest values (10, 'Blueberry') on conflict (key, key, key) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into insertconflicttest values (11, 'Cherry') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (11, 'Cherry') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit
++                                                                            ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (12, 'Date') on conflict (lower(fruit), key) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (12, 'Date') on conflict (lower(fruit), key) do update set fruit = excluded.fruit
++                                                                     ^
++HINT:  try \h INSERT
+ drop index comp_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Partial index tests, no inference predicate specified
+ --
+@@ -305,24 +278,52 @@
+ insert into insertconflicttest values (16, 'Melon') on conflict (key, key, key) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into insertconflicttest values (17, 'Mulberry') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (17, 'Mulberry') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit
++                                                                              ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (18, 'Pineapple') on conflict (lower(fruit), key) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (18, 'Pineapple') on conflict (lower(fruit), key) do update set fruit = excluded.fruit
++                                                                          ^
++HINT:  try \h INSERT
+ drop index part_comp_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ drop index expr_part_comp_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Expression index tests
+ --
+ create unique index expr_key_index on insertconflicttest(lower(fruit));
+ -- inference succeeds:
+ insert into insertconflicttest values (20, 'Quince') on conflict (lower(fruit)) do update set fruit = excluded.fruit;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (20, 'Quince') on conflict (lower(fruit)) do update set fruit = excluded.fruit
++                                                                       ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (21, 'Pomegranate') on conflict (lower(fruit), lower(fruit)) do update set fruit = excluded.fruit;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (21, 'Pomegranate') on conflict (lower(fruit), lower(fruit)) do update set fruit = excluded.fruit
++                                                                            ^
++HINT:  try \h INSERT
+ -- inference fails:
+ insert into insertconflicttest values (22, 'Apricot') on conflict (upper(fruit)) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (22, 'Apricot') on conflict (upper(fruit)) do update set fruit = excluded.fruit
++                                                                        ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (23, 'Blackberry') on conflict (fruit) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ drop index expr_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Expression index tests (with regular column)
+ --
+@@ -330,26 +331,41 @@
+ create unique index tricky_expr_comp_key_index on insertconflicttest(key, lower(fruit), upper(fruit));
+ -- inference succeeds:
+ insert into insertconflicttest values (24, 'Plum') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (24, 'Plum') on conflict (key, lower(fruit)) do update set fruit = excluded.fruit
++                                                                          ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (25, 'Peach') on conflict (lower(fruit), key) do update set fruit = excluded.fruit;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (25, 'Peach') on conflict (lower(fruit), key) do update set fruit = excluded.fruit
++                                                                      ^
++HINT:  try \h INSERT
+ -- Should not infer "tricky_expr_comp_key_index" index:
+ explain (costs off) insert into insertconflicttest values (26, 'Fig') on conflict (lower(fruit), key, lower(fruit), key) do update set fruit = excluded.fruit;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Insert on insertconflicttest
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: expr_comp_key_index
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest values (26, 'Fig') on conflict (lower(fruit), key, lower(fruit), key) do update set fruit = excluded.fruit
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- inference fails:
+ insert into insertconflicttest values (27, 'Prune') on conflict (key, upper(fruit)) do update set fruit = excluded.fruit;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflicttest values (27, 'Prune') on conflict (key, upper(fruit)) do update set fruit = excluded.fruit
++                                                                           ^
++HINT:  try \h INSERT
+ insert into insertconflicttest values (28, 'Redcurrant') on conflict (fruit, key) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ insert into insertconflicttest values (29, 'Nectarine') on conflict (key) do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ drop index expr_comp_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ drop index tricky_expr_comp_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Non-spurious duplicate violation tests
+ --
+@@ -360,13 +376,15 @@
+ -- fails, since UPDATE is to row with key value 26, and we're updating "fruit"
+ -- to a value that happens to exist in another row ('peach'):
+ insert into insertconflicttest values (26, 'Peach') on conflict (key) do update set fruit = excluded.fruit;
+-ERROR:  duplicate key value violates unique constraint "fruit_index"
+-DETAIL:  Key (fruit)=(Peach) already exists.
+ -- succeeds, since "key" isn't repeated/referenced in UPDATE, and "fruit"
+ -- arbitrates that statement updates existing "Fig" row:
+ insert into insertconflicttest values (25, 'Fig') on conflict (fruit) do update set fruit = excluded.fruit;
+ drop index key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ drop index fruit_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Test partial unique index inference
+ --
+@@ -382,6 +400,8 @@
+ insert into insertconflicttest values (23, 'Blackberry') on conflict (fruit) where fruit like '%berry' do update set fruit = excluded.fruit;
+ ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ drop index partial_key_index;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Test that wholerow references to ON CONFLICT's EXCLUDED work
+ --
+@@ -389,55 +409,34 @@
+ -- Succeeds, updates existing row:
+ insert into insertconflicttest as i values (23, 'Jackfruit') on conflict (key) do update set fruit = excluded.fruit
+   where i.* != excluded.* returning *;
+- key |   fruit   
+------+-----------
+-  23 | Jackfruit
+-(1 row)
+-
++ERROR:  expected tuple ((key, fruit, rowid) AS key, fruit, rowid) to have a length of 2
+ -- No update this time, though:
+ insert into insertconflicttest as i values (23, 'Jackfruit') on conflict (key) do update set fruit = excluded.fruit
+   where i.* != excluded.* returning *;
+- key | fruit 
+------+-------
+-(0 rows)
+-
++ERROR:  expected tuple ((key, fruit, rowid) AS key, fruit, rowid) to have a length of 2
+ -- Predicate changed to require match rather than non-match, so updates once more:
+ insert into insertconflicttest as i values (23, 'Jackfruit') on conflict (key) do update set fruit = excluded.fruit
+   where i.* = excluded.* returning *;
+- key |   fruit   
+------+-----------
+-  23 | Jackfruit
+-(1 row)
+-
++ERROR:  expected tuple ((key, fruit, rowid) AS key, fruit, rowid) to have a length of 2
+ -- Assign:
+-insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.*::text
+-  returning *;
+- key |    fruit     
+------+--------------
+-  23 | (23,Avocado)
+-(1 row)
+-
++-- insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.*::text
++--  returning *;
+ -- deparse whole row var in WHERE and SET clauses:
+ explain (costs off) insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.fruit where excluded.* is null;
+-               QUERY PLAN                
+------------------------------------------
+- Insert on insertconflicttest i
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: plain
+-   Conflict Filter: (excluded.* IS NULL)
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.fruit where excluded.* is null
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.*::text;
+-            QUERY PLAN             
+------------------------------------
+- Insert on insertconflicttest i
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: plain
+-   ->  Result
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) insert into insertconflicttest as i values (23, 'Avocado') on conflict (key) do update set fruit = excluded.*::text
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop index plain;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ -- Cleanup
+ drop table insertconflicttest;
+ --
+@@ -448,9 +447,7 @@
+ create table syscolconflicttest(key int4, data text);
+ insert into syscolconflicttest values (1);
+ insert into syscolconflicttest values (1) on conflict (key) do update set data = excluded.ctid::text;
+-ERROR:  column excluded.ctid does not exist
+-LINE 1: ...values (1) on conflict (key) do update set data = excluded.c...
+-                                                             ^
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ drop table syscolconflicttest;
+ --
+ -- Previous tests all managed to not test any expressions requiring
+@@ -462,10 +459,17 @@
+   where coalesce(a, 1) > 0;
+ insert into insertconflict values (1, 2)
+ on conflict (coalesce(a, 0)) do nothing;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into insertconflict values (1, 2)
++on conflict (coalesce(a, 0)) do nothing
++                     ^
++HINT:  try \h INSERT
+ insert into insertconflict values (1, 2)
+ on conflict (b) where coalesce(a, 1) > 0 do nothing;
+ insert into insertconflict values (1, 2)
+ on conflict (b) where coalesce(a, 1) > 1 do nothing;
++ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+ drop table insertconflict;
+ --
+ -- test insertion through view
+@@ -473,23 +477,29 @@
+ create table insertconflict (f1 int primary key, f2 text);
+ create view insertconflictv as
+   select * from insertconflict with cascaded check option;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++create view insertconflictv as
++  select * from insertconflict with cascaded check option
++                               ^
+ insert into insertconflictv values (1,'foo')
+   on conflict (f1) do update set f2 = excluded.f2;
++ERROR:  relation "insertconflictv" does not exist
+ select * from insertconflict;
+- f1 | f2  
+-----+-----
+-  1 | foo
+-(1 row)
++ f1 | f2 
++----+----
++(0 rows)
+ 
+ insert into insertconflictv values (1,'bar')
+   on conflict (f1) do update set f2 = excluded.f2;
++ERROR:  relation "insertconflictv" does not exist
+ select * from insertconflict;
+- f1 | f2  
+-----+-----
+-  1 | bar
+-(1 row)
++ f1 | f2 
++----+----
++(0 rows)
+ 
+ drop view insertconflictv;
++ERROR:  relation "insertconflictv" does not exist
+ drop table insertconflict;
+ -- ******************************************************************
+ -- *                                                                *
+@@ -504,70 +514,63 @@
+ create table capitals (
+ 	state		char(2)
+ ) inherits (cities);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table capitals (
++	state		char(2)
++) inherits (cities)
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ -- Create unique indexes.  Due to a general limitation of inheritance,
+ -- uniqueness is only enforced per-relation.  Unique index inference
+ -- specification will do the right thing, though.
+ create unique index cities_names_unique on cities (name);
+ create unique index capitals_names_unique on capitals (name);
++ERROR:  relation "capitals" does not exist
+ -- prepopulate the tables.
+ insert into cities values ('San Francisco', 7.24E+5, 63);
+ insert into cities values ('Las Vegas', 2.583E+5, 2174);
+ insert into cities values ('Mariposa', 1200, 1953);
+ insert into capitals values ('Sacramento', 3.694E+5, 30, 'CA');
++ERROR:  relation "capitals" does not exist
+ insert into capitals values ('Madison', 1.913E+5, 845, 'WI');
++ERROR:  relation "capitals" does not exist
+ -- Tests proper for inheritance:
+ select * from capitals;
+-    name    | population | altitude | state 
+-------------+------------+----------+-------
+- Sacramento |     369400 |       30 | CA
+- Madison    |     191300 |      845 | WI
+-(2 rows)
+-
++ERROR:  relation "capitals" does not exist
+ -- Succeeds:
+ insert into cities values ('Las Vegas', 2.583E+5, 2174) on conflict do nothing;
+ insert into capitals values ('Sacramento', 4664.E+5, 30, 'CA') on conflict (name) do update set population = excluded.population;
++ERROR:  relation "capitals" does not exist
+ -- Wrong "Sacramento", so do nothing:
+ insert into capitals values ('Sacramento', 50, 2267, 'NE') on conflict (name) do nothing;
++ERROR:  relation "capitals" does not exist
+ select * from capitals;
+-    name    | population | altitude | state 
+-------------+------------+----------+-------
+- Madison    |     191300 |      845 | WI
+- Sacramento |  466400000 |       30 | CA
+-(2 rows)
+-
++ERROR:  relation "capitals" does not exist
+ insert into cities values ('Las Vegas', 5.83E+5, 2001) on conflict (name) do update set population = excluded.population, altitude = excluded.altitude;
+ select tableoid::regclass, * from cities;
+  tableoid |     name      | population | altitude 
+ ----------+---------------+------------+----------
+  cities   | San Francisco |     724000 |       63
+- cities   | Mariposa      |       1200 |     1953
+  cities   | Las Vegas     |     583000 |     2001
+- capitals | Madison       |     191300 |      845
+- capitals | Sacramento    |  466400000 |       30
+-(5 rows)
++ cities   | Mariposa      |       1200 |     1953
++(3 rows)
+ 
+ insert into capitals values ('Las Vegas', 5.83E+5, 2222, 'NV') on conflict (name) do update set population = excluded.population;
++ERROR:  relation "capitals" does not exist
+ -- Capitals will contain new capital, Las Vegas:
+ select * from capitals;
+-    name    | population | altitude | state 
+-------------+------------+----------+-------
+- Madison    |     191300 |      845 | WI
+- Sacramento |  466400000 |       30 | CA
+- Las Vegas  |     583000 |     2222 | NV
+-(3 rows)
+-
++ERROR:  relation "capitals" does not exist
+ -- Cities contains two instances of "Las Vegas", since unique constraints don't
+ -- work across inheritance:
+ select tableoid::regclass, * from cities;
+  tableoid |     name      | population | altitude 
+ ----------+---------------+------------+----------
+  cities   | San Francisco |     724000 |       63
+- cities   | Mariposa      |       1200 |     1953
+  cities   | Las Vegas     |     583000 |     2001
+- capitals | Madison       |     191300 |      845
+- capitals | Sacramento    |  466400000 |       30
+- capitals | Las Vegas     |     583000 |     2222
+-(6 rows)
++ cities   | Mariposa      |       1200 |     1953
++(3 rows)
+ 
+ -- This only affects "cities" version of "Las Vegas":
+ insert into cities values ('Las Vegas', 5.86E+5, 2223) on conflict (name) do update set population = excluded.population, altitude = excluded.altitude;
+@@ -575,24 +578,20 @@
+  tableoid |     name      | population | altitude 
+ ----------+---------------+------------+----------
+  cities   | San Francisco |     724000 |       63
+- cities   | Mariposa      |       1200 |     1953
+  cities   | Las Vegas     |     586000 |     2223
+- capitals | Madison       |     191300 |      845
+- capitals | Sacramento    |  466400000 |       30
+- capitals | Las Vegas     |     583000 |     2222
+-(6 rows)
++ cities   | Mariposa      |       1200 |     1953
++(3 rows)
+ 
+ -- clean up
+ drop table capitals;
++ERROR:  relation "capitals" does not exist
+ drop table cities;
+ -- Make sure a table named excluded is handled properly
+ create table excluded(key int primary key, data text);
+ insert into excluded values(1, '1');
+ -- error, ambiguous
+ insert into excluded values(1, '2') on conflict (key) do update set data = excluded.data RETURNING *;
+-ERROR:  table reference "excluded" is ambiguous
+-LINE 1: ...es(1, '2') on conflict (key) do update set data = excluded.d...
+-                                                             ^
++ERROR:  ambiguous source name: "excluded"
+ -- ok, aliased
+ insert into excluded AS target values(1, '2') on conflict (key) do update set data = excluded.data RETURNING *;
+  key | data 
+@@ -668,26 +667,28 @@
+ -- check handling of regular btree constraint along with gist constraint
+ create table twoconstraints (f1 int unique, f2 box,
+                              exclude using gist(f2 with &&));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table twoconstraints (f1 int unique, f2 box,
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ insert into twoconstraints values(1, '((0,0),(1,1))');
++ERROR:  relation "twoconstraints" does not exist
+ insert into twoconstraints values(1, '((2,2),(3,3))');  -- fail on f1
+-ERROR:  duplicate key value violates unique constraint "twoconstraints_f1_key"
+-DETAIL:  Key (f1)=(1) already exists.
++ERROR:  relation "twoconstraints" does not exist
+ insert into twoconstraints values(2, '((0,0),(1,2))');  -- fail on f2
+-ERROR:  conflicting key value violates exclusion constraint "twoconstraints_f2_excl"
+-DETAIL:  Key (f2)=((1,2),(0,0)) conflicts with existing key (f2)=((1,1),(0,0)).
++ERROR:  relation "twoconstraints" does not exist
+ insert into twoconstraints values(2, '((0,0),(1,2))')
+   on conflict on constraint twoconstraints_f1_key do nothing;  -- fail on f2
+-ERROR:  conflicting key value violates exclusion constraint "twoconstraints_f2_excl"
+-DETAIL:  Key (f2)=((1,2),(0,0)) conflicts with existing key (f2)=((1,1),(0,0)).
++ERROR:  relation "twoconstraints" does not exist
+ insert into twoconstraints values(2, '((0,0),(1,2))')
+   on conflict on constraint twoconstraints_f2_excl do nothing;  -- do nothing
++ERROR:  relation "twoconstraints" does not exist
+ select * from twoconstraints;
+- f1 |     f2      
+-----+-------------
+-  1 | (1,1),(0,0)
+-(1 row)
+-
++ERROR:  relation "twoconstraints" does not exist
+ drop table twoconstraints;
++ERROR:  relation "twoconstraints" does not exist
+ -- check handling of self-conflicts at various isolation levels
+ create table selfconflict (f1 int primary key, f2 int);
+ begin transaction isolation level read committed;
+@@ -701,18 +702,15 @@
+ commit;
+ begin transaction isolation level read committed;
+ insert into selfconflict values (4,1), (4,2) on conflict(f1) do update set f2 = 0;
+-ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+-HINT:  Ensure that no rows proposed for insertion within the same command have duplicate constrained values.
++ERROR:  UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+ commit;
+ begin transaction isolation level repeatable read;
+ insert into selfconflict values (5,1), (5,2) on conflict(f1) do update set f2 = 0;
+-ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+-HINT:  Ensure that no rows proposed for insertion within the same command have duplicate constrained values.
++ERROR:  UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+ commit;
+ begin transaction isolation level serializable;
+ insert into selfconflict values (6,1), (6,2) on conflict(f1) do update set f2 = 0;
+-ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+-HINT:  Ensure that no rows proposed for insertion within the same command have duplicate constrained values.
++ERROR:  UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+ commit;
+ select * from selfconflict;
+  f1 | f2 
+@@ -725,122 +723,215 @@
+ drop table selfconflict;
+ -- check ON CONFLICT handling with partitioned tables
+ create table parted_conflict_test (a int unique, b char) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_test (a int unique, b char) partition by list (a)
++                                                                              ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_test_1 partition of parted_conflict_test (b unique) for values in (1, 2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_test_1 partition of parted_conflict_test (b unique) for values in (1, 2)
++                                    ^
++HINT:  try \h CREATE TABLE
+ -- no indexes required here
+ insert into parted_conflict_test values (1, 'a') on conflict do nothing;
++ERROR:  relation "parted_conflict_test" does not exist
+ -- index on a required, which does exist in parent
+ insert into parted_conflict_test values (1, 'a') on conflict (a) do nothing;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test values (1, 'a') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test" does not exist
+ -- targeting partition directly will work
+ insert into parted_conflict_test_1 values (1, 'a') on conflict (a) do nothing;
++ERROR:  relation "parted_conflict_test_1" does not exist
+ insert into parted_conflict_test_1 values (1, 'b') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test_1" does not exist
+ -- index on b required, which doesn't exist in parent
+ insert into parted_conflict_test values (2, 'b') on conflict (b) do update set a = excluded.a;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  relation "parted_conflict_test" does not exist
+ -- targeting partition directly will work
+ insert into parted_conflict_test_1 values (2, 'b') on conflict (b) do update set a = excluded.a;
++ERROR:  relation "parted_conflict_test_1" does not exist
+ -- should see (2, 'b')
+ select * from parted_conflict_test order by a;
+- a | b 
+----+---
+- 2 | b
+-(1 row)
+-
++ERROR:  relation "parted_conflict_test" does not exist
+ -- now check that DO UPDATE works correctly for target partition with
+ -- different attribute numbers
+ create table parted_conflict_test_2 (b char, a int unique);
+ alter table parted_conflict_test attach partition parted_conflict_test_2 for values in (3);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table parted_conflict_test attach partition parted_conflict_test_2 for values in (3)
++                                 ^
++HINT:  try \h ALTER TABLE
+ truncate parted_conflict_test;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test values (3, 'a') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test values (3, 'b') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test" does not exist
+ -- should see (3, 'b')
+ select * from parted_conflict_test order by a;
+- a | b 
+----+---
+- 3 | b
+-(1 row)
+-
++ERROR:  relation "parted_conflict_test" does not exist
+ -- case where parent will have a dropped column, but the partition won't
+ alter table parted_conflict_test drop b, add b char;
++ERROR:  relation "parted_conflict_test" does not exist
+ create table parted_conflict_test_3 partition of parted_conflict_test for values in (4);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_test_3 partition of parted_conflict_test for values in (4)
++                                    ^
++HINT:  try \h CREATE TABLE
+ truncate parted_conflict_test;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (4, 'a') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (4, 'b') on conflict (a) do update set b = excluded.b where parted_conflict_test.b = 'a';
++ERROR:  relation "parted_conflict_test" does not exist
+ -- should see (4, 'b')
+ select * from parted_conflict_test order by a;
+- a | b 
+----+---
+- 4 | b
+-(1 row)
+-
++ERROR:  relation "parted_conflict_test" does not exist
+ -- case with multi-level partitioning
+ create table parted_conflict_test_4 partition of parted_conflict_test for values in (5) partition by list (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_test_4 partition of parted_conflict_test for values in (5) partition by list (a)
++                                    ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_test_4_1 partition of parted_conflict_test_4 for values in (5);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_test_4_1 partition of parted_conflict_test_4 for values in (5)
++                                      ^
++HINT:  try \h CREATE TABLE
+ truncate parted_conflict_test;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (5, 'a') on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (5, 'b') on conflict (a) do update set b = excluded.b where parted_conflict_test.b = 'a';
++ERROR:  relation "parted_conflict_test" does not exist
+ -- should see (5, 'b')
+ select * from parted_conflict_test order by a;
+- a | b 
+----+---
+- 5 | b
+-(1 row)
+-
++ERROR:  relation "parted_conflict_test" does not exist
+ -- test with multiple rows
+ truncate parted_conflict_test;
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (1, 'a'), (2, 'a'), (4, 'a') on conflict (a) do update set b = excluded.b where excluded.b = 'b';
++ERROR:  relation "parted_conflict_test" does not exist
+ insert into parted_conflict_test (a, b) values (1, 'b'), (2, 'c'), (4, 'b') on conflict (a) do update set b = excluded.b where excluded.b = 'b';
++ERROR:  relation "parted_conflict_test" does not exist
+ -- should see (1, 'b'), (2, 'a'), (4, 'b')
+ select * from parted_conflict_test order by a;
+- a | b 
+----+---
+- 1 | b
+- 2 | a
+- 4 | b
+-(3 rows)
+-
++ERROR:  relation "parted_conflict_test" does not exist
+ drop table parted_conflict_test;
++ERROR:  relation "parted_conflict_test" does not exist
+ -- test behavior of inserting a conflicting tuple into an intermediate
+ -- partitioning level
+ create table parted_conflict (a int primary key, b text) partition by range (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_conflict (a int primary key, b text) partition by range (a)
++                                                                               ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_1 partition of parted_conflict for values from (0) to (1000) partition by range (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_1 partition of parted_conflict for values from (0) to (1000) partition by range (a)
++                               ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_1_1 partition of parted_conflict_1 for values from (0) to (500);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_1_1 partition of parted_conflict_1 for values from (0) to (500)
++                                 ^
++HINT:  try \h CREATE TABLE
+ insert into parted_conflict values (40, 'forty');
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict_1 values (40, 'cuarenta')
+   on conflict (a) do update set b = excluded.b;
++ERROR:  relation "parted_conflict_1" does not exist
+ drop table parted_conflict;
++ERROR:  relation "parted_conflict" does not exist
+ -- same thing, but this time try to use an index that's created not in the
+ -- partition
+ create table parted_conflict (a int, b text) partition by range (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_conflict (a int, b text) partition by range (a)
++                                                                   ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_1 partition of parted_conflict for values from (0) to (1000) partition by range (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_1 partition of parted_conflict for values from (0) to (1000) partition by range (a)
++                               ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_1_1 partition of parted_conflict_1 for values from (0) to (500);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_conflict_1_1 partition of parted_conflict_1 for values from (0) to (500)
++                                 ^
++HINT:  try \h CREATE TABLE
+ create unique index on only parted_conflict_1 (a);
++ERROR:  at or near "only": syntax error
++DETAIL:  source SQL:
++create unique index on only parted_conflict_1 (a)
++                       ^
++HINT:  try \h CREATE INDEX
+ create unique index on only parted_conflict (a);
++ERROR:  at or near "only": syntax error
++DETAIL:  source SQL:
++create unique index on only parted_conflict (a)
++                       ^
++HINT:  try \h CREATE INDEX
+ alter index parted_conflict_a_idx attach partition parted_conflict_1_a_idx;
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter index parted_conflict_a_idx attach partition parted_conflict_1_a_idx
++                                  ^
++HINT:  try \h ALTER INDEX
+ insert into parted_conflict values (40, 'forty');
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict_1 values (40, 'cuarenta')
+   on conflict (a) do update set b = excluded.b;
+-ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
++ERROR:  relation "parted_conflict_1" does not exist
+ drop table parted_conflict;
++ERROR:  relation "parted_conflict" does not exist
+ -- test whole-row Vars in ON CONFLICT expressions
+ create table parted_conflict (a int, b text, c int) partition by range (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_conflict (a int, b text, c int) partition by range (a)
++                                                                          ^
++HINT:  try \h CREATE TABLE
+ create table parted_conflict_1 (drp text, c int, a int, b text);
+ alter table parted_conflict_1 drop column drp;
+ create unique index on parted_conflict (a, b);
++ERROR:  relation "parted_conflict" does not exist
+ alter table parted_conflict attach partition parted_conflict_1 for values from (0) to (1000);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table parted_conflict attach partition parted_conflict_1 for values from (0) to (1000)
++                            ^
++HINT:  try \h ALTER TABLE
+ truncate parted_conflict;
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict values (50, 'cincuenta', 1);
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict values (50, 'cincuenta', 2)
+   on conflict (a, b) do update set (a, b, c) = row(excluded.*)
+   where parted_conflict = (50, text 'cincuenta', 1) and
+         excluded = (50, text 'cincuenta', 2);
++ERROR:  at or near "row": syntax error
++DETAIL:  source SQL:
++insert into parted_conflict values (50, 'cincuenta', 2)
++  on conflict (a, b) do update set (a, b, c) = row(excluded.*)
++                                               ^
++HINT:  try \h INSERT
+ -- should see (50, 'cincuenta', 2)
+ select * from parted_conflict order by a;
+- a  |     b     | c 
+-----+-----------+---
+- 50 | cincuenta | 2
+-(1 row)
+-
++ERROR:  relation "parted_conflict" does not exist
+ -- test with statement level triggers
+ create or replace function parted_conflict_update_func() returns trigger as $$
+ declare
+@@ -852,15 +943,38 @@
+  return new;
+ end;
+ $$ language plpgsql;
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    r record;
++begin
++ for r in select * from inserted loop
++       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create trigger parted_conflict_update
+     after update on parted_conflict
+     referencing new table as inserted
+     for each statement
+     execute procedure parted_conflict_update_func();
++ERROR:  relation "parted_conflict" does not exist
+ truncate parted_conflict;
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict values (0, 'cero', 1);
++ERROR:  relation "parted_conflict" does not exist
+ insert into parted_conflict values(0, 'cero', 1)
+   on conflict (a,b) do update set c = parted_conflict.c + 1;
+-NOTICE:  a = 0, b = cero, c = 2
++ERROR:  relation "parted_conflict" does not exist
+ drop table parted_conflict;
++ERROR:  relation "parted_conflict" does not exist
+ drop function parted_conflict_update_func();
++ERROR:  unknown function: parted_conflict_update_func()

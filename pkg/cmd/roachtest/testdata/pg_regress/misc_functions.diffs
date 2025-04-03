@@ -1,0 +1,911 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_functions.out --label=/mnt/data1/postgres/src/test/regress/results/misc_functions.out /mnt/data1/postgres/src/test/regress/expected/misc_functions.out /mnt/data1/postgres/src/test/regress/results/misc_functions.out
+--- /mnt/data1/postgres/src/test/regress/expected/misc_functions.out
++++ /mnt/data1/postgres/src/test/regress/results/misc_functions.out
+@@ -1,6 +1,8 @@
+ -- directory paths and dlsuffix are passed to us in environment variables
+ \getenv libdir PG_LIBDIR
++invalid command \getenv
+ \getenv dlsuffix PG_DLSUFFIX
++invalid command \getenv
+ \set regresslib :libdir '/regress' :dlsuffix
+ --
+ -- num_nulls()
+@@ -30,28 +32,59 @@
+ (1 row)
+ 
+ SELECT num_nonnulls(1, 2, NULL::text, NULL::point, '', int8 '9', 1.0 / NULL);
+- num_nonnulls 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(1, 2, NULL::text, NULL::point, '', int8 '9', 1.0 / NULL)
++                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT num_nonnulls(VARIADIC '{1,2,NULL,3}'::int[]);
+- num_nonnulls 
+---------------
+-            3
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(VARIADIC '{1,2,NULL,3}'::int[])
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nonnulls(VARIADIC '{"1","2","3","4"}'::text[]);
+- num_nonnulls 
+---------------
+-            4
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(VARIADIC '{"1","2","3","4"}'::text[])
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nonnulls(VARIADIC ARRAY(SELECT CASE WHEN i <> 40 THEN i END FROM generate_series(1, 100) i));
+- num_nonnulls 
+---------------
+-           99
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(VARIADIC ARRAY(SELECT CASE WHEN i <> 40 THEN i END FROM generate_series(1, 100) i))
++                                                                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nulls(NULL);
+  num_nulls 
+@@ -78,65 +111,138 @@
+ (1 row)
+ 
+ SELECT num_nulls(1, 2, NULL::text, NULL::point, '', int8 '9', 1.0 / NULL);
+- num_nulls 
+------------
+-         3
+-(1 row)
+-
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(1, 2, NULL::text, NULL::point, '', int8 '9', 1.0 / NULL)
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT num_nulls(VARIADIC '{1,2,NULL,3}'::int[]);
+- num_nulls 
+------------
+-         1
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(VARIADIC '{1,2,NULL,3}'::int[])
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nulls(VARIADIC '{"1","2","3","4"}'::text[]);
+- num_nulls 
+------------
+-         0
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(VARIADIC '{"1","2","3","4"}'::text[])
++                                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nulls(VARIADIC ARRAY(SELECT CASE WHEN i <> 40 THEN i END FROM generate_series(1, 100) i));
+- num_nulls 
+------------
+-         1
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(VARIADIC ARRAY(SELECT CASE WHEN i <> 40 THEN i END FROM generate_series(1, 100) i))
++                                                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- special cases
+ SELECT num_nonnulls(VARIADIC NULL::text[]);
+- num_nonnulls 
+---------------
+-             
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(VARIADIC NULL::text[])
++                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT num_nonnulls(VARIADIC '{}'::int[]);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nonnulls(VARIADIC '{}'::int[])
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++SELECT num_nulls(VARIADIC NULL::text[]);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(VARIADIC NULL::text[])
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++SELECT num_nulls(VARIADIC '{}'::int[]);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT num_nulls(VARIADIC '{}'::int[])
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++-- should fail, one or more arguments is required
++SELECT num_nonnulls();
+  num_nonnulls 
+ --------------
+             0
+ (1 row)
+ 
+-SELECT num_nulls(VARIADIC NULL::text[]);
+- num_nulls 
+------------
+-          
+-(1 row)
+-
+-SELECT num_nulls(VARIADIC '{}'::int[]);
++SELECT num_nulls();
+  num_nulls 
+ -----------
+          0
+ (1 row)
+ 
+--- should fail, one or more arguments is required
+-SELECT num_nonnulls();
+-ERROR:  function num_nonnulls() does not exist
+-LINE 1: SELECT num_nonnulls();
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-SELECT num_nulls();
+-ERROR:  function num_nulls() does not exist
+-LINE 1: SELECT num_nulls();
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- canonicalize_path()
+ --
+@@ -144,138 +250,53 @@
+    RETURNS text
+    AS :'regresslib'
+    LANGUAGE C STRICT IMMUTABLE;
++ERROR:  unimplemented: C is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/102201/_version_
+ SELECT test_canonicalize_path('/');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/./abc/def/');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/./../abc/def');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/./../../abc/def/');
+- test_canonicalize_path 
+-------------------------
+- /abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/abc/.././def/ghi');
+- test_canonicalize_path 
+-------------------------
+- /def/ghi
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/abc/./../def/ghi//');
+- test_canonicalize_path 
+-------------------------
+- /def/ghi
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/abc/def/../..');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/abc/def/../../..');
+- test_canonicalize_path 
+-------------------------
+- /
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('/abc/def/../../../../ghi/jkl');
+- test_canonicalize_path 
+-------------------------
+- /ghi/jkl
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('.');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('./');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('./abc/..');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('abc/../');
+- test_canonicalize_path 
+-------------------------
+- .
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('abc/../def');
+- test_canonicalize_path 
+-------------------------
+- def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('..');
+- test_canonicalize_path 
+-------------------------
+- ..
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('../abc/def');
+- test_canonicalize_path 
+-------------------------
+- ../abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('../abc/..');
+- test_canonicalize_path 
+-------------------------
+- ..
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('../abc/../def');
+- test_canonicalize_path 
+-------------------------
+- ../def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('../abc/../../def/ghi');
+- test_canonicalize_path 
+-------------------------
+- ../../def/ghi
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('./abc/./def/.');
+- test_canonicalize_path 
+-------------------------
+- abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('./abc/././def/.');
+- test_canonicalize_path 
+-------------------------
+- abc/def
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ SELECT test_canonicalize_path('./abc/./def/.././ghi/../../../jkl/mno');
+- test_canonicalize_path 
+-------------------------
+- ../jkl/mno
+-(1 row)
+-
++ERROR:  unknown function: test_canonicalize_path()
+ --
+ -- pg_log_backend_memory_contexts()
+ --
+@@ -285,45 +306,27 @@
+ -- permissions are set properly.
+ --
+ SELECT pg_log_backend_memory_contexts(pg_backend_pid());
+- pg_log_backend_memory_contexts 
+---------------------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_log_backend_memory_contexts()
+ SELECT pg_log_backend_memory_contexts(pid) FROM pg_stat_activity
+   WHERE backend_type = 'checkpointer';
+- pg_log_backend_memory_contexts 
+---------------------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_log_backend_memory_contexts()
+ CREATE ROLE regress_log_memory;
+ SELECT has_function_privilege('regress_log_memory',
+   'pg_log_backend_memory_contexts(integer)', 'EXECUTE'); -- no
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_log_backend_memory_contexts()
+ GRANT EXECUTE ON FUNCTION pg_log_backend_memory_contexts(integer)
+   TO regress_log_memory;
++ERROR:  unknown function: pg_log_backend_memory_contexts()
+ SELECT has_function_privilege('regress_log_memory',
+   'pg_log_backend_memory_contexts(integer)', 'EXECUTE'); -- yes
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_log_backend_memory_contexts()
+ SET ROLE regress_log_memory;
+ SELECT pg_log_backend_memory_contexts(pg_backend_pid());
+- pg_log_backend_memory_contexts 
+---------------------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_log_backend_memory_contexts()
+ RESET ROLE;
+ REVOKE EXECUTE ON FUNCTION pg_log_backend_memory_contexts(integer)
+   FROM regress_log_memory;
++ERROR:  unknown function: pg_log_backend_memory_contexts()
+ DROP ROLE regress_log_memory;
+ --
+ -- Test some built-in SRFs
+@@ -334,152 +337,82 @@
+ select setting as segsize
+ from pg_settings where name = 'wal_segment_size'
+ \gset
++no rows returned for \gset
+ select count(*) > 0 as ok from pg_ls_waldir();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_waldir()
+ -- Test ProjectSet as well as FunctionScan
+ select count(*) > 0 as ok from (select pg_ls_waldir()) ss;
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_waldir()
+ -- Test not-run-to-completion cases.
+ select * from pg_ls_waldir() limit 0;
+- name | size | modification 
+-------+------+--------------
+-(0 rows)
+-
++ERROR:  unknown function: pg_ls_waldir()
+ select count(*) > 0 as ok from (select * from pg_ls_waldir() limit 1) ss;
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_waldir()
+ select (w).size = :segsize as ok
+ from (select pg_ls_waldir() w) ss where length((w).name) = 24 limit 1;
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++select (w).size = :segsize as ok
++                  ^
+ select count(*) >= 0 as ok from pg_ls_archive_statusdir();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_archive_statusdir()
+ -- pg_read_file()
+ select length(pg_read_file('postmaster.pid')) > 20;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_read_file()
+ select length(pg_read_file('postmaster.pid', 1, 20));
+- length 
+---------
+-     20
+-(1 row)
+-
++ERROR:  unknown function: pg_read_file()
+ -- Test missing_ok
+ select pg_read_file('does not exist'); -- error
+-ERROR:  could not open file "does not exist" for reading: No such file or directory
++ERROR:  unknown function: pg_read_file()
+ select pg_read_file('does not exist', true) IS NULL; -- ok
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_read_file()
+ -- Test invalid argument
+ select pg_read_file('does not exist', 0, -1); -- error
+-ERROR:  requested length cannot be negative
++ERROR:  unknown function: pg_read_file()
+ select pg_read_file('does not exist', 0, -1, true); -- error
+-ERROR:  requested length cannot be negative
++ERROR:  unknown function: pg_read_file()
+ -- pg_read_binary_file()
+ select length(pg_read_binary_file('postmaster.pid')) > 20;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_read_binary_file()
+ select length(pg_read_binary_file('postmaster.pid', 1, 20));
+- length 
+---------
+-     20
+-(1 row)
+-
++ERROR:  unknown function: pg_read_binary_file()
+ -- Test missing_ok
+ select pg_read_binary_file('does not exist'); -- error
+-ERROR:  could not open file "does not exist" for reading: No such file or directory
++ERROR:  unknown function: pg_read_binary_file()
+ select pg_read_binary_file('does not exist', true) IS NULL; -- ok
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_read_binary_file()
+ -- Test invalid argument
+ select pg_read_binary_file('does not exist', 0, -1); -- error
+-ERROR:  requested length cannot be negative
++ERROR:  unknown function: pg_read_binary_file()
+ select pg_read_binary_file('does not exist', 0, -1, true); -- error
+-ERROR:  requested length cannot be negative
++ERROR:  unknown function: pg_read_binary_file()
+ -- pg_stat_file()
+ select size > 20, isdir from pg_stat_file('postmaster.pid');
+- ?column? | isdir 
+-----------+-------
+- t        | f
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_file()
+ -- pg_ls_dir()
+ select * from (select pg_ls_dir('.') a) a where a = 'base' limit 1;
+-  a   
+-------
+- base
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_dir()
+ -- Test missing_ok (second argument)
+ select pg_ls_dir('does not exist', false, false); -- error
+-ERROR:  could not open directory "does not exist": No such file or directory
++ERROR:  unknown function: pg_ls_dir()
+ select pg_ls_dir('does not exist', true, false); -- ok
+- pg_ls_dir 
+------------
+-(0 rows)
+-
++ERROR:  unknown function: pg_ls_dir()
+ -- Test include_dot_dirs (third argument)
+ select count(*) = 1 as dot_found
+   from pg_ls_dir('.', false, true) as ls where ls = '.';
+- dot_found 
+------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_dir()
+ select count(*) = 1 as dot_found
+   from pg_ls_dir('.', false, false) as ls where ls = '.';
+- dot_found 
+------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_ls_dir()
+ -- pg_timezone_names()
+ select * from (select (pg_timezone_names()).name) ptn where name='UTC' limit 1;
+- name 
+-------
+- UTC
+-(1 row)
+-
++ERROR:  unknown function: pg_timezone_names()
+ -- pg_tablespace_databases()
+ select count(*) > 0 from
+   (select pg_tablespace_databases(oid) as pts from pg_tablespace
+    where spcname = 'pg_default') pts
+   join pg_database db on pts.pts = db.oid;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_tablespace_databases()
+ --
+ -- Test replication slot directory functions
+ --
+@@ -487,48 +420,25 @@
+ -- Not available by default.
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_logicalsnapdir()', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_logicalsnapdir()
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_logicalmapdir()', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_logicalmapdir()
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_replslotdir(text)', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_replslotdir()
+ GRANT pg_monitor TO regress_slot_dir_funcs;
++ERROR:  role/user "pg_monitor" does not exist
+ -- Role is now part of pg_monitor, so these are available.
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_logicalsnapdir()', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_logicalsnapdir()
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_logicalmapdir()', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_logicalmapdir()
+ SELECT has_function_privilege('regress_slot_dir_funcs',
+   'pg_ls_replslotdir(text)', 'EXECUTE');
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: pg_ls_replslotdir()
+ DROP ROLE regress_slot_dir_funcs;
+ --
+ -- Test adding a support function to a subject function
+@@ -536,109 +446,115 @@
+ CREATE FUNCTION my_int_eq(int, int) RETURNS bool
+   LANGUAGE internal STRICT IMMUTABLE PARALLEL SAFE
+   AS $$int4eq$$;
++ERROR:  at or near "parallel": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION my_int_eq(int, int) RETURNS bool
++  LANGUAGE internal STRICT IMMUTABLE PARALLEL SAFE
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- By default, planner does not think that's selective
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN tenk1 b ON a.unique1 = b.unique1
+ WHERE my_int_eq(a.unique2, 42);
+-                  QUERY PLAN                  
+-----------------------------------------------
+- Hash Join
+-   Hash Cond: (b.unique1 = a.unique1)
+-   ->  Seq Scan on tenk1 b
+-   ->  Hash
+-         ->  Seq Scan on tenk1 a
+-               Filter: my_int_eq(unique2, 42)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- With support function that knows it's int4eq, we get a different plan
+ CREATE FUNCTION test_support_func(internal)
+     RETURNS internal
+     AS :'regresslib', 'test_support_func'
+     LANGUAGE C STRICT;
++ERROR:  unimplemented: C is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/102201/_version_
+ ALTER FUNCTION my_int_eq(int, int) SUPPORT test_support_func;
++ERROR:  at or near "test_support_func": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER FUNCTION my_int_eq(int, int) SUPPORT test_support_func
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN tenk1 b ON a.unique1 = b.unique1
+ WHERE my_int_eq(a.unique2, 42);
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on tenk1 a
+-         Filter: my_int_eq(unique2, 42)
+-   ->  Index Scan using tenk1_unique1 on tenk1 b
+-         Index Cond: (unique1 = a.unique1)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Also test non-default rowcount estimate
+ CREATE FUNCTION my_gen_series(int, int) RETURNS SETOF integer
+   LANGUAGE internal STRICT IMMUTABLE PARALLEL SAFE
+   AS $$generate_series_int4$$
+   SUPPORT test_support_func;
++ERROR:  at or near "parallel": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION my_gen_series(int, int) RETURNS SETOF integer
++  LANGUAGE internal STRICT IMMUTABLE PARALLEL SAFE
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN my_gen_series(1,1000) g ON a.unique1 = g;
+-               QUERY PLAN               
+-----------------------------------------
+- Hash Join
+-   Hash Cond: (g.g = a.unique1)
+-   ->  Function Scan on my_gen_series g
+-   ->  Hash
+-         ->  Seq Scan on tenk1 a
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique1 = g;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Function Scan on my_gen_series g
+-   ->  Index Scan using tenk1_unique1 on tenk1 a
+-         Index Cond: (unique1 = g.g)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Test functions for control data
+ SELECT count(*) > 0 AS ok FROM pg_control_checkpoint();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_control_checkpoint()
+ SELECT count(*) > 0 AS ok FROM pg_control_init();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_control_init()
+ SELECT count(*) > 0 AS ok FROM pg_control_recovery();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_control_recovery()
+ SELECT count(*) > 0 AS ok FROM pg_control_system();
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_control_system()
+ -- pg_split_walfile_name
+ SELECT * FROM pg_split_walfile_name(NULL);
+- segment_number | timeline_id 
+-----------------+-------------
+-                |            
+-(1 row)
+-
++ERROR:  unknown function: pg_split_walfile_name()
+ SELECT * FROM pg_split_walfile_name('invalid');
+-ERROR:  invalid WAL file name "invalid"
++ERROR:  unknown function: pg_split_walfile_name()
+ SELECT segment_number > 0 AS ok_segment_number, timeline_id
+   FROM pg_split_walfile_name('000000010000000100000000');
+- ok_segment_number | timeline_id 
+--------------------+-------------
+- t                 |           1
+-(1 row)
+-
++ERROR:  unknown function: pg_split_walfile_name()
+ SELECT segment_number > 0 AS ok_segment_number, timeline_id
+   FROM pg_split_walfile_name('ffffffFF00000001000000af');
+- ok_segment_number | timeline_id 
+--------------------+-------------
+- t                 |  4294967295
+-(1 row)
+-
++ERROR:  unknown function: pg_split_walfile_name()

@@ -55,6 +55,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -1,0 +1,550 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_role.out --label=/mnt/data1/postgres/src/test/regress/results/create_role.out /mnt/data1/postgres/src/test/regress/expected/create_role.out /mnt/data1/postgres/src/test/regress/results/create_role.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_role.out
++++ /mnt/data1/postgres/src/test/regress/results/create_role.out
+@@ -1,98 +1,184 @@
+ -- ok, superuser can create users with any set of privileges
+ CREATE ROLE regress_role_super SUPERUSER;
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_role_super SUPERUSER
++                               ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_role_admin CREATEDB CREATEROLE REPLICATION BYPASSRLS;
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ GRANT CREATE ON DATABASE regression TO regress_role_admin WITH GRANT OPTION;
++ERROR:  role/user "regress_role_admin" does not exist
+ CREATE ROLE regress_role_limited_admin CREATEROLE;
+ CREATE ROLE regress_role_normal;
+ -- fail, CREATEROLE user can't give away role attributes without having them
+ SET SESSION AUTHORIZATION regress_role_limited_admin;
++ERROR:  at or near "regress_role_limited_admin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_role_limited_admin
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE ROLE regress_nosuch_superuser SUPERUSER;
+-ERROR:  permission denied to create role
+-DETAIL:  Only roles with the SUPERUSER attribute may create roles with the SUPERUSER attribute.
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_nosuch_superuser SUPERUSER
++                                     ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_nosuch_replication_bypassrls REPLICATION BYPASSRLS;
+-ERROR:  permission denied to create role
+-DETAIL:  Only roles with the REPLICATION attribute may create roles with the REPLICATION attribute.
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ CREATE ROLE regress_nosuch_replication REPLICATION;
+-ERROR:  permission denied to create role
+-DETAIL:  Only roles with the REPLICATION attribute may create roles with the REPLICATION attribute.
+ CREATE ROLE regress_nosuch_bypassrls BYPASSRLS;
+-ERROR:  permission denied to create role
+-DETAIL:  Only roles with the BYPASSRLS attribute may create roles with the BYPASSRLS attribute.
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ CREATE ROLE regress_nosuch_createdb CREATEDB;
+-ERROR:  permission denied to create role
+-DETAIL:  Only roles with the CREATEDB attribute may create roles with the CREATEDB attribute.
+ -- ok, can create a role without any special attributes
+ CREATE ROLE regress_role_limited;
+ -- fail, can't give it in any of the restricted attributes
+ ALTER ROLE regress_role_limited SUPERUSER;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_role_limited SUPERUSER
++                                ^
++HINT:  try \h ALTER ROLE
+ ALTER ROLE regress_role_limited REPLICATION;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the REPLICATION attribute may change the REPLICATION attribute.
+ ALTER ROLE regress_role_limited CREATEDB;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the CREATEDB attribute may change the CREATEDB attribute.
+ ALTER ROLE regress_role_limited BYPASSRLS;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the BYPASSRLS attribute may change the BYPASSRLS attribute.
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ DROP ROLE regress_role_limited;
+ -- ok, can give away these role attributes if you have them
+ SET SESSION AUTHORIZATION regress_role_admin;
++ERROR:  at or near "regress_role_admin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_role_admin
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE ROLE regress_replication_bypassrls REPLICATION BYPASSRLS;
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ CREATE ROLE regress_replication REPLICATION;
+ CREATE ROLE regress_bypassrls BYPASSRLS;
++ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136910/_version_
+ CREATE ROLE regress_createdb CREATEDB;
+ -- ok, can toggle these role attributes off and on if you have them
+ ALTER ROLE regress_replication NOREPLICATION;
+ ALTER ROLE regress_replication REPLICATION;
+ ALTER ROLE regress_bypassrls NOBYPASSRLS;
++ERROR:  role/user "regress_bypassrls" does not exist
+ ALTER ROLE regress_bypassrls BYPASSRLS;
++ERROR:  role/user "regress_bypassrls" does not exist
+ ALTER ROLE regress_createdb NOCREATEDB;
+ ALTER ROLE regress_createdb CREATEDB;
+ -- fail, can't toggle SUPERUSER
+ ALTER ROLE regress_createdb SUPERUSER;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_createdb SUPERUSER
++                            ^
++HINT:  try \h ALTER ROLE
+ ALTER ROLE regress_createdb NOSUPERUSER;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the SUPERUSER attribute may change the SUPERUSER attribute.
++ERROR:  at or near "nosuperuser": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_createdb NOSUPERUSER
++                            ^
++HINT:  try \h ALTER ROLE
+ -- ok, having CREATEROLE is enough to create users with these privileges
+ CREATE ROLE regress_createrole CREATEROLE NOINHERIT;
++ERROR:  at or near "noinherit": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_createrole CREATEROLE NOINHERIT
++                                          ^
+ GRANT CREATE ON DATABASE regression TO regress_createrole WITH GRANT OPTION;
++ERROR:  role/user "regress_createrole" does not exist
+ CREATE ROLE regress_login LOGIN;
+ CREATE ROLE regress_inherit INHERIT;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_inherit INHERIT
++                            ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_connection_limit CONNECTION LIMIT 5;
++ERROR:  at or near "connection": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_connection_limit CONNECTION LIMIT 5
++                                     ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_encrypted_password ENCRYPTED PASSWORD 'foo';
++ERROR:  setting or updating a password is not supported in insecure mode
+ CREATE ROLE regress_password_null PASSWORD NULL;
+ -- ok, backwards compatible noise words should be ignored
+ CREATE ROLE regress_noiseword SYSID 12345;
+-NOTICE:  SYSID can no longer be specified
++ERROR:  at or near "sysid": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_noiseword SYSID 12345
++                              ^
++HINT:  try \h CREATE ROLE
+ -- fail, cannot grant membership in superuser role
+ CREATE ROLE regress_nosuch_super IN ROLE regress_role_super;
+-ERROR:  permission denied to grant role "regress_role_super"
+-DETAIL:  Only roles with the SUPERUSER attribute may grant roles with the SUPERUSER attribute.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_nosuch_super IN ROLE regress_role_super
++                                 ^
++HINT:  try \h CREATE ROLE
+ -- fail, database owner cannot have members
+ CREATE ROLE regress_nosuch_dbowner IN ROLE pg_database_owner;
+-ERROR:  role "pg_database_owner" cannot have explicit members
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_nosuch_dbowner IN ROLE pg_database_owner
++                                   ^
++HINT:  try \h CREATE ROLE
+ -- ok, can grant other users into a role
+ CREATE ROLE regress_inroles ROLE
+ 	regress_role_super, regress_createdb, regress_createrole, regress_login,
+ 	regress_inherit, regress_connection_limit, regress_encrypted_password, regress_password_null;
++ERROR:  at or near "role": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_inroles ROLE
++                            ^
++HINT:  try \h CREATE ROLE
+ -- fail, cannot grant a role into itself
+ CREATE ROLE regress_nosuch_recursive ROLE regress_nosuch_recursive;
+-ERROR:  role "regress_nosuch_recursive" is a member of role "regress_nosuch_recursive"
++ERROR:  at or near "role": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_nosuch_recursive ROLE regress_nosuch_recursive
++                                     ^
++HINT:  try \h CREATE ROLE
+ -- ok, can grant other users into a role with admin option
+ CREATE ROLE regress_adminroles ADMIN
+ 	regress_role_super, regress_createdb, regress_createrole, regress_login,
+ 	regress_inherit, regress_connection_limit, regress_encrypted_password, regress_password_null;
++ERROR:  at or near "admin": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_adminroles ADMIN
++                               ^
++HINT:  try \h CREATE ROLE
+ -- fail, cannot grant a role into itself with admin option
+ CREATE ROLE regress_nosuch_admin_recursive ADMIN regress_nosuch_admin_recursive;
+-ERROR:  role "regress_nosuch_admin_recursive" is a member of role "regress_nosuch_admin_recursive"
++ERROR:  at or near "admin": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_nosuch_admin_recursive ADMIN regress_nosuch_admin_recursive
++                                           ^
++HINT:  try \h CREATE ROLE
+ -- fail, regress_createrole does not have CREATEDB privilege
+ SET SESSION AUTHORIZATION regress_createrole;
++ERROR:  at or near "regress_createrole": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_createrole
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE DATABASE regress_nosuch_db;
+-ERROR:  permission denied to create database
+ -- ok, regress_createrole can create new roles
+ CREATE ROLE regress_plainrole;
+ -- ok, roles with CREATEROLE can create new roles with it
+@@ -100,161 +186,280 @@
+ -- ok, roles with CREATEROLE can create new roles with different role
+ -- attributes, including CREATEROLE
+ CREATE ROLE regress_hasprivs CREATEROLE LOGIN INHERIT CONNECTION LIMIT 5;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_hasprivs CREATEROLE LOGIN INHERIT CONNECTION LIMIT 5
++                                              ^
+ -- ok, we should be able to modify a role we created
+ COMMENT ON ROLE regress_hasprivs IS 'some comment';
++ERROR:  at or near "role": syntax error
++DETAIL:  source SQL:
++COMMENT ON ROLE regress_hasprivs IS 'some comment'
++           ^
+ ALTER ROLE regress_hasprivs RENAME TO regress_tenant;
++ERROR:  at or near "rename": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_hasprivs RENAME TO regress_tenant
++                            ^
++HINT:  try \h ALTER ROLE
+ ALTER ROLE regress_tenant NOINHERIT NOLOGIN CONNECTION LIMIT 7;
++ERROR:  at or near "noinherit": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_tenant NOINHERIT NOLOGIN CONNECTION LIMIT 7
++                          ^
++HINT:  try \h ALTER ROLE
+ -- fail, we should be unable to modify a role we did not create
+ COMMENT ON ROLE regress_role_normal IS 'some comment';
+-ERROR:  permission denied
+-DETAIL:  The current user must have the ADMIN option on role "regress_role_normal".
++ERROR:  at or near "role": syntax error
++DETAIL:  source SQL:
++COMMENT ON ROLE regress_role_normal IS 'some comment'
++           ^
+ ALTER ROLE regress_role_normal RENAME TO regress_role_abnormal;
+-ERROR:  permission denied to rename role
+-DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_role_normal" may rename this role.
++ERROR:  at or near "rename": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_role_normal RENAME TO regress_role_abnormal
++                               ^
++HINT:  try \h ALTER ROLE
+ ALTER ROLE regress_role_normal NOINHERIT NOLOGIN CONNECTION LIMIT 7;
+-ERROR:  permission denied to alter role
+-DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_role_normal" may alter this role.
++ERROR:  at or near "noinherit": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_role_normal NOINHERIT NOLOGIN CONNECTION LIMIT 7
++                               ^
++HINT:  try \h ALTER ROLE
+ -- ok, regress_tenant can create objects within the database
+ SET SESSION AUTHORIZATION regress_tenant;
++ERROR:  at or near "regress_tenant": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_tenant
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE tenant_table (i integer);
+ CREATE INDEX tenant_idx ON tenant_table(i);
+ CREATE VIEW tenant_view AS SELECT * FROM pg_catalog.pg_class;
+ REVOKE ALL PRIVILEGES ON tenant_table FROM PUBLIC;
+ -- fail, these objects belonging to regress_tenant
+ SET SESSION AUTHORIZATION regress_createrole;
++ERROR:  at or near "regress_createrole": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_createrole
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DROP INDEX tenant_idx;
+-ERROR:  must be owner of index tenant_idx
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ ALTER TABLE tenant_table ADD COLUMN t text;
+-ERROR:  must be owner of table tenant_table
+ DROP TABLE tenant_table;
+-ERROR:  must be owner of table tenant_table
+ ALTER VIEW tenant_view OWNER TO regress_role_admin;
+-ERROR:  must be owner of view tenant_view
++ERROR:  role/user "regress_role_admin" does not exist
+ DROP VIEW tenant_view;
+-ERROR:  must be owner of view tenant_view
+ -- fail, can't create objects owned as regress_tenant
+ CREATE SCHEMA regress_tenant_schema AUTHORIZATION regress_tenant;
+-ERROR:  must be able to SET ROLE "regress_tenant"
++ERROR:  role/user "regress_tenant" does not exist
+ -- fail, we don't inherit permissions from regress_tenant
+ REASSIGN OWNED BY regress_tenant TO regress_createrole;
+-ERROR:  permission denied to reassign objects
+-DETAIL:  Only roles with privileges of role "regress_tenant" may reassign objects owned by it.
++ERROR:  role/user "regress_tenant" does not exist
+ -- ok, create a role with a value for createrole_self_grant
+ SET createrole_self_grant = 'set, inherit';
++ERROR:  unrecognized configuration parameter "createrole_self_grant"
+ CREATE ROLE regress_tenant2;
+ GRANT CREATE ON DATABASE regression TO regress_tenant2;
++ERROR:  database "regression" does not exist
+ -- ok, regress_tenant2 can create objects within the database
+ SET SESSION AUTHORIZATION regress_tenant2;
++ERROR:  at or near "regress_tenant2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_tenant2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE tenant2_table (i integer);
+ REVOKE ALL PRIVILEGES ON tenant2_table FROM PUBLIC;
+ -- ok, because we have SET and INHERIT on regress_tenant2
+ SET SESSION AUTHORIZATION regress_createrole;
++ERROR:  at or near "regress_createrole": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_createrole
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE SCHEMA regress_tenant2_schema AUTHORIZATION regress_tenant2;
+ ALTER SCHEMA regress_tenant2_schema OWNER TO regress_createrole;
++ERROR:  role/user "regress_createrole" does not exist
+ ALTER TABLE tenant2_table OWNER TO regress_createrole;
++ERROR:  role/user "regress_createrole" does not exist
+ ALTER TABLE tenant2_table OWNER TO regress_tenant2;
+ -- with SET but not INHERIT, we can give away objects but not take them
+ REVOKE INHERIT OPTION FOR regress_tenant2 FROM regress_createrole;
++ERROR:  at or near "option": syntax error: not a valid privilege: "inherit"
++DETAIL:  source SQL:
++REVOKE INHERIT OPTION FOR regress_tenant2 FROM regress_createrole
++               ^
+ ALTER SCHEMA regress_tenant2_schema OWNER TO regress_tenant2;
+ ALTER TABLE tenant2_table OWNER TO regress_createrole;
+-ERROR:  must be owner of table tenant2_table
++ERROR:  role/user "regress_createrole" does not exist
+ -- with INHERIT but not SET, we can take objects but not give them away
+ GRANT regress_tenant2 TO regress_createrole WITH INHERIT TRUE, SET FALSE;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++GRANT regress_tenant2 TO regress_createrole WITH INHERIT TRUE, SET FALSE
++                                                 ^
++HINT:  try \h GRANT
+ ALTER TABLE tenant2_table OWNER TO regress_createrole;
++ERROR:  role/user "regress_createrole" does not exist
+ ALTER TABLE tenant2_table OWNER TO regress_tenant2;
+-ERROR:  must be able to SET ROLE "regress_tenant2"
+ DROP TABLE tenant2_table;
+ -- fail, CREATEROLE is not enough to create roles in privileged roles
+ CREATE ROLE regress_read_all_data IN ROLE pg_read_all_data;
+-ERROR:  permission denied to grant role "pg_read_all_data"
+-DETAIL:  Only roles with the ADMIN option on role "pg_read_all_data" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_read_all_data IN ROLE pg_read_all_data
++                                  ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_write_all_data IN ROLE pg_write_all_data;
+-ERROR:  permission denied to grant role "pg_write_all_data"
+-DETAIL:  Only roles with the ADMIN option on role "pg_write_all_data" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_write_all_data IN ROLE pg_write_all_data
++                                   ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_monitor IN ROLE pg_monitor;
+-ERROR:  permission denied to grant role "pg_monitor"
+-DETAIL:  Only roles with the ADMIN option on role "pg_monitor" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_monitor IN ROLE pg_monitor
++                            ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_read_all_settings IN ROLE pg_read_all_settings;
+-ERROR:  permission denied to grant role "pg_read_all_settings"
+-DETAIL:  Only roles with the ADMIN option on role "pg_read_all_settings" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_read_all_settings IN ROLE pg_read_all_settings
++                                      ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_read_all_stats IN ROLE pg_read_all_stats;
+-ERROR:  permission denied to grant role "pg_read_all_stats"
+-DETAIL:  Only roles with the ADMIN option on role "pg_read_all_stats" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_read_all_stats IN ROLE pg_read_all_stats
++                                   ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_stat_scan_tables IN ROLE pg_stat_scan_tables;
+-ERROR:  permission denied to grant role "pg_stat_scan_tables"
+-DETAIL:  Only roles with the ADMIN option on role "pg_stat_scan_tables" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_stat_scan_tables IN ROLE pg_stat_scan_tables
++                                     ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_read_server_files IN ROLE pg_read_server_files;
+-ERROR:  permission denied to grant role "pg_read_server_files"
+-DETAIL:  Only roles with the ADMIN option on role "pg_read_server_files" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_read_server_files IN ROLE pg_read_server_files
++                                      ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_write_server_files IN ROLE pg_write_server_files;
+-ERROR:  permission denied to grant role "pg_write_server_files"
+-DETAIL:  Only roles with the ADMIN option on role "pg_write_server_files" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_write_server_files IN ROLE pg_write_server_files
++                                       ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_execute_server_program IN ROLE pg_execute_server_program;
+-ERROR:  permission denied to grant role "pg_execute_server_program"
+-DETAIL:  Only roles with the ADMIN option on role "pg_execute_server_program" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_execute_server_program IN ROLE pg_execute_server_program
++                                           ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_signal_backend IN ROLE pg_signal_backend;
+-ERROR:  permission denied to grant role "pg_signal_backend"
+-DETAIL:  Only roles with the ADMIN option on role "pg_signal_backend" may grant this role.
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_signal_backend IN ROLE pg_signal_backend
++                                   ^
++HINT:  try \h CREATE ROLE
+ -- fail, role still owns database objects
+ DROP ROLE regress_tenant;
+-ERROR:  role "regress_tenant" cannot be dropped because some objects depend on it
+-DETAIL:  owner of table tenant_table
+-owner of view tenant_view
++ERROR:  role/user "regress_tenant" does not exist
+ -- fail, creation of these roles failed above so they do not now exist
+ SET SESSION AUTHORIZATION regress_role_admin;
++ERROR:  at or near "regress_role_admin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_role_admin
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DROP ROLE regress_nosuch_superuser;
+-ERROR:  role "regress_nosuch_superuser" does not exist
++ERROR:  role/user "regress_nosuch_superuser" does not exist
+ DROP ROLE regress_nosuch_replication_bypassrls;
+-ERROR:  role "regress_nosuch_replication_bypassrls" does not exist
++ERROR:  role/user "regress_nosuch_replication_bypassrls" does not exist
+ DROP ROLE regress_nosuch_replication;
+-ERROR:  role "regress_nosuch_replication" does not exist
+ DROP ROLE regress_nosuch_bypassrls;
+-ERROR:  role "regress_nosuch_bypassrls" does not exist
++ERROR:  role/user "regress_nosuch_bypassrls" does not exist
+ DROP ROLE regress_nosuch_super;
+-ERROR:  role "regress_nosuch_super" does not exist
++ERROR:  role/user "regress_nosuch_super" does not exist
+ DROP ROLE regress_nosuch_dbowner;
+-ERROR:  role "regress_nosuch_dbowner" does not exist
++ERROR:  role/user "regress_nosuch_dbowner" does not exist
+ DROP ROLE regress_nosuch_recursive;
+-ERROR:  role "regress_nosuch_recursive" does not exist
++ERROR:  role/user "regress_nosuch_recursive" does not exist
+ DROP ROLE regress_nosuch_admin_recursive;
+-ERROR:  role "regress_nosuch_admin_recursive" does not exist
++ERROR:  role/user "regress_nosuch_admin_recursive" does not exist
+ DROP ROLE regress_plainrole;
+ -- must revoke privileges before dropping role
+ REVOKE CREATE ON DATABASE regression FROM regress_createrole CASCADE;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE CREATE ON DATABASE regression FROM regress_createrole CASCADE
++                                                             ^
+ -- ok, should be able to drop non-superuser roles we created
+ DROP ROLE regress_replication_bypassrls;
++ERROR:  role/user "regress_replication_bypassrls" does not exist
+ DROP ROLE regress_replication;
+ DROP ROLE regress_bypassrls;
++ERROR:  role/user "regress_bypassrls" does not exist
+ DROP ROLE regress_createdb;
+ DROP ROLE regress_createrole;
++ERROR:  role/user "regress_createrole" does not exist
+ DROP ROLE regress_login;
+ DROP ROLE regress_inherit;
++ERROR:  role/user "regress_inherit" does not exist
+ DROP ROLE regress_connection_limit;
++ERROR:  role/user "regress_connection_limit" does not exist
+ DROP ROLE regress_encrypted_password;
++ERROR:  role/user "regress_encrypted_password" does not exist
+ DROP ROLE regress_password_null;
+ DROP ROLE regress_noiseword;
++ERROR:  role/user "regress_noiseword" does not exist
+ DROP ROLE regress_inroles;
++ERROR:  role/user "regress_inroles" does not exist
+ DROP ROLE regress_adminroles;
++ERROR:  role/user "regress_adminroles" does not exist
+ -- fail, cannot drop ourself, nor superusers or roles we lack ADMIN for
+ DROP ROLE regress_role_super;
+-ERROR:  permission denied to drop role
+-DETAIL:  Only roles with the SUPERUSER attribute may drop roles with the SUPERUSER attribute.
++ERROR:  role/user "regress_role_super" does not exist
+ DROP ROLE regress_role_admin;
+-ERROR:  current user cannot be dropped
++ERROR:  role/user "regress_role_admin" does not exist
+ DROP ROLE regress_rolecreator;
+-ERROR:  permission denied to drop role
+-DETAIL:  Only roles with the CREATEROLE attribute and the ADMIN option on role "regress_rolecreator" may drop this role.
+ -- ok
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE CREATE ON DATABASE regression FROM regress_role_admin CASCADE;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE CREATE ON DATABASE regression FROM regress_role_admin CASCADE
++                                                             ^
+ DROP INDEX tenant_idx;
++ERROR:  index "tenant_idx" does not exist
+ DROP TABLE tenant_table;
++ERROR:  relation "tenant_table" does not exist
+ DROP VIEW tenant_view;
++ERROR:  relation "tenant_view" does not exist
+ DROP SCHEMA regress_tenant2_schema;
+ DROP ROLE regress_tenant;
++ERROR:  role/user "regress_tenant" does not exist
+ DROP ROLE regress_tenant2;
+ DROP ROLE regress_rolecreator;
++ERROR:  role/user "regress_rolecreator" does not exist
+ DROP ROLE regress_role_admin;
++ERROR:  role/user "regress_role_admin" does not exist
+ DROP ROLE regress_role_limited_admin;
+ DROP ROLE regress_role_super;
++ERROR:  role/user "regress_role_super" does not exist
+ DROP ROLE regress_role_normal;

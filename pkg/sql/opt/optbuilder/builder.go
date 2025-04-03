@@ -369,6 +369,11 @@ func (b *Builder) buildStmt(
 				panic(doBlockVersionErr)
 			}
 		default:
+			if tree.CanModifySchema(stmt) {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported", stmt.StatementTag(),
+				))
+			}
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
 	}

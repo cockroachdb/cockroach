@@ -646,6 +646,11 @@ func (tc *Collection) finalizeDescriptors(
 		requiredLevel = validate.MutableRead
 	} else {
 		requiredLevel = validate.ImmutableRead
+		// If we're reading a batch of immutable descriptors, we'll do only
+		// basic validations in only reduce overhead.
+		if len(validationLevels) > 10 {
+			requiredLevel = validate.ImmutableReadBatch
+		}
 	}
 	// Ensure that all descriptors are sufficiently validated.
 	if !tc.validationModeProvider.ValidateDescriptorsOnRead() {

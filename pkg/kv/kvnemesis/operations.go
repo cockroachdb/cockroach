@@ -46,6 +46,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *TransferLeaseOperation:
 		return &o.Result
+	case *ChangeSettingOperation:
+		return &o.Result
 	case *ChangeZoneOperation:
 		return &o.Result
 	case *BatchOperation:
@@ -143,6 +145,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *ChangeReplicasOperation:
 		o.format(w, fctx)
 	case *TransferLeaseOperation:
+		o.format(w, fctx)
+	case *ChangeSettingOperation:
 		o.format(w, fctx)
 	case *ChangeZoneOperation:
 		o.format(w, fctx)
@@ -390,6 +394,16 @@ func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.AdminTransferLease(ctx, %s, %d)`, fctx.receiver, fmtKey(op.Key), op.Target)
+	op.Result.format(w)
+}
+
+func (op ChangeSettingOperation) format(w *strings.Builder, fctx formatCtx) {
+	switch op.Type {
+	case ChangeSettingType_SetLeaseType:
+		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %s)`, op.Type, op.LeaseType)
+	default:
+		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
+	}
 	op.Result.format(w)
 }
 

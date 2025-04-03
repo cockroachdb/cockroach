@@ -83,7 +83,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

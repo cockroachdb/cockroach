@@ -1,0 +1,487 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/copydml.out --label=/mnt/data1/postgres/src/test/regress/results/copydml.out /mnt/data1/postgres/src/test/regress/expected/copydml.out /mnt/data1/postgres/src/test/regress/results/copydml.out
+--- /mnt/data1/postgres/src/test/regress/expected/copydml.out
++++ /mnt/data1/postgres/src/test/regress/results/copydml.out
+@@ -1,7 +1,9 @@
+ --
+ -- Test cases for COPY (INSERT/UPDATE/DELETE) TO
+ --
+-create table copydml_test (id serial, t text);
++create sequence id_seq;
++ERROR:  relation "root.public.id_seq" already exists
++create table copydml_test (id int default nextval('id_seq'), t text);
+ insert into copydml_test (t) values ('a');
+ insert into copydml_test (t) values ('b');
+ insert into copydml_test (t) values ('c');
+@@ -11,75 +13,420 @@
+ -- Test COPY (insert/update/delete ...)
+ --
+ copy (insert into copydml_test (t) values ('f') returning id) to stdout;
+-6
++11
+ copy (update copydml_test set t = 'g' where t = 'f' returning id) to stdout;
+-6
++11
+ copy (delete from copydml_test where t = 'g' returning id) to stdout;
+-6
++11
+ --
+ -- Test \copy (insert/update/delete ...)
+ --
+ \copy (insert into copydml_test (t) values ('f') returning id) to stdout;
+-7
++12
+ \copy (update copydml_test set t = 'g' where t = 'f' returning id) to stdout;
+-7
++12
+ \copy (delete from copydml_test where t = 'g' returning id) to stdout;
+-7
++12
+ -- Error cases
+ copy (insert into copydml_test default values) to stdout;
+-ERROR:  COPY query must have a RETURNING clause
+ copy (update copydml_test set t = 'g') to stdout;
+-ERROR:  COPY query must have a RETURNING clause
+ copy (delete from copydml_test) to stdout;
+-ERROR:  COPY query must have a RETURNING clause
+ create rule qqq as on insert to copydml_test do instead nothing;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on insert to copydml_test do instead nothing
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (insert into copydml_test default values) to stdout;
+-ERROR:  DO INSTEAD NOTHING rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on insert to copydml_test do also delete from copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on insert to copydml_test do also delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (insert into copydml_test default values) to stdout;
+-ERROR:  DO ALSO rules are not supported for the COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on insert to copydml_test do instead (delete from copydml_test; delete from copydml_test);
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on insert to copydml_test do instead (delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (insert into copydml_test default values) to stdout;
+-ERROR:  multi-statement DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on insert to copydml_test where new.t <> 'f' do instead delete from copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on insert to copydml_test where new.t <> 'f' do instead delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (insert into copydml_test default values) to stdout;
+-ERROR:  conditional DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on update to copydml_test do instead nothing;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on update to copydml_test do instead nothing
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (update copydml_test set t = 'f') to stdout;
+-ERROR:  DO INSTEAD NOTHING rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on update to copydml_test do also delete from copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on update to copydml_test do also delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (update copydml_test set t = 'f') to stdout;
+-ERROR:  DO ALSO rules are not supported for the COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on update to copydml_test do instead (delete from copydml_test; delete from copydml_test);
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on update to copydml_test do instead (delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (update copydml_test set t = 'f') to stdout;
+-ERROR:  multi-statement DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on update to copydml_test where new.t <> 'f' do instead delete from copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on update to copydml_test where new.t <> 'f' do instead delete from copydml_test
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (update copydml_test set t = 'f') to stdout;
+-ERROR:  conditional DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on delete to copydml_test do instead nothing;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on delete to copydml_test do instead nothing
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (delete from copydml_test) to stdout;
+-ERROR:  DO INSTEAD NOTHING rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on delete to copydml_test do also insert into copydml_test default values;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on delete to copydml_test do also insert into copydml_test default values
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (delete from copydml_test) to stdout;
+-ERROR:  DO ALSO rules are not supported for the COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on delete to copydml_test do instead (insert into copydml_test default values; insert into copydml_test default values);
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on delete to copydml_test do instead (insert into copydml_test default values
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (delete from copydml_test) to stdout;
+-ERROR:  multi-statement DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule qqq as on delete to copydml_test where old.t <> 'f' do instead insert into copydml_test default values;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule qqq as on delete to copydml_test where old.t <> 'f' do instead insert into copydml_test default values
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ copy (delete from copydml_test) to stdout;
+-ERROR:  conditional DO INSTEAD rules are not supported for COPY
+ drop rule qqq on copydml_test;
++ERROR:  at or near "qqq": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule qqq on copydml_test
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- triggers
+ create function qqq_trig() returns trigger as $$
+ begin
+@@ -94,19 +441,21 @@
+ $$ language plpgsql;
+ create trigger qqqbef before insert or update or delete on copydml_test
+     for each row execute procedure qqq_trig();
++ERROR:  no data source matches prefix: new in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ create trigger qqqaf after insert or update or delete on copydml_test
+     for each row execute procedure qqq_trig();
++ERROR:  no data source matches prefix: new in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ copy (insert into copydml_test (t) values ('f') returning id) to stdout;
+-NOTICE:  BEFORE INSERT 8
+-8
+-NOTICE:  AFTER INSERT 8
++18
+ copy (update copydml_test set t = 'g' where t = 'f' returning id) to stdout;
+-NOTICE:  BEFORE UPDATE 8
+-8
+-NOTICE:  AFTER UPDATE 8
++18
+ copy (delete from copydml_test where t = 'g' returning id) to stdout;
+-NOTICE:  BEFORE DELETE 8
+-8
+-NOTICE:  AFTER DELETE 8
++18
+ drop table copydml_test;
+ drop function qqq_trig();

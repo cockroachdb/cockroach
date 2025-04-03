@@ -58,7 +58,8 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+// new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
+// [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 //
@@ -219,7 +220,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
-					BaFmt:                  ba,
+					Batch:                  ba,
 				}
 				return ""
 
@@ -542,6 +543,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "on-lease-transfer-eval":
+				mon.runSync("eval transfer lease", func(ctx context.Context) {
+					locksToWrite := m.OnRangeLeaseTransferEval()
+					if len(locksToWrite) > 0 {
+						log.Eventf(ctx, "locks to propose as replicated: %d", len(locksToWrite))
+					}
+				})
+				return c.waitAndCollect(t, mon)
+
 			case "on-lease-updated":
 				var isLeaseholder bool
 				d.ScanArgs(t, "leaseholder", &isLeaseholder)
@@ -562,7 +572,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			case "on-split":
 				mon.runSync("split range", func(ctx context.Context) {
 					log.Event(ctx, "complete")
-					m.OnRangeSplit()
+					var endKeyStr string
+					d.ScanArgs(t, "key", &endKeyStr)
+					locks := m.OnRangeSplit(roachpb.Key(endKeyStr))
+					if len(locks) > 0 {
+						log.Eventf(ctx, "range split returned %d locks for re-acquistion", len(locks))
+					}
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -720,6 +735,9 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	// Set the latch manager's long latch threshold to infinity to disable
 	// logging, which could cause a test to erroneously fail.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},

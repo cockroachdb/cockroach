@@ -31,11 +31,12 @@ type queryCounter struct {
 	selectCount                     int64
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
-	fallbackCount                   int64
 	updateCount                     int64
 	insertCount                     int64
 	deleteCount                     int64
 	ddlCount                        int64
+	callSPCount                     int64
+	callSPExecutedCount             int64
 	miscCount                       int64
 	miscExecutedCount               int64
 	copyCount                       int64
@@ -47,13 +48,15 @@ type queryCounter struct {
 	restartSavepointCount           int64
 	releaseRestartSavepointCount    int64
 	rollbackToRestartSavepointCount int64
+	statementTimeoutCount           int64
+	transactionTimeoutCount         int64
 }
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
@@ -64,6 +67,10 @@ func TestQueryCounts(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+
+	if _, err := sqlDB.Exec("CREATE PROCEDURE p_select() LANGUAGE SQL AS 'SELECT 1'"); err != nil {
+		t.Fatal(err)
+	}
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -104,6 +111,19 @@ func TestQueryCounts(t *testing.T) {
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
+		{
+			query:       "BEGIN; SET LOCAL statement_timeout = '100ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, statementTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
+		{
+			query:       "BEGIN; SET LOCAL transaction_timeout = '100ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, transactionTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
+		{query: "CALL p_select()", callSPCount: 1, callSPExecutedCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -112,6 +132,13 @@ func TestQueryCounts(t *testing.T) {
 		t.Run(tc.query, func(t *testing.T) {
 			if _, err := sqlDB.Exec(tc.query); err != nil && !tc.expectError {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
+			}
+			// If the query included a BEGIN statement and failed, we need to abort the transaction
+			// to set up for the next test.
+			if tc.txnBeginCount > 0 && tc.expectError {
+				if _, err := sqlDB.Exec("ABORT"); err != nil {
+					t.Fatalf("unexpected error when attempting to abort opened txn: %s'", err)
+				}
 			}
 
 			// Force metric snapshot refresh.
@@ -129,7 +156,7 @@ func TestQueryCounts(t *testing.T) {
 			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 0); err != nil {
+			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, tc.txnAbortCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelectStarted, accum.selectCount, tc.selectCount); err != nil {
@@ -150,6 +177,12 @@ func TestQueryCounts(t *testing.T) {
 			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdlStarted, accum.ddlCount, tc.ddlCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
+			if accum.callSPCount, err = checkCounterDelta(s, sql.MetaCallStoredProcStarted, accum.callSPCount, tc.callSPCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.callSPExecutedCount, err = checkCounterDelta(s, sql.MetaCallStoredProcExecuted, accum.callSPExecutedCount, tc.callSPExecutedCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
 			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMiscStarted, accum.miscCount, tc.miscCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
@@ -162,7 +195,10 @@ func TestQueryCounts(t *testing.T) {
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
+			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.transactionTimeoutCount, err = checkCounterDelta(s, sql.MetaTransactionTimeout, accum.transactionTimeoutCount, tc.transactionTimeoutCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 		})
@@ -174,7 +210,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
-		params, cmdFilters := createTestServerParams()
+		params, cmdFilters := createTestServerParamsAllowTenants()
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
@@ -279,7 +315,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -314,7 +350,7 @@ func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

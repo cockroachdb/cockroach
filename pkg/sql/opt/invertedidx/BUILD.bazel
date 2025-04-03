@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/opt/props",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",

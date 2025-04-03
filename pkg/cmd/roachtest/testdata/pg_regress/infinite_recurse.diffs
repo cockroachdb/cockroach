@@ -1,0 +1,20 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/infinite_recurse.out --label=/mnt/data1/postgres/src/test/regress/results/infinite_recurse.out /mnt/data1/postgres/src/test/regress/expected/infinite_recurse.out /mnt/data1/postgres/src/test/regress/results/infinite_recurse.out
+--- /mnt/data1/postgres/src/test/regress/expected/infinite_recurse.out
++++ /mnt/data1/postgres/src/test/regress/results/infinite_recurse.out
+@@ -2,6 +2,7 @@
+ -- max_stack_depth is not set too high.
+ create function infinite_recurse() returns int as
+ 'select infinite_recurse()' language sql;
++ERROR:  unknown function: infinite_recurse()
+ -- Unfortunately, up till mid 2020 the Linux kernel had a bug in PPC64
+ -- signal handling that would cause this test to crash if it happened
+ -- to receive an sinval catchup interrupt while the stack is deep:
+@@ -19,6 +20,6 @@
+ -- and primary error message.
+ \set VERBOSITY sqlstate
+ select infinite_recurse();
+-ERROR:  54001
++ERROR:  42883
+ \echo :LAST_ERROR_MESSAGE
+-stack depth limit exceeded
++unknown function: infinite_recurse()

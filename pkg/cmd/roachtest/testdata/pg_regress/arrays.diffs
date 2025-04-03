@@ -1,0 +1,2415 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/arrays.out --label=/mnt/data1/postgres/src/test/regress/results/arrays.out /mnt/data1/postgres/src/test/regress/expected/arrays.out /mnt/data1/postgres/src/test/regress/results/arrays.out
+--- /mnt/data1/postgres/src/test/regress/expected/arrays.out
++++ /mnt/data1/postgres/src/test/regress/results/arrays.out
+@@ -3,6 +3,7 @@
+ --
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ CREATE TABLE arrtest (
+ 	a 			int2[],
+ 	b 			int4[][][],
+@@ -12,6 +13,14 @@
+ 	f			char(5)[],
+ 	g			varchar(5)[]
+ );
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE arrtest (
++	a 			int2[],
++	b 			int4[][][],
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ CREATE TABLE array_op_test (
+ 	seqno		int4,
+ 	i			int4[],
+@@ -19,371 +28,349 @@
+ );
+ \set filename :abs_srcdir '/data/array.data'
+ COPY array_op_test FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/array.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY array_op_test FROM ':abs_srcdir/data/array.data'
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ANALYZE array_op_test;
+ --
+ -- only the 'e' array is 0-based, the others are 1-based.
+ --
+ INSERT INTO arrtest (a[1:5], b[1:1][1:2][1:2], c, d, f, g)
+    VALUES ('{1,2,3,4,5}', '{{{0,0},{1,2}}}', '{}', '{}', '{}', '{}');
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO arrtest (a[1:5], b[1:1][1:2][1:2], c, d, f, g)
++                      ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE arrtest SET e[0] = '1.1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest SET e[0] = '1.1'
++                    ^
++HINT:  try \h UPDATE
+ UPDATE arrtest SET e[1] = '2.2';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest SET e[1] = '2.2'
++                    ^
++HINT:  try \h UPDATE
+ INSERT INTO arrtest (f)
+    VALUES ('{"too long"}');
+-ERROR:  value too long for type character(5)
++ERROR:  relation "arrtest" does not exist
+ INSERT INTO arrtest (a, b[1:2][1:2], c, d, e, f, g)
+    VALUES ('{11,12,23}', '{{3,4},{4,5}}', '{"foobar"}',
+            '{{"elt1", "elt2"}}', '{"3.4", "6.7"}',
+            '{"abc","abcde"}', '{"abc","abcde"}');
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO arrtest (a, b[1:2][1:2], c, d, e, f, g)
++                         ^
++HINT:  try \h <SELECTCLAUSE>
+ INSERT INTO arrtest (a, b[1:2], c, d[1:2])
+    VALUES ('{}', '{3,4}', '{foo,bar}', '{bar,foo}');
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO arrtest (a, b[1:2], c, d[1:2])
++                         ^
++HINT:  try \h <SELECTCLAUSE>
+ INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+-ERROR:  subscripted assignment to "b" requires type integer but expression is of type timestamp with time zone
+-LINE 1: INSERT INTO arrtest (b[2]) VALUES(now());
+-                             ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO arrtest (b[2]) VALUES(now())
++                      ^
++HINT:  try \h <SELECTCLAUSE>
+ INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+-ERROR:  subscripted assignment to "b" requires type integer[] but expression is of type timestamp with time zone
+-LINE 1: INSERT INTO arrtest (b[1:2]) VALUES(now());
+-                             ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO arrtest (b[1:2]) VALUES(now())
++                      ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM arrtest;
+-      a      |        b        |     c     |       d       |        e        |        f        |      g      
+--------------+-----------------+-----------+---------------+-----------------+-----------------+-------------
+- {1,2,3,4,5} | {{{0,0},{1,2}}} | {}        | {}            | [0:1]={1.1,2.2} | {}              | {}
+- {11,12,23}  | {{3,4},{4,5}}   | {foobar}  | {{elt1,elt2}} | {3.4,6.7}       | {"abc  ",abcde} | {abc,abcde}
+- {}          | {3,4}           | {foo,bar} | {bar,foo}     |                 |                 | 
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT arrtest.a[1],
+           arrtest.b[1][1][1],
+           arrtest.c[1],
+           arrtest.d[1][1],
+           arrtest.e[0]
+    FROM arrtest;
+- a  | b |   c    |  d   |  e  
+-----+---+--------+------+-----
+-  1 | 0 |        |      | 1.1
+- 11 |   | foobar | elt1 |    
+-    |   | foo    |      |    
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT a[1], b[1][1][1], c[1], d[1][1], e[0]
+    FROM arrtest;
+- a  | b |   c    |  d   |  e  
+-----+---+--------+------+-----
+-  1 | 0 |        |      | 1.1
+- 11 |   | foobar | elt1 |    
+-    |   | foo    |      |    
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT a[1:3],
+           b[1:1][1:2][1:2],
+           c[1:2],
+           d[1:1][1:2]
+    FROM arrtest;
+-     a      |        b        |     c     |       d       
+-------------+-----------------+-----------+---------------
+- {1,2,3}    | {{{0,0},{1,2}}} | {}        | {}
+- {11,12,23} | {}              | {foobar}  | {{elt1,elt2}}
+- {}         | {}              | {foo,bar} | {}
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT array_ndims(a) AS a,array_ndims(b) AS b,array_ndims(c) AS c
+    FROM arrtest;
+- a | b | c 
+----+---+---
+- 1 | 3 |  
+- 1 | 2 | 1
+-   | 1 | 1
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT array_dims(a) AS a,array_dims(b) AS b,array_dims(c) AS c
+    FROM arrtest;
+-   a   |        b        |   c   
+--------+-----------------+-------
+- [1:5] | [1:1][1:2][1:2] | 
+- [1:3] | [1:2][1:2]      | [1:1]
+-       | [1:2]           | [1:2]
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ -- returns nothing
+ SELECT *
+    FROM arrtest
+    WHERE a[1] < 5 and
+          c = '{"foobar"}'::_name;
+- a | b | c | d | e | f | g 
+----+---+---+---+---+---+---
+-(0 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ UPDATE arrtest
+   SET a[1:2] = '{16,25}'
+   WHERE NOT a = '{}'::_int2;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET a[1:2] = '{16,25}'
++       ^
++HINT:  try \h UPDATE
+ UPDATE arrtest
+   SET b[1:1][1:1][1:2] = '{113, 117}',
+       b[1:1][1:2][2:2] = '{142, 147}'
+   WHERE array_dims(b) = '[1:1][1:2][1:2]';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET b[1:1][1:1][1:2] = '{113, 117}',
++       ^
++HINT:  try \h UPDATE
+ UPDATE arrtest
+   SET c[2:2] = '{"new_word"}'
+   WHERE array_dims(c) is not null;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET c[2:2] = '{"new_word"}'
++       ^
++HINT:  try \h UPDATE
+ SELECT a,b,c FROM arrtest;
+-       a       |           b           |         c         
+----------------+-----------------------+-------------------
+- {16,25,3,4,5} | {{{113,142},{1,147}}} | {}
+- {}            | {3,4}                 | {foo,new_word}
+- {16,25,23}    | {{3,4},{4,5}}         | {foobar,new_word}
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT a[1:3],
+           b[1:1][1:2][1:2],
+           c[1:2],
+           d[1:1][2:2]
+    FROM arrtest;
+-     a      |           b           |         c         |    d     
+-------------+-----------------------+-------------------+----------
+- {16,25,3}  | {{{113,142},{1,147}}} | {}                | {}
+- {}         | {}                    | {foo,new_word}    | {}
+- {16,25,23} | {}                    | {foobar,new_word} | {{elt2}}
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT b[1:1][2][2],
+        d[1:1][2]
+    FROM arrtest;
+-           b           |       d       
+------------------------+---------------
+- {{{113,142},{1,147}}} | {}
+- {}                    | {}
+- {}                    | {{elt1,elt2}}
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ INSERT INTO arrtest(a) VALUES('{1,null,3}');
++ERROR:  relation "arrtest" does not exist
+ SELECT a FROM arrtest;
+-       a       
+----------------
+- {16,25,3,4,5}
+- {}
+- {16,25,23}
+- {1,NULL,3}
+-(4 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ UPDATE arrtest SET a[4] = NULL WHERE a[2] IS NULL;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest SET a[4] = NULL WHERE a[2] IS NULL
++                    ^
++HINT:  try \h UPDATE
+ SELECT a FROM arrtest WHERE a[2] IS NULL;
+-        a        
+------------------
+- [4:4]={NULL}
+- {1,NULL,3,NULL}
+-(2 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ DELETE FROM arrtest WHERE a[2] IS NULL AND b IS NULL;
++ERROR:  relation "arrtest" does not exist
+ SELECT a,b,c FROM arrtest;
+-       a       |           b           |         c         
+----------------+-----------------------+-------------------
+- {16,25,3,4,5} | {{{113,142},{1,147}}} | {}
+- {16,25,23}    | {{3,4},{4,5}}         | {foobar,new_word}
+- [4:4]={NULL}  | {3,4}                 | {foo,new_word}
+-(3 rows)
+-
++ERROR:  relation "arrtest" does not exist
+ -- test non-error-throwing API
+ SELECT pg_input_is_valid('{1,2,3}', 'integer[]');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('{1,2', 'integer[]');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('{1,zed}', 'integer[]');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('{1,zed}', 'integer[]');
+-                   message                    | detail | hint | sql_error_code 
+-----------------------------------------------+--------+------+----------------
+- invalid input syntax for type integer: "zed" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- test mixed slice/scalar subscripting
+ select '{{1,2,3},{4,5,6},{7,8,9}}'::int[];
+-           int4            
+----------------------------
+- {{1,2,3},{4,5,6},{7,8,9}}
+-(1 row)
+-
++ERROR:  could not parse "{{1,2,3},{4,5,6},{7,8,9}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select ('{{1,2,3},{4,5,6},{7,8,9}}'::int[])[1:2][2];
+-     int4      
+----------------
+- {{1,2},{4,5}}
+-(1 row)
+-
++ERROR:  could not parse "{{1,2,3},{4,5,6},{7,8,9}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '[0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}'::int[];
+-                 int4                 
+---------------------------------------
+- [0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}
+-(1 row)
+-
++ERROR:  could not parse "[0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}" as type int[]: array must be enclosed in { and }
+ select ('[0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}'::int[])[1:2][2];
+-     int4      
+----------------
+- {{5,6},{8,9}}
+-(1 row)
+-
++ERROR:  could not parse "[0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}" as type int[]: array must be enclosed in { and }
+ --
+ -- check subscription corner cases
+ --
+ -- More subscripts than MAXDIM (6)
+ SELECT ('{}'::int[])[1][2][3][4][5][6][7];
+-ERROR:  number of array dimensions (7) exceeds the maximum allowed (6)
++ERROR:  unimplemented: multidimensional indexing: ARRAY[][1][2][3][4][5][6][7]
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ -- NULL index yields NULL when selecting
+ SELECT ('{{{1},{2},{3}},{{4},{5},{6}}}'::int[])[1][NULL][1];
+- int4 
+-------
+-     
+-(1 row)
+-
++ERROR:  could not parse "{{{1},{2},{3}},{{4},{5},{6}}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ SELECT ('{{{1},{2},{3}},{{4},{5},{6}}}'::int[])[1][NULL:1][1];
+- int4 
+-------
+- 
+-(1 row)
+-
++ERROR:  could not parse "{{{1},{2},{3}},{{4},{5},{6}}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ SELECT ('{{{1},{2},{3}},{{4},{5},{6}}}'::int[])[1][1:NULL][1];
+- int4 
+-------
+- 
+-(1 row)
+-
++ERROR:  could not parse "{{{1},{2},{3}},{{4},{5},{6}}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ -- NULL index in assignment is an error
+ UPDATE arrtest
+   SET c[NULL] = '{"can''t assign"}'
+   WHERE array_dims(c) is not null;
+-ERROR:  array subscript in assignment must not be null
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET c[NULL] = '{"can''t assign"}'
++       ^
++HINT:  try \h UPDATE
+ UPDATE arrtest
+   SET c[NULL:1] = '{"can''t assign"}'
+   WHERE array_dims(c) is not null;
+-ERROR:  array subscript in assignment must not be null
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET c[NULL:1] = '{"can''t assign"}'
++       ^
++HINT:  try \h UPDATE
+ UPDATE arrtest
+   SET c[1:NULL] = '{"can''t assign"}'
+   WHERE array_dims(c) is not null;
+-ERROR:  array subscript in assignment must not be null
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest
++  SET c[1:NULL] = '{"can''t assign"}'
++       ^
++HINT:  try \h UPDATE
+ -- Un-subscriptable type
+ SELECT (now())[1];
+-ERROR:  cannot subscript type timestamp with time zone because it does not support subscripting
+-LINE 1: SELECT (now())[1];
+-                ^
++ERROR:  unknown signature: now() (returning <anyelement[]>)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- test slices with empty lower and/or upper index
+ CREATE TEMP TABLE arrtest_s (
+   a       int2[],
+   b       int2[][]
+ );
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEMP TABLE arrtest_s (
++  a       int2[],
++  b       int2[][]
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ INSERT INTO arrtest_s VALUES ('{1,2,3,4,5}', '{{1,2,3}, {4,5,6}, {7,8,9}}');
++ERROR:  relation "arrtest_s" does not exist
+ INSERT INTO arrtest_s VALUES ('[0:4]={1,2,3,4,5}', '[0:2][0:2]={{1,2,3}, {4,5,6}, {7,8,9}}');
++ERROR:  relation "arrtest_s" does not exist
+ SELECT * FROM arrtest_s;
+-         a         |                  b                   
+--------------------+--------------------------------------
+- {1,2,3,4,5}       | {{1,2,3},{4,5,6},{7,8,9}}
+- [0:4]={1,2,3,4,5} | [0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ SELECT a[:3], b[:2][:2] FROM arrtest_s;
+-     a     |             b             
+------------+---------------------------
+- {1,2,3}   | {{1,2},{4,5}}
+- {1,2,3,4} | {{1,2,3},{4,5,6},{7,8,9}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ SELECT a[2:], b[2:][2:] FROM arrtest_s;
+-     a     |       b       
+------------+---------------
+- {2,3,4,5} | {{5,6},{8,9}}
+- {3,4,5}   | {{9}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ SELECT a[:], b[:] FROM arrtest_s;
+-      a      |             b             
+--------------+---------------------------
+- {1,2,3,4,5} | {{1,2,3},{4,5,6},{7,8,9}}
+- {1,2,3,4,5} | {{1,2,3},{4,5,6},{7,8,9}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ -- updates
+ UPDATE arrtest_s SET a[:3] = '{11, 12, 13}', b[:2][:2] = '{{11,12}, {14,15}}'
+   WHERE array_lower(a,1) = 1;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest_s SET a[:3] = '{11, 12, 13}', b[:2][:2] = '{{11,12}, {14,15}}'
++                      ^
++HINT:  try \h UPDATE
+ SELECT * FROM arrtest_s;
+-         a         |                  b                   
+--------------------+--------------------------------------
+- [0:4]={1,2,3,4,5} | [0:2][0:2]={{1,2,3},{4,5,6},{7,8,9}}
+- {11,12,13,4,5}    | {{11,12,3},{14,15,6},{7,8,9}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ UPDATE arrtest_s SET a[3:] = '{23, 24, 25}', b[2:][2:] = '{{25,26}, {28,29}}';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest_s SET a[3:] = '{23, 24, 25}', b[2:][2:] = '{{25,26}, {28,29}}'
++                      ^
++HINT:  try \h UPDATE
+ SELECT * FROM arrtest_s;
+-          a          |                   b                   
+----------------------+---------------------------------------
+- [0:4]={1,2,3,23,24} | [0:2][0:2]={{1,2,3},{4,5,6},{7,8,25}}
+- {11,12,23,24,25}    | {{11,12,3},{14,25,26},{7,28,29}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ UPDATE arrtest_s SET a[:] = '{11, 12, 13, 14, 15}';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest_s SET a[:] = '{11, 12, 13, 14, 15}'
++                      ^
++HINT:  try \h UPDATE
+ SELECT * FROM arrtest_s;
+-           a            |                   b                   
+-------------------------+---------------------------------------
+- [0:4]={11,12,13,14,15} | [0:2][0:2]={{1,2,3},{4,5,6},{7,8,25}}
+- {11,12,13,14,15}       | {{11,12,3},{14,25,26},{7,28,29}}
+-(2 rows)
+-
++ERROR:  relation "arrtest_s" does not exist
+ UPDATE arrtest_s SET a[:] = '{23, 24, 25}';  -- fail, too small
+-ERROR:  source array too small
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest_s SET a[:] = '{23, 24, 25}'
++                      ^
++HINT:  try \h UPDATE
+ INSERT INTO arrtest_s VALUES(NULL, NULL);
++ERROR:  relation "arrtest_s" does not exist
+ UPDATE arrtest_s SET a[:] = '{11, 12, 13, 14, 15}';  -- fail, no good with null
+-ERROR:  array slice subscript must provide both boundaries
+-DETAIL:  When assigning to a slice of an empty array value, slice boundaries must be fully specified.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE arrtest_s SET a[:] = '{11, 12, 13, 14, 15}'
++                      ^
++HINT:  try \h UPDATE
+ -- we want to work with a point_tbl that includes a null
+ CREATE TEMP TABLE point_tbl AS SELECT * FROM public.point_tbl;
++ERROR:  relation "public.point_tbl" does not exist
+ INSERT INTO POINT_TBL(f1) VALUES (NULL);
++ERROR:  relation "point_tbl" does not exist
+ -- check with fixed-length-array type, such as point
+ SELECT f1[0:1] FROM POINT_TBL;
+-ERROR:  slices of fixed-length arrays not implemented
++ERROR:  relation "point_tbl" does not exist
+ SELECT f1[0:] FROM POINT_TBL;
+-ERROR:  slices of fixed-length arrays not implemented
++ERROR:  relation "point_tbl" does not exist
+ SELECT f1[:1] FROM POINT_TBL;
+-ERROR:  slices of fixed-length arrays not implemented
++ERROR:  relation "point_tbl" does not exist
+ SELECT f1[:] FROM POINT_TBL;
+-ERROR:  slices of fixed-length arrays not implemented
++ERROR:  relation "point_tbl" does not exist
+ -- subscript assignments to fixed-width result in NULL if previous value is NULL
+ UPDATE point_tbl SET f1[0] = 10 WHERE f1 IS NULL RETURNING *;
+- f1 
+-----
+- 
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE point_tbl SET f1[0] = 10 WHERE f1 IS NULL RETURNING *
++                       ^
++HINT:  try \h UPDATE
+ INSERT INTO point_tbl(f1[0]) VALUES(0) RETURNING *;
+- f1 
+-----
+- 
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO point_tbl(f1[0]) VALUES(0) RETURNING *
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- NULL assignments get ignored
+ UPDATE point_tbl SET f1[0] = NULL WHERE f1::text = '(10,10)'::point::text RETURNING *;
+-   f1    
+----------
+- (10,10)
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE point_tbl SET f1[0] = NULL WHERE f1::text = '(10,10)'::point::text RETURNING *
++                       ^
++HINT:  try \h UPDATE
+ -- but non-NULL subscript assignments work
+ UPDATE point_tbl SET f1[0] = -10, f1[1] = -10 WHERE f1::text = '(10,10)'::point::text RETURNING *;
+-    f1     
+------------
+- (-10,-10)
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE point_tbl SET f1[0] = -10, f1[1] = -10 WHERE f1::text = '(10,10)'::point::text RETURNING *
++                       ^
++HINT:  try \h UPDATE
+ -- but not to expand the range
+ UPDATE point_tbl SET f1[3] = 10 WHERE f1::text = '(-10,-10)'::point::text RETURNING *;
+-ERROR:  array subscript out of range
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE point_tbl SET f1[3] = 10 WHERE f1::text = '(-10,-10)'::point::text RETURNING *
++                       ^
++HINT:  try \h UPDATE
+ --
+ -- test array extension
+ --
+@@ -396,87 +383,147 @@
+ (1 row)
+ 
+ update arrtest1 set i[2] = 22, t[2] = 'twenty-two';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[2] = 22, t[2] = 'twenty-two'
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-       i       |             t              
+----------------+----------------------------
+- {1,22,NULL,4} | {one,twenty-two,NULL,four}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[5] = 5, t[5] = 'five';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[5] = 5, t[5] = 'five'
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-        i        |                t                
+------------------+---------------------------------
+- {1,22,NULL,4,5} | {one,twenty-two,NULL,four,five}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[8] = 8, t[8] = 'eight';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[8] = 8, t[8] = 'eight'
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-              i              |                        t                        
+------------------------------+-------------------------------------------------
+- {1,22,NULL,4,5,NULL,NULL,8} | {one,twenty-two,NULL,four,five,NULL,NULL,eight}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[0] = 0, t[0] = 'zero';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[0] = 0, t[0] = 'zero'
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                  i                  |                             t                              
+--------------------------------------+------------------------------------------------------------
+- [0:8]={0,1,22,NULL,4,5,NULL,NULL,8} | [0:8]={zero,one,twenty-two,NULL,four,five,NULL,NULL,eight}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[-3] = -3, t[-3] = 'minus-three';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[-3] = -3, t[-3] = 'minus-three'
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                         i                         |                                         t                                         
+----------------------------------------------------+-----------------------------------------------------------------------------------
+- [-3:8]={-3,NULL,NULL,0,1,22,NULL,4,5,NULL,NULL,8} | [-3:8]={minus-three,NULL,NULL,zero,one,twenty-two,NULL,four,five,NULL,NULL,eight}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[0:2] = array[10,11,12], t[0:2] = array['ten','eleven','twelve'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[0:2] = array[10,11,12], t[0:2] = array['ten','eleven','twelve']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                          i                          |                                        t                                        
+------------------------------------------------------+---------------------------------------------------------------------------------
+- [-3:8]={-3,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,8} | [-3:8]={minus-three,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,eight}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[8:10] = array[18,null,20], t[8:10] = array['p18',null,'p20'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[8:10] = array[18,null,20], t[8:10] = array['p18',null,'p20']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                               i                               |                                            t                                            
+----------------------------------------------------------------+-----------------------------------------------------------------------------------------
+- [-3:10]={-3,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20} | [-3:10]={minus-three,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[11:12] = array[null,22], t[11:12] = array[null,'p22'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[11:12] = array[null,22], t[11:12] = array[null,'p22']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                                   i                                   |                                                t                                                 
+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------
+- [-3:12]={-3,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20,NULL,22} | [-3:12]={minus-three,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20,NULL,p22}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[15:16] = array[null,26], t[15:16] = array[null,'p26'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[15:16] = array[null,26], t[15:16] = array[null,'p26']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                                            i                                            |                                                          t                                                          
+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------
+- [-3:16]={-3,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20,NULL,22,NULL,NULL,NULL,26} | [-3:16]={minus-three,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20,NULL,p22,NULL,NULL,NULL,p26}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[-5:-3] = array[-15,-14,-13], t[-5:-3] = array['m15','m14','m13'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[-5:-3] = array[-15,-14,-13], t[-5:-3] = array['m15','m14','m13']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                                                i                                                 |                                                          t                                                          
+---------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------
+- [-5:16]={-15,-14,-13,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20,NULL,22,NULL,NULL,NULL,26} | [-5:16]={m15,m14,m13,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20,NULL,p22,NULL,NULL,NULL,p26}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[-7:-6] = array[-17,null], t[-7:-6] = array['m17',null];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[-7:-6] = array[-17,null], t[-7:-6] = array['m17',null]
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                                                     i                                                     |                                                              t                                                               
+------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------
+- [-7:16]={-17,NULL,-15,-14,-13,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20,NULL,22,NULL,NULL,NULL,26} | [-7:16]={m17,NULL,m15,m14,m13,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20,NULL,p22,NULL,NULL,NULL,p26}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ update arrtest1 set i[-12:-10] = array[-22,null,-20], t[-12:-10] = array['m22',null,'m20'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[-12:-10] = array[-22,null,-20], t[-12:-10] = array['m22',null,'m20']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-                                                                 i                                                                 |                                                                          t                                                                           
+------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------
+- [-12:16]={-22,NULL,-20,NULL,NULL,-17,NULL,-15,-14,-13,NULL,NULL,10,11,12,NULL,4,5,NULL,NULL,18,NULL,20,NULL,22,NULL,NULL,NULL,26} | [-12:16]={m22,NULL,m20,NULL,NULL,m17,NULL,m15,m14,m13,NULL,NULL,ten,eleven,twelve,NULL,four,five,NULL,NULL,p18,NULL,p20,NULL,p22,NULL,NULL,NULL,p26}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ delete from arrtest1;
+@@ -488,10 +535,15 @@
+ (1 row)
+ 
+ update arrtest1 set i[0:5] = array[0,1,2,null,4,5], t[0:5] = array['z','p1','p2',null,'p4','p5'];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update arrtest1 set i[0:5] = array[0,1,2,null,4,5], t[0:5] = array['z','p1','p2',null,'p4','p5']
++                     ^
++HINT:  try \h UPDATE
+ select * from arrtest1;
+-           i            |             t              
+-------------------------+----------------------------
+- [0:5]={0,1,2,NULL,4,5} | [0:5]={z,p1,p2,NULL,p4,p5}
++      i       |          t          
++--------------+---------------------
++ {1,2,NULL,4} | {one,two,NULL,four}
+ (1 row)
+ 
+ --
+@@ -506,6 +558,8 @@
+   ARRAY[[['aaa','aab'],['aba','abb'],['aca','acb']],[['baa','bab'],['bba','bbb'],['bca','bcb']]],
+   ARRAY['19620326','19931223','19970117']::timestamp[]
+ );
++ERROR:  value type int[][][] doesn't match type int[] of column "i"
++HINT:  you will need to rewrite or cast the expression
+ -- some more test data
+ CREATE TEMP TABLE arrtest_f (f0 int, f1 text, f2 float8);
+ insert into arrtest_f values(1,'cat1',1.21);
+@@ -531,21 +585,19 @@
+ SELECT t.f[1][3][1] AS "131", t.f[2][2][1] AS "221" FROM (
+   SELECT ARRAY[[[111,112],[121,122],[131,132]],[[211,212],[221,122],[231,232]]] AS f
+ ) AS t;
+- 131 | 221 
+------+-----
+- 131 | 221
+-(1 row)
+-
++ERROR:  unimplemented: multidimensional indexing: f[1][3][1]
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ SELECT ARRAY[[[[[['hello'],['world']]]]]];
+-           array           
+----------------------------
+- {{{{{{hello},{world}}}}}}
++                                                          array                                                          
++-------------------------------------------------------------------------------------------------------------------------
++ {"{\"{\\\"{\\\\\\\"{\\\\\\\\\\\\\\\"{hello}\\\\\\\\\\\\\\\",\\\\\\\\\\\\\\\"{world}\\\\\\\\\\\\\\\"}\\\\\\\"}\\\"}\"}"}
+ (1 row)
+ 
+ SELECT ARRAY[ARRAY['hello'],ARRAY['world']];
+-       array       
+--------------------
+- {{hello},{world}}
++         array         
++-----------------------
++ {"{hello}","{world}"}
+ (1 row)
+ 
+ SELECT ARRAY(select f2 from arrtest_f order by f2) AS "ARRAY";
+@@ -556,7 +608,7 @@
+ 
+ -- with nulls
+ SELECT '{1,null,3}'::int[];
+-    int4    
++    int8    
+ ------------
+  {1,NULL,3}
+ (1 row)
+@@ -587,17 +639,11 @@
+ (1 row)
+ 
+ SELECT array_cat(ARRAY[1,2], ARRAY[[3,4],[5,6]]) AS "{{1,2},{3,4},{5,6}}";
+- {{1,2},{3,4},{5,6}} 
+----------------------
+- {{1,2},{3,4},{5,6}}
+-(1 row)
+-
++ERROR:  unknown signature: array_cat(int[], int[][])
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT array_cat(ARRAY[[3,4],[5,6]], ARRAY[1,2]) AS "{{3,4},{5,6},{1,2}}";
+- {{3,4},{5,6},{1,2}} 
+----------------------
+- {{3,4},{5,6},{1,2}}
+-(1 row)
+-
++ERROR:  unknown signature: array_cat(int[][], int[])
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT array_position(ARRAY[1,2,3,4,5], 4);
+  array_position 
+ ----------------
+@@ -611,7 +657,8 @@
+ (1 row)
+ 
+ SELECT array_position(ARRAY[[1,2],[3,4]], 3);
+-ERROR:  searching for elements in multidimensional arrays is not supported
++ERROR:  unknown signature: array_position(int[][], int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat'], 'mon');
+  array_position 
+ ----------------
+@@ -661,7 +708,8 @@
+ (1 row)
+ 
+ SELECT array_positions(ARRAY[[1,2],[3,4]], 4);
+-ERROR:  searching for elements in multidimensional arrays is not supported
++ERROR:  unknown signature: array_positions(int[][], int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT array_positions(ARRAY[1,2,3,4,5,6,1,2,3,4,5,6], NULL);
+  array_positions 
+ -----------------
+@@ -699,17 +747,9 @@
+ NOTICE:  4
+ NOTICE:  7
+ SELECT array_position('[2:4]={1,2,3}'::int[], 1);
+- array_position 
+-----------------
+-              2
+-(1 row)
+-
++ERROR:  array_position(): could not parse "[2:4]={1,2,3}" as type int[]: array must be enclosed in { and }
+ SELECT array_positions('[2:4]={1,2,3}'::int[], 1);
+- array_positions 
+------------------
+- {2}
+-(1 row)
+-
++ERROR:  array_positions(): could not parse "[2:4]={1,2,3}" as type int[]: array must be enclosed in { and }
+ SELECT
+     array_position(ids, (1, 1)),
+     array_positions(ids, (1, 1))
+@@ -726,11 +766,7 @@
+ 
+ -- operators
+ SELECT a FROM arrtest WHERE b = ARRAY[[[113,142],[1,147]]];
+-       a       
+----------------
+- {16,25,3,4,5}
+-(1 row)
+-
++ERROR:  relation "arrtest" does not exist
+ SELECT NOT ARRAY[1.1,1.2,1.3] = ARRAY[1.1,1.2,1.3] AS "FALSE";
+  FALSE 
+ -------
+@@ -756,17 +792,9 @@
+ (1 row)
+ 
+ SELECT ARRAY[[['hello','world']]] || ARRAY[[['happy','birthday']]] AS "ARRAY";
+-                ARRAY                 
+---------------------------------------
+- {{{hello,world}},{{happy,birthday}}}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <string[][][]> || <string[][][]>
+ SELECT ARRAY[[1,2],[3,4]] || ARRAY[5,6] AS "{{1,2},{3,4},{5,6}}";
+- {{1,2},{3,4},{5,6}} 
+----------------------
+- {{1,2},{3,4},{5,6}}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <int[][]> || <int[]>
+ SELECT ARRAY[0,0] || ARRAY[1,1] || ARRAY[2,2] AS "{0,0,1,1,2,2}";
+  {0,0,1,1,2,2} 
+ ---------------
+@@ -780,216 +808,55 @@
+ (1 row)
+ 
+ SELECT ARRAY[1.1] || ARRAY[2,3,4];
+-  ?column?   
+--------------
+- {1.1,2,3,4}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <decimal[]> || <int[]>
+ SELECT array_agg(x) || array_agg(x) FROM (VALUES (ROW(1,2)), (ROW(3,4))) v(x);
+-             ?column?              
+------------------------------------
+- {"(1,2)","(3,4)","(1,2)","(3,4)"}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <tuple{int, int}[]> || <tuple{int, int}[]>
+ SELECT ROW(1,2) || array_agg(x) FROM (VALUES (ROW(3,4)), (ROW(5,6))) v(x);
+-         ?column?          
+----------------------------
+- {"(1,2)","(3,4)","(5,6)"}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <tuple{int, int}> || <tuple{int, int}[]>
+ SELECT * FROM array_op_test WHERE i @> '{32}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    74 | {32}                            | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-    98 | {38,34,32,89}                   | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-   100 | {85,32,57,39,49,84,32,3,30}     | {AAAAAAA80240,AAAAAAAAAAAAAAAA1729,AAAAA60038,AAAAAAAAAAA92631,AAAAAAAA9523}
+-(6 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i && '{32}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    74 | {32}                            | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-    98 | {38,34,32,89}                   | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-   100 | {85,32,57,39,49,84,32,3,30}     | {AAAAAAA80240,AAAAAAAAAAAAAAAA1729,AAAAA60038,AAAAAAAAAAA92631,AAAAAAAA9523}
+-(6 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i @> '{17}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    12 | {17,99,18,52,91,72,0,43,96,23}  | {AAAAA33250,AAAAAAAAAAAAAAAAAAA85420,AAAAAAAAAAA33576}
+-    15 | {17,14,16,63,67}                | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    19 | {52,82,17,74,23,46,69,51,75}    | {AAAAAAAAAAAAA73084,AAAAA75968,AAAAAAAAAAAAAAAA14047,AAAAAAA80240,AAAAAAAAAAAAAAAAAAA1205,A68938}
+-    53 | {38,17}                         | {AAAAAAAAAAA21658}
+-    65 | {61,5,76,59,17}                 | {AAAAAA99807,AAAAA64741,AAAAAAAAAAA53908,AA21643,AAAAAAAAA10012}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-(8 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i && '{17}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    12 | {17,99,18,52,91,72,0,43,96,23}  | {AAAAA33250,AAAAAAAAAAAAAAAAAAA85420,AAAAAAAAAAA33576}
+-    15 | {17,14,16,63,67}                | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    19 | {52,82,17,74,23,46,69,51,75}    | {AAAAAAAAAAAAA73084,AAAAA75968,AAAAAAAAAAAAAAAA14047,AAAAAAA80240,AAAAAAAAAAAAAAAAAAA1205,A68938}
+-    53 | {38,17}                         | {AAAAAAAAAAA21658}
+-    65 | {61,5,76,59,17}                 | {AAAAAA99807,AAAAA64741,AAAAAAAAAAA53908,AA21643,AAAAAAAAA10012}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-(8 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i @> '{32,17}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-(3 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i && '{32,17}' ORDER BY seqno;
+- seqno |                i                |                                                                 t                                                                  
+--------+---------------------------------+------------------------------------------------------------------------------------------------------------------------------------
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-    12 | {17,99,18,52,91,72,0,43,96,23}  | {AAAAA33250,AAAAAAAAAAAAAAAAAAA85420,AAAAAAAAAAA33576}
+-    15 | {17,14,16,63,67}                | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    19 | {52,82,17,74,23,46,69,51,75}    | {AAAAAAAAAAAAA73084,AAAAA75968,AAAAAAAAAAAAAAAA14047,AAAAAAA80240,AAAAAAAAAAAAAAAAAAA1205,A68938}
+-    53 | {38,17}                         | {AAAAAAAAAAA21658}
+-    65 | {61,5,76,59,17}                 | {AAAAAA99807,AAAAA64741,AAAAAAAAAAA53908,AA21643,AAAAAAAAA10012}
+-    74 | {32}                            | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-    98 | {38,34,32,89}                   | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-   100 | {85,32,57,39,49,84,32,3,30}     | {AAAAAAA80240,AAAAAAAAAAAAAAAA1729,AAAAA60038,AAAAAAAAAAA92631,AAAAAAAA9523}
+-(11 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i <@ '{38,34,32,89}' ORDER BY seqno;
+- seqno |       i       |                                                             t                                                              
+--------+---------------+----------------------------------------------------------------------------------------------------------------------------
+-    40 | {34}          | {AAAAAAAAAAAAAA10611,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAA50956,AAAAAAAAAAAAAAAA31334,AAAAA70466,AAAAAAAA81587,AAAAAAA74623}
+-    74 | {32}          | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    98 | {38,34,32,89} | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-   101 | {}            | {}
+-(4 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i = '{}' ORDER BY seqno;
+- seqno | i  | t  
+--------+----+----
+-   101 | {} | {}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i @> '{}' ORDER BY seqno;
+- seqno |                i                |                                                                                                       t                                                                                                        
+--------+---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-     1 | {92,75,71,52,64,83}             | {AAAAAAAA44066,AAAAAA1059,AAAAAAAAAAA176,AAAAAAA48038}
+-     2 | {3,6}                           | {AAAAAA98232,AAAAAAAA79710,AAAAAAAAAAAAAAAAA69675,AAAAAAAAAAAAAAAA55798,AAAAAAAAA12793}
+-     3 | {37,64,95,43,3,41,13,30,11,43}  | {AAAAAAAAAA48845,AAAAA75968,AAAAA95309,AAA54451,AAAAAAAAAA22292,AAAAAAA99836,A96617,AA17009,AAAAAAAAAAAAAA95246}
+-     4 | {71,39,99,55,33,75,45}          | {AAAAAAAAA53663,AAAAAAAAAAAAAAA67062,AAAAAAAAAA64777,AAA99043,AAAAAAAAAAAAAAAAAAA91804,39557}
+-     5 | {50,42,77,50,4}                 | {AAAAAAAAAAAAAAAAA26540,AAAAAAA79710,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAA176,AAAAA95309,AAAAAAAAAAA46154,AAAAAA66777,AAAAAAAAA27249,AAAAAAAAAA64777,AAAAAAAAAAAAAAAAAAA70104}
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-     7 | {12,51,88,64,8}                 | {AAAAAAAAAAAAAAAAAA12591,AAAAAAAAAAAAAAAAA50407,AAAAAAAAAAAA67946}
+-     8 | {60,84}                         | {AAAAAAA81898,AAAAAA1059,AAAAAAAAAAAA81511,AAAAA961,AAAAAAAAAAAAAAAA31334,AAAAA64741,AA6416,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAAAA50407}
+-     9 | {56,52,35,27,80,44,81,22}       | {AAAAAAAAAAAAAAA73034,AAAAAAAAAAAAA7929,AAAAAAA66161,AA88409,39557,A27153,AAAAAAAA9523,AAAAAAAAAAA99000}
+-    10 | {71,5,45}                       | {AAAAAAAAAAA21658,AAAAAAAAAAAA21089,AAA54451,AAAAAAAAAAAAAAAAAA54141,AAAAAAAAAAAAAA28620,AAAAAAAAAAA21658,AAAAAAAAAAA74076,AAAAAAAAA27249}
+-    11 | {41,86,74,48,22,74,47,50}       | {AAAAAAAA9523,AAAAAAAAAAAA37562,AAAAAAAAAAAAAAAA14047,AAAAAAAAAAA46154,AAAA41702,AAAAAAAAAAAAAAAAA764,AAAAA62737,39557}
+-    12 | {17,99,18,52,91,72,0,43,96,23}  | {AAAAA33250,AAAAAAAAAAAAAAAAAAA85420,AAAAAAAAAAA33576}
+-    13 | {3,52,34,23}                    | {AAAAAA98232,AAAA49534,AAAAAAAAAAA21658}
+-    14 | {78,57,19}                      | {AAAA8857,AAAAAAAAAAAAAAA73034,AAAAAAAA81587,AAAAAAAAAAAAAAA68526,AAAAA75968,AAAAAAAAAAAAAA65909,AAAAAAAAA10012,AAAAAAAAAAAAAA65909}
+-    15 | {17,14,16,63,67}                | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    16 | {14,63,85,11}                   | {AAAAAA66777}
+-    17 | {7,10,81,85}                    | {AAAAAA43678,AAAAAAA12144,AAAAAAAAAAA50956,AAAAAAAAAAAAAAAAAAA15356}
+-    18 | {1}                             | {AAAAAAAAAAA33576,AAAAA95309,64261,AAA59323,AAAAAAAAAAAAAA95246,55847,AAAAAAAAAAAA67946,AAAAAAAAAAAAAAAAAA64374}
+-    19 | {52,82,17,74,23,46,69,51,75}    | {AAAAAAAAAAAAA73084,AAAAA75968,AAAAAAAAAAAAAAAA14047,AAAAAAA80240,AAAAAAAAAAAAAAAAAAA1205,A68938}
+-    20 | {72,89,70,51,54,37,8,49,79}     | {AAAAAA58494}
+-    21 | {2,8,65,10,5,79,43}             | {AAAAAAAAAAAAAAAAA88852,AAAAAAAAAAAAAAAAAAA91804,AAAAA64669,AAAAAAAAAAAAAAAA1443,AAAAAAAAAAAAAAAA23657,AAAAA12179,AAAAAAAAAAAAAAAAA88852,AAAAAAAAAAAAAAAA31334,AAAAAAAAAAAAAAAA41303,AAAAAAAAAAAAAAAAAAA85420}
+-    22 | {11,6,56,62,53,30}              | {AAAAAAAA72908}
+-    23 | {40,90,5,38,72,40,30,10,43,55}  | {A6053,AAAAAAAAAAA6119,AA44673,AAAAAAAAAAAAAAAAA764,AA17009,AAAAA17383,AAAAA70514,AAAAA33250,AAAAA95309,AAAAAAAAAAAA37562}
+-    24 | {94,61,99,35,48}                | {AAAAAAAAAAA50956,AAAAAAAAAAA15165,AAAA85070,AAAAAAAAAAAAAAA36627,AAAAA961,AAAAAAAAAA55219}
+-    25 | {31,1,10,11,27,79,38}           | {AAAAAAAAAAAAAAAAAA59334,45449}
+-    26 | {71,10,9,69,75}                 | {47735,AAAAAAA21462,AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAAAAA91804,AAAAAAAAA72121,AAAAAAAAAAAAAAAAAAA1205,AAAAA41597,AAAA8857,AAAAAAAAAAAAAAAAAAA15356,AA17009}
+-    27 | {94}                            | {AA6416,A6053,AAAAAAA21462,AAAAAAA57334,AAAAAAAAAAAAAAAAAA12591,AA88409,AAAAAAAAAAAAA70254}
+-    28 | {14,33,6,34,14}                 | {AAAAAAAAAAAAAAA13198,AAAAAAAA69452,AAAAAAAAAAA82945,AAAAAAA12144,AAAAAAAAA72121,AAAAAAAAAA18601}
+-    29 | {39,21}                         | {AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAAAAA38885,AAAA85070,AAAAAAAAAAAAAAAAAAA70104,AAAAA66674,AAAAAAAAAAAAA62007,AAAAAAAA69452,AAAAAAA1242,AAAAAAAAAAAAAAAA1729,AAAA35194}
+-    30 | {26,81,47,91,34}                | {AAAAAAAAAAAAAAAAAAA70104,AAAAAAA80240}
+-    31 | {80,24,18,21,54}                | {AAAAAAAAAAAAAAA13198,AAAAAAAAAAAAAAAAAAA70415,A27153,AAAAAAAAA53663,AAAAAAAAAAAAAAAAA50407,A68938}
+-    32 | {58,79,82,80,67,75,98,10,41}    | {AAAAAAAAAAAAAAAAAA61286,AAA54451,AAAAAAAAAAAAAAAAAAA87527,A96617,51533}
+-    33 | {74,73}                         | {A85417,AAAAAAA56483,AAAAA17383,AAAAAAAAAAAAA62159,AAAAAAAAAAAA52814,AAAAAAAAAAAAA85723,AAAAAAAAAAAAAAAAAA55796}
+-    34 | {70,45}                         | {AAAAAAAAAAAAAAAAAA71621,AAAAAAAAAAAAAA28620,AAAAAAAAAA55219,AAAAAAAA23648,AAAAAAAAAA22292,AAAAAAA1242}
+-    35 | {23,40}                         | {AAAAAAAAAAAA52814,AAAA48949,AAAAAAAAA34727,AAAA8857,AAAAAAAAAAAAAAAAAAA62179,AAAAAAAAAAAAAAA68526,AAAAAAA99836,AAAAAAAA50094,AAAA91194,AAAAAAAAAAAAA73084}
+-    36 | {79,82,14,52,30,5,79}           | {AAAAAAAAA53663,AAAAAAAAAAAAAAAA55798,AAAAAAAAAAAAAAAAAAA89194,AA88409,AAAAAAAAAAAAAAA81326,AAAAAAAAAAAAAAAAA63050,AAAAAAAAAAAAAAAA33598}
+-    37 | {53,11,81,39,3,78,58,64,74}     | {AAAAAAAAAAAAAAAAAAA17075,AAAAAAA66161,AAAAAAAA23648,AAAAAAAAAAAAAA10611}
+-    38 | {59,5,4,95,28}                  | {AAAAAAAAAAA82945,A96617,47735,AAAAA12179,AAAAA64669,AAAAAA99807,AA74433,AAAAAAAAAAAAAAAAA59387}
+-    39 | {82,43,99,16,74}                | {AAAAAAAAAAAAAAA67062,AAAAAAA57334,AAAAAAAAAAAAAA65909,A27153,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAA64777,AAAAAAAAAAAA81511,AAAAAAAAAAAAAA65909,AAAAAAAAAAAAAA28620}
+-    40 | {34}                            | {AAAAAAAAAAAAAA10611,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAA50956,AAAAAAAAAAAAAAAA31334,AAAAA70466,AAAAAAAA81587,AAAAAAA74623}
+-    41 | {19,26,63,12,93,73,27,94}       | {AAAAAAA79710,AAAAAAAAAA55219,AAAA41702,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAAA71621,AAAAAAAAAAAAAAAAA63050,AAAAAAA99836,AAAAAAAAAAAAAA8666}
+-    42 | {15,76,82,75,8,91}              | {AAAAAAAAAAA176,AAAAAA38063,45449,AAAAAA54032,AAAAAAA81898,AA6416,AAAAAAAAAAAAAAAAAAA62179,45449,AAAAA60038,AAAAAAAA81587}
+-    43 | {39,87,91,97,79,28}             | {AAAAAAAAAAA74076,A96617,AAAAAAAAAAAAAAAAAAA89194,AAAAAAAAAAAAAAAAAA55796,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAA67946}
+-    44 | {40,58,68,29,54}                | {AAAAAAA81898,AAAAAA66777,AAAAAA98232}
+-    45 | {99,45}                         | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-    46 | {53,24}                         | {AAAAAAAAAAA53908,AAAAAA54032,AAAAA17383,AAAA48949,AAAAAAAAAA18601,AAAAA64669,45449,AAAAAAAAAAA98051,AAAAAAAAAAAAAAAAAA71621}
+-    47 | {98,23,64,12,75,61}             | {AAA59323,AAAAA95309,AAAAAAAAAAAAAAAA31334,AAAAAAAAA27249,AAAAA17383,AAAAAAAAAAAA37562,AAAAAA1059,A84822,55847,AAAAA70466}
+-    48 | {76,14}                         | {AAAAAAAAAAAAA59671,AAAAAAAAAAAAAAAAAAA91804,AAAAAA66777,AAAAAAAAAAAAAAAAAAA89194,AAAAAAAAAAAAAAA36627,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAA73084,AAAAAAA79710,AAAAAAAAAAAAAAA40402,AAAAAAAAAAAAAAAAAAA65037}
+-    49 | {56,5,54,37,49}                 | {AA21643,AAAAAAAAAAA92631,AAAAAAAA81587}
+-    50 | {20,12,37,64,93}                | {AAAAAAAAAA5483,AAAAAAAAAAAAAAAAAAA1205,AA6416,AAAAAAAAAAAAAAAAA63050,AAAAAAAAAAAAAAAAAA47955}
+-    51 | {47}                            | {AAAAAAAAAAAAAA96505,AAAAAAAAAAAAAAAAAA36842,AAAAA95309,AAAAAAAA81587,AA6416,AAAA91194,AAAAAA58494,AAAAAA1059,AAAAAAAA69452}
+-    52 | {89,0}                          | {AAAAAAAAAAAAAAAAAA47955,AAAAAAA48038,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAAAAA73084,AAAAA70466,AAAAAAAAAAAAAAAAA764,AAAAAAAAAAA46154,AA66862}
+-    53 | {38,17}                         | {AAAAAAAAAAA21658}
+-    54 | {70,47}                         | {AAAAAAAAAAAAAAAAAA54141,AAAAA40681,AAAAAAA48038,AAAAAAAAAAAAAAAA29150,AAAAA41597,AAAAAAAAAAAAAAAAAA59334,AA15322}
+-    55 | {47,79,47,64,72,25,71,24,93}    | {AAAAAAAAAAAAAAAAAA55796,AAAAA62737}
+-    56 | {33,7,60,54,93,90,77,85,39}     | {AAAAAAAAAAAAAAAAAA32918,AA42406}
+-    57 | {23,45,10,42,36,21,9,96}        | {AAAAAAAAAAAAAAAAAAA70415}
+-    58 | {92}                            | {AAAAAAAAAAAAAAAA98414,AAAAAAAA23648,AAAAAAAAAAAAAAAAAA55796,AA25381,AAAAAAAAAAA6119}
+-    59 | {9,69,46,77}                    | {39557,AAAAAAA89932,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAAAAAAAAA26540,AAA20874,AA6416,AAAAAAAAAAAAAAAAAA47955}
+-    60 | {62,2,59,38,89}                 | {AAAAAAA89932,AAAAAAAAAAAAAAAAAAA15356,AA99927,AA17009,AAAAAAAAAAAAAAA35875}
+-    61 | {72,2,44,95,54,54,13}           | {AAAAAAAAAAAAAAAAAAA91804}
+-    62 | {83,72,29,73}                   | {AAAAAAAAAAAAA15097,AAAA8857,AAAAAAAAAAAA35809,AAAAAAAAAAAA52814,AAAAAAAAAAAAAAAAAAA38885,AAAAAAAAAAAAAAAAAA24183,AAAAAA43678,A96617}
+-    63 | {11,4,61,87}                    | {AAAAAAAAA27249,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAA13198,AAA20874,39557,51533,AAAAAAAAAAA53908,AAAAAAAAAAAAAA96505,AAAAAAAA78938}
+-    64 | {26,19,34,24,81,78}             | {A96617,AAAAAAAAAAAAAAAAAAA70104,A68938,AAAAAAAAAAA53908,AAAAAAAAAAAAAAA453,AA17009,AAAAAAA80240}
+-    65 | {61,5,76,59,17}                 | {AAAAAA99807,AAAAA64741,AAAAAAAAAAA53908,AA21643,AAAAAAAAA10012}
+-    66 | {31,23,70,52,4,33,48,25}        | {AAAAAAAAAAAAAAAAA69675,AAAAAAAA50094,AAAAAAAAAAA92631,AAAA35194,39557,AAAAAAA99836}
+-    67 | {31,94,7,10}                    | {AAAAAA38063,A96617,AAAA35194,AAAAAAAAAAAA67946}
+-    68 | {90,43,38}                      | {AA75092,AAAAAAAAAAAAAAAAA69675,AAAAAAAAAAA92631,AAAAAAAAA10012,AAAAAAAAAAAAA7929,AA21643}
+-    69 | {67,35,99,85,72,86,44}          | {AAAAAAAAAAAAAAAAAAA1205,AAAAAAAA50094,AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAAAAAAA47955}
+-    70 | {56,70,83}                      | {AAAA41702,AAAAAAAAAAA82945,AA21643,AAAAAAAAAAA99000,A27153,AA25381,AAAAAAAAAAAAAA96505,AAAAAAA1242}
+-    71 | {74,26}                         | {AAAAAAAAAAA50956,AA74433,AAAAAAA21462,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAA36627,AAAAAAAAAAAAA70254,AAAAAAAAAA43419,39557}
+-    72 | {22,1,16,78,20,91,83}           | {47735,AAAAAAA56483,AAAAAAAAAAAAA93788,AA42406,AAAAAAAAAAAAA73084,AAAAAAAA72908,AAAAAAAAAAAAAAAAAA61286,AAAAA66674,AAAAAAAAAAAAAAAAA50407}
+-    73 | {88,25,96,78,65,15,29,19}       | {AAA54451,AAAAAAAAA27249,AAAAAAA9228,AAAAAAAAAAAAAAA67062,AAAAAAAAAAAAAAAAAAA70415,AAAAA17383,AAAAAAAAAAAAAAAA33598}
+-    74 | {32}                            | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    75 | {12,96,83,24,71,89,55}          | {AAAA48949,AAAAAAAA29716,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAAA67946,AAAAAAAAAAAAAAAA29150,AAA28075,AAAAAAAAAAAAAAAAA43052}
+-    76 | {92,55,10,7}                    | {AAAAAAAAAAAAAAA67062}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    78 | {55,89,44,84,34}                | {AAAAAAAAAAA6119,AAAAAAAAAAAAAA8666,AA99927,AA42406,AAAAAAA81898,AAAAAAA9228,AAAAAAAAAAA92631,AA21643,AAAAAAAAAAAAAA28620}
+-    79 | {45}                            | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-    80 | {74,89,44,80,0}                 | {AAAA35194,AAAAAAAA79710,AAA20874,AAAAAAAAAAAAAAAAAAA70104,AAAAAAAAAAAAA73084,AAAAAAA57334,AAAAAAA9228,AAAAAAAAAAAAA62007}
+-    81 | {63,77,54,48,61,53,97}          | {AAAAAAAAAAAAAAA81326,AAAAAAAAAA22292,AA25381,AAAAAAAAAAA74076,AAAAAAA81898,AAAAAAAAA72121}
+-    82 | {34,60,4,79,78,16,86,89,42,50}  | {AAAAA40681,AAAAAAAAAAAAAAAAAA12591,AAAAAAA80240,AAAAAAAAAAAAAAAA55798,AAAAAAAAAAAAAAAAAAA70104}
+-    83 | {14,10}                         | {AAAAAAAAAA22292,AAAAAAAAAAAAA70254,AAAAAAAAAAA6119}
+-    84 | {11,83,35,13,96,94}             | {AAAAA95309,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAAAAA24183}
+-    85 | {39,60}                         | {AAAAAAAAAAAAAAAA55798,AAAAAAAAAA22292,AAAAAAA66161,AAAAAAA21462,AAAAAAAAAAAAAAAAAA12591,55847,AAAAAA98232,AAAAAAAAAAA46154}
+-    86 | {33,81,72,74,45,36,82}          | {AAAAAAAA81587,AAAAAAAAAAAAAA96505,45449,AAAA80176}
+-    87 | {57,27,50,12,97,68}             | {AAAAAAAAAAAAAAAAA26540,AAAAAAAAA10012,AAAAAAAAAAAA35809,AAAAAAAAAAAAAAAA29150,AAAAAAAAAAA82945,AAAAAA66777,31228,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAA96505}
+-    88 | {41,90,77,24,6,24}              | {AAAA35194,AAAA35194,AAAAAAA80240,AAAAAAAAAAA46154,AAAAAA58494,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAAA59334,AAAAAAAAAAAAAAAAAAA91804,AA74433}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-    90 | {88,75}                         | {AAAAA60038,AAAAAAAA23648,AAAAAAAAAAA99000,AAAA41702,AAAAAAAAAAAAA22860,AAAAAAAAAAAAAAA68526}
+-    91 | {78}                            | {AAAAAAAAAAAAA62007,AAA99043}
+-    92 | {85,63,49,45}                   | {AAAAAAA89932,AAAAAAAAAAAAA22860,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAAA21089}
+-    93 | {11}                            | {AAAAAAAAAAA176,AAAAAAAAAAAAAA8666,AAAAAAAAAAAAAAA453,AAAAAAAAAAAAA85723,A68938,AAAAAAAAAAAAA9821,AAAAAAA48038,AAAAAAAAAAAAAAAAA59387,AA99927,AAAAA17383}
+-    94 | {98,9,85,62,88,91,60,61,38,86}  | {AAAAAAAA81587,AAAAA17383,AAAAAAAA81587}
+-    95 | {47,77}                         | {AAAAAAAAAAAAAAAAA764,AAAAAAAAAAA74076,AAAAAAAAAA18107,AAAAA40681,AAAAAAAAAAAAAAA35875,AAAAA60038,AAAAAAA56483}
+-    96 | {23,97,43}                      | {AAAAAAAAAA646,A87088}
+-    97 | {54,2,86,65}                    | {47735,AAAAAAA99836,AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAA29150,AAAAAAA80240,AAAAAAAAAAAAAAAA98414,AAAAAAA56483,AAAAAAAAAAAAAAAA29150,AAAAAAA39692,AA21643}
+-    98 | {38,34,32,89}                   | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-    99 | {37,86}                         | {AAAAAAAAAAAAAAAAAA32918,AAAAA70514,AAAAAAAAA10012,AAAAAAAAAAAAAAAAA59387,AAAAAAAAAA64777,AAAAAAAAAAAAAAAAAAA15356}
+-   100 | {85,32,57,39,49,84,32,3,30}     | {AAAAAAA80240,AAAAAAAAAAAAAAAA1729,AAAAA60038,AAAAAAAAAAA92631,AAAAAAAA9523}
+-   101 | {}                              | {}
+-   102 | {NULL}                          | {NULL}
+-(102 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i && '{}' ORDER BY seqno;
+  seqno | i | t 
+@@ -997,16 +864,14 @@
+ (0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i <@ '{}' ORDER BY seqno;
+- seqno | i  | t  
+--------+----+----
+-   101 | {} | {}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i = '{NULL}' ORDER BY seqno;
+- seqno |   i    |   t    
+--------+--------+--------
+-   102 | {NULL} | {NULL}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i @> '{NULL}' ORDER BY seqno;
+  seqno | i | t 
+@@ -1019,182 +884,54 @@
+ (0 rows)
+ 
+ SELECT * FROM array_op_test WHERE i <@ '{NULL}' ORDER BY seqno;
+- seqno | i  | t  
+--------+----+----
+-   101 | {} | {}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t @> '{AAAAAAAA72908}' ORDER BY seqno;
+- seqno |           i           |                                                                     t                                                                      
+--------+-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------
+-    22 | {11,6,56,62,53,30}    | {AAAAAAAA72908}
+-    45 | {99,45}               | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-    72 | {22,1,16,78,20,91,83} | {47735,AAAAAAA56483,AAAAAAAAAAAAA93788,AA42406,AAAAAAAAAAAAA73084,AAAAAAAA72908,AAAAAAAAAAAAAAAAAA61286,AAAAA66674,AAAAAAAAAAAAAAAAA50407}
+-    79 | {45}                  | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-(4 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t && '{AAAAAAAA72908}' ORDER BY seqno;
+- seqno |           i           |                                                                     t                                                                      
+--------+-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------
+-    22 | {11,6,56,62,53,30}    | {AAAAAAAA72908}
+-    45 | {99,45}               | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-    72 | {22,1,16,78,20,91,83} | {47735,AAAAAAA56483,AAAAAAAAAAAAA93788,AA42406,AAAAAAAAAAAAA73084,AAAAAAAA72908,AAAAAAAAAAAAAAAAAA61286,AAAAA66674,AAAAAAAAAAAAAAAAA50407}
+-    79 | {45}                  | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-(4 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t @> '{AAAAAAAAAA646}' ORDER BY seqno;
+- seqno |        i         |                                 t                                  
+--------+------------------+--------------------------------------------------------------------
+-    15 | {17,14,16,63,67} | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    79 | {45}             | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-    96 | {23,97,43}       | {AAAAAAAAAA646,A87088}
+-(3 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t && '{AAAAAAAAAA646}' ORDER BY seqno;
+- seqno |        i         |                                 t                                  
+--------+------------------+--------------------------------------------------------------------
+-    15 | {17,14,16,63,67} | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    79 | {45}             | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-    96 | {23,97,43}       | {AAAAAAAAAA646,A87088}
+-(3 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t @> '{AAAAAAAA72908,AAAAAAAAAA646}' ORDER BY seqno;
+- seqno |  i   |                                 t                                  
+--------+------+--------------------------------------------------------------------
+-    79 | {45} | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t && '{AAAAAAAA72908,AAAAAAAAAA646}' ORDER BY seqno;
+- seqno |           i           |                                                                     t                                                                      
+--------+-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------
+-    15 | {17,14,16,63,67}      | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    22 | {11,6,56,62,53,30}    | {AAAAAAAA72908}
+-    45 | {99,45}               | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-    72 | {22,1,16,78,20,91,83} | {47735,AAAAAAA56483,AAAAAAAAAAAAA93788,AA42406,AAAAAAAAAAAAA73084,AAAAAAAA72908,AAAAAAAAAAAAAAAAAA61286,AAAAA66674,AAAAAAAAAAAAAAAAA50407}
+-    79 | {45}                  | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-    96 | {23,97,43}            | {AAAAAAAAAA646,A87088}
+-(6 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t <@ '{AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}' ORDER BY seqno;
+- seqno |         i          |                                                     t                                                     
+--------+--------------------+-----------------------------------------------------------------------------------------------------------
+-    22 | {11,6,56,62,53,30} | {AAAAAAAA72908}
+-    45 | {99,45}            | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-   101 | {}                 | {}
+-(3 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t = '{}' ORDER BY seqno;
+- seqno | i  | t  
+--------+----+----
+-   101 | {} | {}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t @> '{}' ORDER BY seqno;
+- seqno |                i                |                                                                                                       t                                                                                                        
+--------+---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-     1 | {92,75,71,52,64,83}             | {AAAAAAAA44066,AAAAAA1059,AAAAAAAAAAA176,AAAAAAA48038}
+-     2 | {3,6}                           | {AAAAAA98232,AAAAAAAA79710,AAAAAAAAAAAAAAAAA69675,AAAAAAAAAAAAAAAA55798,AAAAAAAAA12793}
+-     3 | {37,64,95,43,3,41,13,30,11,43}  | {AAAAAAAAAA48845,AAAAA75968,AAAAA95309,AAA54451,AAAAAAAAAA22292,AAAAAAA99836,A96617,AA17009,AAAAAAAAAAAAAA95246}
+-     4 | {71,39,99,55,33,75,45}          | {AAAAAAAAA53663,AAAAAAAAAAAAAAA67062,AAAAAAAAAA64777,AAA99043,AAAAAAAAAAAAAAAAAAA91804,39557}
+-     5 | {50,42,77,50,4}                 | {AAAAAAAAAAAAAAAAA26540,AAAAAAA79710,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAA176,AAAAA95309,AAAAAAAAAAA46154,AAAAAA66777,AAAAAAAAA27249,AAAAAAAAAA64777,AAAAAAAAAAAAAAAAAAA70104}
+-     6 | {39,35,5,94,17,92,60,32}        | {AAAAAAAAAAAAAAA35875,AAAAAAAAAAAAAAAA23657}
+-     7 | {12,51,88,64,8}                 | {AAAAAAAAAAAAAAAAAA12591,AAAAAAAAAAAAAAAAA50407,AAAAAAAAAAAA67946}
+-     8 | {60,84}                         | {AAAAAAA81898,AAAAAA1059,AAAAAAAAAAAA81511,AAAAA961,AAAAAAAAAAAAAAAA31334,AAAAA64741,AA6416,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAAAA50407}
+-     9 | {56,52,35,27,80,44,81,22}       | {AAAAAAAAAAAAAAA73034,AAAAAAAAAAAAA7929,AAAAAAA66161,AA88409,39557,A27153,AAAAAAAA9523,AAAAAAAAAAA99000}
+-    10 | {71,5,45}                       | {AAAAAAAAAAA21658,AAAAAAAAAAAA21089,AAA54451,AAAAAAAAAAAAAAAAAA54141,AAAAAAAAAAAAAA28620,AAAAAAAAAAA21658,AAAAAAAAAAA74076,AAAAAAAAA27249}
+-    11 | {41,86,74,48,22,74,47,50}       | {AAAAAAAA9523,AAAAAAAAAAAA37562,AAAAAAAAAAAAAAAA14047,AAAAAAAAAAA46154,AAAA41702,AAAAAAAAAAAAAAAAA764,AAAAA62737,39557}
+-    12 | {17,99,18,52,91,72,0,43,96,23}  | {AAAAA33250,AAAAAAAAAAAAAAAAAAA85420,AAAAAAAAAAA33576}
+-    13 | {3,52,34,23}                    | {AAAAAA98232,AAAA49534,AAAAAAAAAAA21658}
+-    14 | {78,57,19}                      | {AAAA8857,AAAAAAAAAAAAAAA73034,AAAAAAAA81587,AAAAAAAAAAAAAAA68526,AAAAA75968,AAAAAAAAAAAAAA65909,AAAAAAAAA10012,AAAAAAAAAAAAAA65909}
+-    15 | {17,14,16,63,67}                | {AA6416,AAAAAAAAAA646,AAAAA95309}
+-    16 | {14,63,85,11}                   | {AAAAAA66777}
+-    17 | {7,10,81,85}                    | {AAAAAA43678,AAAAAAA12144,AAAAAAAAAAA50956,AAAAAAAAAAAAAAAAAAA15356}
+-    18 | {1}                             | {AAAAAAAAAAA33576,AAAAA95309,64261,AAA59323,AAAAAAAAAAAAAA95246,55847,AAAAAAAAAAAA67946,AAAAAAAAAAAAAAAAAA64374}
+-    19 | {52,82,17,74,23,46,69,51,75}    | {AAAAAAAAAAAAA73084,AAAAA75968,AAAAAAAAAAAAAAAA14047,AAAAAAA80240,AAAAAAAAAAAAAAAAAAA1205,A68938}
+-    20 | {72,89,70,51,54,37,8,49,79}     | {AAAAAA58494}
+-    21 | {2,8,65,10,5,79,43}             | {AAAAAAAAAAAAAAAAA88852,AAAAAAAAAAAAAAAAAAA91804,AAAAA64669,AAAAAAAAAAAAAAAA1443,AAAAAAAAAAAAAAAA23657,AAAAA12179,AAAAAAAAAAAAAAAAA88852,AAAAAAAAAAAAAAAA31334,AAAAAAAAAAAAAAAA41303,AAAAAAAAAAAAAAAAAAA85420}
+-    22 | {11,6,56,62,53,30}              | {AAAAAAAA72908}
+-    23 | {40,90,5,38,72,40,30,10,43,55}  | {A6053,AAAAAAAAAAA6119,AA44673,AAAAAAAAAAAAAAAAA764,AA17009,AAAAA17383,AAAAA70514,AAAAA33250,AAAAA95309,AAAAAAAAAAAA37562}
+-    24 | {94,61,99,35,48}                | {AAAAAAAAAAA50956,AAAAAAAAAAA15165,AAAA85070,AAAAAAAAAAAAAAA36627,AAAAA961,AAAAAAAAAA55219}
+-    25 | {31,1,10,11,27,79,38}           | {AAAAAAAAAAAAAAAAAA59334,45449}
+-    26 | {71,10,9,69,75}                 | {47735,AAAAAAA21462,AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAAAAA91804,AAAAAAAAA72121,AAAAAAAAAAAAAAAAAAA1205,AAAAA41597,AAAA8857,AAAAAAAAAAAAAAAAAAA15356,AA17009}
+-    27 | {94}                            | {AA6416,A6053,AAAAAAA21462,AAAAAAA57334,AAAAAAAAAAAAAAAAAA12591,AA88409,AAAAAAAAAAAAA70254}
+-    28 | {14,33,6,34,14}                 | {AAAAAAAAAAAAAAA13198,AAAAAAAA69452,AAAAAAAAAAA82945,AAAAAAA12144,AAAAAAAAA72121,AAAAAAAAAA18601}
+-    29 | {39,21}                         | {AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAAAAA38885,AAAA85070,AAAAAAAAAAAAAAAAAAA70104,AAAAA66674,AAAAAAAAAAAAA62007,AAAAAAAA69452,AAAAAAA1242,AAAAAAAAAAAAAAAA1729,AAAA35194}
+-    30 | {26,81,47,91,34}                | {AAAAAAAAAAAAAAAAAAA70104,AAAAAAA80240}
+-    31 | {80,24,18,21,54}                | {AAAAAAAAAAAAAAA13198,AAAAAAAAAAAAAAAAAAA70415,A27153,AAAAAAAAA53663,AAAAAAAAAAAAAAAAA50407,A68938}
+-    32 | {58,79,82,80,67,75,98,10,41}    | {AAAAAAAAAAAAAAAAAA61286,AAA54451,AAAAAAAAAAAAAAAAAAA87527,A96617,51533}
+-    33 | {74,73}                         | {A85417,AAAAAAA56483,AAAAA17383,AAAAAAAAAAAAA62159,AAAAAAAAAAAA52814,AAAAAAAAAAAAA85723,AAAAAAAAAAAAAAAAAA55796}
+-    34 | {70,45}                         | {AAAAAAAAAAAAAAAAAA71621,AAAAAAAAAAAAAA28620,AAAAAAAAAA55219,AAAAAAAA23648,AAAAAAAAAA22292,AAAAAAA1242}
+-    35 | {23,40}                         | {AAAAAAAAAAAA52814,AAAA48949,AAAAAAAAA34727,AAAA8857,AAAAAAAAAAAAAAAAAAA62179,AAAAAAAAAAAAAAA68526,AAAAAAA99836,AAAAAAAA50094,AAAA91194,AAAAAAAAAAAAA73084}
+-    36 | {79,82,14,52,30,5,79}           | {AAAAAAAAA53663,AAAAAAAAAAAAAAAA55798,AAAAAAAAAAAAAAAAAAA89194,AA88409,AAAAAAAAAAAAAAA81326,AAAAAAAAAAAAAAAAA63050,AAAAAAAAAAAAAAAA33598}
+-    37 | {53,11,81,39,3,78,58,64,74}     | {AAAAAAAAAAAAAAAAAAA17075,AAAAAAA66161,AAAAAAAA23648,AAAAAAAAAAAAAA10611}
+-    38 | {59,5,4,95,28}                  | {AAAAAAAAAAA82945,A96617,47735,AAAAA12179,AAAAA64669,AAAAAA99807,AA74433,AAAAAAAAAAAAAAAAA59387}
+-    39 | {82,43,99,16,74}                | {AAAAAAAAAAAAAAA67062,AAAAAAA57334,AAAAAAAAAAAAAA65909,A27153,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAA64777,AAAAAAAAAAAA81511,AAAAAAAAAAAAAA65909,AAAAAAAAAAAAAA28620}
+-    40 | {34}                            | {AAAAAAAAAAAAAA10611,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAA50956,AAAAAAAAAAAAAAAA31334,AAAAA70466,AAAAAAAA81587,AAAAAAA74623}
+-    41 | {19,26,63,12,93,73,27,94}       | {AAAAAAA79710,AAAAAAAAAA55219,AAAA41702,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAAA71621,AAAAAAAAAAAAAAAAA63050,AAAAAAA99836,AAAAAAAAAAAAAA8666}
+-    42 | {15,76,82,75,8,91}              | {AAAAAAAAAAA176,AAAAAA38063,45449,AAAAAA54032,AAAAAAA81898,AA6416,AAAAAAAAAAAAAAAAAAA62179,45449,AAAAA60038,AAAAAAAA81587}
+-    43 | {39,87,91,97,79,28}             | {AAAAAAAAAAA74076,A96617,AAAAAAAAAAAAAAAAAAA89194,AAAAAAAAAAAAAAAAAA55796,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAA67946}
+-    44 | {40,58,68,29,54}                | {AAAAAAA81898,AAAAAA66777,AAAAAA98232}
+-    45 | {99,45}                         | {AAAAAAAA72908,AAAAAAAAAAAAAAAAAAA17075,AA88409,AAAAAAAAAAAAAAAAAA36842,AAAAAAA48038,AAAAAAAAAAAAAA10611}
+-    46 | {53,24}                         | {AAAAAAAAAAA53908,AAAAAA54032,AAAAA17383,AAAA48949,AAAAAAAAAA18601,AAAAA64669,45449,AAAAAAAAAAA98051,AAAAAAAAAAAAAAAAAA71621}
+-    47 | {98,23,64,12,75,61}             | {AAA59323,AAAAA95309,AAAAAAAAAAAAAAAA31334,AAAAAAAAA27249,AAAAA17383,AAAAAAAAAAAA37562,AAAAAA1059,A84822,55847,AAAAA70466}
+-    48 | {76,14}                         | {AAAAAAAAAAAAA59671,AAAAAAAAAAAAAAAAAAA91804,AAAAAA66777,AAAAAAAAAAAAAAAAAAA89194,AAAAAAAAAAAAAAA36627,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAA73084,AAAAAAA79710,AAAAAAAAAAAAAAA40402,AAAAAAAAAAAAAAAAAAA65037}
+-    49 | {56,5,54,37,49}                 | {AA21643,AAAAAAAAAAA92631,AAAAAAAA81587}
+-    50 | {20,12,37,64,93}                | {AAAAAAAAAA5483,AAAAAAAAAAAAAAAAAAA1205,AA6416,AAAAAAAAAAAAAAAAA63050,AAAAAAAAAAAAAAAAAA47955}
+-    51 | {47}                            | {AAAAAAAAAAAAAA96505,AAAAAAAAAAAAAAAAAA36842,AAAAA95309,AAAAAAAA81587,AA6416,AAAA91194,AAAAAA58494,AAAAAA1059,AAAAAAAA69452}
+-    52 | {89,0}                          | {AAAAAAAAAAAAAAAAAA47955,AAAAAAA48038,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAAAAA73084,AAAAA70466,AAAAAAAAAAAAAAAAA764,AAAAAAAAAAA46154,AA66862}
+-    53 | {38,17}                         | {AAAAAAAAAAA21658}
+-    54 | {70,47}                         | {AAAAAAAAAAAAAAAAAA54141,AAAAA40681,AAAAAAA48038,AAAAAAAAAAAAAAAA29150,AAAAA41597,AAAAAAAAAAAAAAAAAA59334,AA15322}
+-    55 | {47,79,47,64,72,25,71,24,93}    | {AAAAAAAAAAAAAAAAAA55796,AAAAA62737}
+-    56 | {33,7,60,54,93,90,77,85,39}     | {AAAAAAAAAAAAAAAAAA32918,AA42406}
+-    57 | {23,45,10,42,36,21,9,96}        | {AAAAAAAAAAAAAAAAAAA70415}
+-    58 | {92}                            | {AAAAAAAAAAAAAAAA98414,AAAAAAAA23648,AAAAAAAAAAAAAAAAAA55796,AA25381,AAAAAAAAAAA6119}
+-    59 | {9,69,46,77}                    | {39557,AAAAAAA89932,AAAAAAAAAAAAAAAAA43052,AAAAAAAAAAAAAAAAA26540,AAA20874,AA6416,AAAAAAAAAAAAAAAAAA47955}
+-    60 | {62,2,59,38,89}                 | {AAAAAAA89932,AAAAAAAAAAAAAAAAAAA15356,AA99927,AA17009,AAAAAAAAAAAAAAA35875}
+-    61 | {72,2,44,95,54,54,13}           | {AAAAAAAAAAAAAAAAAAA91804}
+-    62 | {83,72,29,73}                   | {AAAAAAAAAAAAA15097,AAAA8857,AAAAAAAAAAAA35809,AAAAAAAAAAAA52814,AAAAAAAAAAAAAAAAAAA38885,AAAAAAAAAAAAAAAAAA24183,AAAAAA43678,A96617}
+-    63 | {11,4,61,87}                    | {AAAAAAAAA27249,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAA13198,AAA20874,39557,51533,AAAAAAAAAAA53908,AAAAAAAAAAAAAA96505,AAAAAAAA78938}
+-    64 | {26,19,34,24,81,78}             | {A96617,AAAAAAAAAAAAAAAAAAA70104,A68938,AAAAAAAAAAA53908,AAAAAAAAAAAAAAA453,AA17009,AAAAAAA80240}
+-    65 | {61,5,76,59,17}                 | {AAAAAA99807,AAAAA64741,AAAAAAAAAAA53908,AA21643,AAAAAAAAA10012}
+-    66 | {31,23,70,52,4,33,48,25}        | {AAAAAAAAAAAAAAAAA69675,AAAAAAAA50094,AAAAAAAAAAA92631,AAAA35194,39557,AAAAAAA99836}
+-    67 | {31,94,7,10}                    | {AAAAAA38063,A96617,AAAA35194,AAAAAAAAAAAA67946}
+-    68 | {90,43,38}                      | {AA75092,AAAAAAAAAAAAAAAAA69675,AAAAAAAAAAA92631,AAAAAAAAA10012,AAAAAAAAAAAAA7929,AA21643}
+-    69 | {67,35,99,85,72,86,44}          | {AAAAAAAAAAAAAAAAAAA1205,AAAAAAAA50094,AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAAAAAAA47955}
+-    70 | {56,70,83}                      | {AAAA41702,AAAAAAAAAAA82945,AA21643,AAAAAAAAAAA99000,A27153,AA25381,AAAAAAAAAAAAAA96505,AAAAAAA1242}
+-    71 | {74,26}                         | {AAAAAAAAAAA50956,AA74433,AAAAAAA21462,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAA36627,AAAAAAAAAAAAA70254,AAAAAAAAAA43419,39557}
+-    72 | {22,1,16,78,20,91,83}           | {47735,AAAAAAA56483,AAAAAAAAAAAAA93788,AA42406,AAAAAAAAAAAAA73084,AAAAAAAA72908,AAAAAAAAAAAAAAAAAA61286,AAAAA66674,AAAAAAAAAAAAAAAAA50407}
+-    73 | {88,25,96,78,65,15,29,19}       | {AAA54451,AAAAAAAAA27249,AAAAAAA9228,AAAAAAAAAAAAAAA67062,AAAAAAAAAAAAAAAAAAA70415,AAAAA17383,AAAAAAAAAAAAAAAA33598}
+-    74 | {32}                            | {AAAAAAAAAAAAAAAA1729,AAAAAAAAAAAAA22860,AAAAAA99807,AAAAA17383,AAAAAAAAAAAAAAA67062,AAAAAAAAAAA15165,AAAAAAAAAAA50956}
+-    75 | {12,96,83,24,71,89,55}          | {AAAA48949,AAAAAAAA29716,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAAA67946,AAAAAAAAAAAAAAAA29150,AAA28075,AAAAAAAAAAAAAAAAA43052}
+-    76 | {92,55,10,7}                    | {AAAAAAAAAAAAAAA67062}
+-    77 | {97,15,32,17,55,59,18,37,50,39} | {AAAAAAAAAAAA67946,AAAAAA54032,AAAAAAAA81587,55847,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAAAAA43052,AAAAAA75463,AAAA49534,AAAAAAAA44066}
+-    78 | {55,89,44,84,34}                | {AAAAAAAAAAA6119,AAAAAAAAAAAAAA8666,AA99927,AA42406,AAAAAAA81898,AAAAAAA9228,AAAAAAAAAAA92631,AA21643,AAAAAAAAAAAAAA28620}
+-    79 | {45}                            | {AAAAAAAAAA646,AAAAAAAAAAAAAAAAAAA70415,AAAAAA43678,AAAAAAAA72908}
+-    80 | {74,89,44,80,0}                 | {AAAA35194,AAAAAAAA79710,AAA20874,AAAAAAAAAAAAAAAAAAA70104,AAAAAAAAAAAAA73084,AAAAAAA57334,AAAAAAA9228,AAAAAAAAAAAAA62007}
+-    81 | {63,77,54,48,61,53,97}          | {AAAAAAAAAAAAAAA81326,AAAAAAAAAA22292,AA25381,AAAAAAAAAAA74076,AAAAAAA81898,AAAAAAAAA72121}
+-    82 | {34,60,4,79,78,16,86,89,42,50}  | {AAAAA40681,AAAAAAAAAAAAAAAAAA12591,AAAAAAA80240,AAAAAAAAAAAAAAAA55798,AAAAAAAAAAAAAAAAAAA70104}
+-    83 | {14,10}                         | {AAAAAAAAAA22292,AAAAAAAAAAAAA70254,AAAAAAAAAAA6119}
+-    84 | {11,83,35,13,96,94}             | {AAAAA95309,AAAAAAAAAAAAAAAAAA32918,AAAAAAAAAAAAAAAAAA24183}
+-    85 | {39,60}                         | {AAAAAAAAAAAAAAAA55798,AAAAAAAAAA22292,AAAAAAA66161,AAAAAAA21462,AAAAAAAAAAAAAAAAAA12591,55847,AAAAAA98232,AAAAAAAAAAA46154}
+-    86 | {33,81,72,74,45,36,82}          | {AAAAAAAA81587,AAAAAAAAAAAAAA96505,45449,AAAA80176}
+-    87 | {57,27,50,12,97,68}             | {AAAAAAAAAAAAAAAAA26540,AAAAAAAAA10012,AAAAAAAAAAAA35809,AAAAAAAAAAAAAAAA29150,AAAAAAAAAAA82945,AAAAAA66777,31228,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAA28620,AAAAAAAAAAAAAA96505}
+-    88 | {41,90,77,24,6,24}              | {AAAA35194,AAAA35194,AAAAAAA80240,AAAAAAAAAAA46154,AAAAAA58494,AAAAAAAAAAAAAAAAAAA17075,AAAAAAAAAAAAAAAAAA59334,AAAAAAAAAAAAAAAAAAA91804,AA74433}
+-    89 | {40,32,17,6,30,88}              | {AA44673,AAAAAAAAAAA6119,AAAAAAAAAAAAAAAA23657,AAAAAAAAAAAAAAAAAA47955,AAAAAAAAAAAAAAAA33598,AAAAAAAAAAA33576,AA44673}
+-    90 | {88,75}                         | {AAAAA60038,AAAAAAAA23648,AAAAAAAAAAA99000,AAAA41702,AAAAAAAAAAAAA22860,AAAAAAAAAAAAAAA68526}
+-    91 | {78}                            | {AAAAAAAAAAAAA62007,AAA99043}
+-    92 | {85,63,49,45}                   | {AAAAAAA89932,AAAAAAAAAAAAA22860,AAAAAAAAAAAAAAAAAAA1205,AAAAAAAAAAAA21089}
+-    93 | {11}                            | {AAAAAAAAAAA176,AAAAAAAAAAAAAA8666,AAAAAAAAAAAAAAA453,AAAAAAAAAAAAA85723,A68938,AAAAAAAAAAAAA9821,AAAAAAA48038,AAAAAAAAAAAAAAAAA59387,AA99927,AAAAA17383}
+-    94 | {98,9,85,62,88,91,60,61,38,86}  | {AAAAAAAA81587,AAAAA17383,AAAAAAAA81587}
+-    95 | {47,77}                         | {AAAAAAAAAAAAAAAAA764,AAAAAAAAAAA74076,AAAAAAAAAA18107,AAAAA40681,AAAAAAAAAAAAAAA35875,AAAAA60038,AAAAAAA56483}
+-    96 | {23,97,43}                      | {AAAAAAAAAA646,A87088}
+-    97 | {54,2,86,65}                    | {47735,AAAAAAA99836,AAAAAAAAAAAAAAAAA6897,AAAAAAAAAAAAAAAA29150,AAAAAAA80240,AAAAAAAAAAAAAAAA98414,AAAAAAA56483,AAAAAAAAAAAAAAAA29150,AAAAAAA39692,AA21643}
+-    98 | {38,34,32,89}                   | {AAAAAAAAAAAAAAAAAA71621,AAAA8857,AAAAAAAAAAAAAAAAAAA65037,AAAAAAAAAAAAAAAA31334,AAAAAAAAAA48845}
+-    99 | {37,86}                         | {AAAAAAAAAAAAAAAAAA32918,AAAAA70514,AAAAAAAAA10012,AAAAAAAAAAAAAAAAA59387,AAAAAAAAAA64777,AAAAAAAAAAAAAAAAAAA15356}
+-   100 | {85,32,57,39,49,84,32,3,30}     | {AAAAAAA80240,AAAAAAAAAAAAAAAA1729,AAAAA60038,AAAAAAAAAAA92631,AAAAAAAA9523}
+-   101 | {}                              | {}
+-   102 | {NULL}                          | {NULL}
+-(102 rows)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t && '{}' ORDER BY seqno;
+  seqno | i | t 
+@@ -1202,10 +939,9 @@
+ (0 rows)
+ 
+ SELECT * FROM array_op_test WHERE t <@ '{}' ORDER BY seqno;
+- seqno | i  | t  
+--------+----+----
+-   101 | {} | {}
+-(1 row)
++ seqno | i | t 
++-------+---+---
++(0 rows)
+ 
+ -- array casts
+ SELECT ARRAY[1,2,3]::text[]::int[]::float8[] AS "{1,2,3}";
+@@ -1221,9 +957,9 @@
+ (1 row)
+ 
+ SELECT ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[] AS "{{a,bc},{def,hijk}}";
+- {{a,bc},{def,hijk}} 
+----------------------
+- {{a,bc},{def,hijk}}
++   {{a,bc},{def,hijk}}   
++-------------------------
++ {"{a,bc}","{def,hijk}"}
+ (1 row)
+ 
+ SELECT pg_typeof(ARRAY[['a','bc'],['def','hijk']]::text[]::varchar[]) AS "character varying[]";
+@@ -1233,9 +969,9 @@
+ (1 row)
+ 
+ SELECT CAST(ARRAY[[[[[['a','bb','ccc']]]]]] as text[]) as "{{{{{{a,bb,ccc}}}}}}";
+- {{{{{{a,bb,ccc}}}}}} 
+-----------------------
+- {{{{{{a,bb,ccc}}}}}}
++                                {{{{{{a,bb,ccc}}}}}}                                
++------------------------------------------------------------------------------------
++ {"{\"{\\\"{\\\\\\\"{\\\\\\\\\\\\\\\"{a,bb,ccc}\\\\\\\\\\\\\\\"}\\\\\\\"}\\\"}\"}"}
+ (1 row)
+ 
+ SELECT NULL::text[]::int[] AS "NULL";
+@@ -1303,13 +1039,15 @@
+ 
+ -- errors
+ select 33 * any ('{1,2,3}');
+-ERROR:  op ANY/ALL (array) requires operator to yield boolean
+-LINE 1: select 33 * any ('{1,2,3}');
+-                  ^
++ERROR:  at or near "EOF": syntax error: * ANY <array> is invalid because "*" is not a boolean operator
++DETAIL:  source SQL:
++select 33 * any ('{1,2,3}')
++                           ^
+ select 33 * any (44);
+-ERROR:  op ANY/ALL (array) requires array on right side
+-LINE 1: select 33 * any (44);
+-                  ^
++ERROR:  at or near "EOF": syntax error: * ANY <array> is invalid because "*" is not a boolean operator
++DETAIL:  source SQL:
++select 33 * any (44)
++                    ^
+ -- nulls
+ select 33 = any (null::int[]);
+  ?column? 
+@@ -1373,12 +1111,25 @@
+ -- failure expected:
+ insert into arr_tbl values ('{1,2,3}');
+ ERROR:  duplicate key value violates unique constraint "arr_tbl_f1_key"
+-DETAIL:  Key (f1)=({1,2,3}) already exists.
++DETAIL:  Key (f1)=(ARRAY[1,2,3]) already exists.
+ insert into arr_tbl values ('{2,3,4}');
+ insert into arr_tbl values ('{1,5,3}');
+ insert into arr_tbl values ('{1,2,10}');
+ set enable_seqscan to off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_bitmapscan to off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from arr_tbl where f1 > '{1,2,3}' and f1 <= '{1,5,3}';
+     f1    
+ ----------
+@@ -1399,25 +1150,39 @@
+ insert into arr_pk_tbl values (1, '{3,4,5}') on conflict (pk)
+   do update set f1[1] = excluded.f1[1], f1[3] = excluded.f1[3]
+   returning pk, f1;
+- pk |   f1    
+-----+---------
+-  1 | {3,2,5}
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into arr_pk_tbl values (1, '{3,4,5}') on conflict (pk)
++  do update set f1[1] = excluded.f1[1], f1[3] = excluded.f1[3]
++                  ^
++HINT:  try \h INSERT
+ insert into arr_pk_tbl(pk, f1[1:2]) values (1, '{6,7,8}') on conflict (pk)
+   do update set f1[1] = excluded.f1[1],
+     f1[2] = excluded.f1[2],
+     f1[3] = excluded.f1[3]
+   returning pk, f1;
+- pk |     f1     
+-----+------------
+-  1 | {6,7,NULL}
+-(1 row)
+-
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into arr_pk_tbl(pk, f1[1:2]) values (1, '{6,7,8}') on conflict (pk)
++                             ^
++HINT:  try \h <SELECTCLAUSE>
+ -- note: if above selects don't produce the expected tuple order,
+ -- then you didn't get an indexscan plan, and something is busted.
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- test [not] (like|ilike) (any|all) (...)
+ select 'foo' like any (array['%a', '%o']); -- t
+  ?column? 
+@@ -1472,40 +1237,27 @@
+ --
+ -- none of the following should be accepted
+ select '{{1,{2}},{2,3}}'::text[];
+-ERROR:  malformed array literal: "{{1,{2}},{2,3}}"
+-LINE 1: select '{{1,{2}},{2,3}}'::text[];
+-               ^
+-DETAIL:  Unexpected "{" character.
++ERROR:  could not parse "{{1,{2}},{2,3}}" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '{{},{}}'::text[];
+-ERROR:  malformed array literal: "{{},{}}"
+-LINE 1: select '{{},{}}'::text[];
+-               ^
+-DETAIL:  Unexpected "}" character.
++ERROR:  could not parse "{{},{}}" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select E'{{1,2},\\{2,3}}'::text[];
+-ERROR:  malformed array literal: "{{1,2},\{2,3}}"
+-LINE 1: select E'{{1,2},\\{2,3}}'::text[];
+-               ^
+-DETAIL:  Unexpected "\" character.
++ERROR:  could not parse "{{1,2},\\{2,3}}" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '{{"1 2" x},{3}}'::text[];
+-ERROR:  malformed array literal: "{{"1 2" x},{3}}"
+-LINE 1: select '{{"1 2" x},{3}}'::text[];
+-               ^
+-DETAIL:  Unexpected array element.
++ERROR:  could not parse "{{\"1 2\" x},{3}}" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '{}}'::text[];
+-ERROR:  malformed array literal: "{}}"
+-LINE 1: select '{}}'::text[];
+-               ^
+-DETAIL:  Junk after closing right brace.
++ERROR:  could not parse "{}}" as type string[]: extra text after closing right brace
+ select '{ }}'::text[];
+-ERROR:  malformed array literal: "{ }}"
+-LINE 1: select '{ }}'::text[];
+-               ^
+-DETAIL:  Junk after closing right brace.
++ERROR:  could not parse "{ }}" as type string[]: extra text after closing right brace
+ select array[];
+-ERROR:  cannot determine type of empty array
+-LINE 1: select array[];
+-               ^
+-HINT:  Explicitly cast to the desired type, for example ARRAY[]::integer[].
++ERROR:  cannot determine type of empty array. Consider casting to the desired type, for example ARRAY[]::int[]
+ -- none of the above should be accepted
+ -- all of the following should be accepted
+ select '{}'::text[];
+@@ -1515,38 +1267,28 @@
+ (1 row)
+ 
+ select '{{{1,2,3,4},{2,3,4,5}},{{3,4,5,6},{4,5,6,7}}}'::text[];
+-                     text                      
+------------------------------------------------
+- {{{1,2,3,4},{2,3,4,5}},{{3,4,5,6},{4,5,6,7}}}
+-(1 row)
+-
++ERROR:  could not parse "{{{1,2,3,4},{2,3,4,5}},{{3,4,5,6},{4,5,6,7}}}" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '{0 second  ,0 second}'::interval[];
+-   interval    
+----------------
+- {"@ 0","@ 0"}
++      interval       
++---------------------
++ {00:00:00,00:00:00}
+ (1 row)
+ 
+ select '{ { "," } , { 3 } }'::text[];
+-    text     
+--------------
+- {{","},{3}}
+-(1 row)
+-
++ERROR:  could not parse "{ { \",\" } , { 3 } }" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '  {   {  "  0 second  "   ,  0 second  }   }'::text[];
+-             text              
+--------------------------------
+- {{"  0 second  ","0 second"}}
+-(1 row)
+-
++ERROR:  could not parse "  {   {  \"  0 second  \"   ,  0 second  }   }" as type string[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select '{
+            0 second,
+            @ 1 hour @ 42 minutes @ 20 seconds
+          }'::interval[];
+-              interval              
+-------------------------------------
+- {"@ 0","@ 1 hour 42 mins 20 secs"}
+-(1 row)
+-
++ERROR:  could not parse "{\n           0 second,\n           @ 1 hour @ 42 minutes @ 20 seconds\n         }" as type interval[]: could not parse "@ 1 hour @ 42 minutes @ 20 seconds" as type interval: interval: missing number at position 0: "@ 1 hour @ 42 minutes @ 20 seconds"
+ select array[]::text[];
+  array 
+ -------
+@@ -1554,56 +1296,44 @@
+ (1 row)
+ 
+ select '[0:1]={1.1,2.2}'::float8[];
+-     float8      
+------------------
+- [0:1]={1.1,2.2}
+-(1 row)
+-
++ERROR:  could not parse "[0:1]={1.1,2.2}" as type float[]: array must be enclosed in { and }
+ -- all of the above should be accepted
+ -- tests for array aggregates
+ CREATE TEMP TABLE arraggtest ( f1 INT[], f2 TEXT[][], f3 FLOAT[]);
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEMP TABLE arraggtest ( f1 INT[], f2 TEXT[][], f3 FLOAT[])
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{1,2,3,4}','{{grey,red},{blue,blue}}','{1.6, 0.0}');
++ERROR:  relation "arraggtest" does not exist
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{1,2,3}','{{grey,red},{grey,blue}}','{1.6}');
++ERROR:  relation "arraggtest" does not exist
+ SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+-    max    |   min   |           max            |           min            |   max   |  min  
+------------+---------+--------------------------+--------------------------+---------+-------
+- {1,2,3,4} | {1,2,3} | {{grey,red},{grey,blue}} | {{grey,red},{blue,blue}} | {1.6,0} | {1.6}
+-(1 row)
+-
++ERROR:  relation "arraggtest" does not exist
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{3,3,2,4,5,6}','{{white,yellow},{pink,orange}}','{2.1,3.3,1.8,1.7,1.6}');
++ERROR:  relation "arraggtest" does not exist
+ SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+-      max      |   min   |              max               |           min            |          max          |  min  
+----------------+---------+--------------------------------+--------------------------+-----------------------+-------
+- {3,3,2,4,5,6} | {1,2,3} | {{white,yellow},{pink,orange}} | {{grey,red},{blue,blue}} | {2.1,3.3,1.8,1.7,1.6} | {1.6}
+-(1 row)
+-
++ERROR:  relation "arraggtest" does not exist
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{2}','{{black,red},{green,orange}}','{1.6,2.2,2.6,0.4}');
++ERROR:  relation "arraggtest" does not exist
+ SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+-      max      |   min   |              max               |             min              |          max          |  min  
+----------------+---------+--------------------------------+------------------------------+-----------------------+-------
+- {3,3,2,4,5,6} | {1,2,3} | {{white,yellow},{pink,orange}} | {{black,red},{green,orange}} | {2.1,3.3,1.8,1.7,1.6} | {1.6}
+-(1 row)
+-
++ERROR:  relation "arraggtest" does not exist
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{4,2,6,7,8,1}','{{red},{black},{purple},{blue},{blue}}',NULL);
++ERROR:  relation "arraggtest" does not exist
+ SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+-      max      |   min   |              max               |             min              |          max          |  min  
+----------------+---------+--------------------------------+------------------------------+-----------------------+-------
+- {4,2,6,7,8,1} | {1,2,3} | {{white,yellow},{pink,orange}} | {{black,red},{green,orange}} | {2.1,3.3,1.8,1.7,1.6} | {1.6}
+-(1 row)
+-
++ERROR:  relation "arraggtest" does not exist
+ INSERT INTO arraggtest (f1, f2, f3) VALUES
+ ('{}','{{pink,white,blue,red,grey,orange}}','{2.1,1.87,1.4,2.2}');
++ERROR:  relation "arraggtest" does not exist
+ SELECT max(f1), min(f1), max(f2), min(f2), max(f3), min(f3) FROM arraggtest;
+-      max      | min |              max               |             min              |          max          |  min  
+----------------+-----+--------------------------------+------------------------------+-----------------------+-------
+- {4,2,6,7,8,1} | {}  | {{white,yellow},{pink,orange}} | {{black,red},{green,orange}} | {2.1,3.3,1.8,1.7,1.6} | {1.6}
+-(1 row)
+-
++ERROR:  relation "arraggtest" does not exist
+ -- A few simple tests for arrays of composite types
+ create type comptype as (f1 int, f2 text);
+ create table comptable (c1 comptype, c2 comptype[]);
+@@ -1612,6 +1342,7 @@
+   values (row(1,'foo'), array[row(2,'bar')::comptype, row(3,'baz')::comptype]);
+ -- check that implicitly named array type _comptype isn't a problem
+ create type _comptype as enum('fooey');
++ERROR:  type "root.public._comptype" already exists
+ select * from comptable;
+    c1    |          c2           
+ ---------+-----------------------
+@@ -1619,12 +1350,12 @@
+ (1 row)
+ 
+ select c2[2].f2 from comptable;
+- f2  
+------
+- baz
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++select c2[2].f2 from comptable
++            ^
+ drop type _comptype;
++ERROR:  "_comptype" is an implicit array type and cannot be modified
+ drop table comptable;
+ drop type comptype;
+ create or replace function unnest1(anyarray)
+@@ -1636,6 +1367,9 @@
+ select $1[s1][s2] from generate_subscripts($1,1) g1(s1),
+                    generate_subscripts($1,2) g2(s2);
+ $$ language sql immutable;
++ERROR:  unimplemented: multidimensional indexing: ""[s1][s2]
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select * from unnest1(array[1,2,3]);
+  unnest1 
+ ---------
+@@ -1645,103 +1379,48 @@
+ (3 rows)
+ 
+ select * from unnest2(array[[1,2,3],[4,5,6]]);
+- unnest2 
+----------
+-       1
+-       2
+-       3
+-       4
+-       5
+-       6
+-(6 rows)
+-
++ERROR:  unknown function: unnest2()
+ drop function unnest1(anyarray);
+ drop function unnest2(anyarray);
++ERROR:  unknown function: unnest2()
+ select array_fill(null::integer, array[3,3],array[2,2]);
+-                           array_fill                            
+------------------------------------------------------------------
+- [2:4][2:4]={{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill(null::integer, array[3,3]);
+-                      array_fill                      
+-------------------------------------------------------
+- {{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill(null::text, array[3,3],array[2,2]);
+-                           array_fill                            
+------------------------------------------------------------------
+- [2:4][2:4]={{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill(null::text, array[3,3]);
+-                      array_fill                      
+-------------------------------------------------------
+- {{NULL,NULL,NULL},{NULL,NULL,NULL},{NULL,NULL,NULL}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill(7, array[3,3],array[2,2]);
+-              array_fill              
+---------------------------------------
+- [2:4][2:4]={{7,7,7},{7,7,7},{7,7,7}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill(7, array[3,3]);
+-        array_fill         
+----------------------------
+- {{7,7,7},{7,7,7},{7,7,7}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill('juhu'::text, array[3,3],array[2,2]);
+-                           array_fill                            
+------------------------------------------------------------------
+- [2:4][2:4]={{juhu,juhu,juhu},{juhu,juhu,juhu},{juhu,juhu,juhu}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select array_fill('juhu'::text, array[3,3]);
+-                      array_fill                      
+-------------------------------------------------------
+- {{juhu,juhu,juhu},{juhu,juhu,juhu},{juhu,juhu,juhu}}
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select a, a = '{}' as is_eq, array_dims(a)
+   from (select array_fill(42, array[0]) as a) ss;
+- a  | is_eq | array_dims 
+-----+-------+------------
+- {} | t     | 
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select a, a = '{}' as is_eq, array_dims(a)
+   from (select array_fill(42, '{}') as a) ss;
+- a  | is_eq | array_dims 
+-----+-------+------------
+- {} | t     | 
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ select a, a = '{}' as is_eq, array_dims(a)
+   from (select array_fill(42, '{}', '{}') as a) ss;
+- a  | is_eq | array_dims 
+-----+-------+------------
+- {} | t     | 
+-(1 row)
+-
++ERROR:  unknown function: array_fill()
+ -- raise exception
+ select array_fill(1, null, array[2,2]);
+-ERROR:  dimension array or low bound array cannot be null
++ERROR:  unknown function: array_fill()
+ select array_fill(1, array[2,2], null);
+-ERROR:  dimension array or low bound array cannot be null
++ERROR:  unknown function: array_fill()
+ select array_fill(1, array[2,2], '{}');
+-ERROR:  wrong number of array subscripts
+-DETAIL:  Low bound array has different size than dimensions array.
++ERROR:  unknown function: array_fill()
+ select array_fill(1, array[3,3], array[1,1,1]);
+-ERROR:  wrong number of array subscripts
+-DETAIL:  Low bound array has different size than dimensions array.
++ERROR:  unknown function: array_fill()
+ select array_fill(1, array[1,2,null]);
+-ERROR:  dimension values cannot be null
++ERROR:  unknown function: array_fill()
+ select array_fill(1, array[[1,2],[3,4]]);
+-ERROR:  wrong number of array subscripts
+-DETAIL:  Dimension array must be one dimensional.
++ERROR:  unknown function: array_fill()
+ select string_to_array('1|2|3', '|');
+  string_to_array 
+ -----------------
+@@ -1827,113 +1506,33 @@
+ (1 row)
+ 
+ select v, v is null as "is null" from string_to_table('1|2|3', '|') g(v);
+- v | is null 
+----+---------
+- 1 | f
+- 2 | f
+- 3 | f
+-(3 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1|2|3|', '|') g(v);
+- v | is null 
+----+---------
+- 1 | f
+- 2 | f
+- 3 | f
+-   | f
+-(4 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1||2|3||', '||') g(v);
+-  v  | is null 
+------+---------
+- 1   | f
+- 2|3 | f
+-     | f
+-(3 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1|2|3', '') g(v);
+-   v   | is null 
+--------+---------
+- 1|2|3 | f
+-(1 row)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('', '|') g(v);
+- v | is null 
+----+---------
+-(0 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1|2|3', NULL) g(v);
+- v | is null 
+----+---------
+- 1 | f
+- | | f
+- 2 | f
+- | | f
+- 3 | f
+-(5 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table(NULL, '|') g(v);
+- v | is null 
+----+---------
+-(0 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('abc', '') g(v);
+-  v  | is null 
+------+---------
+- abc | f
+-(1 row)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('abc', '', 'abc') g(v);
+- v | is null 
+----+---------
+-   | t
+-(1 row)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('abc', ',') g(v);
+-  v  | is null 
+------+---------
+- abc | f
+-(1 row)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('abc', ',', 'abc') g(v);
+- v | is null 
+----+---------
+-   | t
+-(1 row)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1,2,3,4,,6', ',') g(v);
+- v | is null 
+----+---------
+- 1 | f
+- 2 | f
+- 3 | f
+- 4 | f
+-   | f
+- 6 | f
+-(6 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1,2,3,4,,6', ',', '') g(v);
+- v | is null 
+----+---------
+- 1 | f
+- 2 | f
+- 3 | f
+- 4 | f
+-   | t
+- 6 | f
+-(6 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select v, v is null as "is null" from string_to_table('1,2,3,4,*,6', ',', '*') g(v);
+- v | is null 
+----+---------
+- 1 | f
+- 2 | f
+- 3 | f
+- 4 | f
+-   | t
+- 6 | f
+-(6 rows)
+-
++ERROR:  unknown function: string_to_table()
+ select array_to_string(NULL::int4[], ',') IS NULL;
+  ?column? 
+ ----------
+@@ -2025,29 +1624,19 @@
+ (1 row)
+ 
+ select cardinality('[2:4]={5,6,7}'::int[]);
+- cardinality 
+--------------
+-           3
+-(1 row)
+-
++ERROR:  cardinality(): could not parse "[2:4]={5,6,7}" as type int[]: array must be enclosed in { and }
+ select cardinality('{{1,2}}'::int[]);
+- cardinality 
+--------------
+-           2
+-(1 row)
+-
++ERROR:  cardinality(): could not parse "{{1,2}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select cardinality('{{1,2},{3,4},{5,6}}'::int[]);
+- cardinality 
+--------------
+-           6
+-(1 row)
+-
++ERROR:  cardinality(): could not parse "{{1,2},{3,4},{5,6}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select cardinality('{{{1,9},{5,6}},{{2,3},{3,4}}}'::int[]);
+- cardinality 
+--------------
+-           8
+-(1 row)
+-
++ERROR:  cardinality(): could not parse "{{{1,9},{5,6}},{{2,3},{3,4}}}" as type int[]: unimplemented: nested arrays not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ -- array_agg(anynonarray)
+ select array_agg(unique1) from (select unique1 from tenk1 where unique1 < 15 order by unique1) ss;
+               array_agg               
+@@ -2076,52 +1665,53 @@
+ -- array_agg(anyarray)
+ select array_agg(ar)
+   from (values ('{1,2}'::int[]), ('{3,4}'::int[])) v(ar);
+-   array_agg   
+----------------
+- {{1,2},{3,4}}
++     array_agg     
++-------------------
++ {"{1,2}","{3,4}"}
+ (1 row)
+ 
+ select array_agg(distinct ar order by ar desc)
+   from (select array[i / 2] from generate_series(1,10) a(i)) b(ar);
+-         array_agg         
+----------------------------
+- {{5},{4},{3},{2},{1},{0}}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select array_agg(distinct ar order by ar desc)
++                             ^
++HINT:  try \hf array_agg
+ select array_agg(ar)
+   from (select array_agg(array[i, i+1, i-1])
+         from generate_series(1,2) a(i)) b(ar);
+-      array_agg      
+----------------------
+- {{{1,2,0},{2,3,1}}}
+-(1 row)
+-
++ERROR:  unknown signature: array_agg(int[][])
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select array_agg(array[i+1.2, i+1.3, i+1.4]) from generate_series(1,3) g(i);
+-                  array_agg                  
+----------------------------------------------
+- {{2.2,2.3,2.4},{3.2,3.3,3.4},{4.2,4.3,4.4}}
++                     array_agg                     
++---------------------------------------------------
++ {"{2.2,2.3,2.4}","{3.2,3.3,3.4}","{4.2,4.3,4.4}"}
+ (1 row)
+ 
+ select array_agg(array['Hello', i::text]) from generate_series(9,11) g(i);
+-             array_agg             
+------------------------------------
+- {{Hello,9},{Hello,10},{Hello,11}}
++                array_agg                
++-----------------------------------------
++ {"{Hello,9}","{Hello,10}","{Hello,11}"}
+ (1 row)
+ 
+ select array_agg(array[i, nullif(i, 3), i+1]) from generate_series(1,4) g(i);
+-              array_agg               
+---------------------------------------
+- {{1,1,2},{2,2,3},{3,NULL,4},{4,4,5}}
++                  array_agg                   
++----------------------------------------------
++ {"{1,1,2}","{2,2,3}","{3,NULL,4}","{4,4,5}"}
+ (1 row)
+ 
+ -- errors
+ select array_agg('{}'::int[]) from generate_series(1,2);
+-ERROR:  cannot accumulate empty arrays
++  array_agg  
++-------------
++ {"{}","{}"}
++(1 row)
++
+ select array_agg(null::int[]) from generate_series(1,2);
+-ERROR:  cannot accumulate null arrays
++ERROR:  multidimensional arrays must have array expressions with matching dimensions
+ select array_agg(ar)
+   from (values ('{1,2}'::int[]), ('{3}'::int[])) v(ar);
+-ERROR:  cannot accumulate arrays of different dimensionality
++ERROR:  multidimensional arrays must have array expressions with matching dimensions
+ select unnest(array[1,2,3]);
+  unnest 
+ --------
+@@ -2224,7 +1814,8 @@
+ (1 row)
+ 
+ select array_remove('{{1,2,2},{1,4,3}}', 2); -- not allowed
+-ERROR:  removing elements from multidimensional arrays is not supported
++ERROR:  unknown signature: array_remove(string, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select array_remove(array['X','X','X'], 'X') = '{}';
+  ?column? 
+ ----------
+@@ -2269,33 +1860,34 @@
+ 
+ -- array(select array-value ...)
+ select array(select array[i,i/2] from generate_series(1,5) i);
+-              array              
+----------------------------------
+- {{1,0},{2,1},{3,1},{4,2},{5,2}}
+-(1 row)
+-
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ select array(select array['Hello', i::text] from generate_series(9,11) i);
+-               array               
+------------------------------------
+- {{Hello,9},{Hello,10},{Hello,11}}
++                  array                  
++-----------------------------------------
++ {"{Hello,9}","{Hello,10}","{Hello,11}"}
+ (1 row)
+ 
+ -- Insert/update on a column that is array of composite
+ create temp table t1 (f1 int8_tbl[]);
++ERROR:  unimplemented: cannot use table record type as table column
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/70099/_version_
+ insert into t1 (f1[5].q1) values(42);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into t1 (f1[5].q1) values(42)
++                  ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from t1;
+-       f1        
+------------------
+- [5:5]={"(42,)"}
+-(1 row)
+-
++ERROR:  relation "t1" does not exist
+ update t1 set f1[5].q2 = 43;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update t1 set f1[5].q2 = 43
++                ^
++HINT:  try \h UPDATE
+ select * from t1;
+-        f1         
+--------------------
+- [5:5]={"(42,43)"}
+-(1 row)
+-
++ERROR:  relation "t1" does not exist
+ -- Check that arrays of composites are safely detoasted when needed
+ create temp table src (f1 text);
+ insert into src
+@@ -2304,26 +1896,14 @@
+ create temp table dest (f1 textandtext[]);
+ insert into dest select array[row(f1,f1)::textandtext] from src;
+ select length(fipshash((f1[1]).c2)) from dest;
+- length 
+---------
+-     32
+-(1 row)
+-
++ERROR:  unknown function: fipshash()
+ delete from src;
+ select length(fipshash((f1[1]).c2)) from dest;
+- length 
+---------
+-     32
+-(1 row)
+-
++ERROR:  unknown function: fipshash()
+ truncate table src;
+ drop table src;
+ select length(fipshash((f1[1]).c2)) from dest;
+- length 
+---------
+-     32
+-(1 row)
+-
++ERROR:  unknown function: fipshash()
+ drop table dest;
+ drop type textandtext;
+ -- Tests for polymorphic-array form of width_bucket()
+@@ -2357,29 +1937,7 @@
+   (10),
+   (10.0000000000001)
+ ) v(op);
+-        op        | wb_n1 | wb_n2 | wb_n3 | wb_f1 | wb_f2 | wb_f3 
+-------------------+-------+-------+-------+-------+-------+-------
+-             -5.2 |     0 |     0 |     1 |     0 |     0 |     1
+-    -0.0000000001 |     0 |     0 |     2 |     0 |     0 |     2
+-   0.000000000001 |     0 |     1 |     2 |     0 |     1 |     2
+-                1 |     1 |     1 |     2 |     1 |     1 |     2
+- 1.99999999999999 |     1 |     1 |     2 |     1 |     1 |     2
+-                2 |     1 |     1 |     3 |     1 |     1 |     3
+- 2.00000000000001 |     1 |     1 |     3 |     1 |     1 |     3
+-                3 |     2 |     1 |     3 |     2 |     1 |     3
+-                4 |     2 |     1 |     3 |     2 |     1 |     3
+-              4.5 |     2 |     1 |     3 |     2 |     1 |     3
+-                5 |     3 |     1 |     3 |     3 |     1 |     3
+-              5.5 |     3 |     2 |     3 |     3 |     2 |     3
+-                6 |     3 |     2 |     3 |     3 |     2 |     3
+-                7 |     3 |     2 |     3 |     3 |     2 |     3
+-                8 |     3 |     2 |     3 |     3 |     2 |     3
+-                9 |     3 |     2 |     3 |     3 |     2 |     3
+- 9.99999999999999 |     3 |     3 |     3 |     3 |     3 |     3
+-               10 |     4 |     3 |     3 |     4 |     3 |     3
+- 10.0000000000001 |     4 |     3 |     3 |     4 |     3 |     3
+-(19 rows)
+-
++ERROR:  VALUES types int and decimal cannot be matched
+ -- ensure float8 path handles NaN properly
+ SELECT
+     op,
+@@ -2394,8 +1952,8 @@
+ ------+----
+  -5.2 |  0
+     4 |  2
+-   77 |  3
+-  NaN |  5
++   77 |  5
++  NaN |  0
+ (4 rows)
+ 
+ -- these exercise the generic fixed-width code path
+@@ -2434,21 +1992,19 @@
+ (1 row)
+ 
+ SELECT width_bucket(5, '{}');
++ERROR:  unknown signature: width_bucket(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++-- error cases
++SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
++ERROR:  width_bucket(): operand and thresholds must be of the same type
++SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+  width_bucket 
+ --------------
+-            0
++            3
+ (1 row)
+ 
+--- error cases
+-SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
+-ERROR:  function width_bucket(text, integer[]) does not exist
+-LINE 1: SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+-SELECT width_bucket(5, ARRAY[3, 4, NULL]);
+-ERROR:  thresholds array must not contain NULLs
+ SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+-ERROR:  thresholds must be one-dimensional array
++ERROR:  width_bucket(): operand and thresholds must be of the same type
+ -- trim_array
+ SELECT arr, trim_array(arr, 2)
+ FROM
+@@ -2457,72 +2013,32 @@
+         ('[10:16]={1,2,3,4,5,6,7}'),
+         ('[-15:-10]={1,2,3,4,5,6}'),
+         ('{{1,10},{2,20},{3,30},{4,40}}')) v(arr);
+-              arr              |   trim_array    
+--------------------------------+-----------------
+- {1,2,3,4,5,6}                 | {1,2,3,4}
+- {1,2}                         | {}
+- [10:16]={1,2,3,4,5,6,7}       | {1,2,3,4,5}
+- [-15:-10]={1,2,3,4,5,6}       | {1,2,3,4}
+- {{1,10},{2,20},{3,30},{4,40}} | {{1,10},{2,20}}
+-(5 rows)
+-
++ERROR:  VALUES types string and int[] cannot be matched
+ SELECT trim_array(ARRAY[1, 2, 3], -1); -- fail
+-ERROR:  number of elements to trim must be between 0 and 3
++ERROR:  unknown function: trim_array()
+ SELECT trim_array(ARRAY[1, 2, 3], 10); -- fail
+-ERROR:  number of elements to trim must be between 0 and 3
++ERROR:  unknown function: trim_array()
+ SELECT trim_array(ARRAY[]::int[], 1); -- fail
+-ERROR:  number of elements to trim must be between 0 and 0
++ERROR:  unknown function: trim_array()
+ -- array_shuffle
+ SELECT array_shuffle('{1,2,3,4,5,6}'::int[]) <@ '{1,2,3,4,5,6}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: array_shuffle()
+ SELECT array_shuffle('{1,2,3,4,5,6}'::int[]) @> '{1,2,3,4,5,6}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: array_shuffle()
+ SELECT array_dims(array_shuffle('[-1:2][2:3]={{1,2},{3,NULL},{5,6},{7,8}}'::int[]));
+- array_dims  
+--------------
+- [-1:2][2:3]
+-(1 row)
+-
++ERROR:  unknown function: array_dims()
+ SELECT array_dims(array_shuffle('{{{1,2},{3,NULL}},{{5,6},{7,8}},{{9,10},{11,12}}}'::int[]));
+-   array_dims    
+------------------
+- [1:3][1:2][1:2]
+-(1 row)
+-
++ERROR:  unknown function: array_dims()
+ -- array_sample
+ SELECT array_sample('{1,2,3,4,5,6}'::int[], 3) <@ '{1,2,3,4,5,6}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: array_sample()
+ SELECT array_length(array_sample('{1,2,3,4,5,6}'::int[], 3), 1);
+- array_length 
+---------------
+-            3
+-(1 row)
+-
++ERROR:  unknown function: array_sample()
+ SELECT array_dims(array_sample('[-1:2][2:3]={{1,2},{3,NULL},{5,6},{7,8}}'::int[], 3));
+- array_dims 
+-------------
+- [1:3][2:3]
+-(1 row)
+-
++ERROR:  unknown function: array_dims()
+ SELECT array_dims(array_sample('{{{1,2},{3,NULL}},{{5,6},{7,8}},{{9,10},{11,12}}}'::int[], 2));
+-   array_dims    
+------------------
+- [1:2][1:2][1:2]
+-(1 row)
+-
++ERROR:  unknown function: array_dims()
+ SELECT array_sample('{1,2,3,4,5,6}'::int[], -1); -- fail
+-ERROR:  sample size must be between 0 and 6
++ERROR:  unknown function: array_sample()
+ SELECT array_sample('{1,2,3,4,5,6}'::int[], 7); --fail
+-ERROR:  sample size must be between 0 and 6
++ERROR:  unknown function: array_sample()

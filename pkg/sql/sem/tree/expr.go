@@ -39,7 +39,7 @@ type Expr interface {
 	// The semaCtx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr. It is not valid to call TypeCheck with a nil desired
-	// type. Instead, call it with wildcard type types.Any if no specific type is
+	// type. Instead, call it with wildcard type types.AnyElement if no specific type is
 	// desired. This restriction is also true of most methods and functions related
 	// to type checking.
 	TypeCheck(ctx context.Context, semaCtx *SemaContext, desired *types.T) (TypedExpr, error)
@@ -808,7 +808,7 @@ func (node *Placeholder) Format(ctx *FmtCtx) {
 // ResolvedType implements the TypedExpr interface.
 func (node *Placeholder) ResolvedType() *types.T {
 	if node.typ == nil {
-		return types.Any
+		return types.AnyElement
 	}
 	return node.typ
 }
@@ -966,7 +966,7 @@ type Subquery struct {
 // ResolvedType implements the TypedExpr interface.
 func (node *Subquery) ResolvedType() *types.T {
 	if node.typ == nil {
-		return types.Any
+		return types.AnyElement
 	}
 	return node.typ
 }
@@ -1743,6 +1743,7 @@ func (node *DGeometry) String() string        { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
 func (node *DJSON) String() string            { return AsString(node) }
+func (node *DJsonpath) String() string        { return AsString(node) }
 func (node *DUuid) String() string            { return AsString(node) }
 func (node *DIPAddr) String() string          { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }

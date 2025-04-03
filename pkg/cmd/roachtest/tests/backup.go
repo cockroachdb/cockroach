@@ -256,34 +256,6 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
-// fingerprint returns a fingerprint of `db.table`.
-func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string, error) {
-	// See #113816 for why this is needed for now (probably until #94850 is
-	// resolved).
-	_, err := conn.Exec("SET direct_columnar_scans_enabled = false;")
-	if err != nil {
-		return "", err
-	}
-
-	var b strings.Builder
-
-	query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
-	rows, err := conn.QueryContext(ctx, query)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name, fp string
-		if err := rows.Scan(&name, &fp); err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&b, "%s: %s\n", name, fp)
-	}
-
-	return b.String(), rows.Err()
-}
-
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
 func initBulkJobPerfArtifacts(
@@ -329,6 +301,27 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+
+			metricName := fmt.Sprintf("%s_elapsed", test)
+			totalElapsed := histogram.Elapsed
+
+			numNodes := int64(10)
+			tb := int64(1 << 40)
+			mb := int64(1 << 20)
+			dataSizeInMB := (2 * tb) / mb
+			backupDuration := int64(totalElapsed / 1000)
+			avgRatePerNode := roachtestutil.MetricPoint(float64(dataSizeInMB) / float64(numNodes*backupDuration))
+
+			return roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           metricName,
+					Value:          avgRatePerNode,
+					Unit:           "MB/s/node",
+					IsHigherBetter: false,
+				},
+			}, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {
@@ -424,11 +417,11 @@ func registerBackup(r registry.Registry) {
 					}
 
 					table := "bank"
-					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
+					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
+					restore, err := roachtestutil.Fingerprint(ctx, conn, "restoreDB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -530,15 +523,15 @@ func registerBackup(r registry.Registry) {
 
 					t.Status(`fingerprint`)
 					table := "bank"
-					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
+					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreA, err := fingerprint(ctx, conn, "restoreA" /* db */, table)
+					restoreA, err := roachtestutil.Fingerprint(ctx, conn, "restoreA" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreB, err := fingerprint(ctx, conn, "restoreB" /* db */, table)
+					restoreB, err := roachtestutil.Fingerprint(ctx, conn, "restoreB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -640,34 +633,34 @@ func runBackupMVCCRangeTombstones(
 	require.NoError(t, err)
 
 	// Set up some helpers.
-	waitForStatus := func(
+	waitForState := func(
 		jobID string,
-		expectStatus jobs.Status,
-		expectRunningStatus jobs.RunningStatus,
+		exxpectedState jobs.State,
+		expectStatus jobs.StatusMessage,
 		duration time.Duration,
 	) {
 		ctx, cancel := context.WithTimeout(ctx, duration)
 		defer cancel()
 		require.NoError(t, retry.Options{}.Do(ctx, func(ctx context.Context) error {
-			var status string
+			var statusMessage string
 			var payloadBytes, progressBytes []byte
 			require.NoError(t, conn.QueryRowContext(
 				ctx, jobutils.InternalSystemJobsBaseQuery, jobID).
-				Scan(&status, &payloadBytes, &progressBytes))
-			if jobs.Status(status) == jobs.StatusFailed {
+				Scan(&statusMessage, &payloadBytes, &progressBytes))
+			if jobs.State(statusMessage) == jobs.StateFailed {
 				var payload jobspb.Payload
 				require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
 				t.Fatalf("job failed: %s", payload.Error)
 			}
-			if jobs.Status(status) != expectStatus {
-				return errors.Errorf("expected job status %s, but got %s", expectStatus, status)
+			if jobs.State(statusMessage) != exxpectedState {
+				return errors.Errorf("expected job state %s, but got %s", exxpectedState, statusMessage)
 			}
-			if expectRunningStatus != "" {
+			if expectStatus != "" {
 				var progress jobspb.Progress
 				require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
-				if jobs.RunningStatus(progress.RunningStatus) != expectRunningStatus {
+				if jobs.StatusMessage(progress.StatusMessage) != expectStatus {
 					return errors.Errorf("expected running status %s, but got %s",
-						expectRunningStatus, progress.RunningStatus)
+						expectStatus, progress.StatusMessage)
 				}
 			}
 			return nil
@@ -682,7 +675,7 @@ func runBackupMVCCRangeTombstones(
 		require.NoError(t, conn.QueryRowContext(ctx, `SELECT now()`).Scan(&ts))
 
 		t.Status(fmt.Sprintf("fingerprinting %s.%s at time '%s'", database, table, name))
-		fp, err := fingerprint(ctx, conn, database, table)
+		fp, err := roachtestutil.Fingerprint(ctx, conn, database, table)
 		require.NoError(t, err)
 		t.Status("fingerprint:\n", fp)
 
@@ -759,12 +752,12 @@ func runBackupMVCCRangeTombstones(
 			`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|', detached`,
 			strings.Join(files, "', '")),
 		).Scan(&jobID))
-		waitForStatus(jobID, jobs.StatusPaused, "", 30*time.Minute)
+		waitForState(jobID, jobs.StatePaused, "", 30*time.Minute)
 
 		t.Status("canceling import")
 		_, err = conn.ExecContext(ctx, fmt.Sprintf(`CANCEL JOB %s`, jobID))
 		require.NoError(t, err)
-		waitForStatus(jobID, jobs.StatusCanceled, "", 30*time.Minute)
+		waitForState(jobID, jobs.StateCanceled, "", 30*time.Minute)
 	}
 
 	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
@@ -808,7 +801,7 @@ func runBackupMVCCRangeTombstones(
 	require.NoError(t, err)
 	require.NoError(t, conn.QueryRowContext(ctx,
 		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).Scan(&jobID))
-	waitForStatus(jobID, jobs.StatusRunning, sql.RunningStatusWaitingForMVCCGC, 2*time.Minute)
+	waitForState(jobID, jobs.StateRunning, sql.StatusWaitingForMVCCGC, 2*time.Minute)
 
 	// Check that the data has been deleted. We don't write MVCC range tombstones
 	// unless the range contains live data, so only assert their existence if the

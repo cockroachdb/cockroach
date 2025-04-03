@@ -1,0 +1,721 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --label=/mnt/data1/postgres/src/test/regress/results/truncate.out /mnt/data1/postgres/src/test/regress/expected/truncate.out /mnt/data1/postgres/src/test/regress/results/truncate.out
+--- /mnt/data1/postgres/src/test/regress/expected/truncate.out
++++ /mnt/data1/postgres/src/test/regress/results/truncate.out
+@@ -12,18 +12,20 @@
+ -- Roll truncate back
+ BEGIN;
+ TRUNCATE truncate_a;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ SELECT * FROM truncate_a;
+  col1 
+ ------
+-    1
+-    2
+-(2 rows)
++(0 rows)
+ 
+ -- Commit the truncate this time
+ BEGIN;
+ TRUNCATE truncate_a;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT * FROM truncate_a;
+  col1 
+ ------
+@@ -32,42 +34,27 @@
+ -- Test foreign-key checks
+ CREATE TABLE trunc_b (a int REFERENCES truncate_a);
+ CREATE TABLE trunc_c (a serial PRIMARY KEY);
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ CREATE TABLE trunc_d (a int REFERENCES trunc_c);
+ CREATE TABLE trunc_e (a int REFERENCES truncate_a, b int REFERENCES trunc_c);
+ TRUNCATE TABLE truncate_a;		-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_b" references "truncate_a".
+-HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE truncate_a,trunc_b;		-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_e" references "truncate_a".
+-HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_e"
+ TRUNCATE TABLE truncate_a,trunc_b,trunc_e;	-- ok
+ TRUNCATE TABLE truncate_a,trunc_e;		-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_b" references "truncate_a".
+-HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE trunc_c;		-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_d" references "trunc_c".
+-HINT:  Truncate table "trunc_d" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "trunc_c" is referenced by foreign key from table "trunc_d"
+ TRUNCATE TABLE trunc_c,trunc_d;		-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_e" references "trunc_c".
+-HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "trunc_c" is referenced by foreign key from table "trunc_e"
+ TRUNCATE TABLE trunc_c,trunc_d,trunc_e;	-- ok
+ TRUNCATE TABLE trunc_c,trunc_d,trunc_e,truncate_a;	-- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_b" references "truncate_a".
+-HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE trunc_c,trunc_d,trunc_e,truncate_a,trunc_b;	-- ok
+ TRUNCATE TABLE truncate_a RESTRICT; -- fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_b" references "truncate_a".
+-HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE truncate_a CASCADE;  -- ok
+-NOTICE:  truncate cascades to table "trunc_b"
+-NOTICE:  truncate cascades to table "trunc_e"
+ -- circular references
+ ALTER TABLE truncate_a ADD FOREIGN KEY (col1) REFERENCES trunc_c;
+ -- Add some data to verify that truncating actually works ...
+@@ -77,21 +64,13 @@
+ INSERT INTO trunc_d VALUES (1);
+ INSERT INTO trunc_e VALUES (1,1);
+ TRUNCATE TABLE trunc_c;
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "truncate_a" references "trunc_c".
+-HINT:  Truncate table "truncate_a" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "trunc_c" is referenced by foreign key from table "trunc_d"
+ TRUNCATE TABLE trunc_c,truncate_a;
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_d" references "trunc_c".
+-HINT:  Truncate table "trunc_d" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE trunc_c,truncate_a,trunc_d;
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_e" references "trunc_c".
+-HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE trunc_c,truncate_a,trunc_d,trunc_e;
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "trunc_b" references "truncate_a".
+-HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
++ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
+ TRUNCATE TABLE trunc_c,truncate_a,trunc_d,trunc_e,trunc_b;
+ -- Verify that truncating did actually work
+ SELECT * FROM truncate_a
+@@ -117,10 +96,6 @@
+ INSERT INTO trunc_d VALUES (1);
+ INSERT INTO trunc_e VALUES (1,1);
+ TRUNCATE TABLE trunc_c CASCADE;  -- ok
+-NOTICE:  truncate cascades to table "truncate_a"
+-NOTICE:  truncate cascades to table "trunc_d"
+-NOTICE:  truncate cascades to table "trunc_e"
+-NOTICE:  truncate cascades to table "trunc_b"
+ SELECT * FROM truncate_a
+    UNION ALL
+  SELECT * FROM trunc_c
+@@ -143,144 +118,103 @@
+ INSERT INTO trunc_f VALUES (1);
+ INSERT INTO trunc_f VALUES (2);
+ CREATE TABLE trunc_fa (col2a text) INHERITS (trunc_f);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE trunc_fa (col2a text) INHERITS (trunc_f)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO trunc_fa VALUES (3, 'three');
++ERROR:  relation "trunc_fa" does not exist
+ CREATE TABLE trunc_fb (col2b int) INHERITS (trunc_f);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE trunc_fb (col2b int) INHERITS (trunc_f)
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO trunc_fb VALUES (4, 444);
++ERROR:  relation "trunc_fb" does not exist
+ CREATE TABLE trunc_faa (col3 text) INHERITS (trunc_fa);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE trunc_faa (col3 text) INHERITS (trunc_fa)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO trunc_faa VALUES (5, 'five', 'FIVE');
++ERROR:  relation "trunc_faa" does not exist
+ BEGIN;
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+     1
+     2
+-    3
+-    4
+-    5
+-(5 rows)
++(2 rows)
+ 
+ TRUNCATE trunc_f;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+ (0 rows)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ BEGIN;
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+-    1
+-    2
+-    3
+-    4
+-    5
+-(5 rows)
++(0 rows)
+ 
+ TRUNCATE ONLY trunc_f;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+-    3
+-    4
+-    5
+-(3 rows)
++(0 rows)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ BEGIN;
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+-    1
+-    2
+-    3
+-    4
+-    5
+-(5 rows)
++(0 rows)
+ 
+ SELECT * FROM trunc_fa;
+- col1 | col2a 
+-------+-------
+-    3 | three
+-    5 | five
+-(2 rows)
+-
++ERROR:  relation "trunc_fa" does not exist
+ SELECT * FROM trunc_faa;
+- col1 | col2a | col3 
+-------+-------+------
+-    5 | five  | FIVE
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ TRUNCATE ONLY trunc_fb, ONLY trunc_fa;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_f;
+- col1 
+-------
+-    1
+-    2
+-    5
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_fa;
+- col1 | col2a 
+-------+-------
+-    5 | five
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_faa;
+- col1 | col2a | col3 
+-------+-------+------
+-    5 | five  | FIVE
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SELECT * FROM trunc_f;
+  col1 
+ ------
+-    1
+-    2
+-    3
+-    4
+-    5
+-(5 rows)
++(0 rows)
+ 
+ SELECT * FROM trunc_fa;
+- col1 | col2a 
+-------+-------
+-    3 | three
+-    5 | five
+-(2 rows)
+-
++ERROR:  relation "trunc_fa" does not exist
+ SELECT * FROM trunc_faa;
+- col1 | col2a | col3 
+-------+-------+------
+-    5 | five  | FIVE
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ TRUNCATE ONLY trunc_fb, trunc_fa;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_f;
+- col1 
+-------
+-    1
+-    2
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_fa;
+- col1 | col2a 
+-------+-------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM trunc_faa;
+- col1 | col2a | col3 
+-------+-------+------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ DROP TABLE trunc_f CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table trunc_fa
+-drop cascades to table trunc_faa
+-drop cascades to table trunc_fb
+ -- Test ON TRUNCATE triggers
+ CREATE TABLE trunc_trigger_test (f1 int, f2 text, f3 text);
+ CREATE TABLE trunc_trigger_log (tgop text, tglevel text, tgwhen text,
+@@ -294,12 +228,26 @@
+     return null;
+ end;
+ $$ LANGUAGE plpgsql;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- basic before trigger
+ INSERT INTO trunc_trigger_test VALUES(1, 'foo', 'bar'), (2, 'baz', 'quux');
+ CREATE TRIGGER t
+ BEFORE TRUNCATE ON trunc_trigger_test
+ FOR EACH STATEMENT
+ EXECUTE PROCEDURE trunctrigger('before trigger truncate');
++ERROR:  unknown function: trunctrigger()
+ SELECT count(*) as "Row count in test table" FROM trunc_trigger_test;
+  Row count in test table 
+ -------------------------
+@@ -319,12 +267,12 @@
+ (1 row)
+ 
+ SELECT * FROM trunc_trigger_log;
+-   tgop   |  tglevel  | tgwhen |         tgargv          |      tgtable       | rowcount 
+-----------+-----------+--------+-------------------------+--------------------+----------
+- TRUNCATE | STATEMENT | BEFORE | before trigger truncate | trunc_trigger_test |        2
+-(1 row)
++ tgop | tglevel | tgwhen | tgargv | tgtable | rowcount 
++------+---------+--------+--------+---------+----------
++(0 rows)
+ 
+ DROP TRIGGER t ON trunc_trigger_test;
++ERROR:  trigger "t" for table "trunc_trigger_test" does not exist
+ truncate trunc_trigger_log;
+ -- same test with an after trigger
+ INSERT INTO trunc_trigger_test VALUES(1, 'foo', 'bar'), (2, 'baz', 'quux');
+@@ -332,6 +280,7 @@
+ AFTER TRUNCATE ON trunc_trigger_test
+ FOR EACH STATEMENT
+ EXECUTE PROCEDURE trunctrigger('after trigger truncate');
++ERROR:  unknown function: trunctrigger()
+ SELECT count(*) as "Row count in test table" FROM trunc_trigger_test;
+  Row count in test table 
+ -------------------------
+@@ -351,17 +300,18 @@
+ (1 row)
+ 
+ SELECT * FROM trunc_trigger_log;
+-   tgop   |  tglevel  | tgwhen |         tgargv         |      tgtable       | rowcount 
+-----------+-----------+--------+------------------------+--------------------+----------
+- TRUNCATE | STATEMENT | AFTER  | after trigger truncate | trunc_trigger_test |        0
+-(1 row)
++ tgop | tglevel | tgwhen | tgargv | tgtable | rowcount 
++------+---------+--------+--------+---------+----------
++(0 rows)
+ 
+ DROP TABLE trunc_trigger_test;
+ DROP TABLE trunc_trigger_log;
+ DROP FUNCTION trunctrigger();
++ERROR:  unknown function: trunctrigger()
+ -- test TRUNCATE ... RESTART IDENTITY
++CREATE SEQUENCE truncate_a_id;
+ CREATE SEQUENCE truncate_a_id1 START WITH 33;
+-CREATE TABLE truncate_a (id serial,
++CREATE TABLE truncate_a (id int default nextval('truncate_a_id'),
+                          id1 integer default nextval('truncate_a_id1'));
+ ALTER SEQUENCE truncate_a_id1 OWNED BY truncate_a.id1;
+ INSERT INTO truncate_a DEFAULT VALUES;
+@@ -384,14 +334,20 @@
+ (2 rows)
+ 
+ TRUNCATE truncate_a RESTART IDENTITY;
++ERROR:  at or near "restart": syntax error
++DETAIL:  source SQL:
++TRUNCATE truncate_a RESTART IDENTITY
++                    ^
+ INSERT INTO truncate_a DEFAULT VALUES;
+ INSERT INTO truncate_a DEFAULT VALUES;
+ SELECT * FROM truncate_a;
+  id | id1 
+ ----+-----
+-  1 |  33
+-  2 |  34
+-(2 rows)
++  3 |  35
++  4 |  36
++  5 |  37
++  6 |  38
++(4 rows)
+ 
+ CREATE TABLE truncate_b (id int GENERATED ALWAYS AS IDENTITY (START WITH 44));
+ INSERT INTO truncate_b DEFAULT VALUES;
+@@ -414,56 +370,74 @@
+ (2 rows)
+ 
+ TRUNCATE truncate_b RESTART IDENTITY;
++ERROR:  at or near "restart": syntax error
++DETAIL:  source SQL:
++TRUNCATE truncate_b RESTART IDENTITY
++                    ^
+ INSERT INTO truncate_b DEFAULT VALUES;
+ INSERT INTO truncate_b DEFAULT VALUES;
+ SELECT * FROM truncate_b;
+  id 
+ ----
+- 44
+- 45
+-(2 rows)
++ 46
++ 47
++ 48
++ 49
++(4 rows)
+ 
+ -- check rollback of a RESTART IDENTITY operation
+ BEGIN;
+ TRUNCATE truncate_a RESTART IDENTITY;
++ERROR:  at or near "restart": syntax error
++DETAIL:  source SQL:
++TRUNCATE truncate_a RESTART IDENTITY
++                    ^
+ INSERT INTO truncate_a DEFAULT VALUES;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM truncate_a;
+- id | id1 
+-----+-----
+-  1 |  33
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ INSERT INTO truncate_a DEFAULT VALUES;
+ INSERT INTO truncate_a DEFAULT VALUES;
+ SELECT * FROM truncate_a;
+  id | id1 
+ ----+-----
+-  1 |  33
+-  2 |  34
+   3 |  35
+   4 |  36
+-(4 rows)
++  5 |  37
++  6 |  38
++  7 |  39
++  8 |  40
++(6 rows)
+ 
+ DROP TABLE truncate_a;
+ SELECT nextval('truncate_a_id1'); -- fail, seq should have been dropped
+-ERROR:  relation "truncate_a_id1" does not exist
+-LINE 1: SELECT nextval('truncate_a_id1');
+-                       ^
++ERROR:  nextval(): relation "truncate_a_id1" does not exist
+ -- partitioned table
+ CREATE TABLE truncparted (a int, b char) PARTITION BY LIST (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncparted (a int, b char) PARTITION BY LIST (a)
++                                                              ^
++HINT:  try \h CREATE TABLE
+ -- error, can't truncate a partitioned table
+ TRUNCATE ONLY truncparted;
+-ERROR:  cannot truncate only a partitioned table
+-HINT:  Do not specify the ONLY keyword, or use TRUNCATE ONLY on the partitions directly.
++ERROR:  relation "truncparted" does not exist
+ CREATE TABLE truncparted1 PARTITION OF truncparted FOR VALUES IN (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncparted1 PARTITION OF truncparted FOR VALUES IN (1)
++                          ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO truncparted VALUES (1, 'a');
++ERROR:  relation "truncparted" does not exist
+ -- error, must truncate partitions
+ TRUNCATE ONLY truncparted;
+-ERROR:  cannot truncate only a partitioned table
+-HINT:  Do not specify the ONLY keyword, or use TRUNCATE ONLY on the partitions directly.
++ERROR:  relation "truncparted" does not exist
+ TRUNCATE truncparted;
++ERROR:  relation "truncparted" does not exist
+ DROP TABLE truncparted;
++ERROR:  relation "truncparted" does not exist
+ -- foreign key on partitioned table: partition key is referencing column.
+ -- Make sure truncate did execute on all tables
+ CREATE FUNCTION tp_ins_data() RETURNS void LANGUAGE plpgsql AS $$
+@@ -472,6 +446,7 @@
+ 	INSERT INTO truncpart VALUES (1), (100), (150);
+   END
+ $$;
++ERROR:  relation "truncprim" does not exist
+ CREATE FUNCTION tp_chk_data(OUT pktb regclass, OUT pkval int, OUT fktb regclass, OUT fkval int)
+   RETURNS SETOF record LANGUAGE plpgsql AS $$
+   BEGIN
+@@ -481,114 +456,160 @@
+     ORDER BY 2, 4;
+   END
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ CREATE TABLE truncprim (a int PRIMARY KEY);
+ CREATE TABLE truncpart (a int REFERENCES truncprim)
+   PARTITION BY RANGE (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncpart (a int REFERENCES truncprim)
++  PARTITION BY RANGE (a)
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE truncpart_1 PARTITION OF truncpart FOR VALUES FROM (0) TO (100);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncpart_1 PARTITION OF truncpart FOR VALUES FROM (0) TO (100)
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE truncpart_2 PARTITION OF truncpart FOR VALUES FROM (100) TO (200)
+   PARTITION BY RANGE (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncpart_2 PARTITION OF truncpart FOR VALUES FROM (100) TO (200)
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE truncpart_2_1 PARTITION OF truncpart_2 FOR VALUES FROM (100) TO (150);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncpart_2_1 PARTITION OF truncpart_2 FOR VALUES FROM (100) TO (150)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE truncpart_2_d PARTITION OF truncpart_2 DEFAULT;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE truncpart_2_d PARTITION OF truncpart_2 DEFAULT
++                           ^
++HINT:  try \h CREATE TABLE
+ TRUNCATE TABLE truncprim;	-- should fail
+-ERROR:  cannot truncate a table referenced in a foreign key constraint
+-DETAIL:  Table "truncpart" references "truncprim".
+-HINT:  Truncate table "truncpart" at the same time, or use TRUNCATE ... CASCADE.
+ select tp_ins_data();
+- tp_ins_data 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: tp_ins_data()
+ -- should truncate everything
+ TRUNCATE TABLE truncprim, truncpart;
++ERROR:  relation "truncpart" does not exist
+ select * from tp_chk_data();
+- pktb | pkval | fktb | fkval 
+-------+-------+------+-------
+-(0 rows)
+-
++ERROR:  unknown function: tp_chk_data()
+ select tp_ins_data();
+- tp_ins_data 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: tp_ins_data()
+ -- should truncate everything
+ TRUNCATE TABLE truncprim CASCADE;
+-NOTICE:  truncate cascades to table "truncpart"
+-NOTICE:  truncate cascades to table "truncpart_1"
+-NOTICE:  truncate cascades to table "truncpart_2"
+-NOTICE:  truncate cascades to table "truncpart_2_1"
+-NOTICE:  truncate cascades to table "truncpart_2_d"
+ SELECT * FROM tp_chk_data();
+- pktb | pkval | fktb | fkval 
+-------+-------+------+-------
+-(0 rows)
+-
++ERROR:  unknown function: tp_chk_data()
+ SELECT tp_ins_data();
+- tp_ins_data 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: tp_ins_data()
+ -- should truncate all partitions
+ TRUNCATE TABLE truncpart;
++ERROR:  relation "truncpart" does not exist
+ SELECT * FROM tp_chk_data();
+-   pktb    | pkval | fktb | fkval 
+------------+-------+------+-------
+- truncprim |     1 |      |      
+- truncprim |   100 |      |      
+- truncprim |   150 |      |      
+-(3 rows)
+-
++ERROR:  unknown function: tp_chk_data()
+ DROP TABLE truncprim, truncpart;
++ERROR:  relation "truncpart" does not exist
+ DROP FUNCTION tp_ins_data(), tp_chk_data();
++ERROR:  unknown function: tp_ins_data()
+ -- test cascade when referencing a partitioned table
+ CREATE TABLE trunc_a (a INT PRIMARY KEY) PARTITION BY RANGE (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a (a INT PRIMARY KEY) PARTITION BY RANGE (a)
++                                                               ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a1 PARTITION OF trunc_a FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a1 PARTITION OF trunc_a FOR VALUES FROM (0) TO (10)
++                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a2 PARTITION OF trunc_a FOR VALUES FROM (10) TO (20)
+   PARTITION BY RANGE (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a2 PARTITION OF trunc_a FOR VALUES FROM (10) TO (20)
++                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a21 PARTITION OF trunc_a2 FOR VALUES FROM (10) TO (12);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a21 PARTITION OF trunc_a2 FOR VALUES FROM (10) TO (12)
++                       ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a22 PARTITION OF trunc_a2 FOR VALUES FROM (12) TO (16);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a22 PARTITION OF trunc_a2 FOR VALUES FROM (12) TO (16)
++                       ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a2d PARTITION OF trunc_a2 DEFAULT;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a2d PARTITION OF trunc_a2 DEFAULT
++                       ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE trunc_a3 PARTITION OF trunc_a FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE trunc_a3 PARTITION OF trunc_a FOR VALUES FROM (20) TO (30)
++                      ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO trunc_a VALUES (0), (5), (10), (15), (20), (25);
++ERROR:  relation "trunc_a" does not exist
+ -- truncate a partition cascading to a table
+ CREATE TABLE ref_b (
+     b INT PRIMARY KEY,
+     a INT REFERENCES trunc_a(a) ON DELETE CASCADE
+ );
++ERROR:  relation "trunc_a" does not exist
+ INSERT INTO ref_b VALUES (10, 0), (50, 5), (100, 10), (150, 15);
++ERROR:  relation "ref_b" does not exist
+ TRUNCATE TABLE trunc_a1 CASCADE;
+-NOTICE:  truncate cascades to table "ref_b"
++ERROR:  relation "trunc_a1" does not exist
+ SELECT a FROM ref_b;
+- a 
+----
+-(0 rows)
+-
++ERROR:  relation "ref_b" does not exist
+ DROP TABLE ref_b;
++ERROR:  relation "ref_b" does not exist
+ -- truncate a partition cascading to a partitioned table
+ CREATE TABLE ref_c (
+     c INT PRIMARY KEY,
+     a INT REFERENCES trunc_a(a) ON DELETE CASCADE
+ ) PARTITION BY RANGE (c);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE ref_c (
++    c INT PRIMARY KEY,
++    a INT REFERENCES trunc_a(a) ON DELETE CASCADE
++) PARTITION BY RANGE (c)
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE ref_c1 PARTITION OF ref_c FOR VALUES FROM (100) TO (200);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE ref_c1 PARTITION OF ref_c FOR VALUES FROM (100) TO (200)
++                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE ref_c2 PARTITION OF ref_c FOR VALUES FROM (200) TO (300);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE ref_c2 PARTITION OF ref_c FOR VALUES FROM (200) TO (300)
++                    ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO ref_c VALUES (100, 10), (150, 15), (200, 20), (250, 25);
++ERROR:  relation "ref_c" does not exist
+ TRUNCATE TABLE trunc_a21 CASCADE;
+-NOTICE:  truncate cascades to table "ref_c"
+-NOTICE:  truncate cascades to table "ref_c1"
+-NOTICE:  truncate cascades to table "ref_c2"
++ERROR:  relation "trunc_a21" does not exist
+ SELECT a as "from table ref_c" FROM ref_c;
+- from table ref_c 
+-------------------
+-(0 rows)
+-
++ERROR:  relation "ref_c" does not exist
+ SELECT a as "from table trunc_a" FROM trunc_a ORDER BY a;
+- from table trunc_a 
+---------------------
+-                 15
+-                 20
+-                 25
+-(3 rows)
+-
++ERROR:  relation "trunc_a" does not exist
+ DROP TABLE trunc_a, ref_c;
++ERROR:  relation "trunc_a" does not exist

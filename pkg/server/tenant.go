@@ -712,7 +712,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// to add this information. See below.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{
-			"engine_type":     s.sqlServer.cfg.StorageEngine.String(),
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
@@ -759,15 +758,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
-			s.ClusterSettings(),
+			s.sqlServer.cfg,
+			0, /* pebbleCacheSize */
 			s.stopper,
-			s.sqlServer.cfg.GoroutineDumpDirName,
-			s.sqlServer.cfg.HeapProfileDirName,
-			s.sqlServer.cfg.CPUProfileDirName,
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
-			s.cfg.TestingKnobs,
 		); err != nil {
 			return err
 		}
@@ -1118,6 +1114,7 @@ func makeTenantSQLServerArgs(
 
 	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(baseCfg.Config)
 	rpcCtxOpts.TenantID = sqlCfg.TenantID
+	rpcCtxOpts.TenantName = sqlCfg.TenantName
 	rpcCtxOpts.UseNodeAuth = sqlCfg.LocalKVServerInfo != nil
 	rpcCtxOpts.NodeID = baseCfg.IDContainer
 	rpcCtxOpts.StorageClusterID = baseCfg.ClusterIDContainer
@@ -1252,9 +1249,8 @@ func makeTenantSQLServerArgs(
 
 	sTS := ts.MakeTenantServer(baseCfg.AmbientCtx, tenantConnect, rpcContext.TenantID, registry)
 
-	systemConfigWatcher := systemconfigwatcher.NewWithAdditionalProvider(
+	systemConfigWatcher := systemconfigwatcher.New(
 		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
-		tenantConnect,
 	)
 
 	// Define structures which have circular dependencies. The underlying structures
@@ -1270,10 +1266,10 @@ func makeTenantSQLServerArgs(
 		Settings: st,
 		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStateFunc(
 				circularJobRegistry, jobsprotectedts.Jobs,
 			),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStateFunc(
 				circularJobRegistry, jobsprotectedts.Schedules,
 			),
 			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),
@@ -1302,7 +1298,7 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	grpcServer, err := newGRPCServer(startupCtx, rpcContext)
+	grpcServer, err := newGRPCServer(startupCtx, rpcContext, registry)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

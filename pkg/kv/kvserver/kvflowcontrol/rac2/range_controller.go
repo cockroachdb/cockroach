@@ -166,7 +166,7 @@ type RaftInterface interface {
 	//
 	// If it returns true, all the entries in the slice are in the message, and
 	// Next is advanced to be equal to end.
-	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice raft.LogSlice) (raftpb.Message, bool)
+	SendMsgAppRaftMuLocked(replicaID roachpb.ReplicaID, slice raft.LeadSlice) (raftpb.Message, bool)
 }
 
 // RaftMsgAppMode specifies how Raft (at the leader) generates MsgApps. In
@@ -1631,6 +1631,7 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 			}
 			streams = append(streams, kvflowinspectpb.ConnectedStream{
 				Stream:                  rc.opts.SSTokenCounter.InspectStream(rs.stream),
+				Disconnected:            rs.sendStream.mu.connectedState != replicate,
 				TrackedDeductions:       trackedDeductions,
 				TotalEvalDeductedTokens: int64(evalTokens),
 				TotalSendDeductedTokens: int64(sendTokens),
@@ -1676,9 +1677,11 @@ func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
 			defer rs.sendStream.mu.Unlock()
 			s.IndexToSend = rs.sendStream.mu.sendQueue.indexToSend
 			s.NextRaftIndexInitial = rs.sendStream.mu.nextRaftIndexInitial
-			s.NextRaftIndex = rs.sendStream.mu.sendQueue.nextRaftIndex
 			s.ForceFlushStopIndex = uint64(rs.sendStream.mu.sendQueue.forceFlushStopIndex)
-			s.EvalTokensHeld = convertTokensSlice(rs.sendStream.mu.eval.tokensDeducted[:])
+			// Don't waste space if there are no tokens held.
+			if tokens := rs.sendStream.mu.eval.tokensDeducted[:]; holdsTokens(tokens) {
+				s.EvalTokensHeld = convertTokensSlice(tokens)
+			}
 		}()
 		if rs.sendStream.holdsTokensRaftMuLocked() {
 			s.SendTokensHeld = convertTokensSlice(rs.sendStream.raftMu.tracker.deducted[:])
@@ -1686,6 +1689,12 @@ func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
 		status.Streams[uint64(id)] = s
 	}
 	return status
+}
+
+func holdsTokens(tokens []kvflowcontrol.Tokens) bool {
+	return slices.ContainsFunc(tokens, func(tokens kvflowcontrol.Tokens) bool {
+		return tokens != 0
+	})
 }
 
 func convertTokensSlice(tokens []kvflowcontrol.Tokens) []int64 {
@@ -2298,7 +2307,8 @@ func (rs *replicaState) createReplicaSendStreamRaftMuLocked(
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Must be in StateReplicate on creation.
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "creating send stream %v for replica %v", rs.stream, rs.desc)
+		log.VEventf(ctx, 1, "r%v creating send stream %v for replica %v",
+			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
@@ -2620,7 +2630,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	// replication AC in pull mode, and a send-queue forms, and these entries
 	// are > 4KiB, we will empty the send-queue one entry at a time.
 	// Specifically, we will only deduct 4KiB of tokens, since the approx size
-	// of the send-queue will be zero. Then we will call LogSlice with
+	// of the send-queue will be zero. Then we will call LeadSlice with
 	// maxSize=4KiB, which will return one entry. And then we will repeat. If
 	// this is a real problem, we can fix this by keeping track of not just the
 	// preciseSizeSum of tokens needed, but also the size sum of these entries.
@@ -2638,7 +2648,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	// and elastic work, and MsgAppPull mode, in which case the total size of
 	// entries not subject to flow control will be tiny. We of course return the
 	// unused tokens for entries not subject to flow control.
-	slice, err := logSnapshot.LogSlice(
+	slice, err := logSnapshot.LeadSlice(
 		rss.mu.sendQueue.indexToSend-1, rss.mu.sendQueue.nextRaftIndex-1, uint64(bytesToSend))
 	var msg raftpb.Message
 	if err == nil {
@@ -2686,7 +2696,8 @@ func (rs *replicaState) scheduledRaftMuLocked(
 func (rs *replicaState) closeSendStreamRaftMuLocked(ctx context.Context) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "closing send stream %v for replica %v", rs.stream, rs.desc)
+		log.VEventf(ctx, 1, "r%v closing send stream %v for replica %v",
+			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
@@ -2893,7 +2904,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 	if n := len(event.sendingEntries); n > 0 && event.mode == MsgAppPull {
 		// NB: this will not do IO since everything here is in the unstable log
 		// (see raft.LogSnapshot.unstable).
-		slice, err := event.logSnapshot.LogSlice(
+		slice, err := event.logSnapshot.LeadSlice(
 			event.sendingEntries[0].id.index-1, event.sendingEntries[n-1].id.index, infinityEntryIndex)
 		if err != nil {
 			return false, err
@@ -2924,7 +2935,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 	return transitionedSendQState, nil
 }
 
-func (rss *replicaSendStream) updateInflightRaftMuAndStreamLocked(ls raft.LogSlice) {
+func (rss *replicaSendStream) updateInflightRaftMuAndStreamLocked(ls raft.LeadSlice) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
 	entries := ls.Entries()

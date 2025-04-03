@@ -73,6 +73,8 @@ type streamIngestionFrontier struct {
 	// source cluster can begin garbage collection.
 	heartbeatTime hlc.Timestamp
 
+	readerTenantActivated bool
+
 	lastPartitionUpdate time.Time
 	lastFrontierDump    time.Time
 
@@ -319,10 +321,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	jobID := jobspb.JobID(sf.spec.JobID)
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
-	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for sp, ts := range f.Entries() {
 		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	replicatedTime := f.Frontier()
 	sf.lastPartitionUpdate = timeutil.Now()
@@ -337,6 +338,10 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		progress := md.Progress
 		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
+
+		if replicatedTime.IsSet() && streamProgress.ReplicationStatus == jobspb.InitialScan {
+			streamProgress.ReplicationStatus = jobspb.Replicating
+		}
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
 		if sf.replicatedTimeAtStart.Less(replicatedTime) {
@@ -360,14 +365,20 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
 		}
-		// Only set up the reader tenant once during PCR: when PCR finishes the initial
-		// scan and persists a replicated time for the first time.
-		if replicationDetails.ReadTenantID.IsSet() && sf.replicatedTimeAtStart.IsEmpty() && replicatedTime.IsSet() {
+		// Attempt to activate the reader tenant on the first persisted update of
+		// the flow. If the reader tenant is already active, this will be a no-op.
+		//
+		// NB: we do not have enough persisted state to read the tenant key space
+		// only once during the whole replication stream process, so instead, we
+		// check once per flow.
+		firstProgressOfFlow := sf.replicatedTimeAtStart.Less(replicatedTime)
+		if replicationDetails.ReadTenantID.IsSet() && firstProgressOfFlow && !sf.readerTenantActivated {
 			readerToActivate := replicationDetails.ReadTenantID
-			err := sf.activateReaderTenant(ctx, txn, readerToActivate)
+			err := sf.maybeActivateReaderTenant(ctx, txn, readerToActivate)
 			if err != nil {
 				return err
 			}
+			sf.readerTenantActivated = true
 		}
 
 		ptp := sf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
@@ -411,10 +422,9 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 	jobID := jobspb.JobID(sf.spec.JobID)
 
 	frontierEntries := &execinfrapb.FrontierEntries{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
-	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for sp, ts := range f.Entries() {
 		frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	frontierBytes, err := protoutil.Marshal(frontierEntries)
 	if err != nil {
@@ -476,12 +486,15 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 	}
 }
 
-func (sf *streamIngestionFrontier) activateReaderTenant(
+func (sf *streamIngestionFrontier) maybeActivateReaderTenant(
 	ctx context.Context, txn isql.Txn, readerToActivate roachpb.TenantID,
 ) error {
 	info, err := sql.GetTenantRecordByID(ctx, txn, readerToActivate, sf.FlowCtx.Cfg.Settings)
 	if err != nil {
 		return err
+	}
+	if info.DataState == mtinfopb.DataStateReady {
+		return nil
 	}
 
 	info.DataState = mtinfopb.DataStateReady

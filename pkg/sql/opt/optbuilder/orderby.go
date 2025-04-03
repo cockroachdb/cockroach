@@ -152,7 +152,7 @@ func (b *Builder) analyzeOrderByIndex(order *tree.Order, inScope, orderByScope *
 		}
 
 		colItem := tree.NewColumnItem(&tn, col.ColName())
-		expr := inScope.resolveType(colItem, types.Any)
+		expr := inScope.resolveType(colItem, types.AnyElement)
 		outCol := orderByScope.addColumn(scopeColName(""), expr)
 		outCol.descending = desc
 	}
@@ -331,5 +331,8 @@ func ensureColumnOrderable(e tree.TypedExpr) {
 	switch typ.Family() {
 	case types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		panic(unimplementedWithIssueDetailf(92165, "", "can't order by column type %s", typ.SQLString()))
+	case types.JsonpathFamily:
+		panic(pgerror.Newf(pgcode.UndefinedFunction, "could not identify an ordering operator for type jsonpath"))
+
 	}
 }

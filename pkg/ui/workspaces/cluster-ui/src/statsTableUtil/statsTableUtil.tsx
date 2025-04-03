@@ -33,9 +33,6 @@ export const statisticsColumnLabels = {
   lastExecTimestamp: "Last Execution Time",
   latencyMax: "Max Latency",
   latencyMin: "Min Latency",
-  latencyP50: "P50 Latency",
-  latencyP90: "P90 Latency",
-  latencyP99: "P99 Latency",
   maxMemUsage: "Max Memory",
   maxMemUsed: "Maximum Memory Usage",
   memUsage: "Memory Usage",
@@ -57,6 +54,7 @@ export const statisticsColumnLabels = {
   statementsCount: "Statements",
   status: "Status",
   time: "Time",
+  commitLatency: "Commit Latency",
   transactionFingerprintId: "Transaction Fingerprint ID",
   transactions: "Transactions",
   txnDuration: "Transaction Duration",
@@ -554,6 +552,23 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
+  commitLatency: (_statType: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            Average commit latency of this transaction. The gray bar indicates
+            the mean latency. The blue bar indicates one standard deviation from
+            the mean.
+          </p>
+        }
+      >
+        {getLabel("commitLatency")}
+      </Tooltip>
+    );
+  },
   time: (statType: StatisticType) => {
     let contentModifier = "";
     let fingerprintModifier = "";
@@ -942,84 +957,6 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("latencyMin")}
-      </Tooltip>
-    );
-  },
-  latencyP50: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 50th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP50")}
-      </Tooltip>
-    );
-  },
-  latencyP90: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 90th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP90")}
-      </Tooltip>
-    );
-  },
-  latencyP99: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 99th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP99")}
       </Tooltip>
     );
   },

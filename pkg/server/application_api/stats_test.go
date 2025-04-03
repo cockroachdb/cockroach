@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -132,7 +131,7 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 
 	statusServer := s.StatusServer().(serverpb.StatusServer)
 	sqlServer := s.SQLServer().(*sql.Server)
-	sqlServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, srv.AppStopper())
+	sqlServer.GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 	testutils.SucceedsSoon(t, func() error {
 		// Get the diagnostic info.
 		res, err := statusServer.Diagnostics(ctx, &serverpb.DiagnosticsRequest{NodeId: "local"})
@@ -341,7 +340,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			populateStats(t, sqlDB)
 			if flushed {
 				gateway.SQLServer().(*sql.Server).
-					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, gateway.AppStopper())
+					GetSQLStatsProvider().MaybeFlush(ctx, gateway.AppStopper())
 			}
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{

@@ -10,25 +10,29 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 // NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
 // and writing data. This should be initialized by calling engineccl.Init() before calling
-// NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
-// code does not depend on CCL code.
+// NewPebble(). The optionBytes is a binary serialized storagepb.EncryptionOptions.
 var NewEncryptedEnvFunc func(
-	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	fs vfs.FS, fr *FileRegistry, dbDir string, readOnly bool, encryptionOptions *storagepb.EncryptionOptions,
 ) (*EncryptionEnv, error)
 
 // resolveEncryptedEnvOptions creates the EncryptionEnv and associated file
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
 func resolveEncryptedEnvOptions(
-	ctx context.Context, unencryptedFS vfs.FS, dir string, encryptionOpts []byte, rw RWMode,
+	ctx context.Context,
+	unencryptedFS vfs.FS,
+	dir string,
+	encryptionOpts *storagepb.EncryptionOptions,
+	rw RWMode,
 ) (*FileRegistry, *EncryptionEnv, error) {
-	if len(encryptionOpts) == 0 {
+	if encryptionOpts == nil {
 		// There's no encryption config. This is valid if the user doesn't
 		// intend to use encryption-at-rest, and the store has never had
 		// encryption-at-rest enabled. Validate that there's no file registry.
@@ -36,7 +40,7 @@ func resolveEncryptedEnvOptions(
 		// --enterprise-encryption flag for this store.
 		if err := checkNoRegistryFile(unencryptedFS, dir); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
-				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
+				"specified. You must fully specify the --enterprise-encryption flag")
 		}
 		return nil, nil, nil
 	}
@@ -80,15 +84,15 @@ type EncryptionRegistries struct {
 	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
 	FileRegistry []byte
 	// KeyRegistry is the list of keys, scrubbed of actual key data.
-	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
+	// serialized storage/enginepb/key_registry.proto::DataKeysRegistry
 	KeyRegistry []byte
 }
 
 // EncryptionStatsHandler provides encryption related stats.
 type EncryptionStatsHandler interface {
-	// Returns a serialized enginepbccl.EncryptionStatus.
+	// Returns a serialized enginepb.EncryptionStatus.
 	GetEncryptionStatus() ([]byte, error)
-	// Returns a serialized enginepbccl.DataKeysRegistry, scrubbed of key contents.
+	// Returns a serialized enginepb.DataKeysRegistry, scrubbed of key contents.
 	GetDataKeysRegistry() ([]byte, error)
 	// Returns the ID of the active data key, or "plain" if none.
 	GetActiveDataKeyID() (string, error)
@@ -109,8 +113,8 @@ type EnvStats struct {
 	// ActiveKeyBytes is the size of files using the active data key.
 	ActiveKeyBytes uint64
 	// EncryptionType is an enum describing the active encryption algorithm.
-	// See: ccl/storageccl/engineccl/enginepbccl/key_registry.proto
+	// See: storage/engine/enginepb/key_registry.proto
 	EncryptionType int32
-	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
+	// EncryptionStatus is a serialized enginepb/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
 }

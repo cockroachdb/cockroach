@@ -44,7 +44,7 @@ PGURLS=$(drtprod pgurl "${CLUSTER}":1)
 drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee ycsb_init_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
-${pwd}/cockroach workload init ycsb $PGURLS --drop --families=false $@
+${pwd}/cockroach workload init ycsb $PGURLS --drop --families=false --insert-hash=false $@
 EOF"
 drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x ycsb_init_${suffix}.sh"
 

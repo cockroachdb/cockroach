@@ -1,0 +1,4590 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label=/mnt/data1/postgres/src/test/regress/results/jsonb.out /mnt/data1/postgres/src/test/regress/expected/jsonb.out /mnt/data1/postgres/src/test/regress/results/jsonb.out
+--- /mnt/data1/postgres/src/test/regress/expected/jsonb.out
++++ /mnt/data1/postgres/src/test/regress/results/jsonb.out
+@@ -1,10 +1,26 @@
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ CREATE TABLE testjsonb (
+        j jsonb
+ );
+ \set filename :abs_srcdir '/data/jsonb.data'
+ COPY testjsonb FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/jsonb.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY testjsonb FROM ':abs_srcdir/data/jsonb.data'
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Strings.
+ SELECT '""'::jsonb;				-- OK.
+  jsonb 
+@@ -13,11 +29,9 @@
+ (1 row)
+ 
+ SELECT $$''$$::jsonb;			-- ERROR, single quotes are not allowed
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT $$''$$::jsonb;
+-               ^
+-DETAIL:  Token "'" is invalid.
+-CONTEXT:  JSON data, line 1: '...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 2 bytes at offset 0:
++...|''|...
++...|^.|...: invalid JSON token
+ SELECT '"abc"'::jsonb;			-- OK
+  jsonb 
+ -------
+@@ -25,18 +39,15 @@
+ (1 row)
+ 
+ SELECT '"abc'::jsonb;			-- ERROR, quotes not closed
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '"abc'::jsonb;
+-               ^
+-DETAIL:  Token ""abc" is invalid.
+-CONTEXT:  JSON data, line 1: "abc
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 0:
++...|"abc|...
++...|^...|...: invalid JSON token
+ SELECT '"abc
+ def"'::jsonb;					-- ERROR, unescaped newline in string constant
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '"abc
+-               ^
+-DETAIL:  Character with value 0x0a must be escaped.
+-CONTEXT:  JSON data, line 1: "abc
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 9 bytes at offset 0:
++...|"abc
++def"|...
++...|^........|...: invalid JSON token
+ SELECT '"\n\"\\"'::jsonb;		-- OK, legal escapes
+   jsonb   
+ ----------
+@@ -44,11 +55,9 @@
+ (1 row)
+ 
+ SELECT '"\v"'::jsonb;			-- ERROR, not a valid JSON escape
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '"\v"'::jsonb;
+-               ^
+-DETAIL:  Escape sequence "\v" is invalid.
+-CONTEXT:  JSON data, line 1: "\v...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 1:
++...|"\v"|...
++...|.^..|...: invalid JSON token
+ -- see json_encoding test for input with unicode escapes
+ -- Numbers.
+ SELECT '1'::jsonb;				-- OK
+@@ -64,11 +73,9 @@
+ (1 row)
+ 
+ SELECT '01'::jsonb;				-- ERROR, not valid according to JSON spec
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '01'::jsonb;
+-               ^
+-DETAIL:  Token "01" is invalid.
+-CONTEXT:  JSON data, line 1: 01
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 2 bytes at offset 2:
++...|01|...
++...|..^|...: trailing characters after JSON document
+ SELECT '0.1'::jsonb;				-- OK
+  jsonb 
+ -------
+@@ -82,35 +89,29 @@
+ (1 row)
+ 
+ SELECT '1e100'::jsonb;			-- OK
+-                                                 jsonb                                                 
+--------------------------------------------------------------------------------------------------------
+- 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
++ jsonb  
++--------
++ 1E+100
+ (1 row)
+ 
+ SELECT '1.3e100'::jsonb;			-- OK
+-                                                 jsonb                                                 
+--------------------------------------------------------------------------------------------------------
+- 13000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
++  jsonb   
++----------
++ 1.3E+100
+ (1 row)
+ 
+ SELECT '1f2'::jsonb;				-- ERROR
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '1f2'::jsonb;
+-               ^
+-DETAIL:  Token "1f2" is invalid.
+-CONTEXT:  JSON data, line 1: 1f2
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 3 bytes at offset 2:
++...|1f2|...
++...|..^|...: trailing characters after JSON document
+ SELECT '0.x1'::jsonb;			-- ERROR
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '0.x1'::jsonb;
+-               ^
+-DETAIL:  Token "0.x1" is invalid.
+-CONTEXT:  JSON data, line 1: 0.x1
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 0:
++...|0.x1|...
++...|^...|...: invalid JSON token
+ SELECT '1.3ex100'::jsonb;		-- ERROR
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '1.3ex100'::jsonb;
+-               ^
+-DETAIL:  Token "1.3ex100" is invalid.
+-CONTEXT:  JSON data, line 1: 1.3ex100
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 8 bytes at offset 0:
++...|1.3ex100|...
++...|^.......|...: invalid JSON token
+ -- Arrays.
+ SELECT '[]'::jsonb;				-- OK
+  jsonb 
+@@ -131,23 +132,17 @@
+ (1 row)
+ 
+ SELECT '[1,2,]'::jsonb;			-- ERROR, trailing comma
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '[1,2,]'::jsonb;
+-               ^
+-DETAIL:  Expected JSON value, but found "]".
+-CONTEXT:  JSON data, line 1: [1,2,]
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 6 bytes at offset 4:
++...|[1,2,]|...
++...|....^.|...: stateArrayValue: unexpected comma
+ SELECT '[1,2'::jsonb;			-- ERROR, no closing bracket
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '[1,2'::jsonb;
+-               ^
+-DETAIL:  The input string ended unexpectedly.
+-CONTEXT:  JSON data, line 1: [1,2
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 4:
++...|[1,2|...
++...|....^|...: unexpected EOF
+ SELECT '[1,[2]'::jsonb;			-- ERROR, no closing bracket
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '[1,[2]'::jsonb;
+-               ^
+-DETAIL:  The input string ended unexpectedly.
+-CONTEXT:  JSON data, line 1: [1,[2]
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 6 bytes at offset 6:
++...|[1,[2]|...
++...|......^|...: unexpected EOF
+ -- Objects.
+ SELECT '{}'::jsonb;				-- OK
+  jsonb 
+@@ -156,11 +151,9 @@
+ (1 row)
+ 
+ SELECT '{"abc"}'::jsonb;			-- ERROR, no value
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc"}'::jsonb;
+-               ^
+-DETAIL:  Expected ":", but found "}".
+-CONTEXT:  JSON data, line 1: {"abc"}
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 7 bytes at offset 7:
++...|{"abc"}|...
++...|.......^|...: stateObjectColon: expecting colon
+ SELECT '{"abc":1}'::jsonb;		-- OK
+    jsonb    
+ ------------
+@@ -168,29 +161,21 @@
+ (1 row)
+ 
+ SELECT '{1:"abc"}'::jsonb;		-- ERROR, keys must be strings
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{1:"abc"}'::jsonb;
+-               ^
+-DETAIL:  Expected string or "}", but found "1".
+-CONTEXT:  JSON data, line 1: {1...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 9 bytes at offset 2:
++...|{1:"abc"}|...
++...|..^......|...: stateObjectString: missing string key
+ SELECT '{"abc",1}'::jsonb;		-- ERROR, wrong separator
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc",1}'::jsonb;
+-               ^
+-DETAIL:  Expected ":", but found ",".
+-CONTEXT:  JSON data, line 1: {"abc",...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 9 bytes at offset 7:
++...|{"abc",1}|...
++...|.......^.|...: stateObjectColon: expecting colon
+ SELECT '{"abc"=1}'::jsonb;		-- ERROR, totally wrong separator
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc"=1}'::jsonb;
+-               ^
+-DETAIL:  Token "=" is invalid.
+-CONTEXT:  JSON data, line 1: {"abc"=...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 9 bytes at offset 6:
++...|{"abc"=1}|...
++...|......^..|...: invalid JSON token
+ SELECT '{"abc"::1}'::jsonb;		-- ERROR, another wrong separator
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc"::1}'::jsonb;
+-               ^
+-DETAIL:  Expected JSON value, but found ":".
+-CONTEXT:  JSON data, line 1: {"abc"::...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 10 bytes at offset 8:
++...|{"abc"::1}|...
++...|........^.|...: unexpected object token ":"
+ SELECT '{"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}'::jsonb; -- OK
+                                jsonb                                
+ --------------------------------------------------------------------
+@@ -198,26 +183,48 @@
+ (1 row)
+ 
+ SELECT '{"abc":1:2}'::jsonb;		-- ERROR, colon in wrong spot
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc":1:2}'::jsonb;
+-               ^
+-DETAIL:  Expected "," or "}", but found ":".
+-CONTEXT:  JSON data, line 1: {"abc":1:...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 11 bytes at offset 9:
++...|{"abc":1:2}|...
++...|.........^.|...: stateObjectComma: expecting comma
+ SELECT '{"abc":1,3}'::jsonb;		-- ERROR, no value
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{"abc":1,3}'::jsonb;
+-               ^
+-DETAIL:  Expected string, but found "3".
+-CONTEXT:  JSON data, line 1: {"abc":1,3...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 11 bytes at offset 10:
++...|{"abc":1,3}|...
++...|..........^|...: stateObjectString: missing string key
+ -- Recursion.
+ SET max_stack_depth = '100kB';
++ERROR:  unimplemented: the configuration setting "max_stack_depth" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT repeat('[', 10000)::jsonb;
+-ERROR:  stack depth limit exceeded
+-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 10000 bytes at offset 10000:
++...|[[[[[[[[[[[[[[[[|...
++...|................^|...: unexpected EOF
+ SELECT repeat('{"a":', 10000)::jsonb;
+-ERROR:  stack depth limit exceeded
+-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 50000 bytes at offset 50000:
++...|:{"a":{"a":{"a":|...
++...|................^|...: unexpected EOF
+ RESET max_stack_depth;
++ERROR:  unimplemented: the configuration setting "max_stack_depth" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Miscellaneous stuff.
+ SELECT 'true'::jsonb;			-- OK
+  jsonb 
+@@ -244,41 +251,27 @@
+ (1 row)
+ 
+ SELECT 'true false'::jsonb;		-- ERROR, too many values
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT 'true false'::jsonb;
+-               ^
+-DETAIL:  Expected end of input, but found "false".
+-CONTEXT:  JSON data, line 1: true false
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 10 bytes at offset 5:
++...|true false|...
++...|.....^....|...: trailing characters after JSON document
+ SELECT 'true, false'::jsonb;		-- ERROR, too many values
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT 'true, false'::jsonb;
+-               ^
+-DETAIL:  Expected end of input, but found ",".
+-CONTEXT:  JSON data, line 1: true,...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 11 bytes at offset 5:
++...|true, false|...
++...|.....^.....|...: trailing characters after JSON document
+ SELECT 'truf'::jsonb;			-- ERROR, not a keyword
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT 'truf'::jsonb;
+-               ^
+-DETAIL:  Token "truf" is invalid.
+-CONTEXT:  JSON data, line 1: truf
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 0:
++...|truf|...
++...|^...|...: invalid JSON token
+ SELECT 'trues'::jsonb;			-- ERROR, not a keyword
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT 'trues'::jsonb;
+-               ^
+-DETAIL:  Token "trues" is invalid.
+-CONTEXT:  JSON data, line 1: trues
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 5 bytes at offset 5:
++...|trues|...
++...|.....^|...: trailing characters after JSON document
+ SELECT ''::jsonb;				-- ERROR, no value
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT ''::jsonb;
+-               ^
+-DETAIL:  The input string ended unexpectedly.
+-CONTEXT:  JSON data, line 1: 
++ERROR:  could not parse JSON: unable to decode JSON: while decoding empty string: unexpected EOF
+ SELECT '    '::jsonb;			-- ERROR, no value
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '    '::jsonb;
+-               ^
+-DETAIL:  The input string ended unexpectedly.
+-CONTEXT:  JSON data, line 1:     
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 4:
++...|    |...
++...|....^|...: unexpected EOF
+ -- Multi-line JSON input to check ERROR reporting
+ SELECT '{
+ 		"one": 1,
+@@ -287,7 +280,7 @@
+ 		true}'::jsonb; -- OK
+                   jsonb                  
+ -----------------------------------------
+- {"one": 1, "two": "two", "three": true}
++ {"one": 1, "three": true, "two": "two"}
+ (1 row)
+ 
+ SELECT '{
+@@ -295,68 +288,48 @@
+ 		"two":,"two",  -- ERROR extraneous comma before field "two"
+ 		"three":
+ 		true}'::jsonb;
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{
+-               ^
+-DETAIL:  Expected JSON value, but found ",".
+-CONTEXT:  JSON data, line 3: 		"two":,...
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 94 bytes at offset 23:
++...|e": 1,
++		"two":,"two",  -- ERROR|...
++...|................^...............|...: unexpected object token ","
+ SELECT '{
+ 		"one": 1,
+ 		"two":"two",
+ 		"averyveryveryveryveryveryveryveryveryverylongfieldname":}'::jsonb;
+-ERROR:  invalid input syntax for type json
+-LINE 1: SELECT '{
+-               ^
+-DETAIL:  Expected JSON value, but found "}".
+-CONTEXT:  JSON data, line 4: ...yveryveryveryveryveryveryveryverylongfieldname":}
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 89 bytes at offset 89:
++...|longfieldname":}|...
++...|................^|...: unexpected object token "}"
+ -- ERROR missing value for last field
+ -- test non-error-throwing input
+ select pg_input_is_valid('{"a":true}', 'jsonb');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select pg_input_is_valid('{"a":true', 'jsonb');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('{"a":true', 'jsonb');
+-              message               |                detail                | hint | sql_error_code 
+-------------------------------------+--------------------------------------+------+----------------
+- invalid input syntax for type json | The input string ended unexpectedly. |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select * from pg_input_error_info('{"a":1e1000000}', 'jsonb');
+-            message             | detail | hint | sql_error_code 
+---------------------------------+--------+------+----------------
+- value overflows numeric format |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- make sure jsonb is passed through json generators without being escaped
+ SELECT array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
+-      array_to_json       
+---------------------------
+- [{"a": 1},{"b": [2, 3]}]
++       array_to_json       
++---------------------------
++ [{"a": 1}, {"b": [2, 3]}]
+ (1 row)
+ 
+ -- anyarray column
+ CREATE TEMP TABLE rows AS
+ SELECT x, 'txt' || x as y
+ FROM generate_series(1,3) AS x;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ analyze rows;
+ select attname, to_jsonb(histogram_bounds) histogram_bounds
+ from pg_stats
+ where tablename = 'rows' and
+       schemaname = pg_my_temp_schema()::regnamespace::text
+ order by 1;
+- attname |     histogram_bounds     
+----------+--------------------------
+- x       | [1, 2, 3]
+- y       | ["txt1", "txt2", "txt3"]
+-(2 rows)
++ attname | histogram_bounds 
++---------+------------------
++(0 rows)
+ 
+ -- to_jsonb, timestamps
+ select to_jsonb(timestamp '2014-05-28 12:22:35.614298');
+@@ -400,27 +373,27 @@
+ (1 row)
+ 
+ select to_jsonb(timestamp 'Infinity');
+-  to_jsonb  
+-------------
+- "infinity"
++            to_jsonb            
++--------------------------------
++ "294277-01-01T23:59:59.999999"
+ (1 row)
+ 
+ select to_jsonb(timestamp '-Infinity');
+-  to_jsonb   
+--------------
+- "-infinity"
++        to_jsonb        
++------------------------
++ "-4714-11-23T00:00:00"
+ (1 row)
+ 
+ select to_jsonb(timestamptz 'Infinity');
+-  to_jsonb  
+-------------
+- "infinity"
++               to_jsonb               
++--------------------------------------
++ "294277-01-01T15:59:59.999999-08:00"
+ (1 row)
+ 
+ select to_jsonb(timestamptz '-Infinity');
+-  to_jsonb   
+--------------
+- "-infinity"
++           to_jsonb           
++------------------------------
++ "-4714-11-22T16:00:00-08:00"
+ (1 row)
+ 
+ --jsonb_agg
+@@ -430,9 +403,9 @@
+                ROW(y.*,ARRAY[4,5,6])] AS z
+          FROM generate_series(1,2) x,
+               generate_series(4,5) y) q;
+-                                                                                                                                                                    jsonb_agg                                                                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- [{"b": "a1", "c": 4, "z": [{"f1": 1, "f2": [1, 2, 3]}, {"f1": 4, "f2": [4, 5, 6]}]}, {"b": "a1", "c": 5, "z": [{"f1": 1, "f2": [1, 2, 3]}, {"f1": 5, "f2": [4, 5, 6]}]}, {"b": "a2", "c": 4, "z": [{"f1": 2, "f2": [1, 2, 3]}, {"f1": 4, "f2": [4, 5, 6]}]}, {"b": "a2", "c": 5, "z": [{"f1": 2, "f2": [1, 2, 3]}, {"f1": 5, "f2": [4, 5, 6]}]}]
++                                                                                                                                                                                                jsonb_agg                                                                                                                                                                                                 
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ [{"b": "a1", "c": 4, "z": [{"f1": {"x": 1}, "f2": [1, 2, 3]}, {"f1": {"x": 4}, "f2": [4, 5, 6]}]}, {"b": "a1", "c": 5, "z": [{"f1": {"x": 1}, "f2": [1, 2, 3]}, {"f1": {"x": 5}, "f2": [4, 5, 6]}]}, {"b": "a2", "c": 4, "z": [{"f1": {"x": 2}, "f2": [1, 2, 3]}, {"f1": {"x": 4}, "f2": [4, 5, 6]}]}, {"b": "a2", "c": 5, "z": [{"f1": {"x": 2}, "f2": [1, 2, 3]}, {"f1": {"x": 5}, "f2": [4, 5, 6]}]}]
+ (1 row)
+ 
+ SELECT jsonb_agg(q ORDER BY x, y)
+@@ -574,9 +547,9 @@
+ (1 row)
+ 
+ SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'scalar';
+-ERROR:  cannot call jsonb_object_keys on a scalar
++ERROR:  cannot call json_object_keys on a scalar
+ SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'array';
+-ERROR:  cannot call jsonb_object_keys on an array
++ERROR:  cannot call json_object_keys on an array
+ SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'object';
+  jsonb_object_keys 
+ -------------------
+@@ -773,47 +746,19 @@
+ 
+ -- containment
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+- jsonb_contains 
+-----------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":null}');
+- jsonb_contains 
+-----------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "g":null}');
+- jsonb_contains 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"g":null}');
+- jsonb_contains 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"c"}');
+- jsonb_contains 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+- jsonb_contains 
+-----------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":"q"}');
+- jsonb_contains 
+-----------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contains()
+ SELECT '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+  ?column? 
+ ----------
+@@ -893,47 +838,19 @@
+ (1 row)
+ 
+ SELECT jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"a":"b", "c":null}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"a":"b", "g":null}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"g":null}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"a":"c"}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT jsonb_contained('{"a":"b", "c":"q"}', '{"a":"b", "b":1, "c":null}');
+- jsonb_contained 
+------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_contained()
+ SELECT '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+  ?column? 
+ ----------
+@@ -1036,9 +953,9 @@
+ (1 row)
+ 
+ SELECT jsonb_array_length('{"f1":1,"f2":[5,6]}');
+-ERROR:  cannot get array length of a non-array
++ERROR:  jsonb_array_length(): cannot get array length of a non-array
+ SELECT jsonb_array_length('4');
+-ERROR:  cannot get array length of a scalar
++ERROR:  jsonb_array_length(): cannot get array length of a scalar
+ -- each
+ SELECT jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null}');
+      jsonb_each     
+@@ -1119,29 +1036,13 @@
+ 
+ -- exists
+ SELECT jsonb_exists('{"a":null, "b":"qq"}', 'a');
+- jsonb_exists 
+---------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists()
+ SELECT jsonb_exists('{"a":null, "b":"qq"}', 'b');
+- jsonb_exists 
+---------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists()
+ SELECT jsonb_exists('{"a":null, "b":"qq"}', 'c');
+- jsonb_exists 
+---------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists()
+ SELECT jsonb_exists('{"a":"null", "b":"qq"}', 'a');
+- jsonb_exists 
+---------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists()
+ SELECT jsonb '{"a":null, "b":"qq"}' ? 'a';
+  ?column? 
+ ----------
+@@ -1170,7 +1071,7 @@
+ SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ -- type sensitive array exists - should return no rows (since "exists" only
+@@ -1185,7 +1086,7 @@
+ SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
+@@ -1249,35 +1150,15 @@
+ (1 row)
+ 
+ SELECT jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['a','b']);
+- jsonb_exists_all 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists_all()
+ SELECT jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['b','a']);
+- jsonb_exists_all 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists_all()
+ SELECT jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','a']);
+- jsonb_exists_all 
+-------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists_all()
+ SELECT jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','d']);
+- jsonb_exists_all 
+-------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists_all()
+ SELECT jsonb_exists_all('{"a":null, "b":"qq"}', '{}'::text[]);
+- jsonb_exists_all 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: jsonb_exists_all()
+ SELECT jsonb '{"a":null, "b":"qq"}' ?& ARRAY['a','b'];
+  ?column? 
+ ----------
+@@ -1419,47 +1300,108 @@
+ (1 row)
+ 
+ SELECT jsonb_build_array(VARIADIC NULL::text[]); -- ok
+- jsonb_build_array 
+--------------------
+- 
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC NULL::text[])
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_array(VARIADIC '{}'::text[]); -- ok
+- jsonb_build_array 
+--------------------
+- []
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC '{}'::text[])
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_array(VARIADIC '{a,b,c}'::text[]); -- ok
+- jsonb_build_array 
+--------------------
+- ["a", "b", "c"]
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC '{a,b,c}'::text[])
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_array(VARIADIC ARRAY['a', NULL]::text[]); -- ok
+- jsonb_build_array 
+--------------------
+- ["a", null]
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC ARRAY['a', NULL]::text[])
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_array(VARIADIC '{1,2,3,4}'::text[]); -- ok
+-  jsonb_build_array   
+-----------------------
+- ["1", "2", "3", "4"]
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC '{1,2,3,4}'::text[])
++                                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_array(VARIADIC '{1,2,3,4}'::int[]); -- ok
+- jsonb_build_array 
+--------------------
+- [1, 2, 3, 4]
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC '{1,2,3,4}'::int[])
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-SELECT jsonb_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
+- jsonb_build_array  
+---------------------
+- [1, 4, 2, 5, 3, 6]
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++SELECT jsonb_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][])
++                                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
+                            jsonb_build_object                            
+ -------------------------------------------------------------------------
+@@ -1476,15 +1418,13 @@
+ (1 row)
+ 
+ SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
+-ERROR:  argument list must have even number of elements
+-HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
++ERROR:  jsonb_build_object(): argument list must have even number of elements
+ SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
+-ERROR:  key value must be scalar, not array, composite, or json
++ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ SELECT jsonb_build_object('a', 'b', 'c'); -- error
+-ERROR:  argument list must have even number of elements
+-HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
++ERROR:  jsonb_build_object(): argument list must have even number of elements
+ SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
+-ERROR:  argument 1: key must not be null
++ERROR:  jsonb_build_object(): null value not allowed for object key
+ SELECT jsonb_build_object('a', NULL); -- ok
+  jsonb_build_object 
+ --------------------
+@@ -1492,46 +1432,124 @@
+ (1 row)
+ 
+ SELECT jsonb_build_object(VARIADIC NULL::text[]); -- ok
+- jsonb_build_object 
+---------------------
+- 
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC NULL::text[])
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_object(VARIADIC '{}'::text[]); -- ok
+- jsonb_build_object 
+---------------------
+- {}
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC '{}'::text[])
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_object(VARIADIC '{a,b,c}'::text[]); -- error
+-ERROR:  argument list must have even number of elements
+-HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC '{a,b,c}'::text[])
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT jsonb_build_object(VARIADIC ARRAY['a', NULL]::text[]); -- ok
+- jsonb_build_object 
+---------------------
+- {"a": null}
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC ARRAY['a', NULL]::text[])
++                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_object(VARIADIC ARRAY[NULL, 'a']::text[]); -- error, key cannot be NULL
+-ERROR:  argument 1: key must not be null
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC ARRAY[NULL, 'a']::text[])
++                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT jsonb_build_object(VARIADIC '{1,2,3,4}'::text[]); -- ok
+-  jsonb_build_object  
+-----------------------
+- {"1": "2", "3": "4"}
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC '{1,2,3,4}'::text[])
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ SELECT jsonb_build_object(VARIADIC '{1,2,3,4}'::int[]); -- ok
+- jsonb_build_object 
+---------------------
+- {"1": 2, "3": 4}
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC '{1,2,3,4}'::int[])
++                                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-SELECT jsonb_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
+-    jsonb_build_object    
+---------------------------
+- {"1": 4, "2": 5, "3": 6}
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++SELECT jsonb_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT jsonb_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][])
++                                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ -- empty objects/arrays
+ SELECT jsonb_build_array();
+  jsonb_build_array 
+@@ -1554,42 +1572,36 @@
+ 
+ -- keys must be scalar and not null
+ SELECT jsonb_build_object(null,2);
+-ERROR:  argument 1: key must not be null
++ERROR:  jsonb_build_object(): null value not allowed for object key
+ SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
+-ERROR:  key value must be scalar, not array, composite, or json
++ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
+-ERROR:  key value must be scalar, not array, composite, or json
++ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ SELECT jsonb_build_object('{1,2,3}'::int[], 3);
+-ERROR:  key value must be scalar, not array, composite, or json
++ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ -- handling of NULL values
+ SELECT jsonb_object_agg(1, NULL::jsonb);
+- jsonb_object_agg 
+-------------------
+- {"1": null}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_object_agg(int, jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT jsonb_object_agg(NULL, '{"a":1}');
+-ERROR:  field name must not be null
++ERROR:  null value not allowed for object key
+ CREATE TEMP TABLE foo (serial_num int, name text, type text);
+ INSERT INTO foo VALUES (847001,'t15','GE1043');
+ INSERT INTO foo VALUES (847002,'t16','GE1043');
+ INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+ SELECT jsonb_build_object('turbines',jsonb_object_agg(serial_num,jsonb_build_object('name',name,'type',type)))
+ FROM foo;
+-                                                                     jsonb_build_object                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+- {"turbines": {"847001": {"name": "t15", "type": "GE1043"}, "847002": {"name": "t16", "type": "GE1043"}, "847003": {"name": "sub-alpha", "type": "GESS90"}}}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_object_agg(int, jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT jsonb_object_agg(name, type) FROM foo;
+                      jsonb_object_agg                      
+ -----------------------------------------------------------
+- {"t15": "GE1043", "t16": "GE1043", "sub-alpha": "GESS90"}
++ {"sub-alpha": "GESS90", "t15": "GE1043", "t16": "GE1043"}
+ (1 row)
+ 
+ INSERT INTO foo VALUES (999999, NULL, 'bar');
+ SELECT jsonb_object_agg(name, type) FROM foo;
+-ERROR:  field name must not be null
++ERROR:  null value not allowed for object key
+ -- jsonb_object
+ -- empty object, one dimension
+ SELECT jsonb_object('{}');
+@@ -1614,23 +1626,23 @@
+ 
+ -- same but with two dimensions
+ SELECT jsonb_object('{{a,1},{b,2},{3,NULL},{"d e f","a b c"}}');
+-                   jsonb_object                    
+----------------------------------------------------
+- {"3": null, "a": "1", "b": "2", "d e f": "a b c"}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_object(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- odd number error
+ SELECT jsonb_object('{a,b,c}');
+-ERROR:  array must have even number of elements
++ERROR:  jsonb_object(): array must have even number of elements
+ -- one column error
+ SELECT jsonb_object('{{a},{b}}');
+-ERROR:  array must have two columns
++ERROR:  unknown signature: jsonb_object(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- too many columns error
+ SELECT jsonb_object('{{a,b,c},{b,c,d}}');
+-ERROR:  array must have two columns
++ERROR:  unknown signature: jsonb_object(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- too many dimensions error
+ SELECT jsonb_object('{{{a,b},{c,d}},{{b,c},{d,e}}}');
+-ERROR:  wrong number of array subscripts
++ERROR:  unknown signature: jsonb_object(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --two argument form of jsonb_object
+ select jsonb_object('{a,b,c,"d e f"}','{1,2,3,"a b c"}');
+                    jsonb_object                   
+@@ -1640,15 +1652,16 @@
+ 
+ -- too many dimensions
+ SELECT jsonb_object('{{a,1},{b,2},{3,NULL},{"d e f","a b c"}}', '{{a,1},{b,2},{3,NULL},{"d e f","a b c"}}');
+-ERROR:  wrong number of array subscripts
++ERROR:  unknown signature: jsonb_object(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- mismatched dimensions
+ select jsonb_object('{a,b,c,"d e f",g}','{1,2,3,"a b c"}');
+-ERROR:  mismatched array dimensions
++ERROR:  jsonb_object(): mismatched array dimensions
+ select jsonb_object('{a,b,c,"d e f"}','{1,2,3,"a b c",g}');
+-ERROR:  mismatched array dimensions
++ERROR:  jsonb_object(): mismatched array dimensions
+ -- null key error
+ select jsonb_object('{a,b,NULL,"d e f"}','{1,2,3,"a b c"}');
+-ERROR:  null value not allowed for object key
++ERROR:  jsonb_object(): null value not allowed for object key
+ -- empty key is allowed
+ select jsonb_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
+                   jsonb_object                   
+@@ -2033,7 +2046,7 @@
+ (6 rows)
+ 
+ SELECT * FROM jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]') q;
+-           value            
++             q              
+ ----------------------------
+  1
+  true
+@@ -2056,7 +2069,7 @@
+ (7 rows)
+ 
+ SELECT * FROM jsonb_array_elements_text('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false,"stringy"]') q;
+-           value            
++             q              
+ ----------------------------
+  1
+  true
+@@ -2070,10 +2083,34 @@
+ -- populate_record
+ CREATE TYPE jbpop AS (a text, b int, c timestamp);
+ CREATE DOMAIN jsb_int_not_null  AS int     NOT NULL;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN jsb_int_not_null  AS int     NOT NULL
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN jsb_int_array_1d  AS int[]   CHECK(array_length(VALUE, 1) = 3);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN jsb_int_array_1d  AS int[]   CHECK(array_length(VALUE, 1) = 3)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN jsb_int_array_2d  AS int[][] CHECK(array_length(VALUE, 2) = 3);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN jsb_int_array_2d  AS int[][] CHECK(array_length(VALUE, 2) = 3)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create type jb_unordered_pair as (x int, y int);
+ create domain jb_ordered_pair as jb_unordered_pair check((value).x <= (value).y);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain jb_ordered_pair as jb_unordered_pair check((value).x <= (value).y)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE TYPE jsbrec AS (
+ 	i	int,
+ 	ia	_int4,
+@@ -2093,9 +2130,18 @@
+ 	rec	jbpop,
+ 	reca	jbpop[]
+ );
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++CREATE TYPE jsbrec AS (
++	i	int,
++	ia	_int4,
++	ia1	int[],
++        ^
++HINT:  try \h CREATE TYPE
+ CREATE TYPE jsbrec_i_not_null AS (
+ 	i	jsb_int_not_null
+ );
++ERROR:  type "jsb_int_not_null" does not exist
+ SELECT * FROM jsonb_populate_record(NULL::jbpop,'{"a":"blurfl","x":43.2}') q;
+    a    | b | c 
+ --------+---+---
+@@ -2103,9 +2149,9 @@
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"a":"blurfl","x":43.2}') q;
+-   a    | b |            c             
+---------+---+--------------------------
+- blurfl | 3 | Mon Dec 31 15:30:56 2012
++   a    | b |          c          
++--------+---+---------------------
++ blurfl | 3 | 2012-12-31 15:30:56
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(NULL::jbpop,'{"a":"blurfl","x":43.2}') q;
+@@ -2115,9 +2161,9 @@
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"a":"blurfl","x":43.2}') q;
+-   a    | b |            c             
+---------+---+--------------------------
+- blurfl | 3 | Mon Dec 31 15:30:56 2012
++   a    | b |          c          
++--------+---+---------------------
++ blurfl | 3 | 2012-12-31 15:30:56
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(NULL::jbpop,'{"a":[100,200,false],"x":43.2}') q;
+@@ -2127,499 +2173,270 @@
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"a":[100,200,false],"x":43.2}') q;
+-         a         | b |            c             
+--------------------+---+--------------------------
+- [100, 200, false] | 3 | Mon Dec 31 15:30:56 2012
++         a         | b |          c          
++-------------------+---+---------------------
++ [100, 200, false] | 3 | 2012-12-31 15:30:56
+ (1 row)
+ 
+ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"c":[100,200,false],"x":43.2}') q;
+-ERROR:  invalid input syntax for type timestamp: "[100, 200, false]"
++ERROR:  parsing as type timestamp: could not parse "[100, 200, false]"
+ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop, '{}') q;
+- a | b |            c             
+----+---+--------------------------
+- x | 3 | Mon Dec 31 15:30:56 2012
++ a | b |          c          
++---+---+---------------------
++ x | 3 | 2012-12-31 15:30:56
+ (1 row)
+ 
+ SELECT i FROM jsonb_populate_record(NULL::jsbrec_i_not_null, '{"x": 43.2}') q;
+-ERROR:  domain jsb_int_not_null does not allow null values
++ERROR:  jsonb_populate_record(): type "jsbrec_i_not_null" does not exist
+ SELECT i FROM jsonb_populate_record(NULL::jsbrec_i_not_null, '{"i": null}') q;
+-ERROR:  domain jsb_int_not_null does not allow null values
++ERROR:  jsonb_populate_record(): type "jsbrec_i_not_null" does not exist
+ SELECT i FROM jsonb_populate_record(NULL::jsbrec_i_not_null, '{"i": 12345}') q;
+-   i   
+--------
+- 12345
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec_i_not_null" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": null}') q;
+- ia 
+-----
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "ia".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": [1, "2", null, 4]}') q;
+-      ia      
+---------------
+- {1,2,NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": [[1, 2], [3, 4]]}') q;
+-      ia       
+----------------
+- {{1,2},{3,4}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": [[1], 2]}') q;
+-ERROR:  expected JSON array
+-HINT:  See the array element [1] of key "ia".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": [[1], [2, 3]]}') q;
+-ERROR:  malformed JSON array
+-DETAIL:  Multidimensional arrays must have sub-arrays with matching dimensions.
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia FROM jsonb_populate_record(NULL::jsbrec, '{"ia": "{1,2,3}"}') q;
+-   ia    
+----------
+- {1,2,3}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1 FROM jsonb_populate_record(NULL::jsbrec, '{"ia1": null}') q;
+- ia1 
+------
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1 FROM jsonb_populate_record(NULL::jsbrec, '{"ia1": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "ia1".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1 FROM jsonb_populate_record(NULL::jsbrec, '{"ia1": [1, "2", null, 4]}') q;
+-     ia1      
+---------------
+- {1,2,NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1 FROM jsonb_populate_record(NULL::jsbrec, '{"ia1": [[1, 2, 3]]}') q;
+-    ia1    
+------------
+- {{1,2,3}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1d FROM jsonb_populate_record(NULL::jsbrec, '{"ia1d": null}') q;
+- ia1d 
+-------
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1d FROM jsonb_populate_record(NULL::jsbrec, '{"ia1d": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "ia1d".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1d FROM jsonb_populate_record(NULL::jsbrec, '{"ia1d": [1, "2", null, 4]}') q;
+-ERROR:  value for domain jsb_int_array_1d violates check constraint "jsb_int_array_1d_check"
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia1d FROM jsonb_populate_record(NULL::jsbrec, '{"ia1d": [1, "2", null]}') q;
+-    ia1d    
+-------------
+- {1,2,NULL}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2 FROM jsonb_populate_record(NULL::jsbrec, '{"ia2": [1, "2", null, 4]}') q;
+-     ia2      
+---------------
+- {1,2,NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2 FROM jsonb_populate_record(NULL::jsbrec, '{"ia2": [[1, 2], [null, 4]]}') q;
+-       ia2        
+-------------------
+- {{1,2},{NULL,4}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2 FROM jsonb_populate_record(NULL::jsbrec, '{"ia2": [[], []]}') q;
+- ia2 
+------
+- {}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2 FROM jsonb_populate_record(NULL::jsbrec, '{"ia2": [[1, 2], [3]]}') q;
+-ERROR:  malformed JSON array
+-DETAIL:  Multidimensional arrays must have sub-arrays with matching dimensions.
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2 FROM jsonb_populate_record(NULL::jsbrec, '{"ia2": [[1, 2], 3, 4]}') q;
+-ERROR:  expected JSON array
+-HINT:  See the array element [1] of key "ia2".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2d FROM jsonb_populate_record(NULL::jsbrec, '{"ia2d": [[1, "2"], [null, 4]]}') q;
+-ERROR:  value for domain jsb_int_array_2d violates check constraint "jsb_int_array_2d_check"
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia2d FROM jsonb_populate_record(NULL::jsbrec, '{"ia2d": [[1, "2", 3], [null, 5, 6]]}') q;
+-         ia2d         
+-----------------------
+- {{1,2,3},{NULL,5,6}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [1, "2", null, 4]}') q;
+-     ia3      
+---------------
+- {1,2,NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [[1, 2], [null, 4]]}') q;
+-       ia3        
+-------------------
+- {{1,2},{NULL,4}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [ [[], []], [[], []], [[], []] ]}') q;
+- ia3 
+------
+- {}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [ [[1, 2]], [[3, 4]] ]}') q;
+-        ia3        
+--------------------
+- {{{1,2}},{{3,4}}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [ [[1, 2], [3, 4]], [[5, 6], [7, 8]] ]}') q;
+-              ia3              
+--------------------------------
+- {{{1,2},{3,4}},{{5,6},{7,8}}}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ia3 FROM jsonb_populate_record(NULL::jsbrec, '{"ia3": [ [[1, 2], [3, 4]], [[5, 6], [7, 8], [9, 10]] ]}') q;
+-ERROR:  malformed JSON array
+-DETAIL:  Multidimensional arrays must have sub-arrays with matching dimensions.
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ta FROM jsonb_populate_record(NULL::jsbrec, '{"ta": null}') q;
+- ta 
+-----
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ta FROM jsonb_populate_record(NULL::jsbrec, '{"ta": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "ta".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ta FROM jsonb_populate_record(NULL::jsbrec, '{"ta": [1, "2", null, 4]}') q;
+-      ta      
+---------------
+- {1,2,NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ta FROM jsonb_populate_record(NULL::jsbrec, '{"ta": [[1, 2, 3], {"k": "v"}]}') q;
+-ERROR:  expected JSON array
+-HINT:  See the array element [1] of key "ta".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT c FROM jsonb_populate_record(NULL::jsbrec, '{"c": null}') q;
+- c 
+----
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT c FROM jsonb_populate_record(NULL::jsbrec, '{"c": "aaa"}') q;
+-     c      
+-------------
+- aaa       
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT c FROM jsonb_populate_record(NULL::jsbrec, '{"c": "aaaaaaaaaa"}') q;
+-     c      
+-------------
+- aaaaaaaaaa
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT c FROM jsonb_populate_record(NULL::jsbrec, '{"c": "aaaaaaaaaaaaa"}') q;
+-ERROR:  value too long for type character(10)
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ca FROM jsonb_populate_record(NULL::jsbrec, '{"ca": null}') q;
+- ca 
+-----
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ca FROM jsonb_populate_record(NULL::jsbrec, '{"ca": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "ca".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ca FROM jsonb_populate_record(NULL::jsbrec, '{"ca": [1, "2", null, 4]}') q;
+-                      ca                       
+------------------------------------------------
+- {"1         ","2         ",NULL,"4         "}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ca FROM jsonb_populate_record(NULL::jsbrec, '{"ca": ["aaaaaaaaaaaaaaaa"]}') q;
+-ERROR:  value too long for type character(10)
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT ca FROM jsonb_populate_record(NULL::jsbrec, '{"ca": [[1, 2, 3], {"k": "v"}]}') q;
+-ERROR:  expected JSON array
+-HINT:  See the array element [1] of key "ca".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": null}') q;
+- js 
+-----
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": true}') q;
+-  js  
+-------
+- true
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": 123.45}') q;
+-   js   
+---------
+- 123.45
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": "123.45"}') q;
+-    js    
+-----------
+- "123.45"
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": "abc"}') q;
+-  js   
+--------
+- "abc"
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": [123, "123", null, {"key": "value"}]}') q;
+-                  js                  
+---------------------------------------
+- [123, "123", null, {"key": "value"}]
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT js FROM jsonb_populate_record(NULL::jsbrec, '{"js": {"a": "bbb", "b": null, "c": 123.45}}') q;
+-                  js                  
+---------------------------------------
+- {"a": "bbb", "b": null, "c": 123.45}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": null}') q;
+- jsb 
+------
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": true}') q;
+- jsb  
+-------
+- true
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": 123.45}') q;
+-  jsb   
+---------
+- 123.45
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": "123.45"}') q;
+-   jsb    
+-----------
+- "123.45"
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": "abc"}') q;
+-  jsb  
+--------
+- "abc"
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": [123, "123", null, {"key": "value"}]}') q;
+-                 jsb                  
+---------------------------------------
+- [123, "123", null, {"key": "value"}]
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsb FROM jsonb_populate_record(NULL::jsbrec, '{"jsb": {"a": "bbb", "b": null, "c": 123.45}}') q;
+-                 jsb                  
+---------------------------------------
+- {"a": "bbb", "b": null, "c": 123.45}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsa FROM jsonb_populate_record(NULL::jsbrec, '{"jsa": null}') q;
+- jsa 
+------
+- 
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsa FROM jsonb_populate_record(NULL::jsbrec, '{"jsa": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "jsa".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsa FROM jsonb_populate_record(NULL::jsbrec, '{"jsa": [1, "2", null, 4]}') q;
+-        jsa         
+---------------------
+- {1,"\"2\"",NULL,4}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT jsa FROM jsonb_populate_record(NULL::jsbrec, '{"jsa": ["aaa", null, [1, 2, "3", {}], { "k" : "v" }]}') q;
+-                          jsa                          
+--------------------------------------------------------
+- {"\"aaa\"",NULL,"[1, 2, \"3\", {}]","{\"k\": \"v\"}"}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT rec FROM jsonb_populate_record(NULL::jsbrec, '{"rec": 123}') q;
+-ERROR:  cannot call populate_composite on a scalar
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT rec FROM jsonb_populate_record(NULL::jsbrec, '{"rec": [1, 2]}') q;
+-ERROR:  cannot call populate_composite on an array
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT rec FROM jsonb_populate_record(NULL::jsbrec, '{"rec": {"a": "abc", "c": "01.02.2003", "x": 43.2}}') q;
+-                rec                
+------------------------------------
+- (abc,,"Thu Jan 02 00:00:00 2003")
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT rec FROM jsonb_populate_record(NULL::jsbrec, '{"rec": "(abc,42,01.02.2003)"}') q;
+-                 rec                 
+--------------------------------------
+- (abc,42,"Thu Jan 02 00:00:00 2003")
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT reca FROM jsonb_populate_record(NULL::jsbrec, '{"reca": 123}') q;
+-ERROR:  expected JSON array
+-HINT:  See the value of key "reca".
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT reca FROM jsonb_populate_record(NULL::jsbrec, '{"reca": [1, 2]}') q;
+-ERROR:  cannot call populate_composite on a scalar
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT reca FROM jsonb_populate_record(NULL::jsbrec, '{"reca": [{"a": "abc", "b": 456}, null, {"c": "01.02.2003", "x": 43.2}]}') q;
+-                          reca                          
+---------------------------------------------------------
+- {"(abc,456,)",NULL,"(,,\"Thu Jan 02 00:00:00 2003\")"}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT reca FROM jsonb_populate_record(NULL::jsbrec, '{"reca": ["(abc,42,01.02.2003)"]}') q;
+-                   reca                    
+--------------------------------------------
+- {"(abc,42,\"Thu Jan 02 00:00:00 2003\")"}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT reca FROM jsonb_populate_record(NULL::jsbrec, '{"reca": "{\"(abc,42,01.02.2003)\"}"}') q;
+-                   reca                    
+--------------------------------------------
+- {"(abc,42,\"Thu Jan 02 00:00:00 2003\")"}
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ SELECT rec FROM jsonb_populate_record(
+ 	row(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+ 		row('x',3,'2012-12-31 15:30:56')::jbpop,NULL)::jsbrec,
+ 	'{"rec": {"a": "abc", "c": "01.02.2003", "x": 43.2}}'
+ ) q;
+-                rec                 
+-------------------------------------
+- (abc,3,"Thu Jan 02 00:00:00 2003")
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ -- anonymous record type
+ SELECT jsonb_populate_record(null::record, '{"x": 0, "y": 1}');
+-ERROR:  could not determine row type for result of jsonb_populate_record
+-HINT:  Provide a non-null record argument, or call the function in the FROM clause using a column definition list.
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
+ SELECT jsonb_populate_record(row(1,2), '{"f1": 0, "f2": 1}');
+- jsonb_populate_record 
+------------------------
+- (0,1)
+-(1 row)
+-
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
+ SELECT * FROM
+   jsonb_populate_record(null::record, '{"x": 776}') AS (x int, y int);
+-  x  | y 
+------+---
+- 776 |  
+-(1 row)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++SELECT * FROM
++  jsonb_populate_record(null::record, '{"x": 776}') AS (x int, y int)
++                                                       ^
++HINT:  try \h <SOURCE>
+ -- composite domain
+ SELECT jsonb_populate_record(null::jb_ordered_pair, '{"x": 0, "y": 1}');
+- jsonb_populate_record 
+------------------------
+- (0,1)
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jb_ordered_pair" does not exist
+ SELECT jsonb_populate_record(row(1,2)::jb_ordered_pair, '{"x": 0}');
+- jsonb_populate_record 
+------------------------
+- (0,2)
+-(1 row)
+-
++ERROR:  jsonb_populate_record(): type "jb_ordered_pair" does not exist
+ SELECT jsonb_populate_record(row(1,2)::jb_ordered_pair, '{"x": 1, "y": 0}');
+-ERROR:  value for domain jb_ordered_pair violates check constraint "jb_ordered_pair_check"
++ERROR:  jsonb_populate_record(): type "jb_ordered_pair" does not exist
+ -- populate_recordset
+ SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b |            c             
+---------+---+--------------------------
++   a    | b |          c          
++--------+---+---------------------
+  blurfl |   | 
+-        | 3 | Fri Jan 20 10:42:53 2012
++        | 3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b  |            c             
+---------+----+--------------------------
++   a    | b  |          c          
++--------+----+---------------------
+  blurfl | 99 | 
+- def    |  3 | Fri Jan 20 10:42:53 2012
++ def    |  3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b |            c             
+---------+---+--------------------------
++   a    | b |          c          
++--------+---+---------------------
+  blurfl |   | 
+-        | 3 | Fri Jan 20 10:42:53 2012
++        | 3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b  |            c             
+---------+----+--------------------------
++   a    | b  |          c          
++--------+----+---------------------
+  blurfl | 99 | 
+- def    |  3 | Fri Jan 20 10:42:53 2012
++ def    |  3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-        a        | b  |            c             
+------------------+----+--------------------------
++        a        | b  |          c          
++-----------------+----+---------------------
+  [100, 200, 300] | 99 | 
+- {"z": true}     |  3 | Fri Jan 20 10:42:53 2012
++ {"z": true}     |  3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"c":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-ERROR:  invalid input syntax for type timestamp: "[100, 200, 300]"
++ERROR:  parsing as type timestamp: unexpected separator '[' for field Year
++DETAIL:  Wanted: [ Year Month Day Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ ]
+ SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b |            c             
+---------+---+--------------------------
++   a    | b |          c          
++--------+---+---------------------
+  blurfl |   | 
+-        | 3 | Fri Jan 20 10:42:53 2012
++        | 3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-   a    | b  |            c             
+---------+----+--------------------------
++   a    | b  |          c          
++--------+----+---------------------
+  blurfl | 99 | 
+- def    |  3 | Fri Jan 20 10:42:53 2012
++ def    |  3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
+-        a        | b  |            c             
+------------------+----+--------------------------
++        a        | b  |          c          
++-----------------+----+---------------------
+  [100, 200, 300] | 99 | 
+- {"z": true}     |  3 | Fri Jan 20 10:42:53 2012
++ {"z": true}     |  3 | 2012-01-20 10:42:53
+ (2 rows)
+ 
+ -- anonymous record type
+ SELECT jsonb_populate_recordset(null::record, '[{"x": 0, "y": 1}]');
+-ERROR:  could not determine row type for result of jsonb_populate_recordset
+-HINT:  Provide a non-null record argument, or call the function in the FROM clause using a column definition list.
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
+ SELECT jsonb_populate_recordset(row(1,2), '[{"f1": 0, "f2": 1}]');
+- jsonb_populate_recordset 
+---------------------------
+- (0,1)
+-(1 row)
+-
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
+ SELECT i, jsonb_populate_recordset(row(i,50), '[{"f1":"42"},{"f2":"43"}]')
+ FROM (VALUES (1),(2)) v(i);
+- i | jsonb_populate_recordset 
+----+--------------------------
+- 1 | (42,50)
+- 1 | (1,43)
+- 2 | (42,50)
+- 2 | (2,43)
+-(4 rows)
+-
++ERROR:  anonymous records cannot be used with json{b}_populate_record{set}
+ SELECT * FROM
+   jsonb_populate_recordset(null::record, '[{"x": 776}]') AS (x int, y int);
+-  x  | y 
+------+---
+- 776 |  
+-(1 row)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++SELECT * FROM
++  jsonb_populate_recordset(null::record, '[{"x": 776}]') AS (x int, y int)
++                                                            ^
++HINT:  try \h <SOURCE>
+ -- empty array is a corner case
+ SELECT jsonb_populate_recordset(null::record, '[]');
+-ERROR:  could not determine row type for result of jsonb_populate_recordset
+-HINT:  Provide a non-null record argument, or call the function in the FROM clause using a column definition list.
++ jsonb_populate_recordset 
++--------------------------
++(0 rows)
++
+ SELECT jsonb_populate_recordset(row(1,2), '[]');
+  jsonb_populate_recordset 
+ --------------------------
+@@ -2632,39 +2449,28 @@
+ 
+ SELECT * FROM
+   jsonb_populate_recordset(null::record, '[]') AS (x int, y int);
+- x | y 
+----+---
+-(0 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++SELECT * FROM
++  jsonb_populate_recordset(null::record, '[]') AS (x int, y int)
++                                                  ^
++HINT:  try \h <SOURCE>
+ -- composite domain
+ SELECT jsonb_populate_recordset(null::jb_ordered_pair, '[{"x": 0, "y": 1}]');
+- jsonb_populate_recordset 
+---------------------------
+- (0,1)
+-(1 row)
+-
++ERROR:  jsonb_populate_recordset(): type "jb_ordered_pair" does not exist
+ SELECT jsonb_populate_recordset(row(1,2)::jb_ordered_pair, '[{"x": 0}, {"y": 3}]');
+- jsonb_populate_recordset 
+---------------------------
+- (0,2)
+- (1,3)
+-(2 rows)
+-
++ERROR:  jsonb_populate_recordset(): type "jb_ordered_pair" does not exist
+ SELECT jsonb_populate_recordset(row(1,2)::jb_ordered_pair, '[{"x": 1, "y": 0}]');
+-ERROR:  value for domain jb_ordered_pair violates check constraint "jb_ordered_pair_check"
++ERROR:  jsonb_populate_recordset(): type "jb_ordered_pair" does not exist
+ -- negative cases where the wrong record type is supplied
+ select * from jsonb_populate_recordset(row(0::int),'[{"a":"1","b":"2"},{"a":"3"}]') q (a text, b text);
+-ERROR:  function return row and query-specified return row do not match
+-DETAIL:  Returned row contains 1 attribute, but query expects 2.
++ERROR:  a column definition list is redundant for a function returning a named composite type
+ select * from jsonb_populate_recordset(row(0::int,0::int),'[{"a":"1","b":"2"},{"a":"3"}]') q (a text, b text);
+-ERROR:  function return row and query-specified return row do not match
+-DETAIL:  Returned type integer at ordinal position 1, but query expects text.
++ERROR:  a column definition list is redundant for a function returning a named composite type
+ select * from jsonb_populate_recordset(row(0::int,0::int,0::int),'[{"a":"1","b":"2"},{"a":"3"}]') q (a text, b text);
+-ERROR:  function return row and query-specified return row do not match
+-DETAIL:  Returned row contains 3 attributes, but query expects 2.
++ERROR:  a column definition list is redundant for a function returning a named composite type
+ select * from jsonb_populate_recordset(row(1000000000::int,50::int),'[{"b":"2"},{"a":"3"}]') q (a text, b text);
+-ERROR:  function return row and query-specified return row do not match
+-DETAIL:  Returned type integer at ordinal position 1, but query expects text.
++ERROR:  a column definition list is redundant for a function returning a named composite type
+ -- jsonb_to_record and jsonb_to_recordset
+ select * from jsonb_to_record('{"a":1,"b":"foo","c":"bar"}')
+     as x(a int, b text, d text);
+@@ -2684,11 +2490,14 @@
+ select *, c is null as c_is_null
+ from jsonb_to_record('{"a":1, "b":{"c":16, "d":2}, "x":8, "ca": ["1 2", 3], "ia": [[1,2],[3,4]], "r": {"a": "aaa", "b": 123}}'::jsonb)
+     as t(a int, b jsonb, c text, x int, ca char(5)[], ia int[][], r jbpop);
+- a |         b         | c | x |        ca         |      ia       |     r      | c_is_null 
+----+-------------------+---+---+-------------------+---------------+------------+-----------
+- 1 | {"c": 16, "d": 2} |   | 8 | {"1 2  ","3    "} | {{1,2},{3,4}} | (aaa,123,) | t
+-(1 row)
+-
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select *, c is null as c_is_null
++from jsonb_to_record('{"a":1, "b":{"c":16, "d":2}, "x":8, "ca": ["1 2", 3], "ia": [[1,2],[3,4]], "r": {"a": "aaa", "b": 123}}'::jsonb)
++    as t(a int, b jsonb, c text, x int, ca char(5)[], ia int[][], r jbpop)
++                                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select *, c is null as c_is_null
+ from jsonb_to_recordset('[{"a":1, "b":{"c":16, "d":2}, "x":8}]'::jsonb)
+     as t(a int, b jsonb, c text, x int);
+@@ -2705,7 +2514,6 @@
+ 
+ select * from jsonb_to_record('{"ia": 123}') as x(ia _int4);
+ ERROR:  expected JSON array
+-HINT:  See the value of key "ia".
+ select * from jsonb_to_record('{"ia": [1, "2", null, 4]}') as x(ia _int4);
+       ia      
+ --------------
+@@ -2713,35 +2521,32 @@
+ (1 row)
+ 
+ select * from jsonb_to_record('{"ia": [[1, 2], [3, 4]]}') as x(ia _int4);
+-      ia       
+----------------
+- {{1,2},{3,4}}
+-(1 row)
+-
++ERROR:  could not parse "[1, 2]" as type int: strconv.ParseInt: parsing "[1, 2]": invalid syntax
+ select * from jsonb_to_record('{"ia": [[1], 2]}') as x(ia _int4);
+-ERROR:  expected JSON array
+-HINT:  See the array element [1] of key "ia".
++ERROR:  could not parse "[1]" as type int: strconv.ParseInt: parsing "[1]": invalid syntax
+ select * from jsonb_to_record('{"ia": [[1], [2, 3]]}') as x(ia _int4);
+-ERROR:  malformed JSON array
+-DETAIL:  Multidimensional arrays must have sub-arrays with matching dimensions.
++ERROR:  could not parse "[1]" as type int: strconv.ParseInt: parsing "[1]": invalid syntax
+ select * from jsonb_to_record('{"ia2": [1, 2, 3]}') as x(ia2 int[][]);
+-   ia2   
+----------
+- {1,2,3}
+-(1 row)
+-
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from jsonb_to_record('{"ia2": [1, 2, 3]}') as x(ia2 int[][])
++                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select * from jsonb_to_record('{"ia2": [[1, 2], [3, 4]]}') as x(ia2 int4[][]);
+-      ia2      
+----------------
+- {{1,2},{3,4}}
+-(1 row)
+-
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from jsonb_to_record('{"ia2": [[1, 2], [3, 4]]}') as x(ia2 int4[][])
++                                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select * from jsonb_to_record('{"ia2": [[[1], [2], [3]]]}') as x(ia2 int4[][]);
+-       ia2       
+------------------
+- {{{1},{2},{3}}}
+-(1 row)
+-
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from jsonb_to_record('{"ia2": [[[1], [2], [3]]]}') as x(ia2 int4[][])
++                                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
+ select * from jsonb_to_record('{"out": {"key": 1}}') as x(out json);
+     out     
+ ------------
+@@ -2755,9 +2560,9 @@
+ (1 row)
+ 
+ select * from jsonb_to_record('{"out": "{\"key\": 1}"}') as x(out json);
+-      out       
+-----------------
+- "{\"key\": 1}"
++    out     
++------------
++ {"key": 1}
+ (1 row)
+ 
+ select * from jsonb_to_record('{"out": {"key": 1}}') as x(out jsonb);
+@@ -2773,9 +2578,9 @@
+ (1 row)
+ 
+ select * from jsonb_to_record('{"out": "{\"key\": 1}"}') as x(out jsonb);
+-      out       
+-----------------
+- "{\"key\": 1}"
++    out     
++------------
++ {"key": 1}
+ (1 row)
+ 
+ -- test type info caching in jsonb_populate_record()
+@@ -2788,55 +2593,75 @@
+ }'::jsonb
+ FROM generate_series(1, 3);
+ SELECT (jsonb_populate_record(NULL::jsbrec, js)).* FROM jsbpoptest;
+- i | ia | ia1 | ia2 | ia3 | ia1d | ia2d | t | ta | c | ca | ts | js | jsb |        jsa         |                rec                |                          reca                          
+----+----+-----+-----+-----+------+------+---+----+---+----+----+----+-----+--------------------+-----------------------------------+--------------------------------------------------------
+-   |    |     |     |     |      |      |   |    |   |    |    |    |     | {1,"\"2\"",NULL,4} | (abc,,"Thu Jan 02 00:00:00 2003") | {"(abc,456,)",NULL,"(,,\"Thu Jan 02 00:00:00 2003\")"}
+-   |    |     |     |     |      |      |   |    |   |    |    |    |     | {1,"\"2\"",NULL,4} | (abc,,"Thu Jan 02 00:00:00 2003") | {"(abc,456,)",NULL,"(,,\"Thu Jan 02 00:00:00 2003\")"}
+-   |    |     |     |     |      |      |   |    |   |    |    |    |     | {1,"\"2\"",NULL,4} | (abc,,"Thu Jan 02 00:00:00 2003") | {"(abc,456,)",NULL,"(,,\"Thu Jan 02 00:00:00 2003\")"}
+-(3 rows)
+-
++ERROR:  jsonb_populate_record(): type "jsbrec" does not exist
+ DROP TYPE jsbrec;
++ERROR:  type "jsbrec" does not exist
+ DROP TYPE jsbrec_i_not_null;
++ERROR:  type "jsbrec_i_not_null" does not exist
+ DROP DOMAIN jsb_int_not_null;
++ERROR:  at or near "jsb_int_not_null": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN jsb_int_not_null
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP DOMAIN jsb_int_array_1d;
++ERROR:  at or near "jsb_int_array_1d": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN jsb_int_array_1d
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP DOMAIN jsb_int_array_2d;
++ERROR:  at or near "jsb_int_array_2d": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN jsb_int_array_2d
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP DOMAIN jb_ordered_pair;
++ERROR:  at or near "jb_ordered_pair": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN jb_ordered_pair
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP TYPE jb_unordered_pair;
+ -- indexing
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
+  count 
+ -------
+-    15
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ? 'public';
+  count 
+ -------
+-   194
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ? 'bar';
+@@ -2848,178 +2673,131 @@
+ SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
+  count 
+ -------
+-   337
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
+  count 
+ -------
+-    42
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
+- count 
+--------
+-   194
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
+- count 
+--------
+-   337
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
+- count 
+--------
+-    42
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.public';
+- count 
+--------
+-   194
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.public'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.bar'
++                                       ^
+ CREATE INDEX jidx ON testjsonb USING gin (j);
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
+  count 
+ -------
+-    15
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ -- exercise GIN_SEARCH_MODE_ALL
+ SELECT count(*) FROM testjsonb WHERE j @> '{}';
+  count 
+ -------
+-  1012
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ? 'public';
+  count 
+ -------
+-   194
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ? 'bar';
+@@ -3031,211 +2809,124 @@
+ SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
+  count 
+ -------
+-   337
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
+  count 
+ -------
+-    42
++     0
+ (1 row)
+ 
+ EXPLAIN (COSTS OFF)
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
+-                           QUERY PLAN                            
+------------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on testjsonb
+-         Recheck Cond: (j @@ '($."wait" == null)'::jsonpath)
+-         ->  Bitmap Index Scan on jidx
+-               Index Cond: (j @@ '($."wait" == null)'::jsonpath)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public)';
+- count 
+--------
+-   194
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.bar)';
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) || exists($.disabled)';
+- count 
+--------
+-   337
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.public) && exists($.disabled)';
+- count 
+--------
+-    42
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ EXPLAIN (COSTS OFF)
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on testjsonb
+-         Recheck Cond: (j @? '$."wait"?(@ == null)'::jsonpath)
+-         ->  Bitmap Index Scan on jidx
+-               Index Cond: (j @? '$."wait"?(@ == null)'::jsonpath)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.public';
+- count 
+--------
+-   194
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.public'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.bar'
++                                       ^
+ -- array exists - array elements should behave as keys (for GIN index scans too)
+ CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
+ SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ -- type sensitive array exists - should return no rows (since "exists" only
+@@ -3250,67 +2941,78 @@
+ SELECT count(*) from testjsonb  WHERE j->'array' @> '5'::jsonb;
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
+  count 
+ -------
+-  4791
++     0
+ (1 row)
+ 
+ SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
+-    key    | count 
+------------+-------
+- line      |   884
+- query     |   207
+- pos       |   203
+- node      |   202
+- space     |   197
+- status    |   195
+- public    |   194
+- title     |   190
+- wait      |   190
+- org       |   189
+- user      |   189
+- coauthors |   188
+- disabled  |   185
+- indexed   |   184
+- cleaned   |   180
+- bad       |   179
+- date      |   179
+- world     |   176
+- state     |   172
+- subtitle  |   169
+- auth      |   168
+- abstract  |   161
+- array     |     5
+- age       |     2
+- foo       |     2
+- fool      |     1
+-(26 rows)
++ key | count 
++-----+-------
++(0 rows)
+ 
+ -- sort/hash
+ SELECT count(distinct j) FROM testjsonb;
+  count 
+ -------
+-   894
++     0
+ (1 row)
+ 
+ SET enable_hashagg = off;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
+  count 
+ -------
+-   894
++     0
+ (1 row)
+ 
+ SET enable_hashagg = on;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_sort = off;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
+  count 
+ -------
+-   894
++     0
+ (1 row)
+ 
+ SELECT distinct * FROM (values (jsonb '{}' || ''::text),('{}')) v(j);
+@@ -3320,223 +3022,205 @@
+ (1 row)
+ 
+ SET enable_sort = on;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_hashagg;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_sort;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP INDEX jidx;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ DROP INDEX jidx_array;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ -- btree
+ CREATE INDEX jidx ON testjsonb USING btree (j);
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT count(*) FROM testjsonb WHERE j > '{"p":1}';
+  count 
+ -------
+-   884
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ --gin path opclass
+ DROP INDEX jidx;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ CREATE INDEX jidx ON testjsonb USING gin (j jsonb_path_ops);
++ERROR:  unimplemented: operator class "jsonb_path_ops" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/81115/_version_
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
+  count 
+ -------
+-    15
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
+  count 
+ -------
+-     2
++     0
+ (1 row)
+ 
+ -- exercise GIN_SEARCH_MODE_ALL
+ SELECT count(*) FROM testjsonb WHERE j @> '{}';
+  count 
+ -------
+-  1012
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == null';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.wait == null))';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.wait ? (@ == null))';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '"CC" == $.wait';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.wait == "CC" && true == $.public';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.age == 25.0';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "foo"';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ '$.array[*] == "bar"';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($ ? (@.array[*] == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array ? (@[*] == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($.array[*] ? (@ == "bar"))';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT count(*) FROM testjsonb WHERE j @@ 'exists($)';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ EXPLAIN (COSTS OFF)
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on testjsonb
+-         Recheck Cond: (j @? '$."wait"?(@ == null)'::jsonpath)
+-         ->  Bitmap Index Scan on jidx
+-               Index Cond: (j @? '$."wait"?(@ == null)'::jsonpath)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)';
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? (@ == null)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)';
+- count 
+--------
+-    15
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.wait ? ("CC" == @)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.wait == "CC" && true == @.public)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.age ? (@ == 25)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.age == 25.0)'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$ ? (@.array[*] == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.array ? (@[*] == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.array[*] ? (@ == "bar")'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$';
+- count 
+--------
+-  1012
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.public';
+- count 
+--------
+-   194
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.public'
++                                       ^
+ SELECT count(*) FROM testjsonb WHERE j @? '$.bar';
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM testjsonb WHERE j @? '$.bar'
++                                       ^
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ DROP INDEX jidx;
++ERROR:  index "jidx" does not exist
+ -- nested tests
+ SELECT '{"ff":{"a":12,"b":16}}'::jsonb;
+            jsonb            
+@@ -3694,8 +3378,24 @@
+ insert into nestjsonb (j) values ('[[14,2,3]]');
+ insert into nestjsonb (j) values ('[1,[14,2,3]]');
+ create index on nestjsonb using gin(j jsonb_path_ops);
++ERROR:  unimplemented: operator class "jsonb_path_ops" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/81115/_version_
+ set enable_seqscan = on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_bitmapscan = off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from nestjsonb where j @> '{"a":[[{"x":2}]]}'::jsonb;
+                          j                         
+ ---------------------------------------------------
+@@ -3716,7 +3416,20 @@
+ (2 rows)
+ 
+ set enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_bitmapscan = on;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from nestjsonb where j @> '{"a":[[{"x":2}]]}'::jsonb;
+                          j                         
+ ---------------------------------------------------
+@@ -3737,7 +3450,20 @@
+ (2 rows)
+ 
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- nested object field / array index lookup
+ SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'n';
+  ?column? 
+@@ -4078,33 +3804,29 @@
+ (1 row)
+ 
+ select jsonb_concat('{"d": "test", "a": [1, 2]}', '{"g": "test2", "c": {"c1":1, "c2":2}}');
+-                           jsonb_concat                            
+--------------------------------------------------------------------
+- {"a": [1, 2], "c": {"c1": 1, "c2": 2}, "d": "test", "g": "test2"}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_concat()
+ select '{"aa":1 , "b":2, "cq":3}'::jsonb || '{"cq":"l", "b":"g", "fg":false}';
+                   ?column?                   
+ ---------------------------------------------
+- {"b": "g", "aa": 1, "cq": "l", "fg": false}
++ {"aa": 1, "b": "g", "cq": "l", "fg": false}
+ (1 row)
+ 
+ select '{"aa":1 , "b":2, "cq":3}'::jsonb || '{"aq":"l"}';
+                ?column?                
+ ---------------------------------------
+- {"b": 2, "aa": 1, "aq": "l", "cq": 3}
++ {"aa": 1, "aq": "l", "b": 2, "cq": 3}
+ (1 row)
+ 
+ select '{"aa":1 , "b":2, "cq":3}'::jsonb || '{"aa":"l"}';
+            ?column?           
+ ------------------------------
+- {"b": 2, "aa": "l", "cq": 3}
++ {"aa": "l", "b": 2, "cq": 3}
+ (1 row)
+ 
+ select '{"aa":1 , "b":2, "cq":3}'::jsonb || '{}';
+           ?column?          
+ ----------------------------
+- {"b": 2, "aa": 1, "cq": 3}
++ {"aa": 1, "b": 2, "cq": 3}
+ (1 row)
+ 
+ select '["a", "b"]'::jsonb || '["c"]';
+@@ -4174,17 +3896,9 @@
+ (1 row)
+ 
+ select '"a"'::jsonb || '{"a":1}';
+-    ?column?     
+------------------
+- ["a", {"a": 1}]
+-(1 row)
+-
++ERROR:  invalid concatenation of jsonb objects
+ select '{"a":1}' || '"a"'::jsonb;
+-    ?column?     
+------------------
+- [{"a": 1}, "a"]
+-(1 row)
+-
++ERROR:  invalid concatenation of jsonb objects
+ select '[3]'::jsonb || '{}'::jsonb;
+  ?column? 
+ ----------
+@@ -4204,11 +3918,7 @@
+ (1 row)
+ 
+ select '3'::jsonb || '{}'::jsonb;
+- ?column? 
+-----------
+- [3, {}]
+-(1 row)
+-
++ERROR:  invalid concatenation of jsonb objects
+ select '["a", "b"]'::jsonb || '{"c":1}';
+        ?column?       
+ ----------------------
+@@ -4252,35 +3962,15 @@
+ (1 row)
+ 
+ select jsonb_delete('{"a":1 , "b":2, "c":3}'::jsonb, 'a');
+-   jsonb_delete   
+-------------------
+- {"b": 2, "c": 3}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete()
+ select jsonb_delete('{"a":null , "b":2, "c":3}'::jsonb, 'a');
+-   jsonb_delete   
+-------------------
+- {"b": 2, "c": 3}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete()
+ select jsonb_delete('{"a":1 , "b":2, "c":3}'::jsonb, 'b');
+-   jsonb_delete   
+-------------------
+- {"a": 1, "c": 3}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete()
+ select jsonb_delete('{"a":1 , "b":2, "c":3}'::jsonb, 'c');
+-   jsonb_delete   
+-------------------
+- {"a": 1, "b": 2}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete()
+ select jsonb_delete('{"a":1 , "b":2, "c":3}'::jsonb, 'd');
+-       jsonb_delete       
+---------------------------
+- {"a": 1, "b": 2, "c": 3}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete()
+ select '{"a":1 , "b":2, "c":3}'::jsonb - 'a';
+      ?column?     
+ ------------------
+@@ -4402,7 +4092,7 @@
+ (1 row)
+ 
+ select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '[1,2,3]');
+-ERROR:  path element at position 2 is null
++ERROR:  jsonb_set(): path element at position 2 is null
+ select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{n}', '{"1": 2}');
+                                 jsonb_set                                
+ -------------------------------------------------------------------------
+@@ -4422,7 +4112,7 @@
+ (1 row)
+ 
+ select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '{"1": 2}');
+-ERROR:  path element at position 2 is null
++ERROR:  jsonb_set(): path element at position 2 is null
+ select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{b,-1}', '"test"');
+                                 jsonb_set                                 
+ --------------------------------------------------------------------------
+@@ -4436,39 +4126,27 @@
+ (1 row)
+ 
+ select jsonb_delete_path('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}', '{n}');
+-                    jsonb_delete_path                     
+-----------------------------------------------------------
+- {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [2, 3]}}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete_path()
+ select jsonb_delete_path('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}', '{b,-1}');
+-                        jsonb_delete_path                         
+-------------------------------------------------------------------
+- {"a": 1, "b": [1], "c": {"1": 2}, "d": {"1": [2, 3]}, "n": null}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete_path()
+ select jsonb_delete_path('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}', '{d,1,0}');
+-                        jsonb_delete_path                         
+-------------------------------------------------------------------
+- {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [3]}, "n": null}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_delete_path()
+ select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{n}';
+-                         ?column?                         
++                     json_remove_path                     
+ ----------------------------------------------------------
+  {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [2, 3]}}
+ (1 row)
+ 
+ select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{b,-1}';
+-                             ?column?                             
++                         json_remove_path                         
+ ------------------------------------------------------------------
+  {"a": 1, "b": [1], "c": {"1": 2}, "d": {"1": [2, 3]}, "n": null}
+ (1 row)
+ 
+ select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{b,-1e}'; -- invalid array subscript
+-ERROR:  path element at position 2 is not an integer: "-1e"
++ERROR:  json_remove_path(): a path element is not an integer: -1e
+ select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{d,1,0}';
+-                             ?column?                             
++                         json_remove_path                         
+ ------------------------------------------------------------------
+  {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [3]}, "n": null}
+ (1 row)
+@@ -4499,21 +4177,17 @@
+ (1 row)
+ 
+ select '"a"'::jsonb #- '{a}'; -- error
+-ERROR:  cannot delete path in scalar
++ERROR:  json_remove_path(): cannot delete path in scalar
+ select '{}'::jsonb #- '{a}';
+- ?column? 
+-----------
++ json_remove_path 
++------------------
+  {}
+ (1 row)
+ 
+ select '[]'::jsonb #- '{a}';
+- ?column? 
+-----------
+- []
+-(1 row)
+-
++ERROR:  json_remove_path(): a path element is not an integer: a
+ select jsonb_set('"a"','{a}','"b"'); --error
+-ERROR:  cannot set path in scalar
++ERROR:  jsonb_set(): cannot set path in scalar
+ select jsonb_set('{}','{a}','"b"', false);
+  jsonb_set 
+ -----------
+@@ -4601,67 +4275,49 @@
+ (1 row)
+ 
+ select jsonb_set('{"a": [1, 2, 3]}', '{a, non_integer}', '"new_value"');
+-ERROR:  path element at position 2 is not an integer: "non_integer"
++ERROR:  jsonb_set(): strconv.Atoi: parsing "non_integer": invalid syntax
+ select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, non_integer}', '"new_value"');
+-ERROR:  path element at position 3 is not an integer: "non_integer"
++ERROR:  jsonb_set(): strconv.Atoi: parsing "non_integer": invalid syntax
+ select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, NULL}', '"new_value"');
+-ERROR:  path element at position 3 is null
++ERROR:  jsonb_set(): path element at position 3 is null
+ -- jsonb_set_lax
+ \pset null NULL
+ -- pass though non nulls to jsonb_set
+ select jsonb_set_lax('{"a":1,"b":2}','{b}','5') ;
+-  jsonb_set_lax   
+-------------------
+- {"a": 1, "b": 5}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_set_lax()
+ select jsonb_set_lax('{"a":1,"b":2}','{d}','6', true) ;
+-      jsonb_set_lax       
+---------------------------
+- {"a": 1, "b": 2, "d": 6}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_set_lax()
+ -- using the default treatment
+ select jsonb_set_lax('{"a":1,"b":2}','{b}',null);
+-    jsonb_set_lax    
+----------------------
+- {"a": 1, "b": null}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_set_lax()
+ select jsonb_set_lax('{"a":1,"b":2}','{d}',null,true);
+-        jsonb_set_lax        
+------------------------------
+- {"a": 1, "b": 2, "d": null}
+-(1 row)
+-
++ERROR:  unknown function: jsonb_set_lax()
+ -- errors
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, true, null);
+-ERROR:  null_value_treatment must be "delete_key", "return_target", "use_json_null", or "raise_exception"
++ERROR:  unknown function: jsonb_set_lax()
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, true, 'no_such_treatment');
+-ERROR:  null_value_treatment must be "delete_key", "return_target", "use_json_null", or "raise_exception"
++ERROR:  unknown function: jsonb_set_lax()
+ -- explicit treatments
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'raise_exception') as raise_exception;
+-ERROR:  JSON value must not be null
+-DETAIL:  Exception was raised because null_value_treatment is "raise_exception".
+-HINT:  To avoid, either change the null_value_treatment argument or ensure that an SQL NULL is not passed.
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'raise_exception') as raise_exception
++                                                                         ^
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'return_target') as return_target;
+-  return_target   
+-------------------
+- {"a": 1, "b": 2}
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'return_target') as return_target
++                                                                         ^
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'delete_key') as delete_key;
+- delete_key 
+-------------
+- {"a": 1}
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'delete_key') as delete_key
++                                                                         ^
+ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'use_json_null') as use_json_null;
+-    use_json_null    
+----------------------
+- {"a": 1, "b": null}
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'use_json_null') as use_json_null
++                                                                         ^
+ \pset null ''
+ -- jsonb_insert
+ select jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"');
+@@ -4787,178 +4443,166 @@
+ (1 row)
+ 
+ select jsonb_insert('{"a": {"b": "value"}}', '{a, b}', '"new_value"');
+-ERROR:  cannot replace existing key
+-HINT:  Try using the function jsonb_set to replace key value.
++ERROR:  jsonb_insert(): cannot replace existing key
+ select jsonb_insert('{"a": {"b": "value"}}', '{a, b}', '"new_value"', true);
+-ERROR:  cannot replace existing key
+-HINT:  Try using the function jsonb_set to replace key value.
++ERROR:  jsonb_insert(): cannot replace existing key
+ -- jsonb subscript
+ select ('123'::jsonb)['a'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('123'::jsonb)[0];
+- jsonb 
+--------
+- 
++ ?column? 
++----------
++ 123
+ (1 row)
+ 
+ select ('123'::jsonb)[NULL];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('{"a": 1}'::jsonb)['a'];
+- jsonb 
+--------
++ ?column? 
++----------
+  1
+ (1 row)
+ 
+ select ('{"a": 1}'::jsonb)[0];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('{"a": 1}'::jsonb)['not_exist'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('{"a": 1}'::jsonb)[NULL];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)['a'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[0];
+- jsonb 
+--------
++ ?column? 
++----------
+  1
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)['1'];
+- jsonb 
+--------
++ ?column? 
++----------
+  "2"
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[1.0];
+-ERROR:  subscript type numeric is not supported
+-LINE 1: select ('[1, "2", null]'::jsonb)[1.0];
+-                                         ^
+-HINT:  jsonb subscript must be coercible to either integer or text.
++ERROR:  unexpected JSON subscript type: DECIMAL
++HINT:  subscript type must be integer or text
+ select ('[1, "2", null]'::jsonb)[2];
+- jsonb 
+--------
++ ?column? 
++----------
+  null
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[3];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[-2];
+- jsonb 
+--------
++ ?column? 
++----------
+  "2"
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[1]['a'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('[1, "2", null]'::jsonb)[1][0];
+- jsonb 
+--------
+- 
++ ?column? 
++----------
++ "2"
+ (1 row)
+ 
+ select ('{"a": 1, "b": "c", "d": [1, 2, 3]}'::jsonb)['b'];
+- jsonb 
+--------
++ ?column? 
++----------
+  "c"
+ (1 row)
+ 
+ select ('{"a": 1, "b": "c", "d": [1, 2, 3]}'::jsonb)['d'];
+-   jsonb   
++ ?column?  
+ -----------
+  [1, 2, 3]
+ (1 row)
+ 
+ select ('{"a": 1, "b": "c", "d": [1, 2, 3]}'::jsonb)['d'][1];
+- jsonb 
+--------
++ ?column? 
++----------
+  2
+ (1 row)
+ 
+ select ('{"a": 1, "b": "c", "d": [1, 2, 3]}'::jsonb)['d']['a'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('{"a": {"a1": {"a2": "aaa"}}, "b": "bbb", "c": "ccc"}'::jsonb)['a']['a1'];
+-     jsonb     
++   ?column?    
+ ---------------
+  {"a2": "aaa"}
+ (1 row)
+ 
+ select ('{"a": {"a1": {"a2": "aaa"}}, "b": "bbb", "c": "ccc"}'::jsonb)['a']['a1']['a2'];
+- jsonb 
+--------
++ ?column? 
++----------
+  "aaa"
+ (1 row)
+ 
+ select ('{"a": {"a1": {"a2": "aaa"}}, "b": "bbb", "c": "ccc"}'::jsonb)['a']['a1']['a2']['a3'];
+- jsonb 
+--------
++ ?column? 
++----------
+  
+ (1 row)
+ 
+ select ('{"a": ["a1", {"b1": ["aaa", "bbb", "ccc"]}], "b": "bb"}'::jsonb)['a'][1]['b1'];
+-         jsonb         
++       ?column?        
+ -----------------------
+  ["aaa", "bbb", "ccc"]
+ (1 row)
+ 
+ select ('{"a": ["a1", {"b1": ["aaa", "bbb", "ccc"]}], "b": "bb"}'::jsonb)['a'][1]['b1'][2];
+- jsonb 
+--------
++ ?column? 
++----------
+  "ccc"
+ (1 row)
+ 
+ -- slices are not supported
+ select ('{"a": 1}'::jsonb)['a':'b'];
+ ERROR:  jsonb subscript does not support slices
+-LINE 1: select ('{"a": 1}'::jsonb)['a':'b'];
+-                                       ^
+ select ('[1, "2", null]'::jsonb)[1:2];
+ ERROR:  jsonb subscript does not support slices
+-LINE 1: select ('[1, "2", null]'::jsonb)[1:2];
+-                                           ^
+ select ('[1, "2", null]'::jsonb)[:2];
+ ERROR:  jsonb subscript does not support slices
+-LINE 1: select ('[1, "2", null]'::jsonb)[:2];
+-                                          ^
+ select ('[1, "2", null]'::jsonb)[1:];
+ ERROR:  jsonb subscript does not support slices
+-LINE 1: select ('[1, "2", null]'::jsonb)[1:];
+-                                         ^
+ select ('[1, "2", null]'::jsonb)[:];
+ ERROR:  jsonb subscript does not support slices
+ create TEMP TABLE test_jsonb_subscript (
+@@ -4970,54 +4614,79 @@
+ (2, '{"key": "value"}'); -- jsonb with data
+ -- update empty jsonb
+ update test_jsonb_subscript set test_json['a'] = '1' where id = 1;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '1' where id = 1
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+  id |    test_json     
+ ----+------------------
++  1 | {}
+   2 | {"key": "value"}
+-  1 | {"a": 1}
+ (2 rows)
+ 
+ -- update jsonb with some data
+ update test_jsonb_subscript set test_json['a'] = '1' where id = 2;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '1' where id = 2
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |        test_json         
+-----+--------------------------
+-  1 | {"a": 1}
+-  2 | {"a": 1, "key": "value"}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
+ (2 rows)
+ 
+ -- replace jsonb
+ update test_jsonb_subscript set test_json['a'] = '"test"';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '"test"'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |           test_json           
+-----+-------------------------------
+-  1 | {"a": "test"}
+-  2 | {"a": "test", "key": "value"}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
+ (2 rows)
+ 
+ -- replace by object
+ update test_jsonb_subscript set test_json['a'] = '{"b": 1}'::jsonb;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '{"b": 1}'::jsonb
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |            test_json            
+-----+---------------------------------
+-  1 | {"a": {"b": 1}}
+-  2 | {"a": {"b": 1}, "key": "value"}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
+ (2 rows)
+ 
+ -- replace by array
+ update test_jsonb_subscript set test_json['a'] = '[1, 2, 3]'::jsonb;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '[1, 2, 3]'::jsonb
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |            test_json             
+-----+----------------------------------
+-  1 | {"a": [1, 2, 3]}
+-  2 | {"a": [1, 2, 3], "key": "value"}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
+ (2 rows)
+ 
+ -- use jsonb subscription in where clause
+ select * from test_jsonb_subscript where test_json['key'] = '"value"';
+- id |            test_json             
+-----+----------------------------------
+-  2 | {"a": [1, 2, 3], "key": "value"}
++ id |    test_json     
++----+------------------
++  2 | {"key": "value"}
+ (1 row)
+ 
+ select * from test_jsonb_subscript where test_json['key_doesnt_exists'] = '"value"';
+@@ -5032,198 +4701,327 @@
+ 
+ -- NULL
+ update test_jsonb_subscript set test_json[NULL] = '1';
+-ERROR:  jsonb subscript in assignment must not be null
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[NULL] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['another_key'] = NULL;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['another_key'] = NULL
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                       test_json                       
+-----+-------------------------------------------------------
+-  1 | {"a": [1, 2, 3], "another_key": null}
+-  2 | {"a": [1, 2, 3], "key": "value", "another_key": null}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
+ (2 rows)
+ 
+ -- NULL as jsonb source
+ insert into test_jsonb_subscript values (3, NULL);
+ update test_jsonb_subscript set test_json['a'] = '1' where id = 3;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'] = '1' where id = 3
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                       test_json                       
+-----+-------------------------------------------------------
+-  1 | {"a": [1, 2, 3], "another_key": null}
+-  2 | {"a": [1, 2, 3], "key": "value", "another_key": null}
+-  3 | {"a": 1}
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
++  3 | 
+ (3 rows)
+ 
+ update test_jsonb_subscript set test_json = NULL where id = 3;
+ update test_jsonb_subscript set test_json[0] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                           test_json                           
+-----+---------------------------------------------------------------
+-  1 | {"0": 1, "a": [1, 2, 3], "another_key": null}
+-  2 | {"0": 1, "a": [1, 2, 3], "key": "value", "another_key": null}
+-  3 | [1]
++ id |    test_json     
++----+------------------
++  1 | {}
++  2 | {"key": "value"}
++  3 | 
+ (3 rows)
+ 
+ -- Fill the gaps logic
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '[0]');
+ update test_jsonb_subscript set test_json[5] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[5] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |           test_json            
+-----+--------------------------------
+-  1 | [0, null, null, null, null, 1]
++ id | test_json 
++----+-----------
++  1 | [0]
+ (1 row)
+ 
+ update test_jsonb_subscript set test_json[-4] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[-4] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |          test_json          
+-----+-----------------------------
+-  1 | [0, null, 1, null, null, 1]
++ id | test_json 
++----+-----------
++  1 | [0]
+ (1 row)
+ 
+ update test_jsonb_subscript set test_json[-8] = '1';
+-ERROR:  path element at position 1 is out of range: -8
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[-8] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |          test_json          
+-----+-----------------------------
+-  1 | [0, null, 1, null, null, 1]
++ id | test_json 
++----+-----------
++  1 | [0]
+ (1 row)
+ 
+ -- keep consistent values position
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '[]');
+ update test_jsonb_subscript set test_json[5] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[5] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |             test_json             
+-----+-----------------------------------
+-  1 | [null, null, null, null, null, 1]
++ id | test_json 
++----+-----------
++  1 | []
+ (1 row)
+ 
+ -- create the whole path
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{}');
+ update test_jsonb_subscript set test_json['a'][0]['b'][0]['c'] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][0]['b'][0]['c'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |         test_json          
+-----+----------------------------
+-  1 | {"a": [{"b": [{"c": 1}]}]}
++ id | test_json 
++----+-----------
++  1 | {}
+ (1 row)
+ 
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{}');
+ update test_jsonb_subscript set test_json['a'][2]['b'][2]['c'][2] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][2]['b'][2]['c'][2] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                            test_json                             
+-----+------------------------------------------------------------------
+-  1 | {"a": [null, null, {"b": [null, null, {"c": [null, null, 1]}]}]}
++ id | test_json 
++----+-----------
++  1 | {}
+ (1 row)
+ 
+ -- create the whole path with already existing keys
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{"b": 1}');
+ update test_jsonb_subscript set test_json['a'][0] = '2';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][0] = '2'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |     test_json      
+-----+--------------------
+-  1 | {"a": [2], "b": 1}
++ id | test_json 
++----+-----------
++  1 | {"b": 1}
+ (1 row)
+ 
+ -- the start jsonb is an object, first subscript is treated as a key
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{}');
+ update test_jsonb_subscript set test_json[0]['a'] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0]['a'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |    test_json    
+-----+-----------------
+-  1 | {"0": {"a": 1}}
++ id | test_json 
++----+-----------
++  1 | {}
+ (1 row)
+ 
+ -- the start jsonb is an array
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '[]');
+ update test_jsonb_subscript set test_json[0]['a'] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0]['a'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json[2]['b'] = '2';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[2]['b'] = '2'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |         test_json          
+-----+----------------------------
+-  1 | [{"a": 1}, null, {"b": 2}]
++ id | test_json 
++----+-----------
++  1 | []
+ (1 row)
+ 
+ -- overwriting an existing path
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{}');
+ update test_jsonb_subscript set test_json['a']['b'][1] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b'][1] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a']['b'][10] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b'][10] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                                 test_json                                  
+-----+----------------------------------------------------------------------------
+-  1 | {"a": {"b": [null, 1, null, null, null, null, null, null, null, null, 1]}}
++ id | test_json 
++----+-----------
++  1 | {}
+ (1 row)
+ 
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '[]');
+ update test_jsonb_subscript set test_json[0][0][0] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0][0][0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json[0][0][1] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0][0][1] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id | test_json  
+-----+------------
+-  1 | [[[1, 1]]]
++ id | test_json 
++----+-----------
++  1 | []
+ (1 row)
+ 
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{}');
+ update test_jsonb_subscript set test_json['a']['b'][10] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b'][10] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a'][10][10] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][10][10] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |                                                                      test_json                                                                       
+-----+------------------------------------------------------------------------------------------------------------------------------------------------------
+-  1 | {"a": {"b": [null, null, null, null, null, null, null, null, null, null, 1], "10": [null, null, null, null, null, null, null, null, null, null, 1]}}
++ id | test_json 
++----+-----------
++  1 | {}
+ (1 row)
+ 
+ -- an empty sub element
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{"a": {}}');
+ update test_jsonb_subscript set test_json['a']['b']['c'][2] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b']['c'][2] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |              test_json               
+-----+--------------------------------------
+-  1 | {"a": {"b": {"c": [null, null, 1]}}}
++ id | test_json 
++----+-----------
++  1 | {"a": {}}
+ (1 row)
+ 
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{"a": []}');
+ update test_jsonb_subscript set test_json['a'][1]['c'][2] = '1';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][1]['c'][2] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ select * from test_jsonb_subscript;
+- id |               test_json               
+-----+---------------------------------------
+-  1 | {"a": [null, {"c": [null, null, 1]}]}
++ id | test_json 
++----+-----------
++  1 | {"a": []}
+ (1 row)
+ 
+ -- trying replace assuming a composite object, but it's an element or a value
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, '{"a": 1}');
+ update test_jsonb_subscript set test_json['a']['b'] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a']['b']['c'] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a']['b']['c'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a'][0] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a'][0]['c'] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][0]['c'] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json['a'][0][0] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json['a'][0][0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ -- trying replace assuming a composite object, but it's a raw scalar
+ delete from test_jsonb_subscript;
+ insert into test_jsonb_subscript values (1, 'null');
+ update test_jsonb_subscript set test_json[0] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ update test_jsonb_subscript set test_json[0][0] = '1';
+-ERROR:  cannot replace existing key
+-DETAIL:  The path assumes key is a composite object, but it is a scalar value.
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[0][0] = '1'
++                                         ^
++HINT:  try \h UPDATE
+ -- try some things with short-header and toasted subscript values
+ drop table test_jsonb_subscript;
+ create temp table test_jsonb_subscript (
+@@ -5241,235 +5039,173 @@
+ (2 rows)
+ 
+ update test_jsonb_subscript set test_json[id] = '"baz"';
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update test_jsonb_subscript set test_json[id] = '"baz"'
++                                         ^
++HINT:  try \h UPDATE
+ select length(id), test_json[id] from test_jsonb_subscript;
+  length | test_json 
+ --------+-----------
+-      3 | "baz"
+-   2500 | "baz"
++      3 | "bar"
++   2500 | "bar"
+ (2 rows)
+ 
+ \x
+ table test_jsonb_subscript;
+ -[ RECORD 1 ]--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ id        | foo
+-test_json | {"foo": "baz"}
++test_json | {"foo": "bar"}
+ -[ RECORD 2 ]--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ id        | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzy
+-test_json | {"xyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzy": "baz"}
++test_json | {"xyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzyxyzzy": "bar"}
+ 
+ \x
+ -- jsonb to tsvector
+ select to_tsvector('{"a": "aaa bbb ddd ccc", "b": ["eee fff ggg"], "c": {"d": "hhh iii"}}'::jsonb);
+-                                to_tsvector                                
+----------------------------------------------------------------------------
+- 'aaa':1 'bbb':2 'ccc':4 'ddd':3 'eee':6 'fff':7 'ggg':8 'hhh':10 'iii':11
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- jsonb to tsvector with config
+ select to_tsvector('simple', '{"a": "aaa bbb ddd ccc", "b": ["eee fff ggg"], "c": {"d": "hhh iii"}}'::jsonb);
+-                                to_tsvector                                
+----------------------------------------------------------------------------
+- 'aaa':1 'bbb':2 'ccc':4 'ddd':3 'eee':6 'fff':7 'ggg':8 'hhh':10 'iii':11
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(string, jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- jsonb to tsvector with stop words
+ select to_tsvector('english', '{"a": "aaa in bbb ddd ccc", "b": ["the eee fff ggg"], "c": {"d": "hhh. iii"}}'::jsonb);
+-                                to_tsvector                                 
+-----------------------------------------------------------------------------
+- 'aaa':1 'bbb':3 'ccc':5 'ddd':4 'eee':8 'fff':9 'ggg':10 'hhh':12 'iii':13
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(string, jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- jsonb to tsvector with numeric values
+ select to_tsvector('english', '{"a": "aaa in bbb ddd ccc", "b": 123, "c": 456}'::jsonb);
+-           to_tsvector           
+----------------------------------
+- 'aaa':1 'bbb':3 'ccc':5 'ddd':4
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(string, jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- jsonb_to_tsvector
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"all"');
+-                                   jsonb_to_tsvector                                    
+-----------------------------------------------------------------------------------------
+- '123':8 '456':12 'aaa':2 'b':6 'bbb':4 'c':10 'd':14 'f':18 'fals':20 'g':22 'true':16
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"key"');
+-       jsonb_to_tsvector        
+---------------------------------
+- 'b':2 'c':4 'd':6 'f':8 'g':10
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"string"');
+- jsonb_to_tsvector 
+--------------------
+- 'aaa':1 'bbb':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"numeric"');
+- jsonb_to_tsvector 
+--------------------
+- '123':1 '456':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"boolean"');
+- jsonb_to_tsvector 
+--------------------
+- 'fals':3 'true':1
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '["string", "numeric"]');
+-        jsonb_to_tsvector        
+----------------------------------
+- '123':5 '456':7 'aaa':1 'bbb':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"all"');
+-                                   jsonb_to_tsvector                                    
+-----------------------------------------------------------------------------------------
+- '123':8 '456':12 'aaa':2 'b':6 'bbb':4 'c':10 'd':14 'f':18 'fals':20 'g':22 'true':16
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"key"');
+-       jsonb_to_tsvector        
+---------------------------------
+- 'b':2 'c':4 'd':6 'f':8 'g':10
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"string"');
+- jsonb_to_tsvector 
+--------------------
+- 'aaa':1 'bbb':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"numeric"');
+- jsonb_to_tsvector 
+--------------------
+- '123':1 '456':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '"boolean"');
+- jsonb_to_tsvector 
+--------------------
+- 'fals':3 'true':1
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '["string", "numeric"]');
+-        jsonb_to_tsvector        
+----------------------------------
+- '123':5 '456':7 'aaa':1 'bbb':3
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- to_tsvector corner cases
+ select to_tsvector('""'::jsonb);
+- to_tsvector 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select to_tsvector('{}'::jsonb);
+- to_tsvector 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select to_tsvector('[]'::jsonb);
+- to_tsvector 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select to_tsvector('null'::jsonb);
+- to_tsvector 
+--------------
+- 
+-(1 row)
+-
++ERROR:  unknown signature: to_tsvector(jsonb)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- jsonb_to_tsvector corner cases
+ select jsonb_to_tsvector('""'::jsonb, '"all"');
+- jsonb_to_tsvector 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('{}'::jsonb, '"all"');
+- jsonb_to_tsvector 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('[]'::jsonb, '"all"');
+- jsonb_to_tsvector 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('null'::jsonb, '"all"');
+- jsonb_to_tsvector 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '""');
+-ERROR:  wrong flag in flag array: ""
+-HINT:  Possible values are: "string", "numeric", "boolean", "key", and "all".
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '{}');
+-ERROR:  wrong flag type, only arrays and scalars are allowed
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '[]');
+- jsonb_to_tsvector 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, 'null');
+-ERROR:  flag array element is not a string
+-HINT:  Possible values are: "string", "numeric", "boolean", "key", and "all".
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select jsonb_to_tsvector('english', '{"a": "aaa in bbb", "b": 123, "c": 456, "d": true, "f": false, "g": null}'::jsonb, '["all", null]');
+-ERROR:  flag array element is not a string
+-HINT:  Possible values are: "string", "numeric", "boolean", "key", and "all".
++ERROR:  jsonb_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- ts_headline for jsonb
+ select ts_headline('{"a": "aaa bbb", "b": {"c": "ccc ddd fff", "c1": "ccc1 ddd1"}, "d": ["ggg hhh", "iii jjj"]}'::jsonb, tsquery('bbb & ddd & hhh'));
+-                                                   ts_headline                                                    
+-------------------------------------------------------------------------------------------------------------------
+- {"a": "aaa <b>bbb</b>", "b": {"c": "ccc <b>ddd</b> fff", "c1": "ccc1 ddd1"}, "d": ["ggg <b>hhh</b>", "iii jjj"]}
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select ts_headline('english', '{"a": "aaa bbb", "b": {"c": "ccc ddd fff"}, "d": ["ggg hhh", "iii jjj"]}'::jsonb, tsquery('bbb & ddd & hhh'));
+-                                          ts_headline                                          
+------------------------------------------------------------------------------------------------
+- {"a": "aaa <b>bbb</b>", "b": {"c": "ccc <b>ddd</b> fff"}, "d": ["ggg <b>hhh</b>", "iii jjj"]}
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select ts_headline('{"a": "aaa bbb", "b": {"c": "ccc ddd fff", "c1": "ccc1 ddd1"}, "d": ["ggg hhh", "iii jjj"]}'::jsonb, tsquery('bbb & ddd & hhh'), 'StartSel = <, StopSel = >');
+-                                            ts_headline                                            
+----------------------------------------------------------------------------------------------------
+- {"a": "aaa <bbb>", "b": {"c": "ccc <ddd> fff", "c1": "ccc1 ddd1"}, "d": ["ggg <hhh>", "iii jjj"]}
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select ts_headline('english', '{"a": "aaa bbb", "b": {"c": "ccc ddd fff", "c1": "ccc1 ddd1"}, "d": ["ggg hhh", "iii jjj"]}'::jsonb, tsquery('bbb & ddd & hhh'), 'StartSel = <, StopSel = >');
+-                                            ts_headline                                            
+----------------------------------------------------------------------------------------------------
+- {"a": "aaa <bbb>", "b": {"c": "ccc <ddd> fff", "c1": "ccc1 ddd1"}, "d": ["ggg <hhh>", "iii jjj"]}
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- corner cases for ts_headline with jsonb
+ select ts_headline('null'::jsonb, tsquery('aaa & bbb'));
+- ts_headline 
+--------------
+- null
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select ts_headline('{}'::jsonb, tsquery('aaa & bbb'));
+- ts_headline 
+--------------
+- {}
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select ts_headline('[]'::jsonb, tsquery('aaa & bbb'));
+- ts_headline 
+--------------
+- []
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- casts
+ select 'true'::jsonb::bool;
+  bool 
+@@ -5478,7 +5214,7 @@
+ (1 row)
+ 
+ select '[]'::jsonb::bool;
+-ERROR:  cannot cast jsonb array to type boolean
++ERROR:  cannot cast jsonb array to type bool
+ select '1.0'::jsonb::float;
+  float8 
+ --------
+@@ -5486,7 +5222,7 @@
+ (1 row)
+ 
+ select '[1.0]'::jsonb::float;
+-ERROR:  cannot cast jsonb array to type double precision
++ERROR:  cannot cast jsonb array to type float
+ select '12345'::jsonb::int4;
+  int4  
+ -------
+@@ -5494,7 +5230,7 @@
+ (1 row)
+ 
+ select '"hello"'::jsonb::int4;
+-ERROR:  cannot cast jsonb string to type integer
++ERROR:  cannot cast jsonb string to type int4
+ select '12345'::jsonb::numeric;
+  numeric 
+ ---------
+@@ -5502,7 +5238,7 @@
+ (1 row)
+ 
+ select '{}'::jsonb::numeric;
+-ERROR:  cannot cast jsonb object to type numeric
++ERROR:  cannot cast jsonb object to type decimal
+ select '12345.05'::jsonb::numeric;
+  numeric  
+ ----------

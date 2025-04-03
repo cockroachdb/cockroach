@@ -19,9 +19,14 @@ import (
 // upon the operator, the type may be fixed, or it may be dependent upon the
 // expression children.
 func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
-	// Special-case Variable, since it's the only expression that needs the memo.
-	if e.Op() == opt.VariableOp {
+	// Special-case expressions that need access to the memo.
+	switch e.Op() {
+	case opt.VariableOp:
 		return typeVariable(mem, e)
+	case opt.ArrayFlattenOp:
+		return typeArrayFlatten(mem, e)
+	case opt.SubqueryOp:
+		return typeSubquery(mem, e)
 	}
 
 	fn := typingFuncMap[e.Op()]
@@ -180,11 +185,9 @@ func init() {
 	typingFuncMap[opt.CaseOp] = typeCase
 	typingFuncMap[opt.WhenOp] = typeWhen
 	typingFuncMap[opt.CastOp] = typeCast
-	typingFuncMap[opt.SubqueryOp] = typeSubquery
 	typingFuncMap[opt.ColumnAccessOp] = typeColumnAccess
 	typingFuncMap[opt.IndirectionOp] = typeIndirection
 	typingFuncMap[opt.CollateOp] = typeCollate
-	typingFuncMap[opt.ArrayFlattenOp] = typeArrayFlatten
 	typingFuncMap[opt.IfErrOp] = typeIfErr
 	typingFuncMap[opt.UDFCallOp] = typeUDFCall
 	typingFuncMap[opt.TxnControlOp] = typeTxnControl
@@ -248,6 +251,20 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 	return typ
 }
 
+// typeArrayFlatten returns the type of the subquery as an array.
+func typeArrayFlatten(mem *Memo, e opt.ScalarExpr) *types.T {
+	colID := e.(*ArrayFlattenExpr).RequestedCol
+	return types.MakeArray(mem.Metadata().ColumnMeta(colID).Type)
+}
+
+// typeSubquery returns the type of a subquery, which is equal to the type of
+// its first (and only) column.
+func typeSubquery(mem *Memo, e opt.ScalarExpr) *types.T {
+	input := e.Child(0).(RelExpr)
+	colID := input.Relational().OutputCols.SingleColumn()
+	return mem.Metadata().ColumnMeta(colID).Type
+}
+
 // typeArrayAgg returns an array type with element type equal to the type of the
 // aggregate expression's first (and only) argument.
 func typeArrayAgg(e opt.ScalarExpr) *types.T {
@@ -275,13 +292,6 @@ func typeCollate(e opt.ScalarExpr) *types.T {
 	t := e.Child(0).(opt.ScalarExpr).DataType()
 	locale := e.(*CollateExpr).Locale
 	return types.MakeCollatedType(t, locale)
-}
-
-// typeArrayFlatten returns the type of the subquery as an array.
-func typeArrayFlatten(e opt.ScalarExpr) *types.T {
-	input := e.Child(0).(RelExpr)
-	colID := e.(*ArrayFlattenExpr).RequestedCol
-	return types.MakeArray(input.Memo().Metadata().ColumnMeta(colID).Type)
 }
 
 // typeIfErr returns the type of the IfErrExpr. The type is boolean if
@@ -391,14 +401,6 @@ func typeUDFCall(e opt.ScalarExpr) *types.T {
 // typeTxnControl returns the type of a TxnControlExpr operator
 func typeTxnControl(e opt.ScalarExpr) *types.T {
 	return e.(*TxnControlExpr).Def.Typ
-}
-
-// typeSubquery returns the type of a subquery, which is equal to the type of
-// its first (and only) column.
-func typeSubquery(e opt.ScalarExpr) *types.T {
-	input := e.Child(0).(RelExpr)
-	colID := input.Relational().OutputCols.SingleColumn()
-	return input.Memo().Metadata().ColumnMeta(colID).Type
 }
 
 func typeColumnAccess(e opt.ScalarExpr) *types.T {

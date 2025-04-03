@@ -296,9 +296,33 @@ func (reg *registry) NewFilter() *Filter {
 	return newFilterFromRegistry(reg)
 }
 
+// updateMetricsOnUnregistration updates the metrics when a registration is
+// registered with the processor's registry.
+func (reg *registry) updateMetricsOnRegistration(r registration) {
+	reg.metrics.RangeFeedRegistrations.Inc(1)
+	switch r.(type) {
+	case *bufferedRegistration:
+		reg.metrics.RangeFeedBufferedRegistrations.Inc(1)
+	case *unbufferedRegistration:
+		reg.metrics.RangeFeedUnbufferedRegistrations.Inc(1)
+	}
+}
+
+// updateMetricsOnUnregistration updates the metrics when a registration is
+// unregistered from the processor's registry.
+func (reg *registry) updateMetricsOnUnregistration(r registration) {
+	reg.metrics.RangeFeedRegistrations.Dec(1)
+	switch r.(type) {
+	case *bufferedRegistration:
+		reg.metrics.RangeFeedBufferedRegistrations.Dec(1)
+	case *unbufferedRegistration:
+		reg.metrics.RangeFeedUnbufferedRegistrations.Dec(1)
+	}
+}
+
 // Register adds the provided registration to the registry.
 func (reg *registry) Register(ctx context.Context, r registration) {
-	reg.metrics.RangeFeedRegistrations.Inc(1)
+	reg.updateMetricsOnRegistration(r)
 	r.setID(reg.nextID())
 	r.setSpanAsKeys()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
@@ -402,18 +426,20 @@ func (reg *registry) forOverlappingRegs(
 }
 
 func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) {
-	// We only ever call remote on values we know exist in the
-	// registry, so we can assume we can decrement this by the
-	// lenght of the input.
-	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 	if len(toDelete) == reg.tree.Len() {
+		// Note that toDelete may contain a mix of different types of registrations.
+		for _, i := range toDelete {
+			reg.updateMetricsOnUnregistration(i.(registration))
+		}
 		reg.tree.Clear()
 	} else if len(toDelete) == 1 {
+		reg.updateMetricsOnUnregistration(toDelete[0].(registration))
 		if err := reg.tree.Delete(toDelete[0], false /* fast */); err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
 	} else if len(toDelete) > 1 {
 		for _, i := range toDelete {
+			reg.updateMetricsOnUnregistration(i.(registration))
 			if err := reg.tree.Delete(i, true /* fast */); err != nil {
 				log.Fatalf(ctx, "%v", err)
 			}

@@ -24,6 +24,12 @@ const (
 	// It is exported for testing backup inspection tooling.
 	DateBasedIncFolderName = "/20060102/150405.00"
 
+	// DateBasedIncFolderNameSuffix is the date format appended to incremental
+	// backup directories to ensure uniqueness among incrementals with the same
+	// end time. It is set to the start time of the backup's coverage.
+	// This is used for all backups taken on or after v25.2.
+	DateBasedIncFolderNameSuffix = "20060102-150405.00"
+
 	// DateBasedIntoFolderName is the date format used when creating sub-directories
 	// for storing backups in a collection.
 	// Also exported for testing backup inspection tooling.

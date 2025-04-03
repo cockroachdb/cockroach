@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"math"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -205,6 +206,24 @@ func (qs *raftReceiveQueues) SetEnforceMaxLen(enforceMaxLen bool) {
 	})
 }
 
+// raftTickPacerConf is a configuration struct for the raft tick pacer.
+// It implements the taskPacerConfig interface.
+type raftTickPacerConf struct {
+	store *Store
+}
+
+func newRaftTickPacerConf(s *Store) raftTickPacerConf {
+	return raftTickPacerConf{store: s}
+}
+
+func (r raftTickPacerConf) getRefresh() time.Duration {
+	return r.store.cfg.RaftTickInterval
+}
+
+func (r raftTickPacerConf) getSmear() time.Duration {
+	return r.store.cfg.RaftTickSmearInterval
+}
+
 // HandleDelegatedSnapshot reads the incoming delegated snapshot message and
 // throttles sending snapshots before passing the request to the sender replica.
 func (s *Store) HandleDelegatedSnapshot(
@@ -328,7 +347,7 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
-	comparisonResult := s.getLocalityComparison(ctx, req.FromReplica.NodeID, req.ToReplica.NodeID)
+	comparisonResult := s.getLocalityComparison(req.FromReplica.NodeID, req.ToReplica.NodeID)
 	s.metrics.updateCrossLocalityMetricsOnIncomingRaftMsg(comparisonResult, int64(req.Size()))
 	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
 	// Store, this one doesn't need to directly run through a Stopper task because
@@ -389,7 +408,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 func (s *Store) HandleRaftRequestSent(
 	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64,
 ) {
-	comparisonResult := s.getLocalityComparison(ctx, fromNodeID, toNodeID)
+	comparisonResult := s.getLocalityComparison(fromNodeID, toNodeID)
 	s.metrics.updateCrossLocalityMetricsOnOutgoingRaftMsg(comparisonResult, msgSize)
 }
 
@@ -814,6 +833,47 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	})
 }
 
+// supportWithdrawnCallback is called every time the local store withdraws
+// support form other stores in store liveness. The goal of this callback is to
+// unquiesce any replicas on the local store that have leaders on any of the
+// remote stores.
+func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
+	// No replica with a leader on one of the supportWithdrawnForStoreIDs can
+	// fall asleep while we're iterating below. The check for fortifying leader
+	// in maybeFallAsleepRMuLocked, which calls SupportFor, will fail because
+	// support for the leader's store is already withdrawn. If a replica has
+	// started falling asleep (i.e. it's past the fortification check), it will
+	// finish falling asleep, while holding r.mu, before it's processed here.
+	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
+		shouldWakeUp := func() bool {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			// If the replica is not asleep, it shouldn't wake up.
+			if !r.mu.asleep {
+				return false
+			}
+			leader, err := r.getReplicaDescriptorByIDRLocked(r.shMu.leaderID, roachpb.ReplicaDescriptor{})
+			// If we found the replica's leader's store, and it doesn't match any of
+			// the stores in supportWithdrawnForStoreIDs, the replica shouldn't wake
+			// up. In all other cases, the replica should wake up.
+			if err == nil && leader.StoreID != 0 {
+				if _, ok := supportWithdrawnForStoreIDs[leader.StoreID]; !ok {
+					return false
+				}
+			}
+			return true
+		}
+		// If the replica shouldn't wake up, continue iterating.
+		if !shouldWakeUp() {
+			return true
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.maybeWakeUpRMuLocked()
+		return true
+	})
+}
+
 func (s *Store) processRaft(ctx context.Context) {
 	s.scheduler.Start(s.stopper)
 	// Wait for the scheduler worker goroutines to finish.
@@ -855,29 +915,76 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.RaftTickInterval)
 	defer ticker.Stop()
 
+	var timer timeutil.Timer
+	defer timer.Stop()
+	// waitUntil is used to wait between different tick batches to pace the
+	// ticking process over the entire tick interval.
+	waitUntil := func(until time.Time) {
+		now := timeutil.Now()
+		if !now.Before(until) {
+			return
+		}
+		timer.Reset(until.Sub(now))
+		<-timer.C
+		timer.Read = true
+	}
+
+	// Create a config that will be used by the taskPacer, which allows us to pace
+	// the enqueuing of Raft ticks.
+	conf := newRaftTickPacerConf(s)
+	pacer := NewTaskPacer(conf)
+
 	for {
 		select {
 		case <-ticker.C:
+			now := timeutil.Now()
+			pacer.StartTask(now)
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
 				s.updateLivenessMap()
 			}
 			s.updateIOThresholdMap()
 
-			s.unquiescedReplicas.Lock()
-			// Why do we bother to ever queue a Replica on the Raft scheduler for
-			// tick processing? Couldn't we just call Replica.tick() here? Yes, but
-			// then a single bad/slow Replica can disrupt tick processing for every
-			// Replica on the store which cascades into Raft elections and more
-			// disruption.
-			batch := s.scheduler.NewEnqueueBatch()
-			for rangeID := range s.unquiescedReplicas.m {
-				batch.Add(rangeID)
-			}
-			s.unquiescedReplicas.Unlock()
+			s.unquiescedOrAwakeReplicas.Lock()
 
-			s.scheduler.EnqueueRaftTicks(batch)
-			batch.Close()
+			// Reuse the rangeIDs slice across runs to minimize allocation.
+			var rangeIDs []roachpb.RangeID
+			rangeIDs = rangeIDs[:0]
+			for rangeID := range s.unquiescedOrAwakeReplicas.m {
+				rangeIDs = append(rangeIDs, rangeID)
+			}
+			s.unquiescedOrAwakeReplicas.Unlock()
+
+			// Sort the rangeIDs to have a deterministic order in which we process
+			// the replicas. This helps achieve more determinism in the order in which
+			// replicas are being ticked at.
+			// TODO(ibrahim): If we find that sorting ranges is expensive, we should
+			// try to optimize it by relying on the fact that ranges shouldn't change
+			// much from one iteration to the next.
+			slices.Sort(rangeIDs)
+
+			// Enqueue ticks using the taskPacer. This is important to avoid
+			// running all the schedulers goroutines at once until all the replicas
+			// are ticked, which can lead to increased goroutine scheduling latency.
+			for startAt := now; len(rangeIDs) != 0; {
+				waitUntil(startAt)
+				todo, by := pacer.Pace(timeutil.Now(), len(rangeIDs))
+				batch := s.scheduler.NewEnqueueBatch()
+				for _, id := range rangeIDs[:todo] {
+					batch.Add(id)
+				}
+
+				// Why do we bother to ever queue a Replica on the Raft scheduler for
+				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
+				// then a single bad/slow Replica can disrupt tick processing for every
+				// Replica on the store which cascades into Raft elections and more
+				// disruption.
+				s.scheduler.EnqueueRaftTicks(batch)
+				batch.Close()
+				rangeIDs = rangeIDs[todo:]
+				startAt = by
+			}
+
 			s.metrics.RaftTicks.Inc(1)
 
 		case <-s.stopper.ShouldQuiesce():

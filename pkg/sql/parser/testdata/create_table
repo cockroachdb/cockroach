@@ -204,6 +204,13 @@ CREATE TABLE a (b JSONB) -- fully parenthesized
 CREATE TABLE a (b JSONB) -- literals removed
 CREATE TABLE _ (_ JSONB) -- identifiers removed
 
+parse
+CREATE TABLE a (b JSONPATH)
+----
+CREATE TABLE a (b JSONPATH)
+CREATE TABLE a (b JSONPATH) -- fully parenthesized
+CREATE TABLE a (b JSONPATH) -- literals removed
+CREATE TABLE _ (_ JSONPATH) -- identifiers removed
 
 parse
 CREATE TABLE a (b FLOAT4)
@@ -1377,6 +1384,23 @@ CREATE TABLE a (b INT8, VECTOR INDEX (b)) -- fully parenthesized
 CREATE TABLE a (b INT8, VECTOR INDEX (b)) -- literals removed
 CREATE TABLE _ (_ INT8, VECTOR INDEX (_)) -- identifiers removed
 
+# Explicitly name the index.
+parse
+CREATE TABLE a (b INT8, INVERTED INDEX i (b))
+----
+CREATE TABLE a (b INT8, INVERTED INDEX i (b))
+CREATE TABLE a (b INT8, INVERTED INDEX i (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, INVERTED INDEX i (b)) -- literals removed
+CREATE TABLE _ (_ INT8, INVERTED INDEX _ (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, VECTOR INDEX i (b))
+----
+CREATE TABLE a (b INT8, VECTOR INDEX i (b))
+CREATE TABLE a (b INT8, VECTOR INDEX i (b)) -- fully parenthesized
+CREATE TABLE a (b INT8, VECTOR INDEX i (b)) -- literals removed
+CREATE TABLE _ (_ INT8, VECTOR INDEX _ (_)) -- identifiers removed
+
 parse
 CREATE TABLE a (b INT8, c INT8 REFERENCES foo)
 ----
@@ -1958,6 +1982,22 @@ CREATE TABLE a AS SELECT * FROM b LIMIT 3
 CREATE TABLE a AS SELECT (*) FROM b LIMIT (3) -- fully parenthesized
 CREATE TABLE a AS SELECT * FROM b LIMIT _ -- literals removed
 CREATE TABLE _ AS SELECT * FROM _ LIMIT 3 -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b AS OF SYSTEM TIME '-20s' ORDER BY c
+----
+CREATE TABLE a AS SELECT * FROM b AS OF SYSTEM TIME '-20s' ORDER BY c
+CREATE TABLE a AS SELECT (*) FROM b AS OF SYSTEM TIME ('-20s') ORDER BY (c) -- fully parenthesized
+CREATE TABLE a AS SELECT * FROM b AS OF SYSTEM TIME '_' ORDER BY c -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ AS OF SYSTEM TIME '-20s' ORDER BY _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b AS OF SYSTEM TIME '-20s' ORDER BY c
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b AS OF SYSTEM TIME '-20s' ORDER BY c
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b AS OF SYSTEM TIME ('-20s') ORDER BY (c) -- fully parenthesized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b AS OF SYSTEM TIME '_' ORDER BY c -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ AS OF SYSTEM TIME '-20s' ORDER BY _ -- identifiers removed
 
 parse
 CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3

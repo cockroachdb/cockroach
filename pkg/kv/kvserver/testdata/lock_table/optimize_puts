@@ -1,0 +1,52 @@
+# Test that optimize_puts correctly observes
+# locks on non-existent keys and does not incorrectly set the blind flag.
+
+#
+# Txn t1 will hold a replicated, exclusive lock on a non existent key a02.
+# Txn t2 will attempt apply a batch of puts on keys [a00, ... a15].
+# Txn t2 should observe the lock rather than blindly writing.
+#
+new-txn txn=t1
+----
+
+new-txn txn=t2
+----
+
+get txn=t1 k=a02 lock=Exclusive dur=Replicated lock-non-existing
+----
+get: "\xfaa02"=nil
+
+print-in-memory-lock-table
+----
+num=0
+
+print-replicated-lock-table start=a0 end=z
+----
+key: "\xfaa02", str: Exclusive, txn: t1
+
+
+batch txn=t2 wait=Error
+put k=a00 v=v0
+put k=a01 v=v1
+put k=a02 v=v2
+put k=a03 v=v3
+put k=a04 v=v4
+put k=a05 v=v5
+put k=a06 v=v6
+put k=a07 v=v7
+put k=a08 v=v8
+put k=a09 v=v9
+put k=a10 v=v10
+put k=a11 v=v11
+put k=a12 v=v12
+put k=a13 v=v13
+put k=a14 v=v14
+put k=a15 v=v15
+----
+error: conflicting locks on "\xfaa02" [reason=wait_policy]
+
+commit txn=t1
+----
+
+rollback txn=t2
+----

@@ -1,0 +1,557 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_distinct.out --label=/mnt/data1/postgres/src/test/regress/results/select_distinct.out /mnt/data1/postgres/src/test/regress/expected/select_distinct.out /mnt/data1/postgres/src/test/regress/results/select_distinct.out
+--- /mnt/data1/postgres/src/test/regress/expected/select_distinct.out
++++ /mnt/data1/postgres/src/test/regress/results/select_distinct.out
+@@ -48,50 +48,12 @@
+ SELECT DISTINCT two, string4, ten
+    FROM onek
+    ORDER BY two using <, string4 using <, ten using <;
+- two | string4 | ten 
+------+---------+-----
+-   0 | AAAAxx  |   0
+-   0 | AAAAxx  |   2
+-   0 | AAAAxx  |   4
+-   0 | AAAAxx  |   6
+-   0 | AAAAxx  |   8
+-   0 | HHHHxx  |   0
+-   0 | HHHHxx  |   2
+-   0 | HHHHxx  |   4
+-   0 | HHHHxx  |   6
+-   0 | HHHHxx  |   8
+-   0 | OOOOxx  |   0
+-   0 | OOOOxx  |   2
+-   0 | OOOOxx  |   4
+-   0 | OOOOxx  |   6
+-   0 | OOOOxx  |   8
+-   0 | VVVVxx  |   0
+-   0 | VVVVxx  |   2
+-   0 | VVVVxx  |   4
+-   0 | VVVVxx  |   6
+-   0 | VVVVxx  |   8
+-   1 | AAAAxx  |   1
+-   1 | AAAAxx  |   3
+-   1 | AAAAxx  |   5
+-   1 | AAAAxx  |   7
+-   1 | AAAAxx  |   9
+-   1 | HHHHxx  |   1
+-   1 | HHHHxx  |   3
+-   1 | HHHHxx  |   5
+-   1 | HHHHxx  |   7
+-   1 | HHHHxx  |   9
+-   1 | OOOOxx  |   1
+-   1 | OOOOxx  |   3
+-   1 | OOOOxx  |   5
+-   1 | OOOOxx  |   7
+-   1 | OOOOxx  |   9
+-   1 | VVVVxx  |   1
+-   1 | VVVVxx  |   3
+-   1 | VVVVxx  |   5
+-   1 | VVVVxx  |   7
+-   1 | VVVVxx  |   9
+-(40 rows)
+-
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++SELECT DISTINCT two, string4, ten
++   FROM onek
++   ORDER BY two using <, string4 using <, ten using <
++                ^
+ --
+ -- awk '{print $2;}' person.data |
+ -- awk '{if(NF!=1){print $2;}else{print;}}' - emp.data |
+@@ -100,47 +62,21 @@
+ -- sort -n -r | uniq
+ --
+ SELECT DISTINCT p.age FROM person* p ORDER BY age using >;
+- age 
+------
+-  98
+-  88
+-  78
+-  68
+-  60
+-  58
+-  50
+-  48
+-  40
+-  38
+-  34
+-  30
+-  28
+-  25
+-  24
+-  23
+-  20
+-  19
+-  18
+-   8
+-(20 rows)
+-
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++SELECT DISTINCT p.age FROM person* p ORDER BY age using >
++                                                  ^
+ --
+ -- Check mentioning same column more than once
+ --
+ EXPLAIN (VERBOSE, COSTS OFF)
+ SELECT count(*) FROM
+   (SELECT DISTINCT two, four, two FROM tenk1) ss;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Aggregate
+-   Output: count(*)
+-   ->  HashAggregate
+-         Output: tenk1.two, tenk1.four, tenk1.two
+-         Group Key: tenk1.two, tenk1.four
+-         ->  Seq Scan on public.tenk1
+-               Output: tenk1.two, tenk1.four, tenk1.two
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM
+   (SELECT DISTINCT two, four, two FROM tenk1) ss;
+  count 
+@@ -153,58 +89,132 @@
+ -- aggregation. Force spilling in both cases by setting work_mem low.
+ --
+ SET work_mem='64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Produce results with sorting.
+ SET enable_hashagg=FALSE;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET jit_above_cost=0;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ EXPLAIN (costs off)
+ SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Unique
+-   ->  Sort
+-         Sort Key: ((g % 1000))
+-         ->  Function Scan on generate_series g
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ CREATE TABLE distinct_group_1 AS
+ SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SET jit_above_cost TO DEFAULT;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ CREATE TABLE distinct_group_2 AS
+ SELECT DISTINCT (g%1000)::text FROM generate_series(0,9999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SET enable_seqscan = 0;
++ERROR:  parameter "enable_seqscan" requires a Boolean value
++DETAIL:  0 is a int
+ -- Check to see we get an incremental sort plan
+ EXPLAIN (costs off)
+ SELECT DISTINCT hundred, two FROM tenk1;
+-                     QUERY PLAN                      
+------------------------------------------------------
+- Unique
+-   ->  Incremental Sort
+-         Sort Key: hundred, two
+-         Presorted Key: hundred
+-         ->  Index Scan using tenk1_hundred on tenk1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_hashagg=TRUE;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Produce results with hash aggregation.
+ SET enable_sort=FALSE;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET jit_above_cost=0;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ EXPLAIN (costs off)
+ SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+-                QUERY PLAN                
+-------------------------------------------
+- HashAggregate
+-   Group Key: (g % 1000)
+-   ->  Function Scan on generate_series g
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ CREATE TABLE distinct_hash_1 AS
+ SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SET jit_above_cost TO DEFAULT;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ CREATE TABLE distinct_hash_2 AS
+ SELECT DISTINCT (g%1000)::text FROM generate_series(0,9999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SET enable_sort=TRUE;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET work_mem TO DEFAULT;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Compare results
+ (SELECT * FROM distinct_hash_1 EXCEPT SELECT * FROM distinct_group_1)
+   UNION ALL
+@@ -226,32 +236,73 @@
+ DROP TABLE distinct_group_2;
+ -- Test parallel DISTINCT
+ SET parallel_tuple_cost=0;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_setup_cost=0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET min_parallel_table_scan_size=0;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET max_parallel_workers_per_gather=2;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure we get a parallel plan
+ EXPLAIN (costs off)
+ SELECT DISTINCT four FROM tenk1;
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Unique
+-   ->  Sort
+-         Sort Key: four
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  HashAggregate
+-                     Group Key: four
+-                     ->  Parallel Seq Scan on tenk1
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure the parallel plan produces the correct results
+ SELECT DISTINCT four FROM tenk1;
+  four 
+ ------
+     0
+-    1
+-    2
+     3
++    2
++    1
+ (4 rows)
+ 
+ CREATE OR REPLACE FUNCTION distinct_func(a INT) RETURNS INT AS $$
+@@ -259,41 +310,118 @@
+     RETURN a;
+   END;
+ $$ LANGUAGE plpgsql PARALLEL UNSAFE;
++ERROR:  at or near "parallel": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OR REPLACE FUNCTION distinct_func(a INT) RETURNS INT AS $$
++  BEGIN
++    RETURN a;
++  END;
++$$ LANGUAGE plpgsql PARALLEL UNSAFE
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure we don't do parallel distinct with a parallel unsafe function
+ EXPLAIN (COSTS OFF)
+ SELECT DISTINCT distinct_func(1) FROM tenk1;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Unique
+-   ->  Sort
+-         Sort Key: (distinct_func(1))
+-         ->  Index Only Scan using tenk1_hundred on tenk1
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- make the function parallel safe
+ CREATE OR REPLACE FUNCTION distinct_func(a INT) RETURNS INT AS $$
+   BEGIN
+     RETURN a;
+   END;
+ $$ LANGUAGE plpgsql PARALLEL SAFE;
++ERROR:  at or near "parallel": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OR REPLACE FUNCTION distinct_func(a INT) RETURNS INT AS $$
++  BEGIN
++    RETURN a;
++  END;
++$$ LANGUAGE plpgsql PARALLEL SAFE
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure we do parallel distinct now that the function is parallel safe
+ EXPLAIN (COSTS OFF)
+ SELECT DISTINCT distinct_func(1) FROM tenk1;
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Unique
+-   ->  Gather Merge
+-         Workers Planned: 2
+-         ->  Unique
+-               ->  Sort
+-                     Sort Key: (distinct_func(1))
+-                     ->  Parallel Seq Scan on tenk1
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ RESET max_parallel_workers_per_gather;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET min_parallel_table_scan_size;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET parallel_setup_cost;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET parallel_tuple_cost;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Test the planner's ability to use a LIMIT 1 instead of a Unique node when
+ -- all of the distinct_pathkeys have been marked as redundant
+@@ -301,13 +429,11 @@
+ -- Ensure we get a plan with a Limit 1
+ EXPLAIN (COSTS OFF)
+ SELECT DISTINCT four FROM tenk1 WHERE four = 0;
+-         QUERY PLAN         
+-----------------------------
+- Limit
+-   ->  Seq Scan on tenk1
+-         Filter: (four = 0)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure the above gives us the correct result
+ SELECT DISTINCT four FROM tenk1 WHERE four = 0;
+  four 
+@@ -318,13 +444,11 @@
+ -- Ensure we get a plan with a Limit 1
+ EXPLAIN (COSTS OFF)
+ SELECT DISTINCT four FROM tenk1 WHERE four = 0 AND two <> 0;
+-                 QUERY PLAN                  
+----------------------------------------------
+- Limit
+-   ->  Seq Scan on tenk1
+-         Filter: ((two <> 0) AND (four = 0))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure no rows are returned
+ SELECT DISTINCT four FROM tenk1 WHERE four = 0 AND two <> 0;
+  four 
+@@ -334,13 +458,11 @@
+ -- Ensure we get a plan with a Limit 1 when the SELECT list contains constants
+ EXPLAIN (COSTS OFF)
+ SELECT DISTINCT four,1,2,3 FROM tenk1 WHERE four = 0;
+-         QUERY PLAN         
+-----------------------------
+- Limit
+-   ->  Seq Scan on tenk1
+-         Filter: (four = 0)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure we only get 1 row
+ SELECT DISTINCT four,1,2,3 FROM tenk1 WHERE four = 0;
+  four | ?column? | ?column? | ?column? 

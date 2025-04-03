@@ -25,12 +25,16 @@ const V24_3 = V(71)
 // only be used by the flows once the cluster has upgraded to 25.1.
 const V25_1 = V(72)
 
+// V25_2 is the exec version of all binaries of 25.2 cockroach versions. It can
+// only be used by the flows once the cluster has upgraded to 25.2.
+const V25_2 = V(73)
+
 // MinAccepted is the oldest version that the server is compatible with. A
 // server will not accept flows with older versions.
 const MinAccepted = V24_3
 
 // Latest is the latest exec version supported by this binary.
-const Latest = V25_1
+const Latest = V25_2
 
 var contextVersionKey = ctxutil.RegisterFastValueKey()
 

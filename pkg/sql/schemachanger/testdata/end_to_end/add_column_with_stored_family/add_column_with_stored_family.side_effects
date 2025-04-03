@@ -107,6 +107,7 @@ upsert descriptor #106
   +      - k
   +      - j
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -136,6 +137,7 @@ upsert descriptor #106
   +      - j
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -273,6 +275,7 @@ upsert descriptor #106
   +      - k
   +      - j
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -302,6 +305,7 @@ upsert descriptor #106
   +      - j
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -547,6 +551,7 @@ upsert descriptor #106
   -      - k
   -      - j
   -      unique: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: WRITE_ONLY
@@ -578,6 +583,7 @@ upsert descriptor #106
   -      - j
          unique: true
   -      useDeletePreservingEncoding: true
+         vecConfig: {}
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
@@ -620,7 +626,7 @@ upsert descriptor #106
        - k
   +    - j
        unique: true
-       version: 4
+       vecConfig: {}
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -743,6 +749,7 @@ upsert descriptor #106
   -      storeColumnNames:
   -      - k
   -      unique: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

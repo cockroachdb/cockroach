@@ -9,6 +9,7 @@ drop_stmt ::=
 	| drop_func_stmt
 	| drop_proc_stmt
 	| drop_trigger_stmt
+	| drop_policy_stmt
 	| drop_role_stmt
 	| drop_schedule_stmt
 	| drop_external_connection_stmt

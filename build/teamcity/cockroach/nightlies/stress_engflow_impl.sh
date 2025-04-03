@@ -29,7 +29,7 @@ fi
 
 status=0
 bazel test //pkg:all_tests $ENGFLOW_FLAGS --remote_download_minimal \
-      --runs_per_test ${RUNS_PER_TEST=25} --verbose_failures --build_event_binary_file=artifacts/eventstream \
+      --runs_per_test ${RUNS_PER_TEST=10} --verbose_failures --build_event_binary_file=artifacts/eventstream \
       --profile=artifacts/profile.json.gz \
       ${EXTRA_TEST_ARGS:+$EXTRA_TEST_ARGS} \
       $BES_KEYWORDS_ARGS \

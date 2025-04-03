@@ -1,0 +1,559 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numerology.out --label=/mnt/data1/postgres/src/test/regress/results/numerology.out /mnt/data1/postgres/src/test/regress/expected/numerology.out /mnt/data1/postgres/src/test/regress/results/numerology.out
+--- /mnt/data1/postgres/src/test/regress/expected/numerology.out
++++ /mnt/data1/postgres/src/test/regress/results/numerology.out
+@@ -6,17 +6,15 @@
+ -- numeric literals
+ --
+ SELECT 0b100101;
+- ?column? 
+-----------
+-       37
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b100101;
++       ^
+ SELECT 0o273;
+- ?column? 
+-----------
+-      187
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o273;
++       ^
+ SELECT 0x42F;
+  ?column? 
+ ----------
+@@ -25,29 +23,25 @@
+ 
+ -- cases near int4 overflow
+ SELECT 0b1111111111111111111111111111111;
+-  ?column?  
+-------------
+- 2147483647
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b1111111111111111111111111111111;
++       ^
+ SELECT 0b10000000000000000000000000000000;
+-  ?column?  
+-------------
+- 2147483648
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b10000000000000000000000000000000;
++       ^
+ SELECT 0o17777777777;
+-  ?column?  
+-------------
+- 2147483647
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o17777777777;
++       ^
+ SELECT 0o20000000000;
+-  ?column?  
+-------------
+- 2147483648
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o20000000000;
++       ^
+ SELECT 0x7FFFFFFF;
+   ?column?  
+ ------------
+@@ -61,29 +55,25 @@
+ (1 row)
+ 
+ SELECT -0b10000000000000000000000000000000;
+-  ?column?   
+--------------
+- -2147483648
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT -0b10000000000000000000000000000000;
++        ^
+ SELECT -0b10000000000000000000000000000001;
+-  ?column?   
+--------------
+- -2147483649
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT -0b10000000000000000000000000000001;
++        ^
+ SELECT -0o20000000000;
+-  ?column?   
+--------------
+- -2147483648
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT -0o20000000000;
++        ^
+ SELECT -0o20000000001;
+-  ?column?   
+--------------
+- -2147483649
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT -0o20000000001;
++        ^
+ SELECT -0x80000000;
+   ?column?   
+ -------------
+@@ -98,29 +88,25 @@
+ 
+ -- cases near int8 overflow
+ SELECT 0b111111111111111111111111111111111111111111111111111111111111111;
+-      ?column?       
+----------------------
+- 9223372036854775807
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b111111111111111111111111111111111111111111111111111111111111111;
++       ^
+ SELECT 0b1000000000000000000000000000000000000000000000000000000000000000;
+-      ?column?       
+----------------------
+- 9223372036854775808
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b1000000000000000000000000000000000000000000000000000000000000000;
++       ^
+ SELECT 0o777777777777777777777;
+-      ?column?       
+----------------------
+- 9223372036854775807
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o777777777777777777777;
++       ^
+ SELECT 0o1000000000000000000000;
+-      ?column?       
+----------------------
+- 9223372036854775808
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o1000000000000000000000;
++       ^
+ SELECT 0x7FFFFFFFFFFFFFFF;
+       ?column?       
+ ---------------------
+@@ -128,35 +114,27 @@
+ (1 row)
+ 
+ SELECT 0x8000000000000000;
+-      ?column?       
+----------------------
+- 9223372036854775808
+-(1 row)
+-
++ERROR:  could not evaluate 0x8000000000000000 as Datum type DDecimal from string "0x8000000000000000": could not parse "0x8000000000000000" as type decimal: parse mantissa: 0x8000000000000000
+ SELECT -0b1000000000000000000000000000000000000000000000000000000000000000;
+-       ?column?       
+-----------------------
+- -9223372036854775808
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT -0b1000000000000000000000000000000000000000000000000000000000000000;
++        ^
+ SELECT -0b1000000000000000000000000000000000000000000000000000000000000001;
+-       ?column?       
+-----------------------
+- -9223372036854775809
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT -0b1000000000000000000000000000000000000000000000000000000000000001;
++        ^
+ SELECT -0o1000000000000000000000;
+-       ?column?       
+-----------------------
+- -9223372036854775808
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT -0o1000000000000000000000;
++        ^
+ SELECT -0o1000000000000000000001;
+-       ?column?       
+-----------------------
+- -9223372036854775809
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT -0o1000000000000000000001;
++        ^
+ SELECT -0x8000000000000000;
+        ?column?       
+ ----------------------
+@@ -164,172 +142,180 @@
+ (1 row)
+ 
+ SELECT -0x8000000000000001;
+-       ?column?       
+-----------------------
+- -9223372036854775809
+-(1 row)
+-
++ERROR:  could not evaluate -0x8000000000000001 as Datum type DDecimal from string "0x8000000000000001": could not parse "0x8000000000000001" as type decimal: parse mantissa: 0x8000000000000001
+ -- error cases
+ SELECT 123abc;
+-ERROR:  trailing junk after numeric literal at or near "123a"
+-LINE 1: SELECT 123abc;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "123a"
++DETAIL:  source SQL:
++SELECT 123abc;
++       ^
+ SELECT 0x0o;
+-ERROR:  trailing junk after numeric literal at or near "0x0o"
+-LINE 1: SELECT 0x0o;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "0x0o"
++DETAIL:  source SQL:
++SELECT 0x0o;
++       ^
++SELECT 0.a;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0.a"
++DETAIL:  source SQL:
+ SELECT 0.a;
+-ERROR:  trailing junk after numeric literal at or near "0.a"
+-LINE 1: SELECT 0.a;
+-               ^
++       ^
++SELECT 0.0a;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0.0a"
++DETAIL:  source SQL:
+ SELECT 0.0a;
+-ERROR:  trailing junk after numeric literal at or near "0.0a"
+-LINE 1: SELECT 0.0a;
+-               ^
++       ^
+ SELECT .0a;
+-ERROR:  trailing junk after numeric literal at or near ".0a"
+-LINE 1: SELECT .0a;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near ".0a"
++DETAIL:  source SQL:
++SELECT .0a;
++       ^
++SELECT 0.0e1a;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0.0e1a"
++DETAIL:  source SQL:
+ SELECT 0.0e1a;
+-ERROR:  trailing junk after numeric literal at or near "0.0e1a"
+-LINE 1: SELECT 0.0e1a;
+-               ^
++       ^
++SELECT 0.0e;
++ERROR:  lexical error: invalid floating point literal
++DETAIL:  source SQL:
+ SELECT 0.0e;
+-ERROR:  trailing junk after numeric literal at or near "0.0e"
+-LINE 1: SELECT 0.0e;
+-               ^
++       ^
+ SELECT 0.0e+a;
+-ERROR:  trailing junk after numeric literal at or near "0.0e+"
+-LINE 1: SELECT 0.0e+a;
+-               ^
++ERROR:  lexical error: invalid floating point literal
++DETAIL:  source SQL:
++SELECT 0.0e+a;
++       ^
+ PREPARE p1 AS SELECT $1a;
+-ERROR:  trailing junk after parameter at or near "$1a"
+-LINE 1: PREPARE p1 AS SELECT $1a;
+-                             ^
++ERROR:  could not determine data type of placeholder $1
++HINT:  consider adding explicit type casts to the placeholder arguments
++SELECT 0b;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
+ SELECT 0b;
+-ERROR:  invalid binary integer at or near "0b"
+-LINE 1: SELECT 0b;
+-               ^
++       ^
++SELECT 1b;
++ERROR:  lexical error: trailing junk after numeric literal at or near "1b"
++DETAIL:  source SQL:
+ SELECT 1b;
+-ERROR:  trailing junk after numeric literal at or near "1b"
+-LINE 1: SELECT 1b;
+-               ^
++       ^
+ SELECT 0b0x;
+-ERROR:  trailing junk after numeric literal at or near "0b0x"
+-LINE 1: SELECT 0b0x;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b0x;
++       ^
++SELECT 0o;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
+ SELECT 0o;
+-ERROR:  invalid octal integer at or near "0o"
+-LINE 1: SELECT 0o;
+-               ^
++       ^
+ SELECT 1o;
+-ERROR:  trailing junk after numeric literal at or near "1o"
+-LINE 1: SELECT 1o;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "1o"
++DETAIL:  source SQL:
++SELECT 1o;
++       ^
++SELECT 0o0x;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
+ SELECT 0o0x;
+-ERROR:  trailing junk after numeric literal at or near "0o0x"
+-LINE 1: SELECT 0o0x;
+-               ^
++       ^
++SELECT 0x;
++ERROR:  lexical error: invalid hexadecimal numeric literal
++DETAIL:  source SQL:
+ SELECT 0x;
+-ERROR:  invalid hexadecimal integer at or near "0x"
+-LINE 1: SELECT 0x;
+-               ^
++       ^
+ SELECT 1x;
+-ERROR:  trailing junk after numeric literal at or near "1x"
+-LINE 1: SELECT 1x;
+-               ^
++ERROR:  lexical error: invalid hexadecimal numeric literal
++DETAIL:  source SQL:
++SELECT 1x;
++       ^
++SELECT 0x0y;
++ERROR:  lexical error: trailing junk after numeric literal at or near "0x0y"
++DETAIL:  source SQL:
+ SELECT 0x0y;
+-ERROR:  trailing junk after numeric literal at or near "0x0y"
+-LINE 1: SELECT 0x0y;
+-               ^
++       ^
+ -- underscores
+ SELECT 1_000_000;
+- ?column? 
+-----------
+-  1000000
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000_000;
++       ^
+ SELECT 1_2_3;
+- ?column? 
+-----------
+-      123
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_2_3;
++       ^
+ SELECT 0x1EEE_FFFF;
+- ?column?  
+------------
+- 518979583
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0x1EEE_"
++DETAIL:  source SQL:
++SELECT 0x1EEE_FFFF;
++       ^
+ SELECT 0o2_73;
+- ?column? 
+-----------
+-      187
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0o"
++DETAIL:  source SQL:
++SELECT 0o2_73;
++       ^
+ SELECT 0b_10_0101;
+- ?column? 
+-----------
+-       37
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "0b"
++DETAIL:  source SQL:
++SELECT 0b_10_0101;
++       ^
+ SELECT 1_000.000_005;
+-  ?column?   
+--------------
+- 1000.000005
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000.000_005;
++       ^
+ SELECT 1_000.;
+- ?column? 
+-----------
+-     1000
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000.;
++       ^
+ SELECT .000_005;
+- ?column? 
+-----------
+- 0.000005
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near ".000_"
++DETAIL:  source SQL:
++SELECT .000_005;
++       ^
+ SELECT 1_000.5e0_1;
+- ?column? 
+-----------
+-    10005
+-(1 row)
+-
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000.5e0_1;
++       ^
+ -- error cases
+ SELECT _100;
+ ERROR:  column "_100" does not exist
+-LINE 1: SELECT _100;
+-               ^
+ SELECT 100_;
+-ERROR:  trailing junk after numeric literal at or near "100_"
+-LINE 1: SELECT 100_;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "100_"
++DETAIL:  source SQL:
++SELECT 100_;
++       ^
++SELECT 100__000;
++ERROR:  lexical error: trailing junk after numeric literal at or near "100_"
++DETAIL:  source SQL:
+ SELECT 100__000;
+-ERROR:  trailing junk after numeric literal at or near "100_"
+-LINE 1: SELECT 100__000;
+-               ^
++       ^
+ SELECT _1_000.5;
+-ERROR:  syntax error at or near ".5"
+-LINE 1: SELECT _1_000.5;
+-                     ^
++ERROR:  at or near ".5": syntax error
++DETAIL:  source SQL:
++SELECT _1_000.5
++             ^
+ SELECT 1_000_.5;
+-ERROR:  trailing junk after numeric literal at or near "1_000_"
+-LINE 1: SELECT 1_000_.5;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000_.5;
++       ^
++SELECT 1_000._5;
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
+ SELECT 1_000._5;
+-ERROR:  trailing junk after numeric literal at or near "1_000._"
+-LINE 1: SELECT 1_000._5;
+-               ^
++       ^
++SELECT 1_000.5_;
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
+ SELECT 1_000.5_;
+-ERROR:  trailing junk after numeric literal at or near "1_000.5_"
+-LINE 1: SELECT 1_000.5_;
+-               ^
++       ^
+ SELECT 1_000.5e_1;
+-ERROR:  trailing junk after numeric literal at or near "1_000.5e"
+-LINE 1: SELECT 1_000.5e_1;
+-               ^
++ERROR:  lexical error: trailing junk after numeric literal at or near "1_"
++DETAIL:  source SQL:
++SELECT 1_000.5e_1;
++       ^
+ --
+ -- Test implicit type conversions
+ -- This fails for Postgres v6.1 (and earlier?)
+@@ -342,18 +328,18 @@
+   SELECT float8(f1) FROM INT2_TBL;
+ SELECT f1 FROM TEMP_FLOAT
+   ORDER BY f1;
+-     f1      
+--------------
+- -2147483647
+-     -123456
+-      -32767
+-       -1234
+-           0
+-           0
+-        1234
+-       32767
+-      123456
+-  2147483647
++        f1        
++------------------
++ -2.147483647e+09
++          -123456
++           -32767
++            -1234
++                0
++                0
++             1234
++            32767
++           123456
++  2.147483647e+09
+ (10 rows)
+ 
+ -- int4

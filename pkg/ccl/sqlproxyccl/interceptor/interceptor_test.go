@@ -49,7 +49,9 @@ func TestSimpleProxy(t *testing.T) {
 		errCh := make(chan error, len(queries))
 		go func() {
 			for _, msg := range queries {
-				_, err := client.Write(msg.Encode(nil))
+				buf, err := msg.Encode(nil)
+				require.NoError(t, err)
+				_, err = client.Write(buf)
 				errCh <- err
 			}
 		}()
@@ -79,7 +81,9 @@ func TestSimpleProxy(t *testing.T) {
 			if typ == pgwirebase.ClientMsgTerminate {
 				// Right before we terminate, we could also craft a custom
 				// message, and send it to the server.
-				_, err := serverConn.Write(customQuery.Encode(nil))
+				buf, err := customQuery.Encode(nil)
+				require.NoError(t, err)
+				_, err = serverConn.Write(buf)
 				require.NoError(t, err)
 				break
 			}
@@ -127,7 +131,9 @@ func TestSimpleProxy(t *testing.T) {
 		errCh := make(chan error, len(queries))
 		go func() {
 			for _, msg := range queries {
-				_, err := server.Write(msg.Encode(nil))
+				buf, err := msg.Encode(nil)
+				require.NoError(t, err)
+				_, err = server.Write(buf)
 				errCh <- err
 			}
 		}()
@@ -177,7 +183,9 @@ func TestSimpleProxy(t *testing.T) {
 				// the client.
 				dmsg.SecretKey = 100
 
-				_, err = clientConn.Write(dmsg.Encode(nil))
+				buf, err := dmsg.Encode(nil)
+				require.NoError(t, err)
+				_, err = clientConn.Write(buf)
 				require.NoError(t, err)
 			default:
 				// Forward message that we're not interested to the client.

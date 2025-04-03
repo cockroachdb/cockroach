@@ -1,0 +1,13 @@
+echo
+----
+foo_gauge_float64 67.5
+foo_gauge_float64{tenant_id="1",gauge_label="5"} 1.5
+foo_gauge_float64{tenant_id="1",gauge_label="6"} 1.5
+foo_gauge_float64{tenant_id="1",gauge_label="7"} 1.5
+foo_gauge_float64{tenant_id="1",gauge_label="8"} 1.5
+foo_gauge_float64{tenant_id="1",gauge_label="9"} 1.5
+foo_gauge_float64{tenant_id="2",gauge_label="10"} 10.5
+foo_gauge_float64{tenant_id="2",gauge_label="11"} 10.5
+foo_gauge_float64{tenant_id="2",gauge_label="12"} 10.5
+foo_gauge_float64{tenant_id="2",gauge_label="13"} 10.5
+foo_gauge_float64{tenant_id="2",gauge_label="14"} 10.5

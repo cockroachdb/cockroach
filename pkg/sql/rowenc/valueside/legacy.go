@@ -432,7 +432,7 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		vec, err := vector.Decode(v)
+		_, vec, err := vector.Decode(v)
 		if err != nil {
 			return nil, err
 		}

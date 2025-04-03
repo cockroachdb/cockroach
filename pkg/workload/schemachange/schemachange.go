@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -217,6 +216,9 @@ func (s *schemaChange) Ops(
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = time.Hour
 	cfg.QueryTracer = &PGXTracer{tracer: tracer}
+	if err := s.setClusterSettings(ctx, urls[0]); err != nil {
+		return workload.QueryLoad{}, err
+	}
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -225,9 +227,7 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	if err := s.setClusterSettings(ctx, pool); err != nil {
-		return workload.QueryLoad{}, err
-	}
+
 	stdoutLog := makeAtomicLog(os.Stdout)
 	// Use NewPseudoRand here because we want to print out the global seed used by
 	// the workload. Using NewTestRand() here would only let us see the per-test
@@ -338,12 +338,23 @@ func (s *schemaChange) Ops(
 
 // setClusterSettings configures any settings required for the workload ahead
 // of starting workers.
-func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.MultiConnPool) error {
+func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err error) {
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeErr := conn.Close(ctx)
+		err = errors.WithSecondaryError(err, closeErr)
+	}()
 	for _, stmt := range []string{
 		`SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`,
 		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
+
+		// This workload is designed to test multiple statements in a transaction.
+		`SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`,
 	} {
-		_, err := pool.Get().Exec(ctx, stmt)
+		_, err := conn.Exec(ctx, stmt)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -520,15 +531,6 @@ func (w *schemaChangeWorker) runInTxn(
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 					w.recordInHist(timeutil.Since(start), txnRollback)
-					return errors.Mark(
-						err,
-						errRunInTxnRbkSentinel,
-					)
-				}
-				// Command is too large errors are allowed on DML operations since,
-				// some of the tables can be pretty wide in this test.
-				if op.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
-					strings.Contains(pgErr.Error(), "command is too large") {
 					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,

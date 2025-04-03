@@ -2,7 +2,9 @@ echo
 ----
 (base.RaftConfig) {
  RaftTickInterval: (time.Duration) 500ms,
+ RaftTickSmearInterval: (time.Duration) 1ms,
  RaftElectionTimeoutTicks: (int64) 4,
+ RaftElectionTimeoutJitterTicks: (int64) 4,
  RaftReproposalTimeoutTicks: (int64) 6,
  RaftHeartbeatIntervalTicks: (int64) 2,
  StoreLivenessHeartbeatInterval: (time.Duration) 1s,
@@ -17,11 +19,11 @@ echo
  RaftMaxCommittedSizePerReady: (uint64) 67108864,
  RaftMaxInflightMsgs: (int) 128,
  RaftMaxInflightBytes: (uint64) 33554432,
- RaftDelaySplitToSuppressSnapshot: (time.Duration) 45s,
- TestingDisablePreCampaignStoreLivenessCheck: (bool) false
+ RaftDelaySplitToSuppressSnapshot: (time.Duration) 45s
 }
 RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s
+RaftElectionJitter: 2s
 RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s

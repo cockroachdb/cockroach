@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,11 +61,6 @@ func addNewIndexMutation(
 		tbl.NextConstraintID = opIndex.ConstraintID + 1
 	}
 
-	// Set up the index descriptor type.
-	indexType := descpb.IndexDescriptor_FORWARD
-	if opIndex.IsInverted {
-		indexType = descpb.IndexDescriptor_INVERTED
-	}
 	// Set up the encoding type.
 	encodingType := catenumpb.PrimaryIndexEncoding
 	indexVersion := descpb.LatestIndexDescriptorVersion
@@ -79,7 +75,7 @@ func addNewIndexMutation(
 		NotVisible:                  opIndex.IsNotVisible,
 		Invisibility:                opIndex.Invisibility,
 		Version:                     indexVersion,
-		Type:                        indexType,
+		Type:                        opIndex.Type,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
 		ConstraintID:                opIndex.ConstraintID,
@@ -94,6 +90,9 @@ func addNewIndexMutation(
 	}
 	if opIndex.GeoConfig != nil {
 		idx.GeoConfig = *opIndex.GeoConfig
+	}
+	if opIndex.VecConfig != nil {
+		idx.VecConfig = *opIndex.VecConfig
 	}
 	return enqueueIndexMutation(tbl, idx, state, descpb.DescriptorMutation_ADD)
 }
@@ -408,7 +407,7 @@ func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColu
 		})
 	}
 	// If this is an inverted column, note that.
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
+	if indexDesc.Type == idxtype.INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
 		indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{op.InvertedKind}
 	}
 	return nil
@@ -447,7 +446,7 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 			idx.KeyColumnNames = idx.KeyColumnNames[:i]
 			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
 			idx.KeyColumnDirections = idx.KeyColumnDirections[:i]
-			if idx.Type == descpb.IndexDescriptor_INVERTED && i == len(idx.KeyColumnIDs)-1 {
+			if idx.Type == idxtype.INVERTED && i == len(idx.KeyColumnIDs)-1 {
 				idx.InvertedColumnKinds = nil
 			}
 		}
@@ -505,5 +504,54 @@ func (i *immediateVisitor) AddPartitionZoneConfig(
 ) error {
 	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
 		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
+	return nil
+}
+
+func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
+	ctx context.Context, op scop.MarkRecreatedIndexAsInvisible,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	// If the primary index is already visible, then nothing
+	// needs to be done. This can happen if we are able to sequence
+	// publishing the primary and secondary indexes together.
+	if tbl.GetPrimaryIndexID() == op.TargetPrimaryIndexID {
+		return nil
+	}
+	mut, err := FindMutation(tbl, MakeIndexIDMutationSelector(op.IndexID))
+	if err != nil {
+		return err
+	}
+	m := &tbl.TableDesc().Mutations[mut.MutationOrdinal()]
+	if idx := m.GetIndex(); idx != nil {
+		idx.Invisibility = 1.0
+		idx.NotVisible = true
+	}
+	return nil
+}
+
+func (i *immediateVisitor) MarkRecreatedIndexesAsVisible(
+	ctx context.Context, op scop.MarkRecreatedIndexesAsVisible,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	for indexID, invisibility := range op.IndexVisibilities {
+		idx, err := catalog.MustFindIndexByID(tbl, indexID)
+		if err != nil {
+			return err
+		}
+		idx.IndexDesc().Invisibility = invisibility
+		if invisibility == 0.0 {
+			idx.IndexDesc().NotVisible = false
+		} else {
+			idx.IndexDesc().NotVisible = true
+		}
+	}
 	return nil
 }

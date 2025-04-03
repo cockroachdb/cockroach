@@ -58,9 +58,9 @@ func TestTruncateLog(t *testing.T) {
 
 	ctx := context.Background()
 	const (
-		rangeID    = 12
-		term       = 10
-		firstIndex = 100
+		rangeID        = 12
+		term           = 10
+		compactedIndex = 99
 	)
 
 	st := cluster.MakeTestingClusterSettings()
@@ -68,14 +68,14 @@ func TestTruncateLog(t *testing.T) {
 		ClusterSettings: st,
 		Desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
 		Term:            term,
-		FirstIndex:      firstIndex,
+		CompactedIndex:  compactedIndex,
 	}
 
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	truncState := kvserverpb.RaftTruncatedState{
-		Index: firstIndex + 1,
+		Index: compactedIndex + 2,
 		Term:  term,
 	}
 
@@ -84,7 +84,7 @@ func TestTruncateLog(t *testing.T) {
 	// Send a truncation request.
 	req := kvpb.TruncateLogRequest{
 		RangeID: rangeID,
-		Index:   firstIndex + 7,
+		Index:   compactedIndex + 8,
 	}
 	cArgs := CommandArgs{
 		EvalCtx: evalCtx.EvalContext(),

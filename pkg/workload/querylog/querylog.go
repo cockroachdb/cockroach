@@ -737,6 +737,7 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) (retErr error) {
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer func(rows *gosql.Rows) {
 			retErr = errors.CombineErrors(retErr, rows.Close())
 		}(rows)
@@ -768,6 +769,7 @@ WHERE attrelid=$1`, relid)
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer func(rows *gosql.Rows) {
 			retErr = errors.CombineErrors(retErr, rows.Close())
 		}(rows)
@@ -851,6 +853,7 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) (retErr er
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer func() { retErr = errors.CombineErrors(retErr, samples.Close()) }()
 		for samples.Next() {
 			rowOfSamples := make([]interface{}, len(cols))

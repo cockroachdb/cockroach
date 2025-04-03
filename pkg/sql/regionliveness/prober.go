@@ -113,13 +113,13 @@ type livenessProber struct {
 	settings        *clustersettings.Settings
 }
 
-var testingProbeQueryCallbackFunc func()
+var testingBeforeProbeLivenessHook func()
 var testingUnavailableAtTTLOverride time.Duration
 
-func TestingSetProbeLivenessTimeout(probeCallbackFn func()) func() {
-	testingProbeQueryCallbackFunc = probeCallbackFn
+func TestingSetBeforeProbeLivenessHook(hook func()) func() {
+	testingBeforeProbeLivenessHook = hook
 	return func() {
-		probeCallbackFn = nil
+		testingBeforeProbeLivenessHook = nil
 	}
 }
 
@@ -183,8 +183,8 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 	err := timeutil.RunWithTimeout(ctx, "probe-liveness", tableTimeout,
 		func(ctx context.Context) error {
 			return l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if testingProbeQueryCallbackFunc != nil {
-					testingProbeQueryCallbackFunc()
+				if testingBeforeProbeLivenessHook != nil {
+					testingBeforeProbeLivenessHook()
 				}
 				instancesTable := systemschema.SQLInstancesTable()
 				indexPrefix := l.codec.IndexPrefix(uint32(instancesTable.GetID()), uint32(instancesTable.GetPrimaryIndexID()))

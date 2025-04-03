@@ -80,9 +80,9 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 	return rec.i.GetNodeLocality()
 }
 
-// GetFirstIndex returns the first index.
-func (rec *SpanSetReplicaEvalContext) GetFirstIndex() kvpb.RaftIndex {
-	return rec.i.GetFirstIndex()
+// GetCompactedIndex returns the compacted index of the raft log.
+func (rec *SpanSetReplicaEvalContext) GetCompactedIndex() kvpb.RaftIndex {
+	return rec.i.GetCompactedIndex()
 }
 
 // GetTerm returns the term for the given index in the Raft log.

@@ -7,6 +7,7 @@ package spanconfigstore
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 )
@@ -41,7 +42,7 @@ func (r *boundsReader) Bounds(tenID roachpb.TenantID) (_ *spanconfigbounds.Bound
 	}
 
 	b := tenantcapabilities.MustGetValueByID(
-		capabilities, tenantcapabilities.TenantSpanConfigBounds,
+		capabilities, tenantcapabilitiespb.TenantSpanConfigBounds,
 	).(tenantcapabilities.SpanConfigBoundValue).Get()
 	return b, b != nil
 }

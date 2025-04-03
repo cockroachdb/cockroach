@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -350,8 +351,10 @@ func TestErrors(t *testing.T) {
 	r.Exec(t, "CREATE TABLE t (i int PRIMARY KEY, s STRING)")
 	desc := desctestutils.TestingGetTableDescriptor(
 		kvdb, codec, "defaultdb", "public", "t")
-	enc := colenc.MakeEncoder(codec, desc, sv, nil, nil,
-		nil /*metrics*/, nil /*partialIndexMap*/, func() error { return nil })
+	enc := colenc.MakeEncoder(
+		codec, desc, &sessiondata.SessionData{}, sv, nil /* b */, nil, /* insCols */
+		nil /* metrics */, nil /* partialIndexes */, func() error { return nil },
+	)
 	err := enc.PrepareBatch(ctx, nil, 0, 0)
 	require.Error(t, err)
 	err = enc.PrepareBatch(ctx, nil, 1, 0)
@@ -480,13 +483,15 @@ func TestMemoryQuota(t *testing.T) {
 	cb := coldata.NewMemBatchWithCapacity(typs, numRows, factory)
 	txn := kvdb.NewTxn(ctx, t.Name())
 	kvb := txn.NewBatch()
-	enc := colenc.MakeEncoder(codec, desc, sv, cb, cols,
-		nil /*metrics*/, nil /*partialIndexMap*/, func() error {
+	enc := colenc.MakeEncoder(
+		codec, desc, &sessiondata.SessionData{}, sv, cb, cols, nil, /* metrics */
+		nil /* partialIndexes */, func() error {
 			if kvb.ApproximateMutationBytes() > 50 {
 				return colenc.ErrOverMemLimit
 			}
 			return nil
-		})
+		},
+	)
 	pk := coldataext.MakeVecHandler(cb.ColVec(0))
 	strcol := coldataext.MakeVecHandler(cb.ColVec(1))
 	rng, _ := randutil.NewTestRand()
@@ -600,14 +605,18 @@ func buildRowKVs(
 	sv *settings.Values,
 	codec keys.SQLCodec,
 ) (kvs, error) {
-	inserter, err := row.MakeInserter(context.Background(), nil /*txn*/, codec, desc, nil /* uniqueWithTombstoneIndexes */, cols, nil, sv, false, nil)
+	inserter, err := row.MakeInserter(
+		codec, desc, nil, /* uniqueWithTombstoneIndexes */
+		cols, &sessiondata.SessionData{}, sv, nil, /* metrics */
+	)
 	if err != nil {
 		return kvs{}, err
 	}
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
+	var vh row.VectorIndexUpdateHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, nil, false, true); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, nil, row.CPutOp, true /* traceKV */); err != nil {
 			return kvs{}, err
 		}
 	}
@@ -629,7 +638,7 @@ func buildVecKVs(
 	for i, c := range cols {
 		typs[i] = c.GetType()
 	}
-	factory := coldataext.NewExtendedColumnFactory(nil /*evalCtx */)
+	factory := coldataext.NewExtendedColumnFactory(nil /* evalCtx */)
 	b := coldata.NewMemBatchWithCapacity(typs, len(datums), factory)
 
 	for row, d := range datums {
@@ -644,8 +653,10 @@ func buildVecKVs(
 	}
 	b.SetLength(len(datums))
 
-	be := colenc.MakeEncoder(codec, desc, sv, b, cols, nil /*metrics*/, nil, /*partialIndexMap*/
-		func() error { return nil })
+	be := colenc.MakeEncoder(
+		codec, desc, &sessiondata.SessionData{}, sv, b, cols, nil, /* metrics */
+		nil /* partialIndexes */, func() error { return nil },
+	)
 	rng, _ := randutil.NewTestRand()
 	if b.Length() > 1 && rng.Intn(2) == 0 {
 		for i := 0; i < len(datums); i++ {
@@ -708,7 +719,7 @@ func (c *capturePutter) CPut(key, value interface{}, expValue []byte) {
 }
 
 func (c *capturePutter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp,
 ) {
 	colexecerror.InternalError(errors.New("unimplemented"))
 }
@@ -720,7 +731,15 @@ func (c *capturePutter) Put(key, value interface{}) {
 	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
 }
 
+func (c *capturePutter) PutMustAcquireExclusiveLock(key, value interface{}) {
+	colexecerror.InternalError(errors.New("unimplemented"))
+}
+
 func (c *capturePutter) Del(key ...interface{}) {
+	colexecerror.InternalError(errors.New("unimplemented"))
+}
+
+func (c *capturePutter) DelMustAcquireExclusiveLock(key ...interface{}) {
 	colexecerror.InternalError(errors.New("unimplemented"))
 }
 
@@ -758,14 +777,28 @@ func (c *capturePutter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Valu
 	}
 }
 
-// we don't call this
 func (c *capturePutter) PutBytes(kys []roachpb.Key, values [][]byte) {
-	colexecerror.InternalError(errors.New("unimplemented"))
+	for i, k := range kys {
+		if len(k) == 0 {
+			continue
+		}
+		c.kvs.keys = append(c.kvs.keys, k)
+		var kvValue roachpb.Value
+		kvValue.SetBytes(values[i])
+		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
+	}
 }
 
-// we don't call this
 func (c *capturePutter) PutTuples(kys []roachpb.Key, values [][]byte) {
-	colexecerror.InternalError(errors.New("unimplemented"))
+	for i, k := range kys {
+		if len(k) == 0 {
+			continue
+		}
+		c.kvs.keys = append(c.kvs.keys, k)
+		var kvValue roachpb.Value
+		kvValue.SetTuple(values[i])
+		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
+	}
 }
 
 type kvs struct {

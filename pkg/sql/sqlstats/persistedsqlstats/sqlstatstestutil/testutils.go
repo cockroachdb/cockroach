@@ -24,7 +24,7 @@ import (
 // GetRandomizedCollectedStatementStatisticsForTest returns a
 // appstatspb.CollectedStatementStatistics with its fields randomly filled.
 func GetRandomizedCollectedStatementStatisticsForTest(
-	t *testing.T,
+	t testing.TB,
 ) (result appstatspb.CollectedStatementStatistics) {
 	data := sqlstatsutil.GenRandomData()
 	sqlstatsutil.FillObject(t, reflect.ValueOf(&result), &data)
@@ -35,7 +35,7 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 // GetRandomizedCollectedTransactionStatisticsForTest returns a
 // appstatspb.CollectedTransactionStatistics with its fields randomly filled.
 func GetRandomizedCollectedTransactionStatisticsForTest(
-	t *testing.T,
+	t testing.TB,
 ) (result appstatspb.CollectedTransactionStatistics) {
 	data := sqlstatsutil.GenRandomData()
 	sqlstatsutil.FillObject(t, reflect.ValueOf(&result), &data)

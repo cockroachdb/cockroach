@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build crdb_test && !crdb_test_off
-// +build crdb_test,!crdb_test_off
 
 package kvnemesisutil
 

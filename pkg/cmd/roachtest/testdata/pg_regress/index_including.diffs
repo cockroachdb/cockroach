@@ -1,0 +1,722 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/index_including.out --label=/mnt/data1/postgres/src/test/regress/results/index_including.out /mnt/data1/postgres/src/test/regress/expected/index_including.out /mnt/data1/postgres/src/test/regress/results/index_including.out
+--- /mnt/data1/postgres/src/test/regress/expected/index_including.out
++++ /mnt/data1/postgres/src/test/regress/results/index_including.out
+@@ -6,226 +6,247 @@
+  */
+ -- Regular index with included columns
+ CREATE TABLE tbl_include_reg (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_reg (c1 int, c2 int, c3 int, c4 box)
++                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_reg SELECT x, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_reg" does not exist
+ CREATE INDEX tbl_include_reg_idx ON tbl_include_reg (c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl_include_reg" does not exist
+ -- duplicate column is pretty pointless, but we allow it anyway
+ CREATE INDEX ON tbl_include_reg (c1, c2) INCLUDE (c1, c3);
++ERROR:  relation "tbl_include_reg" does not exist
+ SELECT pg_get_indexdef(i.indexrelid)
+ FROM pg_index i JOIN pg_class c ON i.indexrelid = c.oid
+ WHERE i.indrelid = 'tbl_include_reg'::regclass ORDER BY c.relname;
+-                                                pg_get_indexdef                                                
+----------------------------------------------------------------------------------------------------------------
+- CREATE INDEX tbl_include_reg_c1_c2_c11_c3_idx ON public.tbl_include_reg USING btree (c1, c2) INCLUDE (c1, c3)
+- CREATE INDEX tbl_include_reg_idx ON public.tbl_include_reg USING btree (c1, c2) INCLUDE (c3, c4)
+-(2 rows)
+-
++ERROR:  relation "tbl_include_reg" does not exist
+ \d tbl_include_reg_idx
+-  Index "public.tbl_include_reg_idx"
+- Column |  Type   | Key? | Definition 
+---------+---------+------+------------
+- c1     | integer | yes  | c1
+- c2     | integer | yes  | c2
+- c3     | integer | no   | c3
+- c4     | box     | no   | c4
+-btree, for table "public.tbl_include_reg"
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tbl_include_reg_idx)$' COLLATE pg_catalog.default
++                                                                                   ^
+ -- Unique index and unique constraint
+ CREATE TABLE tbl_include_unique1 (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_unique1 (c1 int, c2 int, c3 int, c4 box)
++                                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_unique1 SELECT x, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_unique1" does not exist
+ CREATE UNIQUE INDEX tbl_include_unique1_idx_unique ON tbl_include_unique1 using btree (c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl_include_unique1" does not exist
+ ALTER TABLE tbl_include_unique1 add UNIQUE USING INDEX tbl_include_unique1_idx_unique;
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++ALTER TABLE tbl_include_unique1 add UNIQUE USING INDEX tbl_include_unique1_idx_unique
++                                           ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE tbl_include_unique1 add UNIQUE (c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl_include_unique1" does not exist
+ SELECT pg_get_indexdef(i.indexrelid)
+ FROM pg_index i JOIN pg_class c ON i.indexrelid = c.oid
+ WHERE i.indrelid = 'tbl_include_unique1'::regclass ORDER BY c.relname;
+-                                                       pg_get_indexdef                                                       
+------------------------------------------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_include_unique1_c1_c2_c3_c4_key ON public.tbl_include_unique1 USING btree (c1, c2) INCLUDE (c3, c4)
+- CREATE UNIQUE INDEX tbl_include_unique1_idx_unique ON public.tbl_include_unique1 USING btree (c1, c2) INCLUDE (c3, c4)
+-(2 rows)
+-
++ERROR:  relation "tbl_include_unique1" does not exist
+ -- Unique index and unique constraint. Both must fail.
+ CREATE TABLE tbl_include_unique2 (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_unique2 (c1 int, c2 int, c3 int, c4 box)
++                                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_unique2 SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_unique2" does not exist
+ CREATE UNIQUE INDEX tbl_include_unique2_idx_unique ON tbl_include_unique2 using btree (c1, c2) INCLUDE (c3, c4);
+-ERROR:  could not create unique index "tbl_include_unique2_idx_unique"
+-DETAIL:  Key (c1, c2)=(1, 2) is duplicated.
++ERROR:  relation "tbl_include_unique2" does not exist
+ ALTER TABLE tbl_include_unique2 add UNIQUE (c1, c2) INCLUDE (c3, c4);
+-ERROR:  could not create unique index "tbl_include_unique2_c1_c2_c3_c4_key"
+-DETAIL:  Key (c1, c2)=(1, 2) is duplicated.
++ERROR:  relation "tbl_include_unique2" does not exist
+ -- PK constraint
+ CREATE TABLE tbl_include_pk (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_pk (c1 int, c2 int, c3 int, c4 box)
++                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_pk SELECT 1, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_pk" does not exist
+ ALTER TABLE tbl_include_pk add PRIMARY KEY (c1, c2) INCLUDE (c3, c4);
++ERROR:  at or near "include": syntax error
++DETAIL:  source SQL:
++ALTER TABLE tbl_include_pk add PRIMARY KEY (c1, c2) INCLUDE (c3, c4)
++                                                    ^
+ SELECT pg_get_indexdef(i.indexrelid)
+ FROM pg_index i JOIN pg_class c ON i.indexrelid = c.oid
+ WHERE i.indrelid = 'tbl_include_pk'::regclass ORDER BY c.relname;
+-                                            pg_get_indexdef                                             
+---------------------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_include_pk_pkey ON public.tbl_include_pk USING btree (c1, c2) INCLUDE (c3, c4)
+-(1 row)
+-
++ERROR:  relation "tbl_include_pk" does not exist
+ CREATE TABLE tbl_include_box (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_box (c1 int, c2 int, c3 int, c4 box)
++                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_box SELECT 1, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_box" does not exist
+ CREATE UNIQUE INDEX tbl_include_box_idx_unique ON tbl_include_box using btree (c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl_include_box" does not exist
+ ALTER TABLE tbl_include_box add PRIMARY KEY USING INDEX tbl_include_box_idx_unique;
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++ALTER TABLE tbl_include_box add PRIMARY KEY USING INDEX tbl_include_box_idx_unique
++                                            ^
++HINT:  try \h ALTER TABLE
+ SELECT pg_get_indexdef(i.indexrelid)
+ FROM pg_index i JOIN pg_class c ON i.indexrelid = c.oid
+ WHERE i.indrelid = 'tbl_include_box'::regclass ORDER BY c.relname;
+-                                                pg_get_indexdef                                                 
+-----------------------------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_include_box_idx_unique ON public.tbl_include_box USING btree (c1, c2) INCLUDE (c3, c4)
+-(1 row)
+-
++ERROR:  relation "tbl_include_box" does not exist
+ -- PK constraint. Must fail.
+ CREATE TABLE tbl_include_box_pk (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl_include_box_pk (c1 int, c2 int, c3 int, c4 box)
++                                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl_include_box_pk SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl_include_box_pk" does not exist
+ ALTER TABLE tbl_include_box_pk add PRIMARY KEY (c1, c2) INCLUDE (c3, c4);
+-ERROR:  could not create unique index "tbl_include_box_pk_pkey"
+-DETAIL:  Key (c1, c2)=(1, 2) is duplicated.
++ERROR:  at or near "include": syntax error
++DETAIL:  source SQL:
++ALTER TABLE tbl_include_box_pk add PRIMARY KEY (c1, c2) INCLUDE (c3, c4)
++                                                        ^
+ /*
+  * 2. Test CREATE TABLE with constraint
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
+ 				CONSTRAINT covering UNIQUE(c1,c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexrelid::regclass, indnatts, indnkeyatts, indisunique, indisprimary, indkey, indclass FROM pg_index WHERE indrelid = 'tbl'::regclass::oid;
+- indexrelid | indnatts | indnkeyatts | indisunique | indisprimary | indkey  | indclass  
+-------------+----------+-------------+-------------+--------------+---------+-----------
+- covering   |        4 |           2 | t           | f            | 1 2 3 4 | 1978 1978
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ SELECT pg_get_constraintdef(oid), conname, conkey FROM pg_constraint WHERE conrelid = 'tbl'::regclass::oid;
+-       pg_get_constraintdef       | conname  | conkey 
+-----------------------------------+----------+--------
+- UNIQUE (c1, c2) INCLUDE (c3, c4) | covering | {1,2}
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ -- ensure that constraint works
+ INSERT INTO tbl SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  duplicate key value violates unique constraint "covering"
+-DETAIL:  Key (c1, c2)=(1, 2) already exists.
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
+ 				CONSTRAINT covering PRIMARY KEY(c1,c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexrelid::regclass, indnatts, indnkeyatts, indisunique, indisprimary, indkey, indclass FROM pg_index WHERE indrelid = 'tbl'::regclass::oid;
+- indexrelid | indnatts | indnkeyatts | indisunique | indisprimary | indkey  | indclass  
+-------------+----------+-------------+-------------+--------------+---------+-----------
+- covering   |        4 |           2 | t           | t            | 1 2 3 4 | 1978 1978
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ SELECT pg_get_constraintdef(oid), conname, conkey FROM pg_constraint WHERE conrelid = 'tbl'::regclass::oid;
+-         pg_get_constraintdef          | conname  | conkey 
+----------------------------------------+----------+--------
+- PRIMARY KEY (c1, c2) INCLUDE (c3, c4) | covering | {1,2}
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ -- ensure that constraint works
+ INSERT INTO tbl SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  duplicate key value violates unique constraint "covering"
+-DETAIL:  Key (c1, c2)=(1, 2) already exists.
++ERROR:  relation "tbl" does not exist
+ INSERT INTO tbl SELECT 1, NULL, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  null value in column "c2" of relation "tbl" violates not-null constraint
+-DETAIL:  Failing row contains (1, null, 3, (4,4),(4,4)).
++ERROR:  relation "tbl" does not exist
+ INSERT INTO tbl SELECT x, 2*x, NULL, NULL FROM generate_series(1,300) AS x;
++ERROR:  relation "tbl" does not exist
+ explain (costs off)
+ select * from tbl where (c1,c2,c3) < (2,5,1);
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Bitmap Heap Scan on tbl
+-   Filter: (ROW(c1, c2, c3) < ROW(2, 5, 1))
+-   ->  Bitmap Index Scan on covering
+-         Index Cond: (ROW(c1, c2) <= ROW(2, 5))
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from tbl where (c1,c2,c3) < (2,5,1);
+- c1 | c2 | c3 | c4 
+-----+----+----+----
+-  1 |  2 |    | 
+-  2 |  4 |    | 
+-(2 rows)
+-
++ERROR:  relation "tbl" does not exist
+ -- row comparison that compares high key at page boundary
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ explain (costs off)
+ select * from tbl where (c1,c2,c3) < (262,1,1) limit 1;
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Limit
+-   ->  Index Only Scan using covering on tbl
+-         Index Cond: (ROW(c1, c2) <= ROW(262, 1))
+-         Filter: (ROW(c1, c2, c3) < ROW(262, 1, 1))
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from tbl where (c1,c2,c3) < (262,1,1) limit 1;
+- c1 | c2 | c3 | c4 
+-----+----+----+----
+-  1 |  2 |    | 
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
+ 				UNIQUE(c1,c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexrelid::regclass, indnatts, indnkeyatts, indisunique, indisprimary, indkey, indclass FROM pg_index WHERE indrelid = 'tbl'::regclass::oid;
+-     indexrelid      | indnatts | indnkeyatts | indisunique | indisprimary | indkey  | indclass  
+----------------------+----------+-------------+-------------+--------------+---------+-----------
+- tbl_c1_c2_c3_c4_key |        4 |           2 | t           | f            | 1 2 3 4 | 1978 1978
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ SELECT pg_get_constraintdef(oid), conname, conkey FROM pg_constraint WHERE conrelid = 'tbl'::regclass::oid;
+-       pg_get_constraintdef       |       conname       | conkey 
+-----------------------------------+---------------------+--------
+- UNIQUE (c1, c2) INCLUDE (c3, c4) | tbl_c1_c2_c3_c4_key | {1,2}
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ -- ensure that constraint works
+ INSERT INTO tbl SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  duplicate key value violates unique constraint "tbl_c1_c2_c3_c4_key"
+-DETAIL:  Key (c1, c2)=(1, 2) already exists.
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
+ 				PRIMARY KEY(c1,c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexrelid::regclass, indnatts, indnkeyatts, indisunique, indisprimary, indkey, indclass FROM pg_index WHERE indrelid = 'tbl'::regclass::oid;
+- indexrelid | indnatts | indnkeyatts | indisunique | indisprimary | indkey  | indclass  
+-------------+----------+-------------+-------------+--------------+---------+-----------
+- tbl_pkey   |        4 |           2 | t           | t            | 1 2 3 4 | 1978 1978
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ SELECT pg_get_constraintdef(oid), conname, conkey FROM pg_constraint WHERE conrelid = 'tbl'::regclass::oid;
+-         pg_get_constraintdef          | conname  | conkey 
+----------------------------------------+----------+--------
+- PRIMARY KEY (c1, c2) INCLUDE (c3, c4) | tbl_pkey | {1,2}
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ -- ensure that constraint works
+ INSERT INTO tbl SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  duplicate key value violates unique constraint "tbl_pkey"
+-DETAIL:  Key (c1, c2)=(1, 2) already exists.
++ERROR:  relation "tbl" does not exist
+ INSERT INTO tbl SELECT 1, NULL, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  null value in column "c2" of relation "tbl" violates not-null constraint
+-DETAIL:  Failing row contains (1, null, 3, (4,4),(4,4)).
++ERROR:  relation "tbl" does not exist
+ INSERT INTO tbl SELECT x, 2*x, NULL, NULL FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
+ 				EXCLUDE USING btree (c1 WITH =) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box,
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexrelid::regclass, indnatts, indnkeyatts, indisunique, indisprimary, indkey, indclass FROM pg_index WHERE indrelid = 'tbl'::regclass::oid;
+-    indexrelid     | indnatts | indnkeyatts | indisunique | indisprimary | indkey | indclass 
+--------------------+----------+-------------+-------------+--------------+--------+----------
+- tbl_c1_c3_c4_excl |        3 |           1 | f           | f            | 1 3 4  | 1978
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ SELECT pg_get_constraintdef(oid), conname, conkey FROM pg_constraint WHERE conrelid = 'tbl'::regclass::oid;
+-               pg_get_constraintdef               |      conname      | conkey 
+---------------------------------------------------+-------------------+--------
+- EXCLUDE USING btree (c1 WITH =) INCLUDE (c3, c4) | tbl_c1_c3_c4_excl | {1}
+-(1 row)
+-
++ERROR:  relation "tbl" does not exist
+ -- ensure that constraint works
+ INSERT INTO tbl SELECT 1, 2, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
+-ERROR:  conflicting key value violates exclusion constraint "tbl_c1_c3_c4_excl"
+-DETAIL:  Key (c1)=(1) conflicts with existing key (c1)=(1).
++ERROR:  relation "tbl" does not exist
+ INSERT INTO tbl SELECT x, 2*x, NULL, NULL FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 3.0 Test ALTER TABLE DROP COLUMN.
+  * Any column deletion leads to index deletion.
+@@ -233,16 +254,19 @@
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 int);
+ CREATE UNIQUE INDEX tbl_idx ON tbl using btree(c1, c2, c3, c4);
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+-                                indexdef                                
+-------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_idx ON public.tbl USING btree (c1, c2, c3, c4)
+-(1 row)
++                                          indexdef                                           
++---------------------------------------------------------------------------------------------
++ CREATE UNIQUE INDEX tbl_idx ON root.public.tbl USING btree (c1 ASC, c2 ASC, c3 ASC, c4 ASC)
++ CREATE UNIQUE INDEX tbl_pkey ON root.public.tbl USING btree (rowid ASC)
++(2 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c3;
++NOTICE:  dropping index "tbl_idx" which depends on column "c3"
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+- indexdef 
+-----------
+-(0 rows)
++                                indexdef                                 
++-------------------------------------------------------------------------
++ CREATE UNIQUE INDEX tbl_pkey ON root.public.tbl USING btree (rowid ASC)
++(1 row)
+ 
+ DROP TABLE tbl;
+ /*
+@@ -251,150 +275,277 @@
+  * AS well AS key columns deletion. It's explained in documentation.
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box)
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ CREATE UNIQUE INDEX tbl_idx ON tbl using btree(c1, c2) INCLUDE(c3,c4);
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+-                                    indexdef                                     
+----------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_idx ON public.tbl USING btree (c1, c2) INCLUDE (c3, c4)
+-(1 row)
++ indexdef 
++----------
++(0 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c3;
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 3.2 Test ALTER TABLE DROP COLUMN.
+  * Included column deletion leads to the index deletion.
+  * AS well AS key columns deletion. It's explained in documentation.
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4))
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+-                                          indexdef                                           
+----------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_c1_c2_c3_c4_key ON public.tbl USING btree (c1, c2) INCLUDE (c3, c4)
+-(1 row)
++ indexdef 
++----------
++(0 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c3;
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c1;
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 3.3 Test ALTER TABLE SET STATISTICS
+  */
+ CREATE TABLE tbl (c1 int, c2 int);
+ CREATE INDEX tbl_idx ON tbl (c1, (c1+0)) INCLUDE (c2);
+ ALTER INDEX tbl_idx ALTER COLUMN 1 SET STATISTICS 1000;
+-ERROR:  cannot alter statistics on non-expression column "c1" of index "tbl_idx"
+-HINT:  Alter statistics on table column instead.
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER INDEX tbl_idx ALTER COLUMN 1 SET STATISTICS 1000
++                    ^
++HINT:  try \h ALTER INDEX
+ ALTER INDEX tbl_idx ALTER COLUMN 2 SET STATISTICS 1000;
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER INDEX tbl_idx ALTER COLUMN 2 SET STATISTICS 1000
++                    ^
++HINT:  try \h ALTER INDEX
+ ALTER INDEX tbl_idx ALTER COLUMN 3 SET STATISTICS 1000;
+-ERROR:  cannot alter statistics on included column "c2" of index "tbl_idx"
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER INDEX tbl_idx ALTER COLUMN 3 SET STATISTICS 1000
++                    ^
++HINT:  try \h ALTER INDEX
+ ALTER INDEX tbl_idx ALTER COLUMN 4 SET STATISTICS 1000;
+-ERROR:  column number 4 of relation "tbl_idx" does not exist
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER INDEX tbl_idx ALTER COLUMN 4 SET STATISTICS 1000
++                    ^
++HINT:  try \h ALTER INDEX
+ DROP TABLE tbl;
+ /*
+  * 4. CREATE INDEX CONCURRENTLY
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4))
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl SELECT x, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,1000) AS x;
++ERROR:  relation "tbl" does not exist
+ CREATE UNIQUE INDEX CONCURRENTLY on tbl (c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+-                                          indexdef                                           
+----------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_c1_c2_c3_c4_idx ON public.tbl USING btree (c1, c2) INCLUDE (c3, c4)
+- CREATE UNIQUE INDEX tbl_c1_c2_c3_c4_key ON public.tbl USING btree (c1, c2) INCLUDE (c3, c4)
+-(2 rows)
++ indexdef 
++----------
++(0 rows)
+ 
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 5. REINDEX
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4))
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+-                                          indexdef                                           
+----------------------------------------------------------------------------------------------
+- CREATE UNIQUE INDEX tbl_c1_c2_c3_c4_key ON public.tbl USING btree (c1, c2) INCLUDE (c3, c4)
+-(1 row)
++ indexdef 
++----------
++(0 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c3;
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ REINDEX INDEX tbl_c1_c2_c3_c4_key;
+-ERROR:  relation "tbl_c1_c2_c3_c4_key" does not exist
++ERROR:  at or near "tbl_c1_c2_c3_c4_key": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX INDEX tbl_c1_c2_c3_c4_key
++              ^
++HINT:  CockroachDB does not require reindexing.
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ ALTER TABLE tbl DROP COLUMN c1;
++ERROR:  relation "tbl" does not exist
+ SELECT indexdef FROM pg_indexes WHERE tablename = 'tbl' ORDER BY indexname;
+  indexdef 
+ ----------
+ (0 rows)
+ 
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 7. Check various AMs. All but btree, gist and spgist must fail.
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 box, c4 box);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 box, c4 box)
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ CREATE INDEX on tbl USING brin(c1, c2) INCLUDE (c3, c4);
+-ERROR:  access method "brin" does not support included columns
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX on tbl USING brin(c1, c2) INCLUDE (c3, c4)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX on tbl USING gist(c3) INCLUDE (c1, c4);
++ERROR:  relation "tbl" does not exist
+ CREATE INDEX on tbl USING spgist(c3) INCLUDE (c4);
++ERROR:  at or near "spgist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX on tbl USING spgist(c3) INCLUDE (c4)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX on tbl USING gin(c1, c2) INCLUDE (c3, c4);
+-ERROR:  access method "gin" does not support included columns
++ERROR:  relation "tbl" does not exist
+ CREATE INDEX on tbl USING hash(c1, c2) INCLUDE (c3, c4);
+-ERROR:  access method "hash" does not support included columns
++ERROR:  at or near "hash": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX on tbl USING hash(c1, c2) INCLUDE (c3, c4)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX on tbl USING rtree(c3) INCLUDE (c1, c4);
+-NOTICE:  substituting access method "gist" for obsolete method "rtree"
++ERROR:  at or near "rtree": syntax error: unrecognized access method: rtree
++DETAIL:  source SQL:
++CREATE INDEX on tbl USING rtree(c3) INCLUDE (c1, c4)
++                          ^
+ CREATE INDEX on tbl USING btree(c1, c2) INCLUDE (c3, c4);
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 8. Update, delete values in indexed table.
+  */
+ CREATE TABLE tbl (c1 int, c2 int, c3 int, c4 box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int, c2 int, c3 int, c4 box)
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl SELECT x, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl" does not exist
+ CREATE UNIQUE INDEX tbl_idx_unique ON tbl using btree(c1, c2) INCLUDE (c3,c4);
++ERROR:  relation "tbl" does not exist
+ UPDATE tbl SET c1 = 100 WHERE c1 = 2;
++ERROR:  relation "tbl" does not exist
+ UPDATE tbl SET c1 = 1 WHERE c1 = 3;
++ERROR:  relation "tbl" does not exist
+ -- should fail
+ UPDATE tbl SET c2 = 2 WHERE c1 = 1;
+-ERROR:  duplicate key value violates unique constraint "tbl_idx_unique"
+-DETAIL:  Key (c1, c2)=(1, 2) already exists.
++ERROR:  relation "tbl" does not exist
+ UPDATE tbl SET c3 = 1;
++ERROR:  relation "tbl" does not exist
+ DELETE FROM tbl WHERE c1 = 5 OR c3 = 12;
++ERROR:  relation "tbl" does not exist
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist
+ /*
+  * 9. Alter column type.
+  */
+ CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4));
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE tbl (c1 int,c2 int, c3 int, c4 box, UNIQUE(c1, c2) INCLUDE(c3,c4))
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ INSERT INTO tbl SELECT x, 2*x, 3*x, box('4,4,4,4') FROM generate_series(1,10) AS x;
++ERROR:  relation "tbl" does not exist
+ ALTER TABLE tbl ALTER c1 TYPE bigint;
++ERROR:  relation "tbl" does not exist
+ ALTER TABLE tbl ALTER c3 TYPE bigint;
++ERROR:  relation "tbl" does not exist
+ \d tbl
+-                Table "public.tbl"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- c1     | bigint  |           |          | 
+- c2     | integer |           |          | 
+- c3     | bigint  |           |          | 
+- c4     | box     |           |          | 
+-Indexes:
+-    "tbl_c1_c2_c3_c4_key" UNIQUE CONSTRAINT, btree (c1, c2) INCLUDE (c3, c4)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tbl)$' COLLATE pg_catalog.default
++                                                                   ^
+ DROP TABLE tbl;
++ERROR:  relation "tbl" does not exist

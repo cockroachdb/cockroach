@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -28,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -304,7 +305,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Observe backpressure now that the range is just over the limit.
 		// Use pgx so that cancellation does something reasonable.
-		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).AdvSQLAddr(), "", url.User("root"))
+		url, cleanup := pgurlutils.PGUrl(t, tc.Server(1).AdvSQLAddr(), "", url.User("root"))
 		defer cleanup()
 		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)

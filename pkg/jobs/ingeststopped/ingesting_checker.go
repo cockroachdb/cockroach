@@ -54,8 +54,8 @@ func WaitForNoIngestingNodes(
 		}
 
 		if timeutil.Since(lastStatusUpdate) > statusUpdateFrequency {
-			status := jobs.RunningStatus(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
-			if statusErr := job.NoTxn().RunningStatus(ctx, status); statusErr != nil {
+			status := jobs.StatusMessage(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
+			if statusErr := job.NoTxn().UpdateStatusMessage(ctx, status); statusErr != nil {
 				log.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
 			} else {
 				lastStatusUpdate = timeutil.Now()
@@ -69,13 +69,12 @@ func checkAllNodesForIngestingJob(
 	ctx context.Context, execCtx sql.JobExecContext, jobID catpb.JobID,
 ) error {
 	dsp := execCtx.DistSQLPlanner()
-	evalCtx := execCtx.ExtendedEvalContext()
 
 	// TODO(dt): We should record which nodes were assigned ingestion processors
 	// and then ensure we're reaching out to them specifically here, in particular
 	// in the event a node that was importing is no longer in liveness but might
 	// still be off ingesting.
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 	if err != nil {
 		return err
 	}
@@ -88,7 +87,8 @@ func checkAllNodesForIngestingJob(
 	}
 
 	p.AddNoInputStage(
-		corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{},
+		corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{},
+		execinfrapb.Ordering{}, nil, /* finalizeLastStageCb */
 	)
 	sql.FinalizePlan(ctx, planCtx, p)
 
@@ -101,11 +101,12 @@ func checkAllNodesForIngestingJob(
 		nil, /* rangeCache */
 		nil, /* txn - the flow does not read or write the database */
 		nil, /* clockUpdater */
-		evalCtx.Tracing,
+		execCtx.ExtendedEvalContext().Tracing,
 	)
 	defer recv.Release()
 
-	evalCtxCopy := *evalCtx
-	dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+	dsp.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return res.Err()
 }

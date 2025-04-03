@@ -121,7 +121,7 @@ func TestCrashReportingPacket(t *testing.T) {
 		}(),
 			regexp.MustCompile(`crash_reporting_packet_test.go:\d+: panic: boom`),
 		},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 14, func() string {
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 13, func() string {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
@@ -212,10 +212,6 @@ func TestInternalErrorReporting(t *testing.T) {
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
-	if err != nil {
-		t.Errorf("failed to enable plan collection due to %s", err.Error())
-	}
 
 	if _, err := sqlDB.Exec("SELECT crdb_internal.force_assertion_error('woo')"); !testutils.IsError(err, "internal error") {
 		t.Fatalf("expected internal error, got %v", err)

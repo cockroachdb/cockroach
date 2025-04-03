@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -448,8 +449,7 @@ var debugCtx struct {
 	sizes             bool
 	replicated        bool
 	inputFile         string
-	ballastSize       base.SizeSpec
-	printSystemConfig bool
+	ballastSize       storagepb.SizeSpec
 	maxResults        int
 	decodeAsTableDesc string
 	verbose           bool
@@ -466,9 +466,8 @@ func setDebugContextDefaults() {
 	debugCtx.sizes = false
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
-	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
+	debugCtx.ballastSize = storagepb.SizeSpec{Capacity: 1000000000}
 	debugCtx.maxResults = 0
-	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
 	debugCtx.keyTypes = showAll
@@ -750,6 +749,6 @@ func GetServerCfgStores() base.StoreSpecList {
 // WARNING: consider very carefully whether you should be using this.
 // If you are not writing CCL code that performs command-line flag
 // parsing, you probably should not be using this.
-func GetWALFailoverConfig() *base.WALFailoverConfig {
-	return &serverCfg.WALFailover
+func GetWALFailoverConfig() *storagepb.WALFailover {
+	return &serverCfg.StorageConfig.WALFailover
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -297,7 +299,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump rangedels.
-			if rdIter, err := r.NewRawRangeDelIter(context.Background(), sstable.NoFragmentTransforms); err != nil {
+			if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
 				return err
 			} else if rdIter != nil {
 				defer rdIter.Close()
@@ -322,7 +324,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump range keys.
-			if rkIter, err := r.NewRawRangeKeyIter(context.Background(), sstable.NoFragmentTransforms); err != nil {
+			if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
 				return err
 			} else if rkIter != nil {
 				defer rkIter.Close()
@@ -340,7 +342,7 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 						if len(k.Suffix) > 0 {
-							ts, err := storage.DecodeMVCCTimestampSuffix(k.Suffix)
+							ts, err := mvccencoding.DecodeMVCCTimestampSuffix(k.Suffix)
 							if err != nil {
 								return err
 							}
@@ -1182,7 +1184,13 @@ func cmdAcquireLock(e *evalCtx) error {
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
 		targetLockConflictBytes := e.getTargetLockConflictBytes()
-		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
+		var txnMeta *enginepb.TxnMeta
+		var ignoredSeq []enginepb.IgnoredSeqNumRange
+		if txn != nil {
+			txnMeta = &txn.TxnMeta
+			ignoredSeq = txn.IgnoredSeqNums
+		}
+		return storage.MVCCAcquireLock(e.ctx, rw, txnMeta, ignoredSeq, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
@@ -1314,9 +1322,9 @@ func cmdCPut(e *evalCtx) error {
 				Stats:                          e.ms,
 				ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 				MaxLockConflicts:               e.getMaxLockConflicts(),
+				OriginTimestamp:                originTimestamp,
 			},
 			AllowIfDoesNotExist: behavior,
-			OriginTimestamp:     originTimestamp,
 		}
 		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, opts)
 		if err != nil {
@@ -1340,6 +1348,12 @@ func cmdInitPut(e *evalCtx) error {
 	key := e.getKey()
 	val := e.getVal()
 	failOnTombstones := e.hasArg("failOnTombstones")
+
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("initput", func(rw storage.ReadWriter) error {
@@ -1349,6 +1363,7 @@ func cmdInitPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			OriginTimestamp:                originTimestamp,
 		}
 		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
 		if err != nil {
@@ -1369,7 +1384,14 @@ func cmdDelete(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(txn)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
+
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
 			Txn:                            txn,
@@ -1377,6 +1399,7 @@ func cmdDelete(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			OriginTimestamp:                originTimestamp,
 		}
 		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
@@ -1408,6 +1431,11 @@ func cmdDeleteRange(e *evalCtx) error {
 		e.scanArg("max", &max)
 	}
 
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
@@ -1416,6 +1444,7 @@ func cmdDeleteRange(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			OriginTimestamp:                originTimestamp,
 		}
 		deleted, resumeSpan, num, acqs, err := storage.MVCCDeleteRange(
 			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
@@ -1580,6 +1609,11 @@ func cmdIncrement(e *evalCtx) error {
 		inc = int64(incI)
 	}
 
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw storage.ReadWriter) error {
@@ -1589,6 +1623,7 @@ func cmdIncrement(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			OriginTimestamp:                originTimestamp,
 		}
 		curVal, acq, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
@@ -1631,6 +1666,11 @@ func cmdPut(e *evalCtx) error {
 		e.scanArg("import_epoch", &importEpoch)
 	}
 
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
@@ -1641,6 +1681,7 @@ func cmdPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
+			OriginTimestamp:                originTimestamp,
 		}
 		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
 		if err != nil {
@@ -1933,7 +1974,7 @@ func cmdPutRangeKey(e *evalCtx) error {
 	// range key writes will use and we want to exercise it. See #129592.
 	if e.hasArg("syntheticBit") {
 		return e.withWriter("put_rangekey", func(rw storage.ReadWriter) error {
-			suffix := storage.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
+			suffix := mvccencoding.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
 			valueRaw, err := storage.EncodeMVCCValue(value)
 			if err != nil {
 				return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
@@ -2445,39 +2486,6 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	return s
 }
 
-// boundSettingReader wraps a storage.Reader and sets unset bounds on
-// NewMVCCIterator.
-type boundSettingReader struct {
-	storage.Reader
-}
-
-// NewMVCCIterator implements the Reader interface.
-func (b boundSettingReader) NewMVCCIterator(
-	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) (storage.MVCCIterator, error) {
-	if !opts.Prefix {
-		if len(opts.LowerBound) == 0 {
-			// This logic exists because intentInterleavingIter does not support
-			// iterator bounds spanning the local and global keyspace.
-			if len(opts.UpperBound) != 0 && keys.IsLocal(opts.UpperBound) {
-				opts.LowerBound = keys.MinKey
-			} else {
-				opts.LowerBound = keys.LocalMax
-			}
-		}
-		if len(opts.UpperBound) == 0 {
-			// NB: The above conditional will force a LocalMax min key if lower bound
-			// was initially unset, and LocalMax is not local.
-			if len(opts.LowerBound) != 0 && keys.IsLocal(opts.LowerBound) {
-				opts.UpperBound = keys.LocalMax
-			} else {
-				opts.UpperBound = keys.MaxKey
-			}
-		}
-	}
-	return b.Reader.NewMVCCIterator(ctx, iterKind, opts)
-}
-
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -2641,10 +2649,8 @@ func (e *evalCtx) newReader() storage.Reader {
 		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
-	case "snapshot":
+	case "snapshot", "efos":
 		return e.engine.NewSnapshot()
-	case "efos":
-		return boundSettingReader{e.engine.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}})}
 	default:
 		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
 		return nil

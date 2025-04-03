@@ -37,6 +37,7 @@ var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
+var ipAddressRe = regexp.MustCompile(`{ip(:\d+([-,]\d+)?)(:public|:private)?}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
 var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
@@ -51,10 +52,12 @@ type ExpanderConfig struct {
 type expander struct {
 	node Node
 
-	pgURLs  map[string]map[Node]string
-	pgHosts map[Node]string
-	pgPorts map[Node]string
-	uiPorts map[Node]string
+	pgURLs     map[string]map[Node]string
+	pgHosts    map[Node]string
+	pgPorts    map[Node]string
+	uiPorts    map[Node]string
+	publicIPs  map[Node]string
+	privateIPs map[Node]string
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
@@ -77,6 +80,7 @@ func (e *expander) expand(
 			e.maybeExpandStoreDir,
 			e.maybeExpandLogDir,
 			e.maybeExpandCertsDir,
+			e.maybeExpandIPAddress,
 		}
 		for _, f := range expanders {
 			v, expanded, fErr := f(ctx, l, c, cfg, s)
@@ -328,4 +332,41 @@ func (e *expander) maybeExpandCertsDir(
 		return s, false, nil
 	}
 	return c.CertsDir(e.node), true, nil
+}
+
+// maybeExpandIPAddress is an expanderFunc for {ipaddress:<nodeSpec>[:public|private]}
+func (e *expander) maybeExpandIPAddress(
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
+) (string, bool, error) {
+	m := ipAddressRe.FindStringSubmatch(s)
+	if m == nil {
+		return s, false, nil
+	}
+
+	var err error
+	switch m[3] {
+	case ":public":
+		if e.publicIPs == nil {
+			e.publicIPs = make(map[Node]string, len(c.VMs))
+			for _, node := range allNodes(len(c.VMs)) {
+				e.publicIPs[node] = c.Host(node)
+			}
+		}
+
+		s, err = e.maybeExpandMap(c, e.publicIPs, m[1])
+	default:
+		if e.privateIPs == nil {
+			e.privateIPs = make(map[Node]string, len(c.VMs))
+			for _, node := range allNodes(len(c.VMs)) {
+				ip, err := c.GetInternalIP(node)
+				if err != nil {
+					return "", false, err
+				}
+				e.privateIPs[node] = ip
+			}
+		}
+
+		s, err = e.maybeExpandMap(c, e.privateIPs, m[1])
+	}
+	return s, err == nil, err
 }

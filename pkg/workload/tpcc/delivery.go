@@ -8,6 +8,7 @@ package tpcc
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/exp/rand"
 )
 
 // 2.7 The Delivery Transaction
@@ -76,9 +76,9 @@ func createDelivery(
 func (del *delivery) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	del.config.auditor.deliveryTransactions.Add(1)
 
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
-	oCarrierID := rng.Intn(10) + 1
+	oCarrierID := rng.IntN(10) + 1
 	olDeliveryD := timeutil.Now()
 
 	onTxnStartDuration, err := del.config.executeTx(

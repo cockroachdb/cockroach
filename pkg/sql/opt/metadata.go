@@ -12,8 +12,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -22,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -143,6 +144,10 @@ type Metadata struct {
 	// as a builtin function.
 	builtinRefsByName map[tree.UnresolvedName]struct{}
 
+	// rlsMeta stores row-level security policy metadata enforced during query
+	// execution.
+	rlsMeta RowLevelSecurityMeta
+
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
@@ -249,7 +254,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
 		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
-		len(md.builtinRefsByName) != 0 {
+		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -328,6 +333,12 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 
 	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
 	md.withBindings = nil
+
+	md.rlsMeta = from.rlsMeta
+	md.rlsMeta.PoliciesApplied = make(map[TableID]PoliciesApplied)
+	for id, policies := range from.rlsMeta.PoliciesApplied {
+		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
+	}
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -376,6 +387,48 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 	return currentDigest.Equal(&md.digest.depDigest)
 }
 
+// leaseObjectsInMetaData ensures that all references within this metadata
+// are leased to prevent schema changes from modifying the underlying objects
+// excessively. Additionally, the metadata version and leased descriptor versions
+// are compared.
+func (md *Metadata) leaseObjectsInMetaData(
+	ctx context.Context, optCatalog cat.Catalog,
+) (leasedVersionMatchesMetadata bool, err error) {
+	for id, ds := range md.dataSourceDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if ver != ds.Version() {
+			return false, nil
+		}
+	}
+	for id, rd := range md.routineDeps {
+		ver, err := optCatalog.LeaseByStableID(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if ver != rd.overload.Version {
+			return false, nil
+		}
+	}
+	for _, typ := range md.userDefinedTypesSlice {
+		id := typedesc.UserDefinedTypeOIDToID(typ.Oid())
+		// Not a user defined type.
+		if id == catid.InvalidDescID {
+			continue
+		}
+		ver, err := optCatalog.LeaseByStableID(ctx, cat.StableID(id))
+		if err != nil {
+			return false, err
+		}
+		if ver != uint64(typ.TypeMeta.Version) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // CheckDependencies resolves (again) each database object on which this
 // metadata depends, in order to check the following conditions:
 //  1. The object has not been modified.
@@ -402,7 +455,13 @@ func (md *Metadata) CheckDependencies(
 		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
 		md.dependencyDigestEquals(&currentDigest) {
-		return true, nil
+		// Lease the underlying descriptors for this metadata. If we fail to lease
+		// any descriptors attempt to resolve them by name through the more expensive
+		// code path below.
+		upToDate, err = md.leaseObjectsInMetaData(ctx, optCatalog)
+		if err == nil {
+			return upToDate, nil
+		}
 	}
 
 	// Check that no referenced data sources have changed.
@@ -535,6 +594,11 @@ func (md *Metadata) CheckDependencies(
 		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, optCatalog.GetCurrentUser()); err != nil {
 			return false, err
 		}
+	}
+
+	// Check for staleness from a row-level security point of view.
+	if upToDate, err := md.checkRLSDependencies(ctx, evalCtx, optCatalog); err != nil || !upToDate {
+		return upToDate, err
 	}
 
 	// Update the digest after a full dependency check, since our fast
@@ -951,7 +1015,8 @@ func (md *Metadata) UpdateTableMeta(
 			// will have extra inverted columns added. Add any new inverted columns to
 			// the metadata.
 			for j, n := oldTable.ColumnCount(), newTable.ColumnCount(); j < n; j++ {
-				md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
+				colID := md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
+				md.ColumnMeta(colID).Table = md.tables[i].MetaID
 			}
 			if newTable.ColumnCount() > oldTable.ColumnCount() {
 				// If we added any new columns, we need to recalculate the not null
@@ -998,6 +1063,12 @@ func (md *Metadata) Sequence(seqID SequenceID) cat.Sequence {
 	return md.sequences[seqID.index()]
 }
 
+// AllSequences returns the metadata for all sequences. The result must not be
+// modified.
+func (md *Metadata) AllSequences() []cat.Sequence {
+	return md.sequences
+}
+
 // UniqueID should be used to disambiguate multiple uses of an expression
 // within the scope of a query. For example, a UniqueID field should be
 // added to an expression type if two instances of that type might otherwise
@@ -1022,142 +1093,6 @@ func (md *Metadata) AddView(v cat.View) {
 // modified.
 func (md *Metadata) AllViews() []cat.View {
 	return md.views
-}
-
-// getAllReferenceTables returns all the tables referenced by the metadata. This
-// includes all tables that are directly stored in the metadata in md.tables, as
-// well as recursive references from foreign keys (both referenced and
-// referencing). The tables are returned in sorted order so that later tables
-// reference earlier tables. This allows tables to be re-created in order (e.g.,
-// for statement-bundle recreate) using the output from SHOW CREATE TABLE
-// without any errors due to missing tables.
-// TODO(rytaft): if there is a cycle in the foreign key references,
-// statement-bundle recreate will still hit errors. To handle this case, we
-// would need to first create the tables without the foreign keys, then add the
-// foreign keys later.
-func (md *Metadata) getAllReferenceTables(
-	ctx context.Context, catalog cat.Catalog,
-) []cat.DataSource {
-	var tableSet intsets.Fast
-	var tableList []cat.DataSource
-	var addForeignKeyReferencedTables func(tab cat.Table)
-	var addForeignKeyReferencingTables func(tab cat.Table)
-	// handleRelatedTables is a helper function that processes the given table
-	// if it hasn't been handled yet by adding all referenced and referencing
-	// table of the given one, including via transient (recursive) FK
-	// relationships.
-	handleRelatedTables := func(tabID cat.StableID) {
-		if !tableSet.Contains(int(tabID)) {
-			tableSet.Add(int(tabID))
-			ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
-			if err != nil {
-				// This is a best-effort attempt to get all the tables, so don't
-				// error.
-				return
-			}
-			refTab, ok := ds.(cat.Table)
-			if !ok {
-				// This is a best-effort attempt to get all the tables, so don't
-				// error.
-				return
-			}
-			// We want to include all tables that we reference before adding
-			// ourselves, followed by all tables that reference us.
-			addForeignKeyReferencedTables(refTab)
-			tableList = append(tableList, ds)
-			addForeignKeyReferencingTables(refTab)
-		}
-	}
-	addForeignKeyReferencedTables = func(tab cat.Table) {
-		for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
-			tabID := tab.OutboundForeignKey(i).ReferencedTableID()
-			handleRelatedTables(tabID)
-		}
-	}
-	addForeignKeyReferencingTables = func(tab cat.Table) {
-		for i := 0; i < tab.InboundForeignKeyCount(); i++ {
-			tabID := tab.InboundForeignKey(i).OriginTableID()
-			handleRelatedTables(tabID)
-		}
-	}
-	for i := range md.tables {
-		tabMeta := md.tables[i]
-		tabID := tabMeta.Table.ID()
-		if !tableSet.Contains(int(tabID)) {
-			tableSet.Add(int(tabID))
-			// The order of addition here is important: namely, we want to add
-			// all tables that we reference first, then ourselves, and only then
-			// tables that reference us.
-			addForeignKeyReferencedTables(tabMeta.Table)
-			tableList = append(tableList, tabMeta.Table)
-			addForeignKeyReferencingTables(tabMeta.Table)
-		}
-	}
-	return tableList
-}
-
-// AllDataSourceNames returns the fully qualified names of all datasources
-// referenced by the metadata. This includes all tables, sequences, and views
-// that are directly stored in the metadata, as well as tables that are
-// recursively referenced from foreign keys (both referenced and referencing).
-// If includeVirtualTables is false, then virtual tables are not returned.
-func (md *Metadata) AllDataSourceNames(
-	ctx context.Context,
-	catalog cat.Catalog,
-	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
-	includeVirtualTables bool,
-) (tables, sequences, views []tree.TableName, _ error) {
-	// Catalog objects can show up multiple times in our lists, so deduplicate
-	// them.
-	seen := make(map[tree.TableName]struct{})
-
-	getNames := func(count int, get func(int) cat.DataSource) ([]tree.TableName, error) {
-		result := make([]tree.TableName, 0, count)
-		for i := 0; i < count; i++ {
-			ds := get(i)
-			tn, err := fullyQualifiedName(ds)
-			if err != nil {
-				return nil, err
-			}
-			if _, ok := seen[tn]; !ok {
-				seen[tn] = struct{}{}
-				result = append(result, tn)
-			}
-		}
-		return result, nil
-	}
-	var err error
-	refTables := md.getAllReferenceTables(ctx, catalog)
-	if !includeVirtualTables {
-		// Update refTables in-place to remove all virtual tables.
-		i := 0
-		for j := 0; j < len(refTables); j++ {
-			if t, ok := refTables[j].(cat.Table); !ok || !t.IsVirtualTable() {
-				refTables[i] = refTables[j]
-				i++
-			}
-		}
-		refTables = refTables[:i]
-	}
-	tables, err = getNames(len(refTables), func(i int) cat.DataSource {
-		return refTables[i]
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	sequences, err = getNames(len(md.sequences), func(i int) cat.DataSource {
-		return md.sequences[i]
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	views, err = getNames(len(md.views), func(i int) cat.DataSource {
-		return md.views[i]
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return tables, sequences, views, nil
 }
 
 // WithID uniquely identifies a With expression within the scope of a query.
@@ -1247,4 +1182,57 @@ func (md *Metadata) TestingObjectRefsByName() map[cat.StableID][]*tree.Unresolve
 // TestingPrivileges exposes the privileges for testing.
 func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 	return md.privileges
+}
+
+// SetRLSEnabled will update the metadata to indicate we came across a table
+// that had row-level security enabled.
+func (md *Metadata) SetRLSEnabled(
+	user username.SQLUsername, isAdmin bool, tableID TableID, isTableOwnerAndNotForced bool,
+) {
+	md.rlsMeta.MaybeInit(user, isAdmin)
+	md.rlsMeta.AddTableUse(tableID, isTableOwnerAndNotForced)
+}
+
+// ClearRLSEnabled will clear out the initialized state for the rls meta. This
+// is used as a test helper.
+func (md *Metadata) ClearRLSEnabled() {
+	md.rlsMeta.Clear()
+}
+
+// GetRLSMeta returns the rls metadata struct
+func (md *Metadata) GetRLSMeta() *RowLevelSecurityMeta {
+	return &md.rlsMeta
+}
+
+// checkRLSDependencies will check the metadata for row-level security
+// dependencies to see if it is up to date.
+func (md *Metadata) checkRLSDependencies(
+	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
+) (upToDate bool, err error) {
+	// rlsMeta is lazily updated. If we didn't initialize it, then we didn't come
+	// across any RLS enabled tables. So, from a rls point of view the memo is up
+	// to date.
+	if !md.rlsMeta.IsInitialized {
+		return true, nil
+	}
+
+	// RLS policies that get applied could differ vastly based on the role. So, if
+	// the user is different, we cannot trust anything in the current memo.
+	if md.rlsMeta.User != evalCtx.SessionData().User() {
+		return false, nil
+	}
+
+	// If the role membership changes, resulting in the user gaining or losing
+	// admin privileges, the memo is considered stale. Admins are exempt from
+	// RLS policies.
+	if hasAdminRole, err := optCatalog.HasAdminRole(ctx); err != nil {
+		return false, err
+	} else if md.rlsMeta.HasAdminRole != hasAdminRole {
+		return false, nil
+	}
+
+	// We do not check for specific policy changes. Any time a policy is modified
+	// on a table, a new version of the table descriptor is created. The metadata
+	// dependency check already accounts for changes in the table descriptor version.
+	return true, nil
 }

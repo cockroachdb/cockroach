@@ -290,6 +290,13 @@ func TestLogic_bpchar(
 	runLogicTest(t, "bpchar")
 }
 
+func TestLogic_buffered_writes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "buffered_writes")
+}
+
 func TestLogic_builtin_function(
 	t *testing.T,
 ) {
@@ -1254,6 +1261,27 @@ func TestLogic_json_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_index")
+}
+
+func TestLogic_jsonb_path_exists(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists")
+}
+
+func TestLogic_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query")
+}
+
+func TestLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
 }
 
 func TestLogic_kv_builtin_functions(
@@ -2738,6 +2766,13 @@ func TestLogic_values(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
+}
+
+func TestLogic_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index")
 }
 
 func TestLogic_vectorize(

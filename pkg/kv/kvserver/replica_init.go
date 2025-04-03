@@ -69,19 +69,26 @@ func loadInitializedReplicaForTesting(
 	if err != nil {
 		return nil, err
 	}
-	return newInitializedReplica(store, state)
+
+	// No need to wait for previous lease to expire since this is only used in
+	// tests and some tests don't expect the extra delay.
+	return newInitializedReplica(store, state, false /* waitForPrevLeaseToExpire */)
 }
 
 // newInitializedReplica creates an initialized Replica from its loaded state.
-func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*Replica, error) {
+func newInitializedReplica(
+	store *Store, loaded kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
+) (*Replica, error) {
 	r := newUninitializedReplicaWithoutRaftGroup(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.initRaftMuLockedReplicaMuLocked(loaded); err != nil {
+
+	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire); err != nil {
 		return nil, err
 	}
+
 	return r, nil
 }
 
@@ -238,7 +245,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
-	r.mu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
+	r.LeaderlessWatcher = NewLeaderlessWatcher(r)
+	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
 	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
@@ -288,7 +296,9 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 
 // initRaftMuLockedReplicaMuLocked initializes the Replica using the state
 // loaded from storage. Must not be called more than once on a Replica.
-func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
+func (r *Replica) initRaftMuLockedReplicaMuLocked(
+	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
+) error {
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
 	if desc.RangeID != r.RangeID || s.ReplicaID != r.replicaID {
@@ -309,8 +319,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
 	}
 	r.shMu.raftTruncState = s.TruncState
-	r.shMu.lastIndexNotDurable = s.LastIndex
-	r.shMu.lastTermNotDurable = invalidLastTerm
+	r.shMu.lastIndexNotDurable = s.LastEntryID.Index
+	r.shMu.lastTermNotDurable = s.LastEntryID.Term
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
@@ -332,6 +342,21 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	// Instead, we make the first lease special (which is OK) and the problem
 	// disappears.
 	if r.shMu.state.Lease.Sequence > 0 {
+		if waitForPrevLeaseToExpire {
+			// Wait for the previous lease to expire. This is important because if the
+			// node was restarted, we don't want to reacquire the lease with a start
+			// time that overlaps the previous lease.
+			// This ensures that we don't serve a write request with the new
+			// lease that contradicts a future read served by the old lease before the
+			// restart (we would have lost that timestamp cache).
+			// Note that we need to sleep (instead of just forwarding the
+			// minLeaseProposedTS) because we will run into assertions where the
+			// lease proposed time is in the future compared to r.Clock().Now(), and
+			// we don't allow acquiring a lease that starts in the future.
+			if err := r.waitForPreviousLeaseToExpire(r.store); err != nil {
+				return err
+			}
+		}
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
@@ -348,10 +373,11 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		raftpb.PeerID(r.replicaID),
 		r.shMu.state.RaftAppliedIndex,
 		r.store.cfg,
-		r.mu.currentRACv2Mode == rac2.MsgAppPull,
+		r.shMu.currentRACv2Mode == rac2.MsgAppPull,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
 		r.store.raftMetrics,
+		r.store.TestingKnobs().RaftTestingKnobs,
 	))
 	if err != nil {
 		return err
@@ -486,4 +512,23 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 			r.store.scheduler.AddPriorityID(desc.RangeID)
 		}
 	}
+}
+
+// waitForPreviousLeaseToExpire waits for the previous lease to expire. It does
+// so by sleeping until Clock().Now() is in the future of the previous lease
+// expiration. This works for expiration-based leases, and leader-leases but
+// only best-effort for epoch-based leases since the liveness record might not
+// be found in cache after the restart.
+func (r *Replica) waitForPreviousLeaseToExpire(store *Store) error {
+	st := r.leaseStatusAtRLocked(r.AnnotateCtx(context.TODO()), r.Clock().NowAsClockTimestamp())
+	if st.OwnedBy(store.StoreID()) {
+		// Only sleep if we were the previous lease owner.
+		if err := r.Clock().SleepUntil(
+			r.AnnotateCtx(context.TODO()),
+			st.Expiration().Next(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }

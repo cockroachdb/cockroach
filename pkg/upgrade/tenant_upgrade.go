@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
@@ -49,6 +50,9 @@ type TenantDeps struct {
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
 		txn *kv.Txn, descriptors *descs.Collection, currDb string,
 	) (resolver.SchemaResolver, func(), error)
+
+	// OptionalJobID is the job ID for this upgrade if it is running inside a job.
+	OptionalJobID jobspb.JobID
 }
 
 // TenantUpgradeFunc is used to perform sql-level upgrades. It may be run from

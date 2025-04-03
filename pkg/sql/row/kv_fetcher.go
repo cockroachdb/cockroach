@@ -198,6 +198,7 @@ func NewStreamingKVFetcher(
 	maintainOrdering bool,
 	singleRowLookup bool,
 	maxKeysPerRow int,
+	reverse bool,
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
@@ -220,6 +221,7 @@ func NewStreamingKVFetcher(
 		&kvPairsRead,
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
+		reverse,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -234,7 +236,10 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued, rawMVCCValues))
+	return newKVFetcher(newTxnKVStreamer(
+		streamer, lockStrength, lockDurability, kvFetcherMemAcc,
+		&kvPairsRead, &batchRequestsIssued, rawMVCCValues, reverse,
+	))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

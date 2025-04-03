@@ -132,9 +132,8 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return true
 	case *scpb.NamedRangeZoneConfig, *scpb.Policy, *scpb.PolicyName:
 		return version.IsActive(clusterversion.V25_1)
-	case *scpb.PolicyRole:
-		// TODO(spilchen): switch this to V25_2 when it is available
-		return version.IsActive(clusterversion.V25_1)
+	case *scpb.PolicyRole, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr, *scpb.PolicyDeps, *scpb.RowLevelSecurityEnabled, *scpb.RowLevelSecurityForced:
+		return version.IsActive(clusterversion.V25_2)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

@@ -299,7 +299,6 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 
 		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name))
-		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")
 		// Retry once, since this can fail sometimes due the cluster running hot.
@@ -330,8 +329,8 @@ func runMultiTenantFairness(
 		} else {
 			t.Fatal("no query results")
 		}
-
 		require.NoError(t, rows.Err())
+		vcdb.Close()
 	}
 
 	failThreshold := .3

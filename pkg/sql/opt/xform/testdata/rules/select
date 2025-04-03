@@ -557,6 +557,43 @@ project
       ├── columns: k:1!null
       └── key: (1)
 
+exec-ddl
+CREATE TABLE t140019 (
+  k INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (k) WHERE i = 0 AND j = 1
+)
+----
+
+# Regression test for #140019. Do not project unnecessary columns, like i=0,
+# that are held constant by the partial index predicate.
+opt disable=SimplifyZeroCardinalityGroup
+SELECT NULL FROM t140019 WHERE false GROUP BY j
+----
+project
+ ├── columns: "?column?":6
+ ├── cardinality: [0 - 0]
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: j:3
+ │    ├── grouping columns: j:3
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: (3)
+ │    └── select
+ │         ├── columns: j:3
+ │         ├── cardinality: [0 - 0]
+ │         ├── project
+ │         │    ├── columns: j:3!null
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── scan t140019@t140019_k_idx,partial
+ │         │    └── projections
+ │         │         └── 1 [as=j:3]
+ │         └── filters
+ │              └── false [constraints=(contradiction; tight)]
+ └── projections
+      └── NULL [as="?column?":6]
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------
@@ -8517,6 +8554,50 @@ project
  └── projections
       └── 1 [as="?column?":15]
 
+# Regression test for #136078. A project expression must be added above an
+# inverted filter to prune output columns to match the original group when there
+# is no index join to do so.
+exec-ddl
+CREATE TABLE t136078 (
+  a INT,
+  b STRING,
+  col3_8 STRING AS (lower(b)) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX (col3_8 gin_trgm_ops)
+)
+----
+
+opt set=(optimizer_use_trigram_similarity_optimization=false)
+SELECT b FROM t136078 WHERE 'abc' % col3_8
+----
+project
+ ├── columns: b:2!null
+ ├── stable
+ └── inverted-filter
+      ├── columns: a:1!null b:2!null
+      ├── inverted expression: /6
+      │    ├── tight: false, unique: false
+      │    └── union spans
+      │         ├── ["  a", "  a"]
+      │         ├── [" ab", " ab"]
+      │         ├── ["abc", "abc"]
+      │         └── ["bc ", "bc "]
+      ├── stable
+      ├── key: (1,2)
+      └── select
+           ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           ├── stable
+           ├── scan t136078@t136078_col3_8_idx,inverted
+           │    ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           │    └── inverted constraint: /6/1/2
+           │         └── spans
+           │              ├── ["  a", "  a"]
+           │              ├── [" ab", " ab"]
+           │              ├── ["abc", "abc"]
+           │              └── ["bc ", "bc "]
+           └── filters
+                └── 'abc' % lower(b:2) [outer=(2), stable]
+
 
 # --------------------------------------------------
 # GenerateMinimalInvertedIndexScans
@@ -10353,6 +10434,7 @@ inner-join (lookup b)
  │    ├── right fixed columns: [9] = ['\x376300012a0400']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
+ │    ├── volatile
  │    └── filters (true)
  └── filters (true)
 

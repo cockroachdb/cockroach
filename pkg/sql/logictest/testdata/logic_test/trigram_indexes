@@ -358,3 +358,29 @@ FROM
             AS tab (col1_1, col1_2) ON
             (tab2.col1) = (tab.col1_1)
             AND (tab2.col2) = (tab.col1_2);
+
+subtest trigram_similarity_zero_threshold_inverted_index
+
+statement ok
+SET pg_trgm.similarity_threshold =  0;
+
+statement ok
+CREATE TABLE trigram_similarity_zero_threshold_inverted_index_a (
+  a INT PRIMARY KEY,
+  b STRING,
+  INVERTED INDEX c (b gin_trgm_ops)
+);
+
+statement ok
+SET optimizer_use_trigram_similarity_optimization = false;
+
+statement error pq: index "c" is inverted and cannot be used for this query
+SELECT * FROM trigram_similarity_zero_threshold_inverted_index_a@c WHERE b % 'foo';
+
+statement ok
+SET optimizer_use_trigram_similarity_optimization = true;
+
+statement error pq: index "c" is inverted and cannot be used for this query
+SELECT * FROM trigram_similarity_zero_threshold_inverted_index_a@c WHERE b % 'foo';
+
+subtest end

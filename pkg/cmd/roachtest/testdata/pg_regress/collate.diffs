@@ -1,0 +1,1132 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.out --label=/mnt/data1/postgres/src/test/regress/results/collate.out /mnt/data1/postgres/src/test/regress/expected/collate.out /mnt/data1/postgres/src/test/regress/results/collate.out
+--- /mnt/data1/postgres/src/test/regress/expected/collate.out
++++ /mnt/data1/postgres/src/test/regress/results/collate.out
+@@ -15,138 +15,118 @@
+     a int,
+     b text COLLATE "C" NOT NULL
+ );
++ERROR:  at or near ")": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test1 (
++    a int,
++    b text COLLATE "C" NOT NULL
++)
++^
+ \d collate_test1
+-        Table "collate_tests.collate_test1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | text    | C         | not null | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_test1)$' COLLATE pg_catalog.default
++                                                                             ^
+ CREATE TABLE collate_test_fail (
+     a int COLLATE "C",
+     b text
+ );
+-ERROR:  collations are not supported by type integer
+-LINE 2:     a int COLLATE "C",
+-                  ^
++ERROR:  at or near ",": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test_fail (
++    a int COLLATE "C",
++                     ^
+ CREATE TABLE collate_test_like (
+     LIKE collate_test1
+ );
++ERROR:  relation "collate_test1" does not exist
+ \d collate_test_like
+-      Table "collate_tests.collate_test_like"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | text    | C         | not null | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_test_like)$' COLLATE pg_catalog.default
++                                                                                 ^
+ CREATE TABLE collate_test2 (
+     a int,
+     b text COLLATE "POSIX"
+ );
++ERROR:  at or near ")": syntax error: invalid locale POSIX: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test2 (
++    a int,
++    b text COLLATE "POSIX"
++)
++^
+ INSERT INTO collate_test1 VALUES (1, 'abc'), (2, 'Abc'), (3, 'bbc'), (4, 'ABD');
++ERROR:  relation "collate_test1" does not exist
+ INSERT INTO collate_test2 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test2" does not exist
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'abc';
+- a |  b  
+----+-----
+- 1 | abc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT * FROM collate_test1 WHERE b >= 'abc' COLLATE "C";
+- a |  b  
+----+-----
+- 1 | abc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'abc' COLLATE "C";
+- a |  b  
+----+-----
+- 1 | abc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "POSIX"; -- fail
+-ERROR:  collation mismatch between explicit collations "C" and "POSIX"
+-LINE 1: ...* FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "P...
+-                                                             ^
++ERROR:  relation "collate_test1" does not exist
+ CREATE DOMAIN testdomain_p AS text COLLATE "POSIX";
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain_p AS text COLLATE "POSIX"
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN testdomain_i AS int COLLATE "POSIX"; -- fail
+-ERROR:  collations are not supported by type integer
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain_i AS int COLLATE "POSIX"
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE TABLE collate_test4 (
+     a int,
+     b testdomain_p
+ );
++ERROR:  type "testdomain_p" does not exist
+ INSERT INTO collate_test4 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test4" does not exist
+ SELECT a, b FROM collate_test4 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test4" does not exist
+ CREATE TABLE collate_test5 (
+     a int,
+     b testdomain_p COLLATE "C"
+ );
++ERROR:  at or near ")": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test5 (
++    a int,
++    b testdomain_p COLLATE "C"
++)
++^
+ INSERT INTO collate_test5 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test5" does not exist
+ SELECT a, b FROM collate_test5 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test5" does not exist
+ SELECT a, b FROM collate_test1 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test2 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ -- star expansion
+ SELECT * FROM collate_test1 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT * FROM collate_test2 ORDER BY b;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ -- constant expression folding
+ SELECT 'bbc' COLLATE "C" > 'Abc' COLLATE "C" AS "true";
+  true 
+@@ -166,330 +146,147 @@
+     x text COLLATE "C",
+     y text COLLATE "POSIX"
+ );
++ERROR:  at or near ",": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test10 (
++    a int,
++    x text COLLATE "C",
++                      ^
+ INSERT INTO collate_test10 VALUES (1, 'hij', 'hij'), (2, 'HIJ', 'HIJ');
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, lower(x), lower(y), upper(x), upper(y), initcap(x), initcap(y) FROM collate_test10;
+- a | lower | lower | upper | upper | initcap | initcap 
+----+-------+-------+-------+-------+---------+---------
+- 1 | hij   | hij   | HIJ   | HIJ   | Hij     | Hij
+- 2 | hij   | hij   | HIJ   | HIJ   | Hij     | Hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, lower(x COLLATE "C"), lower(y COLLATE "C") FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, x, y FROM collate_test10 ORDER BY lower(y), a;
+- a |  x  |  y  
+----+-----+-----
+- 1 | hij | hij
+- 2 | HIJ | HIJ
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ -- backwards parsing
+ CREATE VIEW collview1 AS SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
++ERROR:  relation "collate_test1" does not exist
+ CREATE VIEW collview2 AS SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
++ERROR:  relation "collate_test1" does not exist
+ CREATE VIEW collview3 AS SELECT a, lower((x || x) COLLATE "POSIX") FROM collate_test10;
++ERROR:  relation "collate_test10" does not exist
+ SELECT table_name, view_definition FROM information_schema.views
+   WHERE table_name LIKE 'collview%' ORDER BY 1;
+- table_name |                view_definition                 
+-------------+------------------------------------------------
+- collview1  |  SELECT a,                                    +
+-            |     b                                         +
+-            |    FROM collate_test1                         +
+-            |   WHERE ((b COLLATE "C") >= 'bbc'::text);
+- collview2  |  SELECT a,                                    +
+-            |     b                                         +
+-            |    FROM collate_test1                         +
+-            |   ORDER BY (b COLLATE "C");
+- collview3  |  SELECT a,                                    +
+-            |     lower(((x || x) COLLATE "POSIX")) AS lower+
+-            |    FROM collate_test10;
+-(3 rows)
++ table_name | view_definition 
++------------+-----------------
++(0 rows)
+ 
+ -- collation propagation in various expression types
+ SELECT a, coalesce(b, 'foo') FROM collate_test1 ORDER BY 2;
+- a | coalesce 
+----+----------
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, coalesce(b, 'foo') FROM collate_test2 ORDER BY 2;
+- a | coalesce 
+----+----------
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, lower(coalesce(x, 'foo')), lower(coalesce(y, 'foo')) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, b, greatest(b, 'CCC') FROM collate_test1 ORDER BY 3;
+- a |  b  | greatest 
+----+-----+----------
+- 2 | Abc | CCC
+- 4 | ABD | CCC
+- 1 | abc | abc
+- 3 | bbc | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b, greatest(b, 'CCC') FROM collate_test2 ORDER BY 3;
+- a |  b  | greatest 
+----+-----+----------
+- 2 | Abc | CCC
+- 4 | ABD | CCC
+- 1 | abc | abc
+- 3 | bbc | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, x, y, lower(greatest(x, 'foo')), lower(greatest(y, 'foo')) FROM collate_test10;
+- a |  x  |  y  | lower | lower 
+----+-----+-----+-------+-------
+- 1 | hij | hij | hij   | hij
+- 2 | HIJ | HIJ | foo   | foo
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, nullif(b, 'abc') FROM collate_test1 ORDER BY 2;
+- a | nullif 
+----+--------
+- 4 | ABD
+- 2 | Abc
+- 3 | bbc
+- 1 | 
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, nullif(b, 'abc') FROM collate_test2 ORDER BY 2;
+- a | nullif 
+----+--------
+- 4 | ABD
+- 2 | Abc
+- 3 | bbc
+- 1 | 
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, lower(nullif(x, 'foo')), lower(nullif(y, 'foo')) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test1 ORDER BY 2;
+- a |  b   
+----+------
+- 4 | ABD
+- 2 | Abc
+- 1 | abcd
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test2 ORDER BY 2;
+- a |  b   
+----+------
+- 4 | ABD
+- 2 | Abc
+- 1 | abcd
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ CREATE DOMAIN testdomain AS text;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain AS text
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ SELECT a, b::testdomain FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b::testdomain FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, b::testdomain_p FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, lower(x::testdomain), lower(y::testdomain) FROM collate_test10;
+- a | lower | lower 
+----+-------+-------
+- 1 | hij   | hij
+- 2 | hij   | hij
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT min(b), max(b) FROM collate_test1;
+- min | max 
+------+-----
+- ABD | bbc
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT min(b), max(b) FROM collate_test2;
+- min | max 
+------+-----
+- ABD | bbc
+-(1 row)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT array_agg(b ORDER BY b) FROM collate_test1;
+-     array_agg     
+--------------------
+- {ABD,Abc,abc,bbc}
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT array_agg(b ORDER BY b) FROM collate_test2;
+-     array_agg     
+--------------------
+- {ABD,Abc,abc,bbc}
+-(1 row)
+-
++ERROR:  relation "collate_test2" does not exist
+ -- In aggregates, ORDER BY expressions don't affect aggregate's collation
+ SELECT string_agg(x COLLATE "C", y COLLATE "POSIX") FROM collate_test10;  -- fail
+-ERROR:  collation mismatch between explicit collations "C" and "POSIX"
+-LINE 1: SELECT string_agg(x COLLATE "C", y COLLATE "POSIX") FROM col...
+-                                           ^
++ERROR:  relation "collate_test10" does not exist
+ SELECT array_agg(x COLLATE "C" ORDER BY y COLLATE "POSIX") FROM collate_test10;
+- array_agg 
+------------
+- {HIJ,hij}
+-(1 row)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT array_agg(a ORDER BY x COLLATE "C", y COLLATE "POSIX") FROM collate_test10;
+- array_agg 
+------------
+- {2,1}
+-(1 row)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT array_agg(a ORDER BY x||y) FROM collate_test10;  -- fail
+-ERROR:  collation mismatch between implicit collations "C" and "POSIX"
+-LINE 1: SELECT array_agg(a ORDER BY x||y) FROM collate_test10;
+-                                       ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test10" does not exist
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 4 | ABD
+- 2 | Abc
+- 2 | Abc
+- 1 | abc
+- 1 | abc
+- 3 | bbc
+- 3 | bbc
+-(8 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test2 UNION SELECT a, b FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, b FROM collate_test2 WHERE a < 4 INTERSECT SELECT a, b FROM collate_test2 WHERE a > 1 ORDER BY 2;
+- a |  b  
+----+-----
+- 2 | Abc
+- 3 | bbc
+-(2 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, b FROM collate_test2 EXCEPT SELECT a, b FROM collate_test2 WHERE a < 2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 3 | bbc
+-(3 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test2 ORDER BY 2; -- fail
+-ERROR:  could not determine which collation to use for string comparison
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test2; -- ok
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | Abc
+- 3 | bbc
+- 4 | ABD
+- 1 | abc
+- 2 | Abc
+- 3 | bbc
+- 4 | ABD
+-(8 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test1 UNION SELECT a, b FROM collate_test2 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "C" and "POSIX"
+-LINE 1: SELECT a, b FROM collate_test1 UNION SELECT a, b FROM collat...
+-                                                       ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b COLLATE "C" FROM collate_test1 UNION SELECT a, b FROM collate_test2 ORDER BY 2; -- ok
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM collate_test2 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "C" and "POSIX"
+-LINE 1: ...ELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM col...
+-                                                             ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, b FROM collate_test1 EXCEPT SELECT a, b FROM collate_test2 ORDER BY 2; -- fail
+-ERROR:  collation mismatch between implicit collations "C" and "POSIX"
+-LINE 1: SELECT a, b FROM collate_test1 EXCEPT SELECT a, b FROM colla...
+-                                                        ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test1" does not exist
+ CREATE TABLE test_u AS SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test2; -- fail
+-ERROR:  no collation was derived for column "b" with collatable type text
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test1" does not exist
+ -- ideally this would be a parse-time error, but for now it must be run-time:
+ select x < y from collate_test10; -- fail
+-ERROR:  could not determine which collation to use for string comparison
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test10" does not exist
+ select x || y from collate_test10; -- ok, because || is not collation aware
+- ?column? 
+-----------
+- hijhij
+- HIJHIJ
+-(2 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ select x, y from collate_test10 order by x || y; -- not so ok
+-ERROR:  collation mismatch between implicit collations "C" and "POSIX"
+-LINE 1: select x, y from collate_test10 order by x || y;
+-                                                      ^
+-HINT:  You can choose the collation by applying the COLLATE clause to one or both expressions.
++ERROR:  relation "collate_test10" does not exist
+ -- collation mismatch between recursive and non-recursive term
+ WITH RECURSIVE foo(x) AS
+    (SELECT x FROM (VALUES('a' COLLATE "C"),('b')) t(x)
+    UNION ALL
+    SELECT (x || 'c') COLLATE "POSIX" FROM foo WHERE length(x) < 10)
+ SELECT * FROM foo;
+-ERROR:  recursive query "foo" column 1 has collation "C" in non-recursive term but collation "POSIX" overall
+-LINE 2:    (SELECT x FROM (VALUES('a' COLLATE "C"),('b')) t(x)
+-                   ^
+-HINT:  Use the COLLATE clause to set the collation of the non-recursive term.
++     x      
++------------
++ a
++ b
++ ac
++ bc
++ acc
++ bcc
++ accc
++ bccc
++ acccc
++ bcccc
++ accccc
++ bccccc
++ acccccc
++ bcccccc
++ accccccc
++ bccccccc
++ acccccccc
++ bcccccccc
++ accccccccc
++ bccccccccc
++(20 rows)
++
+ SELECT a, b, a < b as lt FROM
+   (VALUES ('a', 'B'), ('A', 'b' COLLATE "C")) v(a,b);
+  a | b | lt 
+@@ -500,178 +297,238 @@
+ 
+ -- collation mismatch in subselects
+ SELECT * FROM collate_test10 WHERE (x, y) NOT IN (SELECT y, x FROM collate_test10);
+-ERROR:  could not determine which collation to use for string hashing
+-HINT:  Use the COLLATE clause to set the collation explicitly.
++ERROR:  relation "collate_test10" does not exist
+ -- now it works with overrides
+ SELECT * FROM collate_test10 WHERE (x COLLATE "POSIX", y COLLATE "C") NOT IN (SELECT y, x FROM collate_test10);
+- a | x | y 
+----+---+---
+-(0 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ SELECT * FROM collate_test10 WHERE (x, y) NOT IN (SELECT y COLLATE "C", x COLLATE "POSIX" FROM collate_test10);
+- a | x | y 
+----+---+---
+-(0 rows)
+-
++ERROR:  relation "collate_test10" does not exist
+ -- casting
+ SELECT CAST('42' AS text COLLATE "C");
+-ERROR:  syntax error at or near "COLLATE"
+-LINE 1: SELECT CAST('42' AS text COLLATE "C");
+-                                 ^
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++SELECT CAST('42' AS text COLLATE "C")
++                         ^
+ SELECT a, CAST(b AS varchar) FROM collate_test1 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, CAST(b AS varchar) FROM collate_test2 ORDER BY 2;
+- a |  b  
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ -- result of a SQL function
+ CREATE FUNCTION vc (text) RETURNS text LANGUAGE sql
+     AS 'select $1::varchar';
+ SELECT a, b FROM collate_test1 ORDER BY a, vc(b);
+- a |  b  
+----+-----
+- 1 | abc
+- 2 | Abc
+- 3 | bbc
+- 4 | ABD
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ -- polymorphism
+ SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test1)) ORDER BY 1;
+- unnest 
+---------
+- ABD
+- Abc
+- abc
+- bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test2)) ORDER BY 1;
+- unnest 
+---------
+- ABD
+- Abc
+- abc
+- bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ CREATE FUNCTION dup (anyelement) RETURNS anyelement
+     AS 'select $1' LANGUAGE sql;
+ SELECT a, dup(b) FROM collate_test1 ORDER BY 2;
+- a | dup 
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test1" does not exist
+ SELECT a, dup(b) FROM collate_test2 ORDER BY 2;
+- a | dup 
+----+-----
+- 4 | ABD
+- 2 | Abc
+- 1 | abc
+- 3 | bbc
+-(4 rows)
+-
++ERROR:  relation "collate_test2" does not exist
+ -- indexes
+ CREATE INDEX collate_test1_idx1 ON collate_test1 (b);
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx2 ON collate_test1 (b COLLATE "POSIX");
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE INDEX collate_test1_idx2 ON collate_test1 (b COLLATE "POSIX")
++                                                    ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX collate_test1_idx3 ON collate_test1 ((b COLLATE "POSIX")); -- this is different grammatically
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx4 ON collate_test1 (((b||'foo') COLLATE "POSIX"));
++ERROR:  relation "collate_test1" does not exist
+ CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "POSIX"); -- fail
+-ERROR:  collations are not supported by type integer
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "POSIX")
++                                                    ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "POSIX")); -- fail
+-ERROR:  collations are not supported by type integer
+-LINE 1: ...ATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "P...
+-                                                             ^
++ERROR:  relation "collate_test1" does not exist
+ SELECT relname, pg_get_indexdef(oid) FROM pg_class WHERE relname LIKE 'collate_test%_idx%' ORDER BY 1;
+-      relname       |                                                  pg_get_indexdef                                                  
+---------------------+-------------------------------------------------------------------------------------------------------------------
+- collate_test1_idx1 | CREATE INDEX collate_test1_idx1 ON collate_tests.collate_test1 USING btree (b)
+- collate_test1_idx2 | CREATE INDEX collate_test1_idx2 ON collate_tests.collate_test1 USING btree (b COLLATE "POSIX")
+- collate_test1_idx3 | CREATE INDEX collate_test1_idx3 ON collate_tests.collate_test1 USING btree (b COLLATE "POSIX")
+- collate_test1_idx4 | CREATE INDEX collate_test1_idx4 ON collate_tests.collate_test1 USING btree (((b || 'foo'::text)) COLLATE "POSIX")
+-(4 rows)
++ relname | pg_get_indexdef 
++---------+-----------------
++(0 rows)
+ 
+ -- foreign keys
+ -- force indexes and mergejoins to be used for FK checking queries,
+ -- else they might not exercise collation-dependent operators
+ SET enable_seqscan TO 0;
++ERROR:  parameter "enable_seqscan" requires a Boolean value
++DETAIL:  0 is a int
+ SET enable_hashjoin TO 0;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_nestloop TO 0;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE collate_test20 (f1 text COLLATE "C" PRIMARY KEY);
++ERROR:  at or near ")": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test20 (f1 text COLLATE "C" PRIMARY KEY)
++                                                            ^
+ INSERT INTO collate_test20 VALUES ('foo'), ('bar');
++ERROR:  relation "collate_test20" does not exist
+ CREATE TABLE collate_test21 (f2 text COLLATE "POSIX" REFERENCES collate_test20);
++ERROR:  at or near ")": syntax error: invalid locale POSIX: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test21 (f2 text COLLATE "POSIX" REFERENCES collate_test20)
++                                                                              ^
+ INSERT INTO collate_test21 VALUES ('foo'), ('bar');
++ERROR:  relation "collate_test21" does not exist
+ INSERT INTO collate_test21 VALUES ('baz'); -- fail
+-ERROR:  insert or update on table "collate_test21" violates foreign key constraint "collate_test21_f2_fkey"
+-DETAIL:  Key (f2)=(baz) is not present in table "collate_test20".
++ERROR:  relation "collate_test21" does not exist
+ CREATE TABLE collate_test22 (f2 text COLLATE "POSIX");
++ERROR:  at or near ")": syntax error: invalid locale POSIX: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test22 (f2 text COLLATE "POSIX")
++                                                    ^
+ INSERT INTO collate_test22 VALUES ('foo'), ('bar'), ('baz');
++ERROR:  relation "collate_test22" does not exist
+ ALTER TABLE collate_test22 ADD FOREIGN KEY (f2) REFERENCES collate_test20; -- fail
+-ERROR:  insert or update on table "collate_test22" violates foreign key constraint "collate_test22_f2_fkey"
+-DETAIL:  Key (f2)=(baz) is not present in table "collate_test20".
++ERROR:  relation "collate_test22" does not exist
+ DELETE FROM collate_test22 WHERE f2 = 'baz';
++ERROR:  relation "collate_test22" does not exist
+ ALTER TABLE collate_test22 ADD FOREIGN KEY (f2) REFERENCES collate_test20;
++ERROR:  relation "collate_test22" does not exist
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_hashjoin;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_nestloop;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- EXPLAIN
+ EXPLAIN (COSTS OFF)
+   SELECT * FROM collate_test10 ORDER BY x, y;
+-                  QUERY PLAN                  
+-----------------------------------------------
+- Sort
+-   Sort Key: x COLLATE "C", y COLLATE "POSIX"
+-   ->  Seq Scan on collate_test10
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF)
+   SELECT * FROM collate_test10 ORDER BY x DESC, y COLLATE "C" ASC NULLS FIRST;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Sort
+-   Sort Key: x COLLATE "C" DESC, y COLLATE "C" NULLS FIRST
+-   ->  Seq Scan on collate_test10
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- CREATE/DROP COLLATION
+ CREATE COLLATION mycoll1 FROM "C";
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION mycoll1 FROM "C"
++       ^
++HINT:  try \h CREATE
+ CREATE COLLATION mycoll2 ( LC_COLLATE = "POSIX", LC_CTYPE = "POSIX" );
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION mycoll2 ( LC_COLLATE = "POSIX", LC_CTYPE = "POSIX" )
++       ^
++HINT:  try \h CREATE
+ CREATE COLLATION mycoll3 FROM "default";  -- intentionally unsupported
+-ERROR:  collation "default" cannot be copied
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION mycoll3 FROM "default"
++       ^
++HINT:  try \h CREATE
+ DROP COLLATION mycoll1;
++ERROR:  at or near "mycoll1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION mycoll1
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE collate_test23 (f1 text collate mycoll2);
++ERROR:  at or near ")": syntax error: invalid locale mycoll2: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test23 (f1 text collate mycoll2)
++                                                    ^
+ DROP COLLATION mycoll2;  -- fail
+-ERROR:  cannot drop collation mycoll2 because other objects depend on it
+-DETAIL:  column f1 of table collate_test23 depends on collation mycoll2
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  at or near "mycoll2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION mycoll2
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- invalid: non-lowercase quoted identifiers
+ CREATE COLLATION case_coll ("Lc_Collate" = "POSIX", "Lc_Ctype" = "POSIX");
+-ERROR:  collation attribute "Lc_Collate" not recognized
+-LINE 1: CREATE COLLATION case_coll ("Lc_Collate" = "POSIX", "Lc_Ctyp...
+-                                    ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION case_coll ("Lc_Collate" = "POSIX", "Lc_Ctype" = "POSIX")
++       ^
++HINT:  try \h CREATE
+ -- 9.1 bug with useless COLLATE in an expression subject to length coercion
+ CREATE TEMP TABLE vctable (f1 varchar(25));
+ INSERT INTO vctable VALUES ('foo' COLLATE "C");
+ SELECT collation for ('foo'); -- unknown type - null
+  pg_collation_for 
+ ------------------
+- 
++ "default"
+ (1 row)
+ 
+ SELECT collation for ('foo'::text);
+@@ -681,96 +538,97 @@
+ (1 row)
+ 
+ SELECT collation for ((SELECT a FROM collate_test1 LIMIT 1)); -- non-collatable type - error
+-ERROR:  collations are not supported by type integer
++ERROR:  relation "collate_test1" does not exist
+ SELECT collation for ((SELECT b FROM collate_test1 LIMIT 1));
+- pg_collation_for 
+-------------------
+- "C"
+-(1 row)
+-
++ERROR:  relation "collate_test1" does not exist
+ -- old bug with not dropping COLLATE when coercing to non-collatable type
+ CREATE VIEW collate_on_int AS
+ SELECT c1+1 AS c1p FROM
+   (SELECT ('4' COLLATE "C")::INT AS c1) ss;
+ \d+ collate_on_int
+-                    View "collate_tests.collate_on_int"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- c1p    | integer |           |          |         | plain   | 
+-View definition:
+- SELECT c1 + 1 AS c1p
+-   FROM ( SELECT 4 AS c1) ss;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_on_int)$' COLLATE pg_catalog.default
++                                                                              ^
+ -- Check conflicting or redundant options in CREATE COLLATION
+ -- LC_COLLATE
+ CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LC_COLLATE = "NONSENSE", LC_CTYPE = "POSIX");
+-ERROR:  conflicting or redundant options
+-LINE 1: ...ATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LC_COLLATE...
+-                                                             ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LC_COLLATE = "NONSENSE", LC_CTYPE = "POSIX")
++       ^
++HINT:  try \h CREATE
+ -- LC_CTYPE
+ CREATE COLLATION coll_dup_chk (LC_CTYPE = "POSIX", LC_CTYPE = "NONSENSE", LC_COLLATE = "POSIX");
+-ERROR:  conflicting or redundant options
+-LINE 1: ...REATE COLLATION coll_dup_chk (LC_CTYPE = "POSIX", LC_CTYPE =...
+-                                                             ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (LC_CTYPE = "POSIX", LC_CTYPE = "NONSENSE", LC_COLLATE = "POSIX")
++       ^
++HINT:  try \h CREATE
+ -- PROVIDER
+ CREATE COLLATION coll_dup_chk (PROVIDER = icu, PROVIDER = NONSENSE, LC_COLLATE = "POSIX", LC_CTYPE = "POSIX");
+-ERROR:  conflicting or redundant options
+-LINE 1: CREATE COLLATION coll_dup_chk (PROVIDER = icu, PROVIDER = NO...
+-                                                       ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (PROVIDER = icu, PROVIDER = NONSENSE, LC_COLLATE = "POSIX", LC_CTYPE = "POSIX")
++       ^
++HINT:  try \h CREATE
+ -- LOCALE
+ CREATE COLLATION case_sensitive (LOCALE = '', LOCALE = "NONSENSE");
+-ERROR:  conflicting or redundant options
+-LINE 1: CREATE COLLATION case_sensitive (LOCALE = '', LOCALE = "NONS...
+-                                                      ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION case_sensitive (LOCALE = '', LOCALE = "NONSENSE")
++       ^
++HINT:  try \h CREATE
+ -- DETERMINISTIC
+ CREATE COLLATION coll_dup_chk (DETERMINISTIC = TRUE, DETERMINISTIC = NONSENSE, LOCALE = '');
+-ERROR:  conflicting or redundant options
+-LINE 1: ...ATE COLLATION coll_dup_chk (DETERMINISTIC = TRUE, DETERMINIS...
+-                                                             ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (DETERMINISTIC = TRUE, DETERMINISTIC = NONSENSE, LOCALE = '')
++       ^
++HINT:  try \h CREATE
+ -- VERSION
+ CREATE COLLATION coll_dup_chk (VERSION = '1', VERSION = "NONSENSE", LOCALE = '');
+-ERROR:  conflicting or redundant options
+-LINE 1: CREATE COLLATION coll_dup_chk (VERSION = '1', VERSION = "NON...
+-                                                      ^
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (VERSION = '1', VERSION = "NONSENSE", LOCALE = '')
++       ^
++HINT:  try \h CREATE
+ -- LOCALE conflicts with LC_COLLATE and LC_CTYPE
+ CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LC_CTYPE = "POSIX", LOCALE = '');
+-ERROR:  conflicting or redundant options
+-DETAIL:  LOCALE cannot be specified together with LC_COLLATE or LC_CTYPE.
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LC_CTYPE = "POSIX", LOCALE = '')
++       ^
++HINT:  try \h CREATE
+ -- LOCALE conflicts with LC_COLLATE
+ CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LOCALE = '');
+-ERROR:  conflicting or redundant options
+-DETAIL:  LOCALE cannot be specified together with LC_COLLATE or LC_CTYPE.
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (LC_COLLATE = "POSIX", LOCALE = '')
++       ^
++HINT:  try \h CREATE
+ -- LOCALE conflicts with LC_CTYPE
+ CREATE COLLATION coll_dup_chk (LC_CTYPE = "POSIX", LOCALE = '');
+-ERROR:  conflicting or redundant options
+-DETAIL:  LOCALE cannot be specified together with LC_COLLATE or LC_CTYPE.
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (LC_CTYPE = "POSIX", LOCALE = '')
++       ^
++HINT:  try \h CREATE
+ -- FROM conflicts with any other option
+ CREATE COLLATION coll_dup_chk (FROM = "C", VERSION = "1");
+-ERROR:  conflicting or redundant options
+-DETAIL:  FROM cannot be specified together with any other options.
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION coll_dup_chk (FROM = "C", VERSION = "1")
++       ^
++HINT:  try \h CREATE
+ --
+ -- Clean up.  Many of these table names will be re-used if the user is
+ -- trying to run any platform-specific collation tests later, so we
+ -- must get rid of them.
+ --
+ DROP SCHEMA collate_tests CASCADE;
+-NOTICE:  drop cascades to 19 other objects
+-DETAIL:  drop cascades to table collate_test1
+-drop cascades to table collate_test_like
+-drop cascades to table collate_test2
+-drop cascades to type testdomain_p
+-drop cascades to table collate_test4
+-drop cascades to table collate_test5
+-drop cascades to table collate_test10
+-drop cascades to view collview1
+-drop cascades to view collview2
+-drop cascades to view collview3
+-drop cascades to type testdomain
+-drop cascades to function vc(text)
+-drop cascades to function dup(anyelement)
+-drop cascades to table collate_test20
+-drop cascades to table collate_test21
+-drop cascades to table collate_test22
+-drop cascades to collation mycoll2
+-drop cascades to table collate_test23
+-drop cascades to view collate_on_int

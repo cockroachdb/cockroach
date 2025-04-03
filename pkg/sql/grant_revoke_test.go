@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -29,7 +28,7 @@ import (
 func TestNoOpGrant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -41,10 +40,10 @@ func TestNoOpGrant(t *testing.T) {
 	tdb.Exec(t, "CREATE USER roach")
 
 	// Assert that user `roach` should not have any privilege on the database, schema, and table.
-	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "db")
-	scDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-	tblDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "sc", "tbl")
-	typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "db", "sc", "typ")
+	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, s.Codec(), "db")
+	scDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, s.Codec(), dbDesc.GetID(), "sc")
+	tblDesc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), "db", "sc", "tbl")
+	typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, s.Codec(), "db", "sc", "typ")
 	userRoach, err := username.MakeSQLUsernameFromUserInput("roach", username.PurposeValidation)
 	require.NoError(t, err)
 	_, ok := dbDesc.GetPrivileges().FindUser(userRoach)
@@ -60,13 +59,13 @@ func TestNoOpGrant(t *testing.T) {
 		var desc catalog.Descriptor
 		switch objectType {
 		case privilege.Database:
-			desc = desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName())
+			desc = desctestutils.TestingGetDatabaseDescriptor(kvDB, s.Codec(), dbDesc.GetName())
 		case privilege.Schema:
-			desc = desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), scDesc.GetName())
+			desc = desctestutils.TestingGetSchemaDescriptor(kvDB, s.Codec(), dbDesc.GetID(), scDesc.GetName())
 		case privilege.Table:
-			desc = desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName(), scDesc.GetName(), tblDesc.GetName())
+			desc = desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), dbDesc.GetName(), scDesc.GetName(), tblDesc.GetName())
 		case privilege.Type:
-			desc = desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName(), scDesc.GetName(), typDesc.GetName())
+			desc = desctestutils.TestingGetTypeDescriptor(kvDB, s.Codec(), dbDesc.GetName(), scDesc.GetName(), typDesc.GetName())
 		}
 		return desc
 	}
@@ -150,7 +149,7 @@ func TestNoOpGrant(t *testing.T) {
 func TestNoOpRevoke(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -162,10 +161,10 @@ func TestNoOpRevoke(t *testing.T) {
 	tdb.Exec(t, "CREATE USER roach")
 
 	// Assert that user `roach` should not have any privilege on the database, schema, and table.
-	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "db")
-	scDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-	tblDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "sc", "tbl")
-	typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "db", "sc", "typ")
+	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, s.Codec(), "db")
+	scDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, s.Codec(), dbDesc.GetID(), "sc")
+	tblDesc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), "db", "sc", "tbl")
+	typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, s.Codec(), "db", "sc", "typ")
 	userRoach, err := username.MakeSQLUsernameFromUserInput("roach", username.PurposeValidation)
 	require.NoError(t, err)
 	_, ok := dbDesc.GetPrivileges().FindUser(userRoach)
@@ -181,13 +180,13 @@ func TestNoOpRevoke(t *testing.T) {
 		var desc catalog.Descriptor
 		switch objectType {
 		case privilege.Database:
-			desc = desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName())
+			desc = desctestutils.TestingGetDatabaseDescriptor(kvDB, s.Codec(), dbDesc.GetName())
 		case privilege.Schema:
-			desc = desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), scDesc.GetName())
+			desc = desctestutils.TestingGetSchemaDescriptor(kvDB, s.Codec(), dbDesc.GetID(), scDesc.GetName())
 		case privilege.Table:
-			desc = desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName(), scDesc.GetName(), tblDesc.GetName())
+			desc = desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), dbDesc.GetName(), scDesc.GetName(), tblDesc.GetName())
 		case privilege.Type:
-			desc = desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetName(), scDesc.GetName(), typDesc.GetName())
+			desc = desctestutils.TestingGetTypeDescriptor(kvDB, s.Codec(), dbDesc.GetName(), scDesc.GetName(), typDesc.GetName())
 		}
 		return desc
 	}

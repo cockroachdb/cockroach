@@ -395,17 +395,17 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 		'experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
 	sqlDB.QueryRow(t, query).Scan(&changefeedID)
 
-	waitForJobStatus(sqlDB, t, changefeedID, "running")
+	waitForJobState(sqlDB, t, changefeedID, "running")
 
 	query = `PAUSE JOB $1`
 	sqlDB.Exec(t, query, changefeedID)
 
-	waitForJobStatus(sqlDB, t, changefeedID, "paused")
+	waitForJobState(sqlDB, t, changefeedID, "paused")
 
 	query = `RESUME JOB $1`
 	sqlDB.Exec(t, query, changefeedID)
 
-	waitForJobStatus(sqlDB, t, changefeedID, "running")
+	waitForJobState(sqlDB, t, changefeedID, "running")
 }
 
 func TestShowChangefeedJobsNoResults(t *testing.T) {
@@ -511,7 +511,7 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		}
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
-		waitForJobStatus(sqlDB, t, jobID, `paused`)
+		waitForJobState(sqlDB, t, jobID, `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, jobID))
 
@@ -629,7 +629,7 @@ func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		waitForJobStatus(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StatusRunning)
+		waitForJobState(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
 		require.Equal(t, 1, countChangefeedJobs())
 
 		// The job is not visible after closed (and its finished time is older than 12 hours).

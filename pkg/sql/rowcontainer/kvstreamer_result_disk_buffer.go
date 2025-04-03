@@ -21,6 +21,9 @@ import (
 )
 
 type kvStreamerResultDiskBuffer struct {
+	// reverse indicates that scan responses are ReverseScanResponse rather than
+	// ScanResponse.
+	reverse bool
 	// initialized is set to true when the first Result is Serialize()'d.
 	initialized bool
 	// container stores all Results that have been Serialize()'d since the last
@@ -48,10 +51,14 @@ var _ kvstreamer.ResultDiskBuffer = &kvStreamerResultDiskBuffer{}
 
 // NewKVStreamerResultDiskBuffer return a new kvstreamer.ResultDiskBuffer that
 // is backed by a disk row container.
+//
+// -reverse informs the ResultDiskBuffer to expect ReverseScanResponse instead
+// of ScanResponse.
 func NewKVStreamerResultDiskBuffer(
-	engine diskmap.Factory, memAcc mon.BoundAccount, diskMonitor *mon.BytesMonitor,
+	engine diskmap.Factory, memAcc mon.BoundAccount, diskMonitor *mon.BytesMonitor, reverse bool,
 ) kvstreamer.ResultDiskBuffer {
 	return &kvStreamerResultDiskBuffer{
+		reverse:     reverse,
 		engine:      engine,
 		memAcc:      memAcc,
 		diskMonitor: diskMonitor,
@@ -120,7 +127,7 @@ func (b *kvStreamerResultDiskBuffer) Deserialize(
 	if err != nil {
 		return err
 	}
-	return deserialize(r, serialized, &b.alloc)
+	return deserialize(r, serialized, &b.alloc, b.reverse)
 }
 
 // Reset implements the kvstreamer.ResultDiskBuffer interface.
@@ -198,8 +205,9 @@ func serialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAl
 		} else {
 			// We have a Scan response.
 			batchResponses := tree.NewDArray(types.Bytes)
-			batchResponses.Array = make(tree.Datums, 0, len(r.ScanResp.BatchResponses))
-			for _, b := range r.ScanResp.BatchResponses {
+			scanBatchResponses := kvstreamer.GetScanBatchResponses(r.ScanResp)
+			batchResponses.Array = make(tree.Datums, 0, len(scanBatchResponses))
+			for _, b := range scanBatchResponses {
 				if err := batchResponses.Append(alloc.NewDBytes(tree.DBytes(b))); err != nil {
 					return err
 				}
@@ -216,7 +224,12 @@ func serialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAl
 //
 // 'Position', 'memoryTok', 'subRequestIdx', 'subRequestDone', and
 // 'scanComplete' fields are left unchanged since those aren't serialized.
-func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
+//
+// - reverse, if true, indicates that ReverseScanResponse is to be used instead
+// of ScanResponse.
+func deserialize(
+	r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc, reverse bool,
+) error {
 	for i := range row {
 		if err := row[i].EnsureDecoded(inOrderResultsBufferSpillTypeSchema[i], alloc); err != nil {
 			return err
@@ -233,13 +246,22 @@ func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.Datum
 				},
 			}
 		}
-	} else {
-		r.ScanResp = &kvpb.ScanResponse{}
+	} else if reverse {
+		response := &kvpb.ReverseScanResponse{}
 		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
-		r.ScanResp.BatchResponses = make([][]byte, batchResponses.Len())
+		response.BatchResponses = make([][]byte, batchResponses.Len())
 		for i := range batchResponses.Array {
-			r.ScanResp.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
+			response.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
 		}
+		r.ScanResp = response
+	} else {
+		response := &kvpb.ScanResponse{}
+		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
+		response.BatchResponses = make([][]byte, batchResponses.Len())
+		for i := range batchResponses.Array {
+			response.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
+		}
+		r.ScanResp = response
 	}
 	return nil
 }

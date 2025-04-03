@@ -1,0 +1,714 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE ZONE FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT PRIMARY KEY,
+  v STRING
+) LOCALITY REGIONAL BY ROW;
+----
+...
++database {0 0 multiregion_db} -> 104
++schema {104 0 public} -> 105
++object {104 105 crdb_internal_region} -> 106
++object {104 105 _crdb_internal_region} -> 107
++object {104 105 table_regional_by_row} -> 108
+
+/* test */
+ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_column
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 108
+    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›
+    tag: ALTER TABLE
+    user: root
+  tableName: multiregion_db.public.table_regional_by_row
+## StatementPhase stage 1 of 1 with 10 MutationType ops
+upsert descriptor #108
+  ...
+         oid: 20
+         width: 64
+  -  - id: 2
+  -    name: v
+  -    nullable: true
+  -    type:
+  -      family: StringFamily
+  -      oid: 25
+     - defaultExpr: default_to_database_primary_region(gateway_region())::@100106
+       hidden: true
+  ...
+       columnNames:
+       - k
+  -    - v
+  +    - crdb_internal_column_2_name_placeholder
+       - crdb_region
+       defaultColumnId: 2
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 104
+  ...
+       - 2
+       storeColumnNames:
+  -    - v
+  +    - crdb_internal_column_2_name_placeholder
+       unique: true
+       vecConfig: {}
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+upsert descriptor #108
+  ...
+         oid: 20
+         width: 64
+  -  - id: 2
+  -    name: v
+  -    nullable: true
+  -    type:
+  -      family: StringFamily
+  -      oid: 25
+     - defaultExpr: default_to_database_primary_region(gateway_region())::@100106
+       hidden: true
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": k
+  +        "3": crdb_region
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 108
+  +      indexes:
+  +        "2": table_regional_by_row_pkey
+  +      name: table_regional_by_row
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›
+  +        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       columnNames:
+       - k
+  -    - v
+  +    - crdb_internal_column_2_name_placeholder
+       - crdb_region
+       defaultColumnId: 2
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 104
+  ...
+       - 2
+       storeColumnNames:
+  -    - v
+  +    - crdb_internal_column_2_name_placeholder
+       unique: true
+       vecConfig: {}
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v"
+  descriptor IDs: [108]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 7 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+backfill indexes [2] from index #1 in table #108
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #108
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 7 with 1 ValidationType op
+validate forward indexes [2] in table #108
+commit transaction #9
+begin transaction #10
+## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+upsert descriptor #108
+  ...
+           statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 2
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      - 1
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         - crdb_region
+         - k
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning:
+           list:
+  ...
+           numImplicitColumns: 1
+         sharded: {}
+  -      storeColumnNames: []
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - crdb_internal_column_2_name_placeholder
+         unique: true
+  -      useDeletePreservingEncoding: true
+         vecConfig: {}
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  ...
+     partitionAllBy: true
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 2
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 2
+       interleave: {}
+       keyColumnDirections:
+  ...
+         numImplicitColumns: 1
+       sharded: {}
+  -    storeColumnIds:
+  -    - 2
+  -    storeColumnNames:
+  -    - crdb_internal_column_2_name_placeholder
+  +    storeColumnNames: []
+       unique: true
+       vecConfig: {}
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
+commit transaction #11
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "3": crdb_region
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 108
+  -      indexes:
+  -        "2": table_regional_by_row_pkey
+  -      name: table_regional_by_row
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›
+  -        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+       - 1
+  -    - 2
+       - 3
+       columnNames:
+       - k
+  -    - crdb_internal_column_2_name_placeholder
+       - crdb_region
+       defaultColumnId: 2
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      - 1
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - crdb_internal_column_2_name_placeholder
+  -      unique: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: table_regional_by_row
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v"
+  descriptor IDs: [108]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 108
+commit transaction #12
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

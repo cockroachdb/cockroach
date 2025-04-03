@@ -156,7 +156,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	}
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
-	panicIfSchemaChangeIsDisallowed(elems, n)
+	checkTableSchemaChangePrerequisites(b, elems, n)
 	var tableID catid.DescID
 	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
@@ -173,7 +173,9 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	if tableID == catid.InvalidDescID {
 		return nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
 	}
-	tzo := tableZoneConfigObj{tableID: tableID}
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	dbzco := databaseZoneConfigObj{databaseID: dbID}
+	tzo := tableZoneConfigObj{tableID: tableID, databaseZoneConfigObj: dbzco}
 
 	// We are a table object.
 	if zs.TargetsTable() && !zs.TargetsIndex() && !zs.TargetsPartition() {

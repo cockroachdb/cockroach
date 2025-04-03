@@ -314,8 +314,13 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 		expectedIndexes []string
 	}{
 		{
-			name:            "create-rbr-table",
-			op:              `DROP TABLE IF EXISTS db.rbr; CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW`,
+			name: "create-rbr-table",
+			op: `
+BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+DROP TABLE IF EXISTS db.rbr;
+CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW;
+COMMIT;`,
 			expectedIndexes: []string{"rbr@rbr_pkey"},
 		},
 	}

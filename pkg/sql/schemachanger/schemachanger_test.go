@@ -67,9 +67,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 				require.NoError(t, err)
 				switch stageIdx {
 				case 0:
-					runningStatus0.Store(job.Progress().RunningStatus)
+					runningStatus0.Store(job.Progress().StatusMessage)
 				case 1:
-					runningStatus1.Store(job.Progress().RunningStatus)
+					runningStatus1.Store(job.Progress().StatusMessage)
 				}
 				return nil
 			},
@@ -303,17 +303,17 @@ func TestDropJobCancelable(t *testing.T) {
 	}{
 		{
 			"simple drop sequence",
-			"BEGIN;DROP SEQUENCE db.sq1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP SEQUENCE db.sq1; END;",
 			false,
 		},
 		{
 			"simple drop view",
-			"BEGIN;DROP VIEW db.v1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP VIEW db.v1; END;",
 			false,
 		},
 		{
 			"simple drop table",
-			"BEGIN;DROP TABLE db.t1 CASCADE; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP TABLE db.t1 CASCADE; END;",
 			false,
 		},
 	}
@@ -376,7 +376,7 @@ CREATE SEQUENCE db.sq1;
 SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'SCHEMA CHANGE' AND 
-	status = $1`, jobs.StatusRunning)
+	status = $1`, jobs.StateRunning)
 			if err != nil {
 				t.Fatalf("unexpected error querying rows %s", err)
 			}
@@ -1050,6 +1050,11 @@ CREATE TABLE t2(n int);
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Ensure we don't commit any DDLs in a transaction.
+			runner.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
+			runner.Exec(t, "SET autocommit_before_ddl = false")
+
 			firstConn, err := sqlDB.Conn(ctx)
 			require.NoError(t, err)
 			defer func() {
@@ -1099,4 +1104,45 @@ CREATE TABLE t2(n int);
 			require.NoError(t, grp.Wait())
 		})
 	}
+}
+
+// TestPreventCreateDropConcurrently confirms that objects cannot be
+// created under a schema that is being dropped.
+func TestPreventCreateDropConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This would work with secondary tenants as well, but the span config
+		// limited logic can hit transaction retries on the span_count table.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	runner.Exec(t, `
+CREATE SCHEMA other_schema;
+CREATE SCHEMA complex_drop_schema;
+CREATE TABLE complex_drop_schema.t1(n int UNIQUE);
+CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
+`)
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';`)
+	runner.ExpectErr(t, " \\d+ was paused before it completed with reason: pause point \"newschemachanger.before.exec\" hit",
+		"DROP SCHEMA complex_drop_schema CASCADE;")
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.Exec("CREATE SEQUENCE  complex_drop_schema.sc1")
+		return err
+	})
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	runner.Exec(t,
+		`RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);`)
+	require.Error(t,
+		grp.Wait(),
+		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
 }

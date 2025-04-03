@@ -1,0 +1,548 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=/mnt/data1/postgres/src/test/regress/results/enum.out /mnt/data1/postgres/src/test/regress/expected/enum.out /mnt/data1/postgres/src/test/regress/results/enum.out
+--- /mnt/data1/postgres/src/test/regress/expected/enum.out
++++ /mnt/data1/postgres/src/test/regress/results/enum.out
+@@ -22,35 +22,16 @@
+ 
+ SELECT 'mauve'::rainbow;
+ ERROR:  invalid input value for enum rainbow: "mauve"
+-LINE 1: SELECT 'mauve'::rainbow;
+-               ^
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('red', 'rainbow');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('mauve', 'rainbow');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('mauve', 'rainbow');
+-                    message                    | detail | hint | sql_error_code 
+------------------------------------------------+--------+------+----------------
+- invalid input value for enum rainbow: "mauve" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ \x
+ SELECT * FROM pg_input_error_info(repeat('too_long', 32), 'rainbow');
+--[ RECORD 1 ]--+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-message        | invalid input value for enum rainbow: "too_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_longtoo_long"
+-detail         | 
+-hint           | 
+-sql_error_code | 22P02
+-
++ERROR:  unknown function: pg_input_error_info()
+ \x
+ --
+ -- adding new values
+@@ -62,9 +43,9 @@
+ ORDER BY 2;
+  enumlabel | enumsortorder 
+ -----------+---------------
+- venus     |             1
+- earth     |             2
+- mars      |             3
++ venus     |             0
++ earth     |             1
++ mars      |             2
+ (3 rows)
+ 
+ ALTER TYPE planets ADD VALUE 'uranus';
+@@ -74,10 +55,10 @@
+ ORDER BY 2;
+  enumlabel | enumsortorder 
+ -----------+---------------
+- venus     |             1
+- earth     |             2
+- mars      |             3
+- uranus    |             4
++ venus     |             0
++ earth     |             1
++ mars      |             2
++ uranus    |             3
+ (4 rows)
+ 
+ ALTER TYPE planets ADD VALUE 'mercury' BEFORE 'venus';
+@@ -94,10 +75,10 @@
+  venus     |             1
+  earth     |             2
+  mars      |             3
+- jupiter   |          3.25
+- saturn    |           3.5
+- uranus    |             4
+- neptune   |             5
++ jupiter   |             4
++ saturn    |             5
++ uranus    |             6
++ neptune   |             7
+ (8 rows)
+ 
+ SELECT enumlabel, enumsortorder
+@@ -110,31 +91,29 @@
+  venus     |             1
+  earth     |             2
+  mars      |             3
+- jupiter   |          3.25
+- saturn    |           3.5
+- uranus    |             4
+- neptune   |             5
++ jupiter   |             4
++ saturn    |             5
++ uranus    |             6
++ neptune   |             7
+ (8 rows)
+ 
+ -- errors for adding labels
+ ALTER TYPE planets ADD VALUE
+   'plutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutopluto';
+-ERROR:  invalid enum label "plutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutopluto"
+-DETAIL:  Labels must be 63 bytes or less.
+ ALTER TYPE planets ADD VALUE 'pluto' AFTER 'zeus';
+-ERROR:  "zeus" is not an existing enum label
++ERROR:  "zeus" is not an existing enum value
+ -- if not exists tests
+ --  existing value gives error
+ ALTER TYPE planets ADD VALUE 'mercury';
+-ERROR:  enum label "mercury" already exists
++ERROR:  enum value "mercury" already exists
+ -- unless IF NOT EXISTS is specified
+ ALTER TYPE planets ADD VALUE IF NOT EXISTS 'mercury';
+-NOTICE:  enum label "mercury" already exists, skipping
++NOTICE:  enum value "mercury" already exists, skipping
+ -- should be neptune, not mercury
+ SELECT enum_last(NULL::planets);
+- enum_last 
+------------
+- neptune
++                               enum_last                                
++------------------------------------------------------------------------
++ plutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutoplutopluto
+ (1 row)
+ 
+ ALTER TYPE planets ADD VALUE IF NOT EXISTS 'pluto';
+@@ -189,27 +168,27 @@
+ ORDER BY enumsortorder;
+  enumlabel | so 
+ -----------+----
+- L1        |  1
+- i1        |  2
+- i2        |  3
+- i3        |  4
+- i4        |  5
+- i5        |  6
+- i6        |  7
+- i7        |  8
+- i8        |  9
+- i9        | 10
+- i10       | 11
+- i11       | 12
+- i12       | 13
+- i13       | 14
+- i14       | 15
+- i15       | 16
+- i16       | 17
+- i17       | 18
+- i18       | 19
+- i19       | 20
+- i20       |   
++ L1        |  0
++ i1        |  1
++ i2        |  2
++ i3        |  3
++ i4        |  4
++ i5        |  5
++ i6        |  6
++ i7        |  7
++ i8        |  8
++ i9        |  9
++ i10       | 10
++ i11       | 11
++ i12       | 12
++ i13       | 13
++ i14       | 14
++ i15       | 15
++ i16       | 16
++ i17       | 17
++ i18       | 18
++ i19       | 19
++ i20       | 20
+  i21       |   
+  i22       |   
+  i23       |   
+@@ -333,7 +312,20 @@
+ -- Index tests, force use of index
+ --
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_bitmapscan = off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Btree index / opclass with the various operators
+ --
+@@ -407,10 +399,27 @@
+ (1 row)
+ 
+ DROP INDEX enumtest_btree;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ --
+ -- Hash index / opclass with the = operator
+ --
+ CREATE INDEX enumtest_hash ON enumtest USING hash (col);
++ERROR:  at or near "hash": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX enumtest_hash ON enumtest USING hash (col)
++                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT * FROM enumtest WHERE col = 'orange';
+   col   
+ --------
+@@ -418,26 +427,48 @@
+ (1 row)
+ 
+ DROP INDEX enumtest_hash;
++ERROR:  index "enumtest_hash" does not exist
+ --
+ -- End index tests
+ --
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Domains over enums
+ --
+ CREATE DOMAIN rgb AS rainbow CHECK (VALUE IN ('red', 'green', 'blue'));
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN rgb AS rainbow CHECK (VALUE IN ('red', 'green', 'blue'))
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ SELECT 'red'::rgb;
+- rgb 
+------
+- red
+-(1 row)
+-
++ERROR:  type "rgb" does not exist
+ SELECT 'purple'::rgb;
+-ERROR:  value for domain rgb violates check constraint "rgb_check"
++ERROR:  type "rgb" does not exist
+ SELECT 'purple'::rainbow::rgb;
+-ERROR:  value for domain rgb violates check constraint "rgb_check"
++ERROR:  type "rgb" does not exist
+ DROP DOMAIN rgb;
++ERROR:  at or near "rgb": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN rgb
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Arrays
+ --
+@@ -448,35 +479,19 @@
+ (1 row)
+ 
+ SELECT ('{red,green,blue}'::rainbow[])[2];
+- rainbow 
+----------
+- green
+-(1 row)
+-
+-SELECT 'red' = ANY ('{red,green,blue}'::rainbow[]);
+  ?column? 
+ ----------
+- t
++ green
+ (1 row)
+ 
++SELECT 'red' = ANY ('{red,green,blue}'::rainbow[]);
++ERROR:  unsupported comparison operator: <string> = ANY <rainbow[]>
+ SELECT 'yellow' = ANY ('{red,green,blue}'::rainbow[]);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> = ANY <rainbow[]>
+ SELECT 'red' = ALL ('{red,green,blue}'::rainbow[]);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> = ALL <rainbow[]>
+ SELECT 'red' = ALL ('{red,red}'::rainbow[]);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> = ALL <rainbow[]>
+ --
+ -- Support functions
+ --
+@@ -517,11 +532,7 @@
+ (1 row)
+ 
+ SELECT enum_range(NULL::rainbow, NULL);
+-              enum_range               
+----------------------------------------
+- {red,orange,yellow,green,blue,purple}
+-(1 row)
+-
++ERROR:  enum_range(): both arguments cannot be NULL
+ --
+ -- User functions, can't test perl/python etc here since may not be compiled.
+ --
+@@ -530,12 +541,9 @@
+ RETURN $1::text || 'omg';
+ END
+ $$ LANGUAGE plpgsql;
++ERROR:  type "anyenum" does not exist
+ SELECT echo_me('red'::rainbow);
+- echo_me 
+----------
+- redomg
+-(1 row)
+-
++ERROR:  unknown function: echo_me()
+ --
+ -- Concrete function should override generic one
+ --
+@@ -555,6 +563,7 @@
+ -- anymore, since there's only one match
+ --
+ DROP FUNCTION echo_me(anyenum);
++ERROR:  type "anyenum" does not exist
+ SELECT echo_me('red');
+  echo_me 
+ ---------
+@@ -570,18 +579,17 @@
+ INSERT INTO enumtest_parent VALUES ('red');
+ INSERT INTO enumtest_child VALUES ('red');
+ INSERT INTO enumtest_child VALUES ('blue');  -- fail
+-ERROR:  insert or update on table "enumtest_child" violates foreign key constraint "enumtest_child_parent_fkey"
+-DETAIL:  Key (parent)=(blue) is not present in table "enumtest_parent".
++ERROR:  insert on table "enumtest_child" violates foreign key constraint "enumtest_child_parent_fkey"
++DETAIL:  Key (parent)=('blue') is not present in table "enumtest_parent".
+ DELETE FROM enumtest_parent;  -- fail
+-ERROR:  update or delete on table "enumtest_parent" violates foreign key constraint "enumtest_child_parent_fkey" on table "enumtest_child"
+-DETAIL:  Key (id)=(red) is still referenced from table "enumtest_child".
++ERROR:  delete on table "enumtest_parent" violates foreign key constraint "enumtest_child_parent_fkey" on table "enumtest_child"
++DETAIL:  Key (id)=('red') is still referenced from table "enumtest_child".
+ --
+ -- cross-type RI should fail
+ --
+ CREATE TYPE bogus AS ENUM('good', 'bad', 'ugly');
+ CREATE TABLE enumtest_bogus_child(parent bogus REFERENCES enumtest_parent);
+-ERROR:  foreign key constraint "enumtest_bogus_child_parent_fkey" cannot be implemented
+-DETAIL:  Key columns "parent" and "id" are of incompatible types: bogus and rainbow.
++ERROR:  type of "parent" (bogus) does not match foreign key "enumtest_parent"."id" (rainbow)
+ DROP TYPE bogus;
+ -- check renaming a value
+ ALTER TYPE rainbow RENAME VALUE 'red' TO 'crimson';
+@@ -591,20 +599,20 @@
+ ORDER BY 2;
+  enumlabel | enumsortorder 
+ -----------+---------------
+- crimson   |             1
+- orange    |             2
+- yellow    |             3
+- green     |             4
+- blue      |             5
+- purple    |             6
++ crimson   |             0
++ orange    |             1
++ yellow    |             2
++ green     |             3
++ blue      |             4
++ purple    |             5
+ (6 rows)
+ 
+ -- check that renaming a non-existent value fails
+ ALTER TYPE rainbow RENAME VALUE 'red' TO 'crimson';
+-ERROR:  "red" is not an existing enum label
++ERROR:  enum value crimson already exists
+ -- check that renaming to an existent value fails
+ ALTER TYPE rainbow RENAME VALUE 'blue' TO 'green';
+-ERROR:  enum label "green" already exists
++ERROR:  enum value green already exists
+ --
+ -- check transactional behaviour of ALTER TYPE ... ADD VALUE
+ --
+@@ -613,13 +621,17 @@
+ -- but we can't use them
+ BEGIN;
+ ALTER TYPE bogus ADD VALUE 'new';
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SAVEPOINT x;
++WARNING:  there is no transaction in progress
+ SELECT 'new'::bogus;  -- unsafe
+-ERROR:  unsafe use of new value "new" of enum type bogus
+-LINE 1: SELECT 'new'::bogus;
+-               ^
+-HINT:  New enum values must be committed before they can be used.
++ bogus 
++-------
++ new
++(1 row)
++
+ ROLLBACK TO x;
++ERROR:  savepoint "x" does not exist
+ SELECT enum_first(null::bogus);  -- safe
+  enum_first 
+ ------------
+@@ -627,14 +639,23 @@
+ (1 row)
+ 
+ SELECT enum_last(null::bogus);  -- unsafe
+-ERROR:  unsafe use of new value "new" of enum type bogus
+-HINT:  New enum values must be committed before they can be used.
++ enum_last 
++-----------
++ new
++(1 row)
++
+ ROLLBACK TO x;
++ERROR:  savepoint "x" does not exist
+ SELECT enum_range(null::bogus);  -- unsafe
+-ERROR:  unsafe use of new value "new" of enum type bogus
+-HINT:  New enum values must be committed before they can be used.
++ enum_range 
++------------
++ {good,new}
++(1 row)
++
+ ROLLBACK TO x;
++ERROR:  savepoint "x" does not exist
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT 'new'::bogus;  -- now safe
+  bogus 
+ -------
+@@ -647,54 +668,68 @@
+ ORDER BY 2;
+  enumlabel | enumsortorder 
+ -----------+---------------
+- good      |             1
+- new       |             2
++ good      |             0
++ new       |             1
+ (2 rows)
+ 
+ -- check that we recognize the case where the enum already existed but was
+ -- modified in the current txn; this should not be considered safe
+ BEGIN;
+ ALTER TYPE bogus RENAME TO bogon;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ ALTER TYPE bogon ADD VALUE 'bad';
+ SELECT 'bad'::bogon;
+-ERROR:  unsafe use of new value "bad" of enum type bogon
+-LINE 1: SELECT 'bad'::bogon;
+-               ^
+-HINT:  New enum values must be committed before they can be used.
++ bogon 
++-------
++ bad
++(1 row)
++
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- but a renamed value is safe to use later in same transaction
+ BEGIN;
+ ALTER TYPE bogus RENAME VALUE 'good' to 'bad';
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  type "bogus" does not exist
+ SELECT 'bad'::bogus;
+- bogus 
+--------
+- bad
+-(1 row)
+-
++ERROR:  type "bogus" does not exist
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ DROP TYPE bogus;
++ERROR:  type "bogus" does not exist
+ -- check that values created during CREATE TYPE can be used in any case
+ BEGIN;
+ CREATE TYPE bogus AS ENUM('good','bad','ugly');
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ ALTER TYPE bogus RENAME TO bogon;
++ERROR:  type "bogon" already exists
+ select enum_range(null::bogon);
+-   enum_range    
+------------------
+- {good,bad,ugly}
++   enum_range   
++----------------
++ {good,new,bad}
+ (1 row)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- ideally, we'd allow this usage; but it requires keeping track of whether
+ -- the enum type was created in the current transaction, which is expensive
+ BEGIN;
+ CREATE TYPE bogus AS ENUM('good');
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  type "root.public.bogus" already exists
+ ALTER TYPE bogus RENAME TO bogon;
++ERROR:  type "bogon" already exists
+ ALTER TYPE bogon ADD VALUE 'bad';
++ERROR:  enum value "bad" already exists
+ ALTER TYPE bogon ADD VALUE 'ugly';
+ select enum_range(null::bogon);  -- fails
+-ERROR:  unsafe use of new value "bad" of enum type bogon
+-HINT:  New enum values must be committed before they can be used.
++     enum_range      
++---------------------
++ {good,new,bad,ugly}
++(1 row)
++
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ --
+ -- Cleanup
+ --

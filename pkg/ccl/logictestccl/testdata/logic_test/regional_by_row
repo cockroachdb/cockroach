@@ -117,9 +117,9 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table_explicit_crdb_region_column]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_explicit_crdb_region_column@regional_by_row_table_explicit_crdb_region_column_pkey  us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_table_explicit_crdb_region_column
@@ -188,18 +188,18 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_a_idx  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_b_key  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_j_idx  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_pkey   ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_a_idx  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_b_key  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_j_idx  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_pkey   ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_a_idx  us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_b_key  us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_j_idx  us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_pkey   us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_a_idx  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_b_key  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_j_idx  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table@regional_by_row_table_pkey   ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_a_idx  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_b_key  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_j_idx  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table@regional_by_row_table_pkey   ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_a_idx  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_b_key  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_j_idx  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table@regional_by_row_table_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_table
@@ -308,21 +308,21 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_a_idx           ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_b_key           ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_j_idx           ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_pkey            ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_unique_col_key  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_a_idx           ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_b_key           ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_j_idx           ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_pkey            ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_unique_col_key  ca-central-1
-gc.ttlseconds = 10,\nnum_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_a_idx           us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_b_key           us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_j_idx           us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_pkey            us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_unique_col_key  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_a_idx           ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_b_key           ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_j_idx           ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_pkey            ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'             regional_by_row_table@regional_by_row_table_unique_col_key  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_a_idx           ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_b_key           ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_j_idx           ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_pkey            ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'                 regional_by_row_table@regional_by_row_table_unique_col_key  ca-central-1
+gc.ttlseconds = 10,\nnum_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'  regional_by_row_table@regional_by_row_table_a_idx           us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_b_key           us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_j_idx           us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_pkey            us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'                       regional_by_row_table@regional_by_row_table_unique_col_key  us-east-1
 
 statement ok
 ALTER TABLE regional_by_row_table DROP COLUMN unique_col
@@ -488,7 +488,7 @@ PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@regional_by_row_table_
                                                                                         gc.ttlseconds = 14400,
                                                                                         num_replicas = 5,
                                                                                         num_voters = 5,
-                                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                                                         voter_constraints = '{+region=ap-southeast-2: 2}',
                                                                                         lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -501,7 +501,7 @@ PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@regional_by_row_table_
                                                                                           gc.ttlseconds = 14400,
                                                                                           num_replicas = 5,
                                                                                           num_voters = 5,
-                                                                                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                                                           voter_constraints = '{+region=ap-southeast-2: 2}',
                                                                                           lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -514,7 +514,7 @@ PARTITION "ap-southeast-2" OF INDEX regional_by_row_table@unique_b_a  ALTER PART
                                                                         gc.ttlseconds = 14400,
                                                                         num_replicas = 5,
                                                                         num_voters = 5,
-                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                                         voter_constraints = '{+region=ap-southeast-2: 2}',
                                                                         lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -579,15 +579,15 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_table_as]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_a_idx  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_b_key  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_pkey   ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_a_idx  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_b_key  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_pkey   ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_a_idx  us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_b_key  us-east-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_pkey   us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_a_idx  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_b_key  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_table_as@regional_by_row_table_as_pkey   ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_a_idx  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_b_key  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_table_as@regional_by_row_table_as_pkey   ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_a_idx  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_b_key  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_table_as@regional_by_row_table_as_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_table_as
@@ -642,7 +642,7 @@ PARTITION "us-east-1" OF TABLE t_regional_by_row  ALTER PARTITION "us-east-1" OF
                                                     gc.ttlseconds = 14400,
                                                     num_replicas = 5,
                                                     num_voters = 5,
-                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                     voter_constraints = '{+region=us-east-1: 2}',
                                                     lease_preferences = '[[+region=us-east-1]]'
 
@@ -650,17 +650,17 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE t_regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  t_regional_by_row@t_regional_by_row_pkey  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      t_regional_by_row@t_regional_by_row_pkey  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            t_regional_by_row@t_regional_by_row_pkey  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  t_regional_by_row@t_regional_by_row_pkey  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      t_regional_by_row@t_regional_by_row_pkey  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            t_regional_by_row@t_regional_by_row_pkey  us-east-1
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE t_regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 5,\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  t_regional_by_row@t_regional_by_row_pkey  ap-southeast-2
-num_voters = 5,\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      t_regional_by_row@t_regional_by_row_pkey  ca-central-1
-num_voters = 5,\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            t_regional_by_row@t_regional_by_row_pkey  us-east-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ap-southeast-2: 2}',\nlease_preferences = '[[+region=ap-southeast-2]]'  t_regional_by_row@t_regional_by_row_pkey  ap-southeast-2
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=ca-central-1: 2}',\nlease_preferences = '[[+region=ca-central-1]]'      t_regional_by_row@t_regional_by_row_pkey  ca-central-1
+num_replicas = 5,\nnum_voters = 5,\nconstraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',\nvoter_constraints = '{+region=us-east-1: 2}',\nlease_preferences = '[[+region=us-east-1]]'            t_regional_by_row@t_regional_by_row_pkey  us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE t_regional_by_row

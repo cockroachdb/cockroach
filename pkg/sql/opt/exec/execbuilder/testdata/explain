@@ -359,6 +359,7 @@ vectorized: true
         │   │
         │   └── • hash join (left outer)
         │       │ equality: (column62) = (table_id)
+        │       │ right cols are key
         │       │
         │       ├── • render
         │       │   │
@@ -383,8 +384,11 @@ vectorized: true
         │       │               └── • virtual table
         │       │                     table: pg_class@primary
         │       │
-        │       └── • virtual table
-        │             table: table_row_statistics@primary
+        │       └── • distinct
+        │           │ distinct on: table_id
+        │           │
+        │           └── • virtual table
+        │                 table: table_row_statistics@primary
         │
         └── • virtual table
               table: tables@tables_database_name_idx (partial index)
@@ -409,6 +413,7 @@ vectorized: true
         │   │
         │   └── • hash join (left outer)
         │       │ equality: (column77) = (table_id)
+        │       │ right cols are key
         │       │
         │       ├── • render
         │       │   │
@@ -439,21 +444,22 @@ vectorized: true
         │       │               └── • sort
         │       │                   │ order: +objoid
         │       │                   │
-        │       │                   └── • render
+        │       │                   └── • filter
+        │       │                       │ filter: objsubid = 0
         │       │                       │
-        │       │                       └── • filter
-        │       │                           │ filter: objsubid = 0
+        │       │                       └── • render
         │       │                           │
-        │       │                           └── • render
+        │       │                           └── • filter
+        │       │                               │ filter: classoid = 4294967083
         │       │                               │
-        │       │                               └── • filter
-        │       │                                   │ filter: classoid = 4294967083
-        │       │                                   │
-        │       │                                   └── • virtual table
-        │       │                                         table: kv_catalog_comments@primary
+        │       │                               └── • virtual table
+        │       │                                     table: kv_catalog_comments@primary
         │       │
-        │       └── • virtual table
-        │             table: table_row_statistics@primary
+        │       └── • distinct
+        │           │ distinct on: table_id
+        │           │
+        │           └── • virtual table
+        │                 table: table_row_statistics@primary
         │
         └── • virtual table
               table: tables@tables_database_name_idx (partial index)
@@ -1763,7 +1769,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1774,7 +1780,7 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1783,7 +1789,7 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1791,7 +1797,7 @@ distribute
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1811,7 +1817,7 @@ EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1822,7 +1828,7 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1831,7 +1837,7 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1839,7 +1845,7 @@ distribute
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1859,7 +1865,7 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1870,7 +1876,7 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1879,7 +1885,7 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1887,7 +1893,7 @@ distribute
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1915,7 +1921,7 @@ EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1926,7 +1932,7 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1935,7 +1941,7 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1943,7 +1949,7 @@ distribute
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -2247,7 +2253,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -2257,6 +2263,7 @@ quality of service: regular
   sql nodes: <hidden>
   regions: <hidden>
   actual row count: 1
+  execution time: 0µs
   size: 1 column, 1 row
 
 # Tests for EXPLAIN (OPT, MEMO).

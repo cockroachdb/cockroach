@@ -113,6 +113,17 @@ func (ocl OptionalColList) IsEmpty() bool {
 	return true
 }
 
+// Len returns the number of columns in the list that are set.
+func (ocl OptionalColList) Len() int {
+	n := 0
+	for i := range ocl {
+		if ocl[i] != 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // Equals returns true if this column list is identical to another list.
 func (ocl OptionalColList) Equals(other OptionalColList) bool {
 	if len(ocl) != len(other) {

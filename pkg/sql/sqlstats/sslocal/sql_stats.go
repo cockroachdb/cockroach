@@ -12,13 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var _ sqlstats.SSDrainer = &SQLStats{}
 
 // SQLStats carries per-application in-memory statistics for all applications.
 type SQLStats struct {
@@ -44,8 +45,6 @@ type SQLStats struct {
 	flushTarget Sink
 
 	knobs *sqlstats.TestingKnobs
-
-	anomalies *insights.AnomalyDetector
 }
 
 func newSQLStats(
@@ -57,10 +56,9 @@ func newSQLStats(
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
-	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:       mon.MakeMonitorName("SQLStats"),
+		Name:       mon.MakeName("SQLStats"),
 		CurCount:   curMemBytesCount,
 		MaxHist:    maxMemBytesHist,
 		Settings:   st,
@@ -70,7 +68,6 @@ func newSQLStats(
 		st:          st,
 		flushTarget: flushTarget,
 		knobs:       knobs,
-		anomalies:   anomalies,
 	}
 	s.atomic = ssmemstorage.NewSQLStatsAtomicCounters(
 		st,
@@ -113,7 +110,6 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.anomalies,
 	)
 	s.mu.apps[appName] = a
 	return a

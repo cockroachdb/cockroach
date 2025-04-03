@@ -538,9 +538,9 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		if !row.Next() {
 			t.Fatal("last_run_time not updated")
 		}
-		var runningStatus string
-		require.NoError(t, row.Scan(&runningStatus))
-		require.Containsf(t, runningStatus, "Job completed at", "running_status not updated: %s", runningStatus)
+		var status string
+		require.NoError(t, row.Scan(&status))
+		require.Containsf(t, status, "Job completed at", "status not updated: %s", status)
 	})
 }
 

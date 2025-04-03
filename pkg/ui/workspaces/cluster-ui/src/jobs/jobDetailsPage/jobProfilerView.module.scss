@@ -18,6 +18,14 @@
     width: 230px;
 }
 
+.view-execution-detail-button {
+    white-space: nowrap;
+
+    >svg {
+        margin-right: $spacing-x-small;
+    }
+}
+
 .download-execution-detail-button {
     white-space: nowrap;
 

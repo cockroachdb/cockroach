@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -187,7 +187,7 @@ func AlteredCapabilitiesString(capabilities *tenantcapabilitiespb.TenantCapabili
 	var builder strings.Builder
 	builder.WriteByte('{')
 	space := ""
-	for _, capID := range tenantcapabilities.IDs {
+	for _, capID := range tenantcapabilitiespb.IDs {
 		value := tenantcapabilities.MustGetValueByID(capabilities, capID)
 		defaultValue := tenantcapabilities.MustGetValueByID(defaultCapabilities, capID)
 		if value.String() != defaultValue.String() {

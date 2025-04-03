@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -133,12 +134,16 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						sp.namePrefix = sp.namePrefix + fmt.Sprintf("/workarounds=%t", useWorkarounds)
 					}
 
+					if sp.skip == "" && !backuptestutils.IsOnlineRestoreSupported() {
+						sp.skip = "online restore is only tested on development branch"
+					}
+
 					sp.initTestName()
 					r.Add(registry.TestSpec{
 						Name:      sp.testName,
 						Owner:     registry.OwnerDisasterRecovery,
 						Benchmark: true,
-						Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+						Cluster:   sp.hardware.makeClusterSpecs(r),
 						Timeout:   sp.timeout,
 						// These tests measure performance. To ensure consistent perf,
 						// disable metamorphic encryption.
@@ -219,7 +224,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 		registry.TestSpec{
 			Name:                      sp.testName,
 			Owner:                     registry.OwnerDisasterRecovery,
-			Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+			Cluster:                   sp.hardware.makeClusterSpecs(r),
 			Timeout:                   sp.timeout,
 			CompatibleClouds:          sp.backup.CompatibleClouds(),
 			Suites:                    sp.suites,
@@ -452,7 +457,7 @@ func waitForDownloadJob(
 			if err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(&status); err != nil {
 				return downloadJobEndTimeLowerBound, err
 			}
-			if status == string(jobs.StatusSucceeded) {
+			if status == string(jobs.StateSucceeded) {
 				var externalBytes uint64
 				if err := conn.QueryRow(jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes); err != nil {
 					return downloadJobEndTimeLowerBound, errors.Wrapf(err, "could not get external bytes")
@@ -465,7 +470,7 @@ func waitForDownloadJob(
 				time.Sleep(postDownloadDelay)
 				downloadJobEndTimeLowerBound = timeutil.Now().Add(-pollingInterval).Add(-postDownloadDelay)
 				return downloadJobEndTimeLowerBound, nil
-			} else if status == string(jobs.StatusRunning) {
+			} else if status == string(jobs.StateRunning) {
 				l.Printf("Download job still running")
 			} else {
 				return downloadJobEndTimeLowerBound, errors.Newf("job unexpectedly found in %s state", status)

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
@@ -118,7 +119,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	st := cluster.MakeClusterSettings()
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
-		EncryptionOptions: []byte("foo"),
+		EncryptionOptions: &storagepb.EncryptionOptions{},
 	}, nil /* statsCollector */)
 	require.NoError(t, err)
 
@@ -136,7 +137,11 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 }
 
 func fauxNewEncryptedEnvFunc(
-	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	unencryptedFS vfs.FS,
+	fr *fs.FileRegistry,
+	dbDir string,
+	readOnly bool,
+	_ *storagepb.EncryptionOptions,
 ) (*fs.EncryptionEnv, error) {
 	return &fs.EncryptionEnv{
 		Closer: nopCloser{},

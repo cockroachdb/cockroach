@@ -30,7 +30,7 @@ func TestConstraintValidationBeforeBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -133,7 +133,7 @@ func TestReadCommittedImplicitPartitionUpsert(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	// If test is in Ready state, transition to ReadDone and wait for conflict.
 	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{

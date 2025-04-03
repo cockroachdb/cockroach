@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // Base config defaults.
@@ -168,7 +165,7 @@ var (
 	//
 	// Raft election (fortification disabled):
 	// - Heartbeat offset (0-1 heartbeat interval)                [-1.00s - 0.00s]
-	// - Election timeout (random 1x-2x timeout)                  [ 2.00s - 4.00s]
+	// - Election timeout (timeout + random election jitter)      [ 2.00s - 4.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// Total latency                                              [ 1.03s - 5.20s]
 	//
@@ -189,7 +186,7 @@ var (
 	// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-1.00s - 0.00s]
 	// - Store Liveness expiration (constant)                     [ 3.00s - 3.00s]
 	// - Store Liveness withdrawal (0-1 withdrawal interval)      [ 0.00s - 0.10s]
-	// - Raft election timeout jitter (random 0x-1x timeout)      [ 0.00s - 2.00s]
+	// - Raft election timeout jitter (random election jitter)    [ 0.00s - 2.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// - Lease acquisition (1x RTT: append)                       [ 0.01s - 0.40s]
 	// Total latency                                              [ 2.04s - 6.70s]
@@ -242,6 +239,11 @@ var (
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RAFT_TICK_INTERVAL", 500*time.Millisecond)
 
+	// defaultRaftTickSmearInterval is the default interval at which ticks are
+	// enqueued at.
+	defaultRaftTickSmearInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RAFT_TICK_SMEAR_INTERVAL", time.Millisecond)
+
 	// defaultRaftHeartbeatIntervalTicks is the default value for
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
 	// each heartbeat.
@@ -250,7 +252,9 @@ var (
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
-	// multiplied by a random factor of 1-2, to avoid ties.
+	// selected randomly between the interval:
+	// [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	//
 	// A timeout of 2 seconds with a Raft heartbeat sent every second gives each
 	// heartbeat 1 second to make it across the network. This is only half a
@@ -260,6 +264,14 @@ var (
 	// random factor provides an additional buffer.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
+
+	// defaultRaftElectionTimeoutJitterTicks specifies the maximum number of Raft
+	// ticks after defaultRaftElectionTimeoutTicks before holding an election.
+	// The actual election timeout per replica is selected randomly between the
+	// interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
+	defaultRaftElectionTimeoutJitterTicks = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_JITTER_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
@@ -545,11 +557,22 @@ type RaftConfig struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
+	// RaftTickSmearInterval is the interval at which ticks are enqueued at. This
+	// will smear the Raft tick processing over the RaftTickInterval. It's used to
+	// prevent all raft scheduler threads running ticking at the same time without
+	// utilizing the full RaftTickInterval. You can disable this by setting it to
+	// 0.
+	RaftTickSmearInterval time.Duration
+
 	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
 	// an election. The actual election timeout is randomized by each replica to
-	// between 1-2 election timeouts. This value is inherited by individual stores
-	// unless overridden.
+	// between the interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	RaftElectionTimeoutTicks int64
+
+	// RaftElectionTimeoutJitterTicks is the maximum number of ticks after
+	// RaftElectionTimeoutTicks to hold an election.
+	RaftElectionTimeoutJitterTicks int64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
@@ -658,11 +681,6 @@ type RaftConfig struct {
 	//
 	// -1 to disable.
 	RaftDelaySplitToSuppressSnapshot time.Duration
-
-	// TestingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
-	// the check performed by a peer before campaigning to ensure it has
-	// StoreLiveness support from a majority quorum.
-	TestingDisablePreCampaignStoreLivenessCheck bool
 }
 
 // SetDefaults initializes unset fields.
@@ -670,8 +688,14 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftTickInterval == 0 {
 		cfg.RaftTickInterval = defaultRaftTickInterval
 	}
+	if cfg.RaftTickSmearInterval == 0 {
+		cfg.RaftTickSmearInterval = defaultRaftTickSmearInterval
+	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RaftElectionTimeoutJitterTicks == 0 {
+		cfg.RaftElectionTimeoutJitterTicks = defaultRaftElectionTimeoutJitterTicks
 	}
 	if cfg.RaftHeartbeatIntervalTicks == 0 {
 		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
@@ -868,163 +892,6 @@ type TempStorageConfig struct {
 	Settings *cluster.Settings
 }
 
-// WALFailoverMode specifies the mode of WAL failover.
-type WALFailoverMode int8
-
-const (
-	// WALFailoverDefault leaves the WAL failover configuration unspecified. Today
-	// this is interpreted as FailoverDisabled but future releases may default to
-	// another mode.
-	WALFailoverDefault WALFailoverMode = iota
-	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
-	// engine observe the latency of a store's primary WAL directly.
-	WALFailoverDisabled
-	// WALFailoverAmongStores enables WAL failover among multiple stores within a
-	// node. This setting has no effect if the node has a single store. When a
-	// storage engine observes high latency writing to its WAL, it may
-	// transparently failover to an arbitrary, predetermined other store's data
-	// directory. If successful in syncing log entries to the other store's
-	// volume, the batch commit latency is insulated from the effects of momentary
-	// disk stalls.
-	WALFailoverAmongStores
-	// WALFailoverExplicitPath enables WAL failover for a single-store node to an
-	// explicitly specified path.
-	WALFailoverExplicitPath
-)
-
-// String implements fmt.Stringer.
-func (m *WALFailoverMode) String() string {
-	return redact.StringWithoutMarkers(m)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch *m {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path")
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
-	}
-}
-
-// WALFailoverConfig configures a node's stores behavior under high write
-// latency to their write-ahead logs.
-type WALFailoverConfig struct {
-	Mode WALFailoverMode
-	// Path is the non-store path to which WALs should be written when failing
-	// over. It must be nonempty if and only if Mode == WALFailoverExplicitPath.
-	Path ExternalPath
-	// PrevPath is the previously used non-store path. It may be set with Mode ==
-	// WALFailoverExplicitPath (when changing the secondary path) or
-	// WALFailoverDisabled (when disabling WAL failover after it was previously
-	// enabled with WALFailoverExplicitPath). It must be empty for other modes.
-	// If Mode is WALFailoverDisabled and previously WAL failover was enabled
-	// using WALFailoverAmongStores, then PrevPath must not be set.
-	PrevPath ExternalPath
-}
-
-// ExternalPath represents a non-store path and associated encryption-at-rest
-// configuration.
-type ExternalPath struct {
-	Path string
-	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
-	// the encryption-at-rest configuration. If encryption-at-rest has ever been
-	// enabled on the store, this field must be set.
-	EncryptionOptions []byte
-}
-
-// IsSet returns whether or not the external path was provided.
-func (e ExternalPath) IsSet() bool { return e.Path != "" }
-
-// Type implements the pflag.Value interface.
-func (c *WALFailoverConfig) Type() string { return "string" }
-
-// String implements fmt.Stringer.
-func (c *WALFailoverConfig) String() string {
-	return redact.StringWithoutMarkers(c)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch c.Mode {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path=")
-		p.SafeString(redact.SafeString(c.Path.Path))
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(c.Mode))
-	}
-}
-
-// Set implements the pflag.Value interface.
-func (c *WALFailoverConfig) Set(s string) error {
-	switch {
-	case strings.HasPrefix(s, "disabled"):
-		c.Mode = WALFailoverDisabled
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
-		if !ok || c.Path.IsSet() {
-			return errors.Newf("invalid disabled --wal-failover setting: %s "+
-				"expect disabled[,prev_path=<prev_path>]", s)
-		}
-	case s == "among-stores":
-		c.Mode = WALFailoverAmongStores
-	case strings.HasPrefix(s, "path="):
-		c.Mode = WALFailoverExplicitPath
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
-		if !ok || !c.Path.IsSet() {
-			return errors.Newf("invalid path --wal-failover setting: %s "+
-				"expect path=<path>[,prev_path=<prev_path>]", s)
-		}
-	default:
-		return errors.Newf("invalid --wal-failover setting: %s "+
-			"(possible values: disabled, among-stores, path=<path>)", s)
-	}
-	return nil
-}
-
-func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
-	if s == "" {
-		return "", "", true
-	}
-	if s2 := strings.TrimPrefix(s, "path="); len(s2) < len(s) {
-		s = s2
-		if i := strings.IndexByte(s, ','); i == -1 {
-			return s, "", true
-		} else {
-			path = s[:i]
-			s = s[i:]
-		}
-	}
-
-	// Any remainder must be a prev_path= field.
-	if !strings.HasPrefix(s, ",prev_path=") {
-		return "", "", false
-	}
-	prevPath = strings.TrimPrefix(s, ",prev_path=")
-	return path, prevPath, true
-}
-
 // ExternalIODirConfig describes various configuration options pertaining
 // to external storage implementations.
 // TODO(adityamaru): Rename ExternalIODirConfig to ExternalIOConfig because it
@@ -1080,11 +947,11 @@ func InheritTempStorageConfig(
 func newTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
 ) TempStorageConfig {
-	var monitorName mon.MonitorName
+	var monitorName mon.Name
 	if inMemory {
-		monitorName = mon.MakeMonitorName("in-mem temp storage")
+		monitorName = mon.MakeName("in-mem temp storage")
 	} else {
-		monitorName = mon.MakeMonitorName("temp disk storage")
+		monitorName = mon.MakeName("temp disk storage")
 	}
 	monitor := mon.NewMonitor(mon.Options{
 		Name:      monitorName,

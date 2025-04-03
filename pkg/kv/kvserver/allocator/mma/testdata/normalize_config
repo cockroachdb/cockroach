@@ -1,0 +1,456 @@
+# No constraint or voter constraints, and normalization adds the empty
+# constraint.
+normalize num-replicas=3 num-voters=3
+----
+input:
+ num-replicas=3 num-voters=3
+output:
+ num-replicas=3 num-voters=3
+ constraints:
+   :3
+
+# No constraint, but have non-voters. Normalization adds the empty constraint.
+normalize num-replicas=5 num-voters=3
+voter-constraint +region=a
+----
+input:
+ num-replicas=5 num-voters=3
+ voter-constraints:
+   +region=a
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=a:3
+   :2
+ voter-constraints:
+   +region=a:3
+
+normalize num-replicas=3 num-voters=3
+constraint +region=us-west -zone=us-west-b
+constraint +zone=us-west-a
+lease-preference +region=us-west +rack=10
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-b
+   +zone=us-west-a
+ lease-preferences:
+   +region=us-west,+rack=10
+output:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a,-zone=us-west-b:3
+ lease-preferences:
+   +region=us-west,+rack=10
+
+normalize num-replicas=3 num-voters=3
+voter-constraint +region=us-west -zone=us-west-b
+voter-constraint +zone=us-west-a
+----
+input:
+ num-replicas=3 num-voters=3
+ voter-constraints:
+   +region=us-west,-zone=us-west-b
+   +zone=us-west-a
+output:
+ num-replicas=3 num-voters=3
+ voter-constraints:
+   +region=us-west,+zone=us-west-a,-zone=us-west-b:3
+
+normalize num-replicas=5 num-voters=5
+constraint num-replicas=1 -zone=us-west-b
+constraint +zone=us-west-a
+lease-preference +region=us-west +rack=10
+----
+input:
+ num-replicas=5 num-voters=5
+ constraints:
+   -zone=us-west-b:1
+   +zone=us-west-a
+ lease-preferences:
+   +region=us-west,+rack=10
+err=invalid mix of constraints
+
+normalize num-replicas=5 num-voters=3
+constraint num-replicas=1 -zone=us-west-b -zone=us-west-b +rack=10
+constraint num-replicas=2 +zone=us-west-a
+voter-constraint num-replicas=2 +zone=us-west-a
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   -zone=us-west-b,-zone=us-west-b,+rack=10:1
+   +zone=us-west-a:2
+ voter-constraints:
+   +zone=us-west-a:2
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   +rack=10,-zone=us-west-b:1
+   +zone=us-west-a:2
+   :2
+ voter-constraints:
+   +zone=us-west-a:2
+   :1
+
+# Multi-region config with all voters in one region, and one voter pinned to a
+# zone.
+normalize num-replicas=5 num-voters=3
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+voter-constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=a -zone=a1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b:1
+   +region=c:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,-zone=a1:1
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b:1
+   +region=c:1
+   +region=a,-zone=a1:1
+   +region=a,+zone=a1:1
+   :1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,-zone=a1:1
+   :1
+
+# Similar to previous, but with another constraint that does not intersect with the
+# voter constraints.
+normalize num-replicas=5 num-voters=3
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+constraint num-replicas=1 +region=d
+voter-constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=a -zone=a1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b:1
+   +region=c:1
+   +region=d:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,-zone=a1:1
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=a,-zone=a1:1
+   +region=a,+zone=a1:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,-zone=a1:1
+   +region=b:1
+
+# Simple multi-region config with voters in multiple regions.
+normalize num-replicas=5 num-voters=5
+constraint num-replicas=2 +region=a
+constraint num-replicas=2 +region=b
+constraint num-replicas=1 +region=c
+voter-constraint num-replicas=2 +region=a
+voter-constraint num-replicas=2 +region=b
+voter-constraint num-replicas=1 +region=c
+lease-preference +region=a
+lease-preference +region=b
+lease-preference +region=c
+----
+input:
+ num-replicas=5 num-voters=5
+ constraints:
+   +region=a:2
+   +region=b:2
+   +region=c:1
+ voter-constraints:
+   +region=a:2
+   +region=b:2
+   +region=c:1
+ lease-preferences:
+   +region=a
+   +region=b
+   +region=c
+output:
+ num-replicas=5 num-voters=5
+ constraints:
+   +region=a:2
+   +region=b:2
+   +region=c:1
+ voter-constraints:
+   +region=a:2
+   +region=b:2
+   +region=c:1
+ lease-preferences:
+   +region=a
+   +region=b
+   +region=c
+
+# Multi-region config with under-specified voter-constraint.
+normalize num-replicas=9 num-voters=9
+constraint num-replicas=1 +region=a
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+constraint num-replicas=1 +region=d
+constraint num-replicas=1 +region=e
+voter-constraint num-replicas=2 +region=f
+lease-preference +region=f
+----
+input:
+ num-replicas=9 num-voters=9
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+ voter-constraints:
+   +region=f:2
+ lease-preferences:
+   +region=f
+output:
+ num-replicas=9 num-voters=9
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+   +region=f:2
+   :2
+ voter-constraints:
+   +region=f:2
+   +region=e:1
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   :2
+ lease-preferences:
+   +region=f
+
+# Multi-region config with under-specified voter-constraint.
+normalize num-replicas=9 num-voters=7
+constraint num-replicas=1 +region=a
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+constraint num-replicas=1 +region=d
+constraint num-replicas=1 +region=e
+voter-constraint num-replicas=2 +region=f
+lease-preference +region=f
+----
+input:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+ voter-constraints:
+   +region=f:2
+ lease-preferences:
+   +region=f
+output:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+   +region=f:2
+   :2
+ voter-constraints:
+   +region=f:2
+   +region=c:1
+   +region=a:1
+   +region=b:1
+   :2
+ lease-preferences:
+   +region=f
+
+normalize num-replicas=5 num-voters=3
+constraint num-replicas=1 +region=b +zone=b2
+constraint num-replicas=1 +region=c +zone=c2
+voter-constraint num-replicas=1 +region=b +zone=b1
+voter-constraint num-replicas=1 +region=a -zone=a1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+ voter-constraints:
+   +region=b,+zone=b1:1
+   +region=a,-zone=a1:1
+err=intersecting conjunctions in constraints and voter constraints
+output:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=a,-zone=a1:1
+   +region=b,+zone=b1:1
+   :1
+ voter-constraints:
+   +region=b,+zone=b1:1
+   +region=a,-zone=a1:1
+   :1
+
+# Multi-region with under-specified voter-constraint. In this case the
+# under-specification is not the unconstrained set, but the conjunction
+# "+region=b", which can be further narrowed.
+normalize num-replicas=3 num-voters=3
+constraint num-replicas=1 +region=b +zone=b2
+constraint num-replicas=1 +region=c +zone=c2
+constraint num-replicas=1 +region=d +zone=d2
+voter-constraint num-replicas=2 +region=b
+voter-constraint num-replicas=1 +region=c +zone=c2
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+ voter-constraints:
+   +region=b:2
+   +region=c,+zone=c2:1
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+output:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+ voter-constraints:
+   +region=b:1
+   +region=c,+zone=c2:1
+   +region=b,+zone=b2:1
+
+# Similar to previous, but under-specified in a way that does not generate an
+# error.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=1 +region=b +zone=b2
+constraint num-replicas=1 +region=c +zone=c2
+constraint num-replicas=1 +region=d +zone=d2
+voter-constraint num-replicas=1 +region=e
+voter-constraint num-replicas=1 +region=c
+voter-constraint num-replicas=1 +region=d
+----
+input:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+ voter-constraints:
+   +region=e:1
+   +region=c:1
+   +region=d:1
+output:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+   +region=e:1
+ voter-constraints:
+   +region=e:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+
+# Single-region very under-specified.
+normalize num-replicas=9 num-voters=5
+constraint num-replicas=3 +region=a +zone=a1
+constraint num-replicas=3 +region=a +zone=a2
+constraint num-replicas=3 +region=a +zone=a3
+voter-constraint num-replicas=5 +region=a
+----
+input:
+ num-replicas=9 num-voters=5
+ constraints:
+   +region=a,+zone=a1:3
+   +region=a,+zone=a2:3
+   +region=a,+zone=a3:3
+ voter-constraints:
+   +region=a:5
+output:
+ num-replicas=9 num-voters=5
+ constraints:
+   +region=a,+zone=a1:3
+   +region=a,+zone=a2:3
+   +region=a,+zone=a3:3
+ voter-constraints:
+   +region=a,+zone=a1:2
+   +region=a,+zone=a2:2
+   +region=a,+zone=a3:1
+
+# Config from #106559.
+normalize num-replicas=6 num-voters=5
+constraint num-replicas=1 +region=eu-west-1
+constraint num-replicas=1 +region=us-central-1
+constraint num-replicas=1 +region=us-east-1
+constraint num-replicas=1 +region=us-west-1
+voter-constraint num-replicas=2 +region=us-west-1
+voter-constraint num-replicas=2 +region=us-east-1
+----
+input:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:1
+   +region=us-west-1:1
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+output:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:2
+   +region=us-west-1:2
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+   +region=eu-west-1:1
+
+# Config from #122292. Note that the normalization over-specifies by adding a
+# voter constraint for +region=a:1. Based on the original configuration,
+# either +region=a:1 or +region=b:1 could be added, but we cannot express a
+# disjunction.
+normalize num-replicas=4 num-voters=3
+constraint num-replicas=1 +region=a
+constraint num-replicas=1 +region=b
+constraint num-replicas=1 +region=c
+voter-constraint num-replicas=2 +region=c
+----
+input:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+ voter-constraints:
+   +region=c:2
+output:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:2
+ voter-constraints:
+   +region=c:2
+   +region=a:1

@@ -1,0 +1,1535 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/join_hash.out --label=/mnt/data1/postgres/src/test/regress/results/join_hash.out /mnt/data1/postgres/src/test/regress/expected/join_hash.out /mnt/data1/postgres/src/test/regress/results/join_hash.out
+--- /mnt/data1/postgres/src/test/regress/expected/join_hash.out
++++ /mnt/data1/postgres/src/test/regress/results/join_hash.out
+@@ -3,8 +3,22 @@
+ --
+ begin;
+ set local min_parallel_table_scan_size = 0;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set local parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_hashjoin = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Extract bucket and batch counts from an explain analyze plan.  In
+ -- general we can't make assertions about how many batches (or
+ -- buckets) will be required because it can vary, but we can in some
+@@ -31,6 +45,7 @@
+   end if;
+ end;
+ $$;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create or replace function hash_join_batches(query text)
+ returns table (original int, final int) language plpgsql
+ as
+@@ -49,383 +64,312 @@
+   end loop;
+ end;
+ $$;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Make a simple relation with well distributed keys and correctly
+ -- estimated size.
+ create table simple as
+   select generate_series(1, 20000) AS id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table simple set (parallel_workers = 2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ analyze simple;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Make a relation whose size we will under-estimate.  We want stats
+ -- to say 1000 rows, but actually there are 20,000 rows.
+ create table bigger_than_it_looks as
+   select generate_series(1, 20000) as id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table bigger_than_it_looks set (autovacuum_enabled = 'false');
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table bigger_than_it_looks set (parallel_workers = 2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ analyze bigger_than_it_looks;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ update pg_class set reltuples = 1000 where relname = 'bigger_than_it_looks';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Make a relation whose size we underestimate and that also has a
+ -- kind of skew that breaks our batching scheme.  We want stats to say
+ -- 2 rows, but actually there are 20,000 rows with the same key.
+ create table extremely_skewed (id int, t text);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table extremely_skewed set (autovacuum_enabled = 'false');
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table extremely_skewed set (parallel_workers = 2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ analyze extremely_skewed;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ insert into extremely_skewed
+   select 42 as id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+   from generate_series(1, 20000);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ update pg_class
+   set reltuples = 2, relpages = pg_relation_size('extremely_skewed') / 8192
+   where relname = 'extremely_skewed';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Make a relation with a couple of enormous tuples.
+ create table wide as select generate_series(1, 2) as id, rpad('', 320000, 'x') as t;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table wide set (parallel_workers = 2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- The "optimal" case: the hash table fits in memory; we plan for 1
+ -- batch, we stick to that number, and peak memory usage stays within
+ -- our work_mem budget
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on simple s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-oblivious hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-                      QUERY PLAN                       
+--------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Hash
+-                           ->  Seq Scan on simple s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-aware hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on simple s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- The "good" case: batches required, but we plan the right number; we
+ -- plan for some number of batches, and we stick to that number, and
+ -- peak memory usage says within our work_mem budget
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on simple s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- t                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-oblivious hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-                      QUERY PLAN                       
+--------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Hash
+-                           ->  Seq Scan on simple s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- t                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-aware hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '192kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join simple s using (id);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on simple s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- t                    | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- parallel full multi-batch hash join
+ select count(*) from simple r full outer join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- The "bad" case: during execution we need to increase number of
+ -- batches; in this case we plan for 1 batch, and increase at least a
+ -- couple of times, and peak memory usage stays within our work_mem
+ -- budget
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Aggregate
+-   ->  Hash Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on bigger_than_it_looks s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) FROM simple r JOIN bigger_than_it_looks s USING (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-oblivious hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join bigger_than_it_looks s using (id);
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Hash
+-                           ->  Seq Scan on bigger_than_it_looks s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join bigger_than_it_looks s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join bigger_than_it_looks s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-aware hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '192kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join bigger_than_it_looks s using (id);
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 1
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on bigger_than_it_looks s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join bigger_than_it_looks s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select original > 1 as initially_multibatch, final > original as increased_batches
+   from hash_join_batches(
+ $$
+   select count(*) from simple r join bigger_than_it_looks s using (id);
+ $$);
+- initially_multibatch | increased_batches 
+-----------------------+-------------------
+- f                    | t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- The "ugly" case: increasing the number of batches during execution
+ -- doesn't help, so stop trying to fit in work_mem and hope for the
+ -- best; in this case we plan for 1 batch, increases just once and
+@@ -433,172 +377,148 @@
+ -- right through the work_mem budget and hope for the best...
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join extremely_skewed s using (id);
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Aggregate
+-   ->  Hash Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on extremely_skewed s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join extremely_skewed s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from hash_join_batches(
+ $$
+   select count(*) from simple r join extremely_skewed s using (id);
+ $$);
+- original | final 
+-----------+-------
+-        1 |     2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-oblivious hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join extremely_skewed s using (id);
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Hash Join
+-               Hash Cond: (r.id = s.id)
+-               ->  Parallel Seq Scan on simple r
+-               ->  Hash
+-                     ->  Seq Scan on extremely_skewed s
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join extremely_skewed s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from hash_join_batches(
+ $$
+   select count(*) from simple r join extremely_skewed s using (id);
+ $$);
+- original | final 
+-----------+-------
+-        1 |     2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallel with parallel-aware hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from simple r join extremely_skewed s using (id);
+-                              QUERY PLAN                               
+------------------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 1
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on extremely_skewed s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from simple r join extremely_skewed s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from hash_join_batches(
+ $$
+   select count(*) from simple r join extremely_skewed s using (id);
+ $$);
+- original | final 
+-----------+-------
+-        1 |     4
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- A couple of other hash join tests unrelated to work_mem management.
+ -- Check that EXPLAIN ANALYZE has data even if the leader doesn't participate
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from hash_join_batches(
+ $$
+   select count(*) from simple r join simple s using (id);
+ $$);
+- original | final 
+-----------+-------
+-        1 |     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- Exercise rescans.  We'll turn off parallel_leader_participation so
+ -- that we can check that instrumentation comes back correctly.
+ create table join_foo as select generate_series(1, 3) as id, 'xxxxx'::text as t;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table join_foo set (parallel_workers = 0);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create table join_bar as select generate_series(1, 10000) as id, 'xxxxx'::text as t;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ alter table join_bar set (parallel_workers = 2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- multi-batch with rescan, parallel-oblivious
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_mergejoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set work_mem = '64kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from join_foo
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop Left Join
+-         Join Filter: ((join_foo.id < (b1.id + 1)) AND (join_foo.id > (b1.id - 1)))
+-         ->  Seq Scan on join_foo
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Hash Join
+-                     Hash Cond: (b1.id = b2.id)
+-                     ->  Parallel Seq Scan on join_bar b1
+-                     ->  Hash
+-                           ->  Seq Scan on join_bar b2
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from join_foo
+   left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+   on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select final > 1 as multibatch
+   from hash_join_batches(
+ $$
+@@ -606,51 +526,45 @@
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+ $$);
+- multibatch 
+-------------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- single-batch with rescan, parallel-oblivious
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_mergejoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from join_foo
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop Left Join
+-         Join Filter: ((join_foo.id < (b1.id + 1)) AND (join_foo.id > (b1.id - 1)))
+-         ->  Seq Scan on join_foo
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Hash Join
+-                     Hash Cond: (b1.id = b2.id)
+-                     ->  Parallel Seq Scan on join_bar b1
+-                     ->  Hash
+-                           ->  Seq Scan on join_bar b2
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from join_foo
+   left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+   on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select final > 1 as multibatch
+   from hash_join_batches(
+ $$
+@@ -658,51 +572,45 @@
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+ $$);
+- multibatch 
+-------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- multi-batch with rescan, parallel-aware
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_mergejoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set work_mem = '64kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from join_foo
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop Left Join
+-         Join Filter: ((join_foo.id < (b1.id + 1)) AND (join_foo.id > (b1.id - 1)))
+-         ->  Seq Scan on join_foo
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Parallel Hash Join
+-                     Hash Cond: (b1.id = b2.id)
+-                     ->  Parallel Seq Scan on join_bar b1
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on join_bar b2
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from join_foo
+   left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+   on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select final > 1 as multibatch
+   from hash_join_batches(
+ $$
+@@ -710,51 +618,45 @@
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+ $$);
+- multibatch 
+-------------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- single-batch with rescan, parallel-aware
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_mergejoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set work_mem = '4MB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select count(*) from join_foo
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Aggregate
+-   ->  Nested Loop Left Join
+-         Join Filter: ((join_foo.id < (b1.id + 1)) AND (join_foo.id > (b1.id - 1)))
+-         ->  Seq Scan on join_foo
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Parallel Hash Join
+-                     Hash Cond: (b1.id = b2.id)
+-                     ->  Parallel Seq Scan on join_bar b1
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on join_bar b2
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from join_foo
+   left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+   on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select final > 1 as multibatch
+   from hash_join_batches(
+ $$
+@@ -762,237 +664,187 @@
+     left join (select b1.id, b1.t from join_bar b1 join join_bar b2 using (id)) ss
+     on join_foo.id < ss.id + 1 and join_foo.id > ss.id - 1;
+ $$);
+- multibatch 
+-------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- A full outer join where every record is matched.
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s using (id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Full Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on simple s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallelism not possible with parallel-oblivious full hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s using (id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Full Join
+-         Hash Cond: (r.id = s.id)
+-         ->  Seq Scan on simple r
+-         ->  Hash
+-               ->  Seq Scan on simple s
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallelism is possible with parallel-aware full hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s using (id);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Full Join
+-                     Hash Cond: (r.id = s.id)
+-                     ->  Parallel Seq Scan on simple r
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on simple s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s using (id);
+- count 
+--------
+- 20000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- A full outer join where every record is not matched.
+ -- non-parallel
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Full Join
+-         Hash Cond: ((0 - s.id) = r.id)
+-         ->  Seq Scan on simple s
+-         ->  Hash
+-               ->  Seq Scan on simple r
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+- count 
+--------
+- 40000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallelism not possible with parallel-oblivious full hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+-               QUERY PLAN               
+-----------------------------------------
+- Aggregate
+-   ->  Hash Full Join
+-         Hash Cond: ((0 - s.id) = r.id)
+-         ->  Seq Scan on simple s
+-         ->  Hash
+-               ->  Seq Scan on simple r
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+- count 
+--------
+- 40000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- parallelism is possible with parallel-aware full hash join
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+      select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Full Join
+-                     Hash Cond: ((0 - s.id) = r.id)
+-                     ->  Parallel Seq Scan on simple s
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on simple r
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select  count(*) from simple r full outer join simple s on (r.id = 0 - s.id);
+- count 
+--------
+- 40000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- exercise special code paths for huge tuples (note use of non-strict
+ -- expression and left join required to get the detoasted tuple into
+ -- the hash table)
+ -- parallel with parallel-aware hash join (hits ExecParallelHashLoadTuple and
+ -- sts_puttuple oversized tuple cases because it's multi-batch)
+ savepoint settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set max_parallel_workers_per_gather = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set work_mem = '128kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set hash_mem_multiplier = 1.0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off)
+   select length(max(s.t))
+   from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Partial Aggregate
+-               ->  Parallel Hash Left Join
+-                     Hash Cond: (wide.id = wide_1.id)
+-                     ->  Parallel Seq Scan on wide
+-                     ->  Parallel Hash
+-                           ->  Parallel Seq Scan on wide wide_1
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select length(max(s.t))
+ from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
+- length 
+---------
+- 320000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select final > 1 as multibatch
+   from hash_join_batches(
+ $$
+   select length(max(s.t))
+   from wide left join (select id, coalesce(t, '') || '' as t from wide) s using (id);
+ $$);
+- multibatch 
+-------------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback to settings;
++ERROR:  savepoint "settings" does not exist
+ -- Hash join reuses the HOT status bit to indicate match status. This can only
+ -- be guaranteed to produce correct results if all the hash join tuple match
+ -- bits are reset before reuse. This is done upon loading them into the
+ -- hashtable.
+ SAVEPOINT settings;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET enable_parallel_hash = on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET parallel_setup_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE TABLE hjtest_matchbits_t1(id int);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE TABLE hjtest_matchbits_t2(id int);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_matchbits_t1 VALUES (1);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_matchbits_t2 VALUES (2);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Update should create a HOT tuple. If this status bit isn't cleared, we won't
+ -- correctly emit the NULL-extended unmatching tuple in full hash join.
+ UPDATE hjtest_matchbits_t2 set id = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM hjtest_matchbits_t1 t1 FULL JOIN hjtest_matchbits_t2 t2 ON t1.id = t2.id
+   ORDER BY t1.id;
+- id | id 
+-----+----
+-  1 |   
+-    |  2
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Test serial full hash join.
+ -- Resetting parallel_setup_cost should force a serial plan.
+ -- Just to be safe, however, set enable_parallel_hash to off, as parallel full
+ -- hash joins are only supported with shared hashtables.
+ RESET parallel_setup_cost;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET enable_parallel_hash = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM hjtest_matchbits_t1 t1 FULL JOIN hjtest_matchbits_t2 t2 ON t1.id = t2.id;
+- id | id 
+-----+----
+-  1 |   
+-    |  2
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO settings;
++ERROR:  savepoint "settings" does not exist
+ rollback;
+ -- Verify that hash key expressions reference the correct
+ -- nodes. Hashjoin's hashkeys need to reference its outer plan, Hash's
+@@ -1007,18 +859,42 @@
+ --
+ BEGIN;
+ SET LOCAL enable_sort = OFF; -- avoid mergejoins
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL from_collapse_limit = 1; -- allows easy changing of join order
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE TABLE hjtest_1 (a text, b int, id int, c bool);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE TABLE hjtest_2 (a bool, id int, b text, c int);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_1(a, b, id, c) VALUES ('text', 2, 1, false); -- matches
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_1(a, b, id, c) VALUES ('text', 1, 2, false); -- fails id join condition
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_1(a, b, id, c) VALUES ('text', 20, 1, false); -- fails < 50
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_1(a, b, id, c) VALUES ('text', 1, 1, false); -- fails (SELECT hjtest_1.b * 5) = (SELECT hjtest_2.c*5)
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_2(a, id, b, c) VALUES (true, 1, 'another', 2); -- matches
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_2(a, id, b, c) VALUES (true, 3, 'another', 7); -- fails id join condition
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_2(a, id, b, c) VALUES (true, 1, 'another', 90);  -- fails < 55
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_2(a, id, b, c) VALUES (true, 1, 'another', 3); -- fails (SELECT hjtest_1.b * 5) = (SELECT hjtest_2.c*5)
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO hjtest_2(a, id, b, c) VALUES (true, 1, 'text', 1); --  fails hjtest_1.a <> hjtest_2.b;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS OFF, VERBOSE)
+ SELECT hjtest_1.a a1, hjtest_2.a a2,hjtest_1.tableoid::regclass t1, hjtest_2.tableoid::regclass t2
+ FROM hjtest_1, hjtest_2
+@@ -1028,38 +904,11 @@
+     AND (SELECT hjtest_1.b * 5) < 50
+     AND (SELECT hjtest_2.c * 5) < 55
+     AND hjtest_1.a <> hjtest_2.b;
+-                                           QUERY PLAN                                           
+-------------------------------------------------------------------------------------------------
+- Hash Join
+-   Output: hjtest_1.a, hjtest_2.a, (hjtest_1.tableoid)::regclass, (hjtest_2.tableoid)::regclass
+-   Hash Cond: ((hjtest_1.id = (SubPlan 1)) AND ((SubPlan 2) = (SubPlan 3)))
+-   Join Filter: (hjtest_1.a <> hjtest_2.b)
+-   ->  Seq Scan on public.hjtest_1
+-         Output: hjtest_1.a, hjtest_1.tableoid, hjtest_1.id, hjtest_1.b
+-         Filter: ((SubPlan 4) < 50)
+-         SubPlan 4
+-           ->  Result
+-                 Output: (hjtest_1.b * 5)
+-   ->  Hash
+-         Output: hjtest_2.a, hjtest_2.tableoid, hjtest_2.id, hjtest_2.c, hjtest_2.b
+-         ->  Seq Scan on public.hjtest_2
+-               Output: hjtest_2.a, hjtest_2.tableoid, hjtest_2.id, hjtest_2.c, hjtest_2.b
+-               Filter: ((SubPlan 5) < 55)
+-               SubPlan 5
+-                 ->  Result
+-                       Output: (hjtest_2.c * 5)
+-         SubPlan 1
+-           ->  Result
+-                 Output: 1
+-                 One-Time Filter: (hjtest_2.id = 1)
+-         SubPlan 3
+-           ->  Result
+-                 Output: (hjtest_2.c * 5)
+-   SubPlan 2
+-     ->  Result
+-           Output: (hjtest_1.b * 5)
+-(28 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF, VERBOSE)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT hjtest_1.a a1, hjtest_2.a a2,hjtest_1.tableoid::regclass t1, hjtest_2.tableoid::regclass t2
+ FROM hjtest_1, hjtest_2
+ WHERE
+@@ -1068,11 +917,7 @@
+     AND (SELECT hjtest_1.b * 5) < 50
+     AND (SELECT hjtest_2.c * 5) < 55
+     AND hjtest_1.a <> hjtest_2.b;
+-  a1  | a2 |    t1    |    t2    
+-------+----+----------+----------
+- text | t  | hjtest_1 | hjtest_2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS OFF, VERBOSE)
+ SELECT hjtest_1.a a1, hjtest_2.a a2,hjtest_1.tableoid::regclass t1, hjtest_2.tableoid::regclass t2
+ FROM hjtest_2, hjtest_1
+@@ -1082,38 +927,11 @@
+     AND (SELECT hjtest_1.b * 5) < 50
+     AND (SELECT hjtest_2.c * 5) < 55
+     AND hjtest_1.a <> hjtest_2.b;
+-                                           QUERY PLAN                                           
+-------------------------------------------------------------------------------------------------
+- Hash Join
+-   Output: hjtest_1.a, hjtest_2.a, (hjtest_1.tableoid)::regclass, (hjtest_2.tableoid)::regclass
+-   Hash Cond: (((SubPlan 1) = hjtest_1.id) AND ((SubPlan 3) = (SubPlan 2)))
+-   Join Filter: (hjtest_1.a <> hjtest_2.b)
+-   ->  Seq Scan on public.hjtest_2
+-         Output: hjtest_2.a, hjtest_2.tableoid, hjtest_2.id, hjtest_2.c, hjtest_2.b
+-         Filter: ((SubPlan 5) < 55)
+-         SubPlan 5
+-           ->  Result
+-                 Output: (hjtest_2.c * 5)
+-   ->  Hash
+-         Output: hjtest_1.a, hjtest_1.tableoid, hjtest_1.id, hjtest_1.b
+-         ->  Seq Scan on public.hjtest_1
+-               Output: hjtest_1.a, hjtest_1.tableoid, hjtest_1.id, hjtest_1.b
+-               Filter: ((SubPlan 4) < 50)
+-               SubPlan 4
+-                 ->  Result
+-                       Output: (hjtest_1.b * 5)
+-         SubPlan 2
+-           ->  Result
+-                 Output: (hjtest_1.b * 5)
+-   SubPlan 1
+-     ->  Result
+-           Output: 1
+-           One-Time Filter: (hjtest_2.id = 1)
+-   SubPlan 3
+-     ->  Result
+-           Output: (hjtest_2.c * 5)
+-(28 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF, VERBOSE)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT hjtest_1.a a1, hjtest_2.a a2,hjtest_1.tableoid::regclass t1, hjtest_2.tableoid::regclass t2
+ FROM hjtest_2, hjtest_1
+ WHERE
+@@ -1122,45 +940,38 @@
+     AND (SELECT hjtest_1.b * 5) < 50
+     AND (SELECT hjtest_2.c * 5) < 55
+     AND hjtest_1.a <> hjtest_2.b;
+-  a1  | a2 |    t1    |    t2    
+-------+----+----------+----------
+- text | t  | hjtest_1 | hjtest_2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- Verify that we behave sanely when the inner hash keys contain parameters
+ -- (that is, outer or lateral references).  This situation has to defeat
+ -- re-use of the inner hash table across rescans.
+ begin;
+ set local enable_hashjoin = on;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select i8.q2, ss.* from
+ int8_tbl i8,
+ lateral (select t1.fivethous, i4.f1 from tenk1 t1 join int4_tbl i4
+          on t1.fivethous = i4.f1+i8.q2 order by 1,2) ss;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on int8_tbl i8
+-   ->  Sort
+-         Sort Key: t1.fivethous, i4.f1
+-         ->  Hash Join
+-               Hash Cond: (t1.fivethous = (i4.f1 + i8.q2))
+-               ->  Seq Scan on tenk1 t1
+-               ->  Hash
+-                     ->  Seq Scan on int4_tbl i4
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select i8.q2, ss.* from
+ int8_tbl i8,
+ lateral (select t1.fivethous, i4.f1 from tenk1 t1 join int4_tbl i4
+          on t1.fivethous = i4.f1+i8.q2 order by 1,2) ss;
+- q2  | fivethous | f1 
+------+-----------+----
+- 456 |       456 |  0
+- 456 |       456 |  0
+- 123 |       123 |  0
+- 123 |       123 |  0
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;

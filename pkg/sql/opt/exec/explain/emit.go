@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
@@ -180,7 +181,7 @@ func emitInternal(
 				return err
 			}
 			visitedFKsByCascades[fkID] = struct{}{}
-			defer delete(visitedFKsByCascades, fkID)
+			defer delete(visitedFKsByCascades, fkID) //nolint:deferloop
 		}
 		if err = emitPostQuery(cascade, cascadePlan, alreadyEmitted); err != nil {
 			return err
@@ -433,6 +434,8 @@ var nodeNames = [...]string{
 	updateOp:               "update",
 	upsertOp:               "upsert",
 	valuesOp:               "", // This node does not have a fixed name.
+	vectorSearchOp:         "vector search",
+	vectorMutationSearchOp: "vector mutation search",
 	windowOp:               "window",
 	zigzagJoinOp:           "zigzag join",
 }
@@ -486,6 +489,13 @@ func omitStats(n *Node) bool {
 }
 
 func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context, n *Node) error {
+	timeIfNonZero := func(d optional.Duration, key string) {
+		if d.HasValue() {
+			if t := string(humanizeutil.Duration(d.Value())); t != "0µs" {
+				e.ob.AddField(key, t)
+			}
+		}
+	}
 	var actualRowCount uint64
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
@@ -517,9 +527,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.KVTime.HasValue() {
 			e.ob.AddField("KV time", string(humanizeutil.Duration(s.KVTime.Value())))
 		}
-		if s.KVContentionTime.HasValue() {
-			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
-		}
+		timeIfNonZero(s.KVContentionTime, "KV contention time")
+		timeIfNonZero(s.KVLockWaitTime, "KV lock wait time")
+		timeIfNonZero(s.KVLatchWaitTime, "KV latch wait time")
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
@@ -538,6 +548,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		if s.KVBatchRequestsIssued.HasValue() {
 			e.ob.AddField("KV gRPC calls", string(humanizeutil.Count(s.KVBatchRequestsIssued.Value())))
+		}
+		if s.ExecTime.HasValue() {
+			e.ob.AddField("execution time", string(humanizeutil.Duration(s.ExecTime.Value())))
 		}
 		if s.MaxAllocatedMem.HasValue() {
 			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
@@ -703,12 +716,15 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			ob.VAttr("parallel", "")
 		}
 		e.emitLockingPolicy(a.Params.Locking)
+		e.emitPolicies(ob, a.Table, n)
 
 	case valuesOp:
 		a := n.args.(*valuesArgs)
-		// Don't emit anything for the "norows" and "emptyrow" cases.
+		// Don't emit anything, except policy info, for the "norows" and "emptyrow" cases.
 		if len(a.Rows) > 0 && (len(a.Rows) > 1 || len(a.Columns) > 0) {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Columns))
+		} else if len(a.Rows) == 0 {
+			e.emitPolicies(ob, nil, n)
 		}
 
 	case filterOp:
@@ -854,6 +870,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if a.EqColsAreKey {
 			ob.Attr("equality cols are key", "")
 		}
+		if a.ReverseScans {
+			ob.Attr("reverse scans", "")
+		}
 		ob.Expr("lookup condition", a.LookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("remote lookup condition", a.RemoteLookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
@@ -924,6 +943,40 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		a := n.args.(*scanBufferArgs)
 		ob.Attr("label", a.Label)
 
+	case vectorSearchOp:
+		a := n.args.(*vectorSearchArgs)
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		ob.Attr("target count", a.TargetNeighborCount)
+		if a.PrefixConstraint != nil {
+			params := exec.ScanParams{
+				NeededCols:      a.OutCols,
+				IndexConstraint: a.PrefixConstraint,
+			}
+			e.emitSpans("prefix spans", a.Table, a.Index, params)
+		}
+		if ob.flags.Verbose {
+			// Vectors can have many dimensions, so don't print them unless verbose.
+			ob.Expr("query vector", a.QueryVector, nil /* varColumns */)
+		}
+
+	case vectorMutationSearchOp:
+		a := n.args.(*vectorMutationSearchArgs)
+		if a.IsIndexPut {
+			ob.Attr("mutation type", "put")
+		} else {
+			ob.Attr("mutation type", "del")
+		}
+		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
+		if ob.flags.Verbose {
+			if len(a.PrefixKeyCols) > 0 {
+				e.ob.Attr("prefix key cols", printColumnList(a.Input.Columns(), a.PrefixKeyCols))
+			}
+			e.ob.Attr("query vector col", a.Input.Columns()[a.QueryVectorCol].Name)
+			if len(a.SuffixKeyCols) > 0 {
+				e.ob.Attr("suffix key cols", printColumnList(a.Input.Columns(), a.SuffixKeyCols))
+			}
+		}
+
 	case insertOp:
 		a := n.args.(*insertArgs)
 		ob.Attrf(
@@ -961,6 +1014,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			}
 			ob.LeaveNode()
 		}
+		e.emitPolicies(ob, a.Table, n)
 
 	case insertFastPathOp:
 		a := n.args.(*insertFastPathArgs)
@@ -995,6 +1049,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			// triggers.
 			return errors.AssertionFailedf("insert fast path with before-triggers")
 		}
+		e.emitPolicies(ob, a.Table, n)
 
 	case upsertOp:
 		a := n.args.(*upsertArgs)
@@ -1034,6 +1089,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			}
 			ob.LeaveNode()
 		}
+		e.emitPolicies(ob, a.Table, n)
 
 	case updateOp:
 		a := n.args.(*updateArgs)
@@ -1055,6 +1111,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			}
 			ob.LeaveNode()
 		}
+		e.emitPolicies(ob, a.Table, n)
 
 	case deleteOp:
 		a := n.args.(*deleteArgs)
@@ -1089,6 +1146,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			// DeleteRange should not be planned if there are applicable triggers.
 			return errors.AssertionFailedf("delete range with before-triggers")
 		}
+		e.emitPolicies(ob, a.Table, n)
 
 	case showCompletionsOp:
 		a := n.args.(*showCompletionsArgs)
@@ -1130,7 +1188,14 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case callOp:
 		a := n.args.(*callArgs)
-		ob.Expr("procedure", a.Proc, nil /* columns */)
+		if a.Proc != nil {
+			// Unlike other expressions, we store Proc as *tree.RoutineExpr, so
+			// the nil value in Proc is different from the nil value that is
+			// checked in Expr:
+			//  (*tree.RoutineExpr)(nil)  vs (tree.TypedExpr)(nil)
+			// so we need an explicit nil check.
+			ob.Expr("procedure", a.Proc, nil /* columns */)
+		}
 
 	case simpleProjectOp,
 		serializingProjectOp,
@@ -1343,6 +1408,37 @@ func (e *emitter) emitJoinAttributes(
 		}
 	}
 	e.ob.Expr("pred", extraOnCond, appendColumns(leftCols, rightCols...))
+}
+
+func (e *emitter) emitPolicies(ob *OutputBuilder, table cat.Table, n *Node) {
+	if !ob.flags.ShowPolicyInfo {
+		return
+	}
+	val, ok := n.annotations[exec.PolicyInfoID]
+	if !ok {
+		return
+	}
+	applied := val.(*exec.RLSPoliciesApplied)
+
+	if applied.PoliciesSkippedForRole {
+		ob.AddField("policies", "exempt for role")
+	} else if applied.Policies.Len() == 0 {
+		ob.AddField("policies", "row-level security enabled, no policies applied.")
+	} else {
+		var sb strings.Builder
+		policies := table.Policies()
+		for _, grp := range [][]cat.Policy{policies.Permissive, policies.Restrictive} {
+			for _, policy := range grp {
+				if applied.Policies.Contains(policy.ID) {
+					if sb.Len() > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(policy.Name.Normalize())
+				}
+			}
+		}
+		ob.AddField("policies", sb.String())
+	}
 }
 
 func printColumns(inputCols colinfo.ResultColumns) string {

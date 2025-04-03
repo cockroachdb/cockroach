@@ -1,0 +1,5015 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label=/mnt/data1/postgres/src/test/regress/results/rules.out /mnt/data1/postgres/src/test/regress/expected/rules.out /mnt/data1/postgres/src/test/regress/results/rules.out
+--- /mnt/data1/postgres/src/test/regress/expected/rules.out
++++ /mnt/data1/postgres/src/test/regress/results/rules.out
+@@ -12,16 +12,72 @@
+ create view rtest_v1 as select * from rtest_t1;
+ create rule rtest_v1_ins as on insert to rtest_v1 do instead
+ 	insert into rtest_t1 values (new.a, new.b);
++ERROR:  at or near "rtest_v1_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_v1_ins as on insert to rtest_v1 do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_v1_upd as on update to rtest_v1 do instead
+ 	update rtest_t1 set a = new.a, b = new.b
+ 	where a = old.a;
++ERROR:  at or near "rtest_v1_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_v1_upd as on update to rtest_v1 do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_v1_del as on delete to rtest_v1 do instead
+ 	delete from rtest_t1 where a = old.a;
++ERROR:  at or near "rtest_v1_del": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_v1_del as on delete to rtest_v1 do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test comments
+ COMMENT ON RULE rtest_v1_bad ON rtest_v1 IS 'bad rule';
+-ERROR:  rule "rtest_v1_bad" for relation "rtest_v1" does not exist
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++COMMENT ON RULE rtest_v1_bad ON rtest_v1 IS 'bad rule'
++           ^
+ COMMENT ON RULE rtest_v1_del ON rtest_v1 IS 'delete rule';
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++COMMENT ON RULE rtest_v1_del ON rtest_v1 IS 'delete rule'
++           ^
+ COMMENT ON RULE rtest_v1_del ON rtest_v1 IS NULL;
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++COMMENT ON RULE rtest_v1_del ON rtest_v1 IS NULL
++           ^
+ --
+ -- Tables and rules for the constraint update/delete test
+ --
+@@ -40,29 +96,152 @@
+ 	update rtest_admin set sysname = new.sysname
+ 		where sysname = old.sysname
+ 	);
++ERROR:  at or near "rtest_sys_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_sys_upd as on update to rtest_system do also (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_sys_del as on delete to rtest_system do also (
+ 	delete from rtest_interface where sysname = old.sysname;
+ 	delete from rtest_admin where sysname = old.sysname;
+ 	);
++ERROR:  at or near "rtest_sys_del": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_sys_del as on delete to rtest_system do also (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_pers_upd as on update to rtest_person do also
+ 	update rtest_admin set pname = new.pname where pname = old.pname;
++ERROR:  at or near "rtest_pers_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_pers_upd as on update to rtest_person do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_pers_del as on delete to rtest_person do also
+ 	delete from rtest_admin where pname = old.pname;
++ERROR:  at or near "rtest_pers_del": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_pers_del as on delete to rtest_person do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Tables and rules for the logging test
+ --
+ create table rtest_emp (ename char(20), salary money);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table rtest_emp (ename char(20), salary money)
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41578/_version_
+ create table rtest_emplog (ename char(20), who name, action char(10), newsal money, oldsal money);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table rtest_emplog (ename char(20), who name, action char(10), newsal money, oldsal money)
++                                                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41578/_version_
+ create table rtest_empmass (ename char(20), salary money);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table rtest_empmass (ename char(20), salary money)
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41578/_version_
+ create rule rtest_emp_ins as on insert to rtest_emp do
+ 	insert into rtest_emplog values (new.ename, current_user,
+ 			'hired', new.salary, '0.00');
++ERROR:  at or near "rtest_emp_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_emp_ins as on insert to rtest_emp do
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_emp_upd as on update to rtest_emp where new.salary != old.salary do
+ 	insert into rtest_emplog values (new.ename, current_user,
+ 			'honored', new.salary, old.salary);
++ERROR:  at or near "rtest_emp_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_emp_upd as on update to rtest_emp where new.salary != old.salary do
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_emp_del as on delete to rtest_emp do
+ 	insert into rtest_emplog values (old.ename, current_user,
+ 			'fired', '0.00', old.salary);
++ERROR:  at or near "rtest_emp_del": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_emp_del as on delete to rtest_emp do
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Tables and rules for the multiple cascaded qualified instead
+ -- rule test
+@@ -76,15 +255,75 @@
+ create rule rtest_t4_ins1 as on insert to rtest_t4
+ 		where new.a >= 10 and new.a < 20 do instead
+ 	insert into rtest_t5 values (new.a, new.b);
++ERROR:  at or near "rtest_t4_ins1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_t4_ins1 as on insert to rtest_t4
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_t4_ins2 as on insert to rtest_t4
+ 		where new.a >= 20 and new.a < 30 do
+ 	insert into rtest_t6 values (new.a, new.b);
++ERROR:  at or near "rtest_t4_ins2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_t4_ins2 as on insert to rtest_t4
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_t5_ins as on insert to rtest_t5
+ 		where new.a > 15 do
+ 	insert into rtest_t7 values (new.a, new.b);
++ERROR:  at or near "rtest_t5_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_t5_ins as on insert to rtest_t5
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_t6_ins as on insert to rtest_t6
+ 		where new.a > 25 do instead
+ 	insert into rtest_t8 values (new.a, new.b);
++ERROR:  at or near "rtest_t6_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_t6_ins as on insert to rtest_t6
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Tables and rules for the rule fire order test
+ --
+@@ -97,16 +336,76 @@
+ create rule rtest_order_r3 as on insert to rtest_order1 do instead
+ 	insert into rtest_order2 values (new.a, nextval('rtest_seq'),
+ 		'rule 3 - this should run 3rd');
++ERROR:  at or near "rtest_order_r3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_order_r3 as on insert to rtest_order1 do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_order_r4 as on insert to rtest_order1
+ 		where a < 100 do instead
+ 	insert into rtest_order2 values (new.a, nextval('rtest_seq'),
+ 		'rule 4 - this should run 4th');
++ERROR:  at or near "rtest_order_r4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_order_r4 as on insert to rtest_order1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_order_r2 as on insert to rtest_order1 do
+ 	insert into rtest_order2 values (new.a, nextval('rtest_seq'),
+ 		'rule 2 - this should run 2nd');
++ERROR:  at or near "rtest_order_r2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_order_r2 as on insert to rtest_order1 do
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_order_r1 as on insert to rtest_order1 do instead
+ 	insert into rtest_order2 values (new.a, nextval('rtest_seq'),
+ 		'rule 1 - this should run 1st');
++ERROR:  at or near "rtest_order_r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_order_r1 as on insert to rtest_order1 do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Tables and rules for the instead nothing test
+ --
+@@ -116,13 +415,73 @@
+ create table rtest_nothn4 (a int4, b text);
+ create rule rtest_nothn_r1 as on insert to rtest_nothn1
+ 	where new.a >= 10 and new.a < 20 do instead nothing;
++ERROR:  at or near "rtest_nothn_r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_nothn_r1 as on insert to rtest_nothn1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_nothn_r2 as on insert to rtest_nothn1
+ 	where new.a >= 30 and new.a < 40 do instead nothing;
++ERROR:  at or near "rtest_nothn_r2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_nothn_r2 as on insert to rtest_nothn1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_nothn_r3 as on insert to rtest_nothn2
+ 	where new.a >= 100 do instead
+ 	insert into rtest_nothn3 values (new.a, new.b);
++ERROR:  at or near "rtest_nothn_r3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_nothn_r3 as on insert to rtest_nothn2
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule rtest_nothn_r4 as on insert to rtest_nothn2
+ 	do instead nothing;
++ERROR:  at or near "rtest_nothn_r4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rtest_nothn_r4 as on insert to rtest_nothn2
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Tests on a view that is select * of a table
+ -- and has insert/update/delete instead rules to
+@@ -141,39 +500,39 @@
+ insert into rtest_t3 values (5, 35);
+ -- insert values
+ insert into rtest_v1 values (1, 11);
++ERROR:  "rtest_v1" is not a table
+ insert into rtest_v1 values (2, 12);
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 11
+- 2 | 12
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- delete with constant expression
+ delete from rtest_v1 where a = 1;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 2 | 12
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ insert into rtest_v1 values (1, 11);
++ERROR:  "rtest_v1" is not a table
+ delete from rtest_v1 where b = 12;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 11
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ insert into rtest_v1 values (2, 12);
++ERROR:  "rtest_v1" is not a table
+ insert into rtest_v1 values (2, 13);
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 11
+- 2 | 12
+- 2 | 13
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ ** Remember the delete rule on rtest_v1: It says
+ ** DO INSTEAD DELETE FROM rtest_t1 WHERE a = old.a
+@@ -184,161 +543,114 @@
+ ** So this time both rows with a = 2 must get deleted
+ \r
+ delete from rtest_v1 where b = 12;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 11
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from rtest_v1;
++ERROR:  "rtest_v1" is not a table
+ -- insert select
+ insert into rtest_v1 select * from rtest_t2;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from rtest_v1;
++ERROR:  "rtest_v1" is not a table
+ -- same with swapped targetlist
+ insert into rtest_v1 (b, a) select b, a from rtest_t2;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- now with only one target attribute
+ insert into rtest_v1 (a) select a from rtest_t3;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+- 1 |   
+- 2 |   
+- 3 |   
+- 4 |   
+- 5 |   
+-(8 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_v1 where b isnull;
+  a | b 
+ ---+---
+- 1 |  
+- 2 |  
+- 3 |  
+- 4 |  
+- 5 |  
+-(5 rows)
++(0 rows)
+ 
+ -- let attribute a differ (must be done on rtest_t1 - see above)
+ update rtest_t1 set a = a + 10 where b isnull;
+ delete from rtest_v1 where b isnull;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- now updates with constant expression
+ update rtest_v1 set b = 42 where a = 2;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 3 | 23
+- 2 | 42
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ update rtest_v1 set b = 99 where b = 42;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 3 | 23
+- 2 | 99
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ update rtest_v1 set b = 88 where b < 50;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 2 | 99
+- 1 | 88
+- 3 | 88
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from rtest_v1;
++ERROR:  "rtest_v1" is not a table
+ insert into rtest_v1 select rtest_t2.a, rtest_t3.b
+     from rtest_t2, rtest_t3
+     where rtest_t2.a = rtest_t3.a;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 31
+- 2 | 32
+- 3 | 33
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- updates in a mergejoin
+ update rtest_v1 set b = rtest_t2.b from rtest_t2 where rtest_v1.a = rtest_t2.a;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ insert into rtest_v1 select * from rtest_t3;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a | b  
+----+----
+- 1 | 21
+- 2 | 22
+- 3 | 23
+- 1 | 31
+- 2 | 32
+- 3 | 33
+- 4 | 34
+- 5 | 35
+-(8 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ update rtest_t1 set a = a + 10 where b > 30;
+ select * from rtest_v1;
+- a  | b  
+-----+----
+-  1 | 21
+-  2 | 22
+-  3 | 23
+- 11 | 31
+- 12 | 32
+- 13 | 33
+- 14 | 34
+- 15 | 35
+-(8 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ update rtest_v1 set a = rtest_t3.a + 20 from rtest_t3 where rtest_v1.b = rtest_t3.b;
++ERROR:  "rtest_v1" is not a table
+ select * from rtest_v1;
+- a  | b  
+-----+----
+-  1 | 21
+-  2 | 22
+-  3 | 23
+- 21 | 31
+- 22 | 32
+- 23 | 33
+- 24 | 34
+- 25 | 35
+-(8 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ --
+ -- Test for constraint updates/deletes
+@@ -362,7 +674,7 @@
+  orion   | eth0
+  orion   | eth1
+  notjw   | eth0
+- pluto   | eth0
++ neptun  | eth0
+ (4 rows)
+ 
+ select * from rtest_admin;
+@@ -370,7 +682,7 @@
+ -------+---------
+  jw    | orion
+  jw    | notjw
+- bm    | pluto
++ bm    | neptun
+ (3 rows)
+ 
+ update rtest_person set pname = 'jwieck' where pdesc = 'Jan Wieck';
+@@ -378,102 +690,68 @@
+ -- The above UPDATE affects two rows with equal keys, so they could be
+ -- updated in either order depending on the whim of the local qsort().
+ select * from rtest_admin order by pname, sysname;
+- pname  | sysname 
+---------+---------
+- bm     | pluto
+- jwieck | notjw
+- jwieck | orion
++ pname | sysname 
++-------+---------
++ bm    | neptun
++ jw    | notjw
++ jw    | orion
+ (3 rows)
+ 
+ delete from rtest_system where sysname = 'orion';
+ select * from rtest_interface;
+  sysname | ifname 
+ ---------+--------
++ orion   | eth0
++ orion   | eth1
+  notjw   | eth0
+- pluto   | eth0
+-(2 rows)
++ neptun  | eth0
++(4 rows)
+ 
+ select * from rtest_admin;
+- pname  | sysname 
+---------+---------
+- bm     | pluto
+- jwieck | notjw
+-(2 rows)
++ pname | sysname 
++-------+---------
++ jw    | orion
++ jw    | notjw
++ bm    | neptun
++(3 rows)
+ 
+ --
+ -- Rule qualification test
+ --
+ insert into rtest_emp values ('wiecc', '5000.00');
++ERROR:  relation "rtest_emp" does not exist
+ insert into rtest_emp values ('gates', '80000.00');
++ERROR:  relation "rtest_emp" does not exist
+ update rtest_emp set ename = 'wiecx' where ename = 'wiecc';
++ERROR:  relation "rtest_emp" does not exist
+ update rtest_emp set ename = 'wieck', salary = '6000.00' where ename = 'wiecx';
++ERROR:  relation "rtest_emp" does not exist
+ update rtest_emp set salary = '7000.00' where ename = 'wieck';
++ERROR:  relation "rtest_emp" does not exist
+ delete from rtest_emp where ename = 'gates';
++ERROR:  relation "rtest_emp" does not exist
+ select ename, who = current_user as "matches user", action, newsal, oldsal from rtest_emplog order by ename, action, newsal;
+-        ename         | matches user |   action   |   newsal   |   oldsal   
+-----------------------+--------------+------------+------------+------------
+- gates                | t            | fired      |      $0.00 | $80,000.00
+- gates                | t            | hired      | $80,000.00 |      $0.00
+- wiecc                | t            | hired      |  $5,000.00 |      $0.00
+- wieck                | t            | honored    |  $6,000.00 |  $5,000.00
+- wieck                | t            | honored    |  $7,000.00 |  $6,000.00
+-(5 rows)
+-
++ERROR:  relation "rtest_emplog" does not exist
+ insert into rtest_empmass values ('meyer', '4000.00');
++ERROR:  relation "rtest_empmass" does not exist
+ insert into rtest_empmass values ('maier', '5000.00');
++ERROR:  relation "rtest_empmass" does not exist
+ insert into rtest_empmass values ('mayr', '6000.00');
++ERROR:  relation "rtest_empmass" does not exist
+ insert into rtest_emp select * from rtest_empmass;
++ERROR:  relation "rtest_emp" does not exist
+ select ename, who = current_user as "matches user", action, newsal, oldsal from rtest_emplog order by ename, action, newsal;
+-        ename         | matches user |   action   |   newsal   |   oldsal   
+-----------------------+--------------+------------+------------+------------
+- gates                | t            | fired      |      $0.00 | $80,000.00
+- gates                | t            | hired      | $80,000.00 |      $0.00
+- maier                | t            | hired      |  $5,000.00 |      $0.00
+- mayr                 | t            | hired      |  $6,000.00 |      $0.00
+- meyer                | t            | hired      |  $4,000.00 |      $0.00
+- wiecc                | t            | hired      |  $5,000.00 |      $0.00
+- wieck                | t            | honored    |  $6,000.00 |  $5,000.00
+- wieck                | t            | honored    |  $7,000.00 |  $6,000.00
+-(8 rows)
+-
++ERROR:  relation "rtest_emplog" does not exist
+ update rtest_empmass set salary = salary + '1000.00';
++ERROR:  relation "rtest_empmass" does not exist
+ update rtest_emp set salary = rtest_empmass.salary from rtest_empmass where rtest_emp.ename = rtest_empmass.ename;
++ERROR:  relation "rtest_emp" does not exist
+ select ename, who = current_user as "matches user", action, newsal, oldsal from rtest_emplog order by ename, action, newsal;
+-        ename         | matches user |   action   |   newsal   |   oldsal   
+-----------------------+--------------+------------+------------+------------
+- gates                | t            | fired      |      $0.00 | $80,000.00
+- gates                | t            | hired      | $80,000.00 |      $0.00
+- maier                | t            | hired      |  $5,000.00 |      $0.00
+- maier                | t            | honored    |  $6,000.00 |  $5,000.00
+- mayr                 | t            | hired      |  $6,000.00 |      $0.00
+- mayr                 | t            | honored    |  $7,000.00 |  $6,000.00
+- meyer                | t            | hired      |  $4,000.00 |      $0.00
+- meyer                | t            | honored    |  $5,000.00 |  $4,000.00
+- wiecc                | t            | hired      |  $5,000.00 |      $0.00
+- wieck                | t            | honored    |  $6,000.00 |  $5,000.00
+- wieck                | t            | honored    |  $7,000.00 |  $6,000.00
+-(11 rows)
+-
++ERROR:  relation "rtest_emplog" does not exist
+ delete from rtest_emp using rtest_empmass where rtest_emp.ename = rtest_empmass.ename;
++ERROR:  relation "rtest_emp" does not exist
+ select ename, who = current_user as "matches user", action, newsal, oldsal from rtest_emplog order by ename, action, newsal;
+-        ename         | matches user |   action   |   newsal   |   oldsal   
+-----------------------+--------------+------------+------------+------------
+- gates                | t            | fired      |      $0.00 | $80,000.00
+- gates                | t            | hired      | $80,000.00 |      $0.00
+- maier                | t            | fired      |      $0.00 |  $6,000.00
+- maier                | t            | hired      |  $5,000.00 |      $0.00
+- maier                | t            | honored    |  $6,000.00 |  $5,000.00
+- mayr                 | t            | fired      |      $0.00 |  $7,000.00
+- mayr                 | t            | hired      |  $6,000.00 |      $0.00
+- mayr                 | t            | honored    |  $7,000.00 |  $6,000.00
+- meyer                | t            | fired      |      $0.00 |  $5,000.00
+- meyer                | t            | hired      |  $4,000.00 |      $0.00
+- meyer                | t            | honored    |  $5,000.00 |  $4,000.00
+- wiecc                | t            | hired      |  $5,000.00 |      $0.00
+- wieck                | t            | honored    |  $6,000.00 |  $5,000.00
+- wieck                | t            | honored    |  $7,000.00 |  $6,000.00
+-(14 rows)
+-
++ERROR:  relation "rtest_emplog" does not exist
+ --
+ -- Multiple cascaded qualified instead rule test
+ --
+@@ -492,39 +770,35 @@
+ ----+-------------------------------------
+   1 | Record should go to rtest_t4
+   2 | Record should go to rtest_t4
++ 10 | Record should go to rtest_t5
++ 15 | Record should go to rtest_t5
++ 19 | Record should go to rtest_t5 and t7
+  20 | Record should go to rtest_t4 and t6
+  26 | Record should go to rtest_t4 and t8
+  28 | Record should go to rtest_t4 and t8
+  30 | Record should go to rtest_t4
+  40 | Record should go to rtest_t4
+-(7 rows)
++(10 rows)
+ 
+ select * from rtest_t5;
+- a  |                  b                  
+-----+-------------------------------------
+- 10 | Record should go to rtest_t5
+- 15 | Record should go to rtest_t5
+- 19 | Record should go to rtest_t5 and t7
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t6;
+- a  |                  b                  
+-----+-------------------------------------
+- 20 | Record should go to rtest_t4 and t6
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t7;
+- a  |                  b                  
+-----+-------------------------------------
+- 19 | Record should go to rtest_t5 and t7
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t8;
+- a  |                  b                  
+-----+-------------------------------------
+- 26 | Record should go to rtest_t4 and t8
+- 28 | Record should go to rtest_t4 and t8
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from rtest_t4;
+ delete from rtest_t5;
+@@ -543,19 +817,19 @@
+ insert into rtest_t9 values (40, 'Record should go to rtest_t4');
+ insert into rtest_t4 select * from rtest_t9 where a < 20;
+ select * from rtest_t4;
+- a |              b               
+----+------------------------------
+- 1 | Record should go to rtest_t4
+- 2 | Record should go to rtest_t4
+-(2 rows)
+-
+-select * from rtest_t5;
+  a  |                  b                  
+ ----+-------------------------------------
++  1 | Record should go to rtest_t4
++  2 | Record should go to rtest_t4
+  10 | Record should go to rtest_t5
+  15 | Record should go to rtest_t5
+  19 | Record should go to rtest_t5 and t7
+-(3 rows)
++(5 rows)
++
++select * from rtest_t5;
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t6;
+  a | b 
+@@ -563,10 +837,9 @@
+ (0 rows)
+ 
+ select * from rtest_t7;
+- a  |                  b                  
+-----+-------------------------------------
+- 19 | Record should go to rtest_t5 and t7
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t8;
+  a | b 
+@@ -579,17 +852,17 @@
+ ----+-------------------------------------
+   1 | Record should go to rtest_t4
+   2 | Record should go to rtest_t4
++ 10 | Record should go to rtest_t5
++ 15 | Record should go to rtest_t5
++ 19 | Record should go to rtest_t5 and t7
+  26 | Record should go to rtest_t4 and t8
+  28 | Record should go to rtest_t4 and t8
+-(4 rows)
++(7 rows)
+ 
+ select * from rtest_t5;
+- a  |                  b                  
+-----+-------------------------------------
+- 10 | Record should go to rtest_t5
+- 15 | Record should go to rtest_t5
+- 19 | Record should go to rtest_t5 and t7
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t6;
+  a | b 
+@@ -597,17 +870,14 @@
+ (0 rows)
+ 
+ select * from rtest_t7;
+- a  |                  b                  
+-----+-------------------------------------
+- 19 | Record should go to rtest_t5 and t7
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t8;
+- a  |                  b                  
+-----+-------------------------------------
+- 26 | Record should go to rtest_t4 and t8
+- 28 | Record should go to rtest_t4 and t8
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ insert into rtest_t4 select a + 1, b from rtest_t9 where a in (20, 30, 40);
+ select * from rtest_t4;
+@@ -615,52 +885,44 @@
+ ----+-------------------------------------
+   1 | Record should go to rtest_t4
+   2 | Record should go to rtest_t4
++ 10 | Record should go to rtest_t5
++ 15 | Record should go to rtest_t5
++ 19 | Record should go to rtest_t5 and t7
+  26 | Record should go to rtest_t4 and t8
+  28 | Record should go to rtest_t4 and t8
+  21 | Record should go to rtest_t4 and t6
+  31 | Record should go to rtest_t4
+  41 | Record should go to rtest_t4
+-(7 rows)
++(10 rows)
+ 
+ select * from rtest_t5;
+- a  |                  b                  
+-----+-------------------------------------
+- 10 | Record should go to rtest_t5
+- 15 | Record should go to rtest_t5
+- 19 | Record should go to rtest_t5 and t7
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t6;
+- a  |                  b                  
+-----+-------------------------------------
+- 21 | Record should go to rtest_t4 and t6
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t7;
+- a  |                  b                  
+-----+-------------------------------------
+- 19 | Record should go to rtest_t5 and t7
+-(1 row)
++ a | b 
++---+---
++(0 rows)
+ 
+ select * from rtest_t8;
+- a  |                  b                  
+-----+-------------------------------------
+- 26 | Record should go to rtest_t4 and t8
+- 28 | Record should go to rtest_t4 and t8
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ --
+ -- Check that the ordering of rules fired is correct
+ --
+ insert into rtest_order1 values (1);
+ select * from rtest_order2;
+- a | b |              c               
+----+---+------------------------------
+- 1 | 1 | rule 1 - this should run 1st
+- 1 | 2 | rule 2 - this should run 2nd
+- 1 | 3 | rule 3 - this should run 3rd
+- 1 | 4 | rule 4 - this should run 4th
+-(4 rows)
++ a | b | c 
++---+---+---
++(0 rows)
+ 
+ --
+ -- Check if instead nothing w/without qualification works
+@@ -677,33 +939,39 @@
+ insert into rtest_nothn1 values (50, 'want this');
+ insert into rtest_nothn1 values (60, 'want this');
+ select * from rtest_nothn1;
+- a  |     b     
+-----+-----------
++ a  |        b        
++----+-----------------
+   1 | want this
+   2 | want this
++ 10 | don't want this
++ 19 | don't want this
+  20 | want this
+  29 | want this
++ 30 | don't want this
++ 39 | don't want this
+  40 | want this
+  50 | want this
+  60 | want this
+-(7 rows)
++(11 rows)
+ 
+ insert into rtest_nothn2 values (10, 'too small');
+ insert into rtest_nothn2 values (50, 'too small');
+ insert into rtest_nothn2 values (100, 'OK');
+ insert into rtest_nothn2 values (200, 'OK');
+ select * from rtest_nothn2;
++  a  |     b     
++-----+-----------
++  10 | too small
++  50 | too small
++ 100 | OK
++ 200 | OK
++(4 rows)
++
++select * from rtest_nothn3;
+  a | b 
+ ---+---
+ (0 rows)
+ 
+-select * from rtest_nothn3;
+-  a  | b  
+------+----
+- 100 | OK
+- 200 | OK
+-(2 rows)
+-
+ delete from rtest_nothn1;
+ delete from rtest_nothn2;
+ delete from rtest_nothn3;
+@@ -720,16 +988,20 @@
+ insert into rtest_nothn4 values (60, 'want this');
+ insert into rtest_nothn1 select * from rtest_nothn4;
+ select * from rtest_nothn1;
+- a  |     b     
+-----+-----------
++ a  |        b        
++----+-----------------
+   1 | want this
+   2 | want this
++ 10 | don't want this
++ 19 | don't want this
+  20 | want this
+  29 | want this
++ 30 | don't want this
++ 39 | don't want this
+  40 | want this
+  50 | want this
+  60 | want this
+-(7 rows)
++(11 rows)
+ 
+ delete from rtest_nothn4;
+ insert into rtest_nothn4 values (10, 'too small');
+@@ -738,17 +1010,19 @@
+ insert into rtest_nothn4 values (200, 'OK');
+ insert into rtest_nothn2 select * from rtest_nothn4;
+ select * from rtest_nothn2;
++  a  |     b     
++-----+-----------
++  10 | too small
++  50 | too small
++ 100 | OK
++ 200 | OK
++(4 rows)
++
++select * from rtest_nothn3;
+  a | b 
+ ---+---
+ (0 rows)
+ 
+-select * from rtest_nothn3;
+-  a  | b  
+------+----
+- 100 | OK
+- 200 | OK
+-(2 rows)
+-
+ create table rtest_view1 (a int4, b text, v bool);
+ create table rtest_view2 (a int4);
+ create table rtest_view3 (a int4, b text);
+@@ -767,6 +1041,8 @@
+ 	language sql;
+ create view rtest_vview5 as select a, b, rtest_viewfunc1(a) as refcount
+ 	from rtest_view1;
++ERROR:  unknown function: rtest_viewfunc1()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ insert into rtest_view1 values (1, 'item 1', 't');
+ insert into rtest_view1 values (2, 'item 2', 't');
+ insert into rtest_view1 values (3, 'item 3', 't');
+@@ -821,18 +1097,7 @@
+ (4 rows)
+ 
+ select * from rtest_vview5;
+- a |   b    | refcount 
+----+--------+----------
+- 1 | item 1 |        0
+- 2 | item 2 |        2
+- 3 | item 3 |        0
+- 4 | item 4 |        1
+- 5 | item 5 |        1
+- 6 | item 6 |        0
+- 7 | item 7 |        4
+- 8 | item 8 |        0
+-(8 rows)
+-
++ERROR:  relation "rtest_vview5" does not exist
+ insert into rtest_view3 select * from rtest_vview1 where a < 7;
+ select * from rtest_view3;
+  a |   b    
+@@ -875,13 +1140,11 @@
+ 
+ delete from rtest_view4;
+ insert into rtest_view4 select * from rtest_vview5 where a > 2 and refcount = 0;
++ERROR:  relation "rtest_vview5" does not exist
+ select * from rtest_view4;
+- a |   b    | c 
+----+--------+---
+- 3 | item 3 | 0
+- 6 | item 6 | 0
+- 8 | item 8 | 0
+-(3 rows)
++ a | b | c 
++---+---+---
++(0 rows)
+ 
+ delete from rtest_view4;
+ --
+@@ -921,15 +1184,10 @@
+ (6 rows)
+ 
+ select * from rtest_vcomp where size_in_cm > 10.0 order by size_in_cm using >;
+- part |     size_in_cm     
+-------+--------------------
+- p1   |                500
+- p2   |                300
+- p5   |              17.78
+- p4   |                 15
+- p6   | 11.176000000000002
+-(5 rows)
+-
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++select * from rtest_vcomp where size_in_cm > 10.0 order by size_in_cm using >
++                                                                      ^
+ --
+ -- In addition run the (slightly modified) queries from the
+ -- programmers manual section on the rule system.
+@@ -983,6 +1241,8 @@
+ 	 WHERE rsl.sl_color = rsh.slcolor
+ 	   AND rsl.sl_len_cm >= rsh.slminlen_cm
+ 	   AND rsl.sl_len_cm <= rsh.slmaxlen_cm;
++ERROR:  unknown function: int4smaller()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ INSERT INTO unit VALUES ('cm', 1.0);
+ INSERT INTO unit VALUES ('m', 100.0);
+ INSERT INTO unit VALUES ('inch', 2.54);
+@@ -1013,12 +1273,7 @@
+ (8 rows)
+ 
+ SELECT * FROM shoe_ready WHERE total_avail >= 2 ORDER BY 1;
+-  shoename  | sh_avail |  sl_name   | sl_avail | total_avail 
+-------------+----------+------------+----------+-------------
+- sh1        |        2 | sl1        |        5 |           2
+- sh3        |        4 | sl7        |        7 |           4
+-(2 rows)
+-
++ERROR:  relation "shoe_ready" does not exist
+     CREATE TABLE shoelace_log (
+         sl_name    char(10),      -- shoelace changed
+         sl_avail   integer,       -- new available value
+@@ -1036,12 +1291,26 @@
+                                         'Al Bundy',
+                                         'epoch'
+                                     );
++ERROR:  at or near "log_shoelace": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE log_shoelace AS ON UPDATE TO shoelace_data
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ UPDATE shoelace_data SET sl_avail = 6 WHERE  sl_name = 'sl7';
+ SELECT * FROM shoelace_log;
+-  sl_name   | sl_avail | log_who  |         log_when         
+-------------+----------+----------+--------------------------
+- sl7        |        6 | Al Bundy | Thu Jan 01 00:00:00 1970
+-(1 row)
++ sl_name | sl_avail | log_who | log_when 
++---------+----------+---------+----------
++(0 rows)
+ 
+     CREATE RULE shoelace_ins AS ON INSERT TO shoelace
+         DO INSTEAD
+@@ -1051,6 +1320,21 @@
+                NEW.sl_color,
+                NEW.sl_len,
+                NEW.sl_unit);
++ERROR:  at or near "shoelace_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE shoelace_ins AS ON INSERT TO shoelace
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+     CREATE RULE shoelace_upd AS ON UPDATE TO shoelace
+         DO INSTEAD
+         UPDATE shoelace_data SET
+@@ -1060,10 +1344,40 @@
+                sl_len = NEW.sl_len,
+                sl_unit = NEW.sl_unit
+          WHERE sl_name = OLD.sl_name;
++ERROR:  at or near "shoelace_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE shoelace_upd AS ON UPDATE TO shoelace
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+     CREATE RULE shoelace_del AS ON DELETE TO shoelace
+         DO INSTEAD
+         DELETE FROM shoelace_data
+          WHERE sl_name = OLD.sl_name;
++ERROR:  at or near "shoelace_del": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE shoelace_del AS ON DELETE TO shoelace
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+     CREATE TABLE shoelace_arrive (
+         arr_name    char(10),
+         arr_quant   integer
+@@ -1077,6 +1391,21 @@
+         UPDATE shoelace SET
+                sl_avail = sl_avail + NEW.ok_quant
+          WHERE sl_name = NEW.ok_name;
++ERROR:  at or near "shoelace_ok_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE shoelace_ok_ins AS ON INSERT TO shoelace_ok
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO shoelace_arrive VALUES ('sl3', 10);
+ INSERT INTO shoelace_arrive VALUES ('sl6', 20);
+ INSERT INTO shoelace_arrive VALUES ('sl8', 20);
+@@ -1099,22 +1428,18 @@
+ ------------+----------+------------+--------+----------+-----------
+  sl1        |        5 | black      |     80 | cm       |        80
+  sl2        |        6 | black      |    100 | cm       |       100
+- sl3        |       10 | black      |     35 | inch     |      88.9
++ sl3        |        0 | black      |     35 | inch     |      88.9
+  sl4        |        8 | black      |     40 | inch     |     101.6
+  sl5        |        4 | brown      |      1 | m        |       100
+- sl6        |       20 | brown      |    0.9 | m        |        90
++ sl6        |        0 | brown      |    0.9 | m        |        90
+  sl7        |        6 | brown      |     60 | cm       |        60
+- sl8        |       21 | brown      |     40 | inch     |     101.6
++ sl8        |        1 | brown      |     40 | inch     |     101.6
+ (8 rows)
+ 
+ SELECT * FROM shoelace_log ORDER BY sl_name;
+-  sl_name   | sl_avail | log_who  |         log_when         
+-------------+----------+----------+--------------------------
+- sl3        |       10 | Al Bundy | Thu Jan 01 00:00:00 1970
+- sl6        |       20 | Al Bundy | Thu Jan 01 00:00:00 1970
+- sl7        |        6 | Al Bundy | Thu Jan 01 00:00:00 1970
+- sl8        |       21 | Al Bundy | Thu Jan 01 00:00:00 1970
+-(4 rows)
++ sl_name | sl_avail | log_who | log_when 
++---------+----------+---------+----------
++(0 rows)
+ 
+     CREATE VIEW shoelace_obsolete AS
+ 	SELECT * FROM shoelace WHERE NOT EXISTS
+@@ -1122,40 +1447,39 @@
+     CREATE VIEW shoelace_candelete AS
+ 	SELECT * FROM shoelace_obsolete WHERE sl_avail = 0;
+ insert into shoelace values ('sl9', 0, 'pink', 35.0, 'inch', 0.0);
++ERROR:  "shoelace" is not a table
+ insert into shoelace values ('sl10', 1000, 'magenta', 40.0, 'inch', 0.0);
++ERROR:  "shoelace" is not a table
+ -- Unsupported (even though a similar updatable view construct is)
+ insert into shoelace values ('sl10', 1000, 'magenta', 40.0, 'inch', 0.0)
+   on conflict do nothing;
+-ERROR:  INSERT with ON CONFLICT clause cannot be used with table that has INSERT or UPDATE rules
++ERROR:  "shoelace" is not a table
+ SELECT * FROM shoelace_obsolete ORDER BY sl_len_cm;
+-  sl_name   | sl_avail |  sl_color  | sl_len | sl_unit  | sl_len_cm 
+-------------+----------+------------+--------+----------+-----------
+- sl9        |        0 | pink       |     35 | inch     |      88.9
+- sl10       |     1000 | magenta    |     40 | inch     |     101.6
+-(2 rows)
++ sl_name | sl_avail | sl_color | sl_len | sl_unit | sl_len_cm 
++---------+----------+----------+--------+---------+-----------
++(0 rows)
+ 
+ SELECT * FROM shoelace_candelete;
+-  sl_name   | sl_avail |  sl_color  | sl_len | sl_unit  | sl_len_cm 
+-------------+----------+------------+--------+----------+-----------
+- sl9        |        0 | pink       |     35 | inch     |      88.9
+-(1 row)
++ sl_name | sl_avail | sl_color | sl_len | sl_unit | sl_len_cm 
++---------+----------+----------+--------+---------+-----------
++(0 rows)
+ 
+ DELETE FROM shoelace WHERE EXISTS
+     (SELECT * FROM shoelace_candelete
+              WHERE sl_name = shoelace.sl_name);
++ERROR:  "shoelace" is not a table
+ SELECT * FROM shoelace ORDER BY sl_name;
+   sl_name   | sl_avail |  sl_color  | sl_len | sl_unit  | sl_len_cm 
+ ------------+----------+------------+--------+----------+-----------
+  sl1        |        5 | black      |     80 | cm       |        80
+- sl10       |     1000 | magenta    |     40 | inch     |     101.6
+  sl2        |        6 | black      |    100 | cm       |       100
+- sl3        |       10 | black      |     35 | inch     |      88.9
++ sl3        |        0 | black      |     35 | inch     |      88.9
+  sl4        |        8 | black      |     40 | inch     |     101.6
+  sl5        |        4 | brown      |      1 | m        |       100
+- sl6        |       20 | brown      |    0.9 | m        |        90
++ sl6        |        0 | brown      |    0.9 | m        |        90
+  sl7        |        6 | brown      |     60 | cm       |        60
+- sl8        |       21 | brown      |     40 | inch     |     101.6
+-(9 rows)
++ sl8        |        1 | brown      |     40 | inch     |     101.6
++(8 rows)
+ 
+ SELECT * FROM shoe ORDER BY shoename;
+   shoename  | sh_avail |  slcolor   | slminlen | slminlen_cm | slmaxlen | slmaxlen_cm |  slunit  
+@@ -1179,42 +1503,114 @@
+ create table rules_foo2 (f1 int);
+ create rule rules_foorule as on insert to rules_foo where f1 < 100
+ do instead nothing;
++ERROR:  at or near "rules_foorule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rules_foorule as on insert to rules_foo where f1 < 100
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into rules_foo values(1);
+ insert into rules_foo values(1001);
+ select * from rules_foo;
+   f1  
+ ------
++    1
+  1001
+-(1 row)
++(2 rows)
+ 
+ drop rule rules_foorule on rules_foo;
++ERROR:  at or near "rules_foorule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule rules_foorule on rules_foo
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- this should fail because f1 is not exposed for unqualified reference:
+ create rule rules_foorule as on insert to rules_foo where f1 < 100
+ do instead insert into rules_foo2 values (f1);
+-ERROR:  column "f1" does not exist
+-LINE 2: do instead insert into rules_foo2 values (f1);
+-                                                  ^
+-DETAIL:  There are columns named "f1", but they are in tables that cannot be referenced from this part of the query.
+-HINT:  Try using a table-qualified name.
++ERROR:  at or near "rules_foorule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rules_foorule as on insert to rules_foo where f1 < 100
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- this is the correct way:
+ create rule rules_foorule as on insert to rules_foo where f1 < 100
+ do instead insert into rules_foo2 values (new.f1);
++ERROR:  at or near "rules_foorule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rules_foorule as on insert to rules_foo where f1 < 100
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into rules_foo values(2);
+ insert into rules_foo values(100);
+ select * from rules_foo;
+   f1  
+ ------
++    1
+  1001
++    2
+   100
+-(2 rows)
++(4 rows)
+ 
+ select * from rules_foo2;
+  f1 
+ ----
+-  2
+-(1 row)
++(0 rows)
+ 
+ drop rule rules_foorule on rules_foo;
++ERROR:  at or near "rules_foorule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule rules_foorule on rules_foo
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table rules_foo;
+ drop table rules_foo2;
+ --
+@@ -1236,6 +1632,21 @@
+     select old.pid, new.descrip where old.descrip isnull;
+   update cchild set descrip = new.descrip where cchild.pid = old.pid;
+ );
++ERROR:  at or near "rrule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rrule as
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from vview;
+  pid |   txt   | descrip  
+ -----+---------+----------
+@@ -1244,37 +1655,54 @@
+ (2 rows)
+ 
+ update vview set descrip='test1' where pid=1;
++ERROR:  "vview" is not a table
+ select * from vview;
+- pid |   txt   | descrip 
+------+---------+---------
+-   1 | parent1 | test1
++ pid |   txt   | descrip  
++-----+---------+----------
++   1 | parent1 | descrip1
+    2 | parent2 | 
+ (2 rows)
+ 
+ update vview set descrip='test2' where pid=2;
++ERROR:  "vview" is not a table
+ select * from vview;
+- pid |   txt   | descrip 
+------+---------+---------
+-   1 | parent1 | test1
+-   2 | parent2 | test2
++ pid |   txt   | descrip  
++-----+---------+----------
++   1 | parent1 | descrip1
++   2 | parent2 | 
+ (2 rows)
+ 
+ update vview set descrip='test3' where pid=3;
++ERROR:  "vview" is not a table
+ select * from vview;
+- pid |   txt   | descrip 
+------+---------+---------
+-   1 | parent1 | test1
+-   2 | parent2 | test2
++ pid |   txt   | descrip  
++-----+---------+----------
++   1 | parent1 | descrip1
++   2 | parent2 | 
+ (2 rows)
+ 
+ select * from cchild;
+- pid | descrip 
+------+---------
+-   1 | test1
+-   2 | test2
+-(2 rows)
++ pid | descrip  
++-----+----------
++   1 | descrip1
++(1 row)
+ 
+ drop rule rrule on vview;
++ERROR:  at or near "rrule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule rrule on vview
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop view vview;
+ drop table pparent;
+ drop table cchild;
+@@ -1286,1357 +1714,9 @@
+ SELECT viewname, definition FROM pg_views
+ WHERE schemaname = 'pg_catalog'
+ ORDER BY viewname;
+-pg_available_extension_versions| SELECT e.name,
+-    e.version,
+-    (x.extname IS NOT NULL) AS installed,
+-    e.superuser,
+-    e.trusted,
+-    e.relocatable,
+-    e.schema,
+-    e.requires,
+-    e.comment
+-   FROM (pg_available_extension_versions() e(name, version, superuser, trusted, relocatable, schema, requires, comment)
+-     LEFT JOIN pg_extension x ON (((e.name = x.extname) AND (e.version = x.extversion))));
+-pg_available_extensions| SELECT e.name,
+-    e.default_version,
+-    x.extversion AS installed_version,
+-    e.comment
+-   FROM (pg_available_extensions() e(name, default_version, comment)
+-     LEFT JOIN pg_extension x ON ((e.name = x.extname)));
+-pg_backend_memory_contexts| SELECT name,
+-    ident,
+-    parent,
+-    level,
+-    total_bytes,
+-    total_nblocks,
+-    free_bytes,
+-    free_chunks,
+-    used_bytes
+-   FROM pg_get_backend_memory_contexts() pg_get_backend_memory_contexts(name, ident, parent, level, total_bytes, total_nblocks, free_bytes, free_chunks, used_bytes);
+-pg_config| SELECT name,
+-    setting
+-   FROM pg_config() pg_config(name, setting);
+-pg_cursors| SELECT name,
+-    statement,
+-    is_holdable,
+-    is_binary,
+-    is_scrollable,
+-    creation_time
+-   FROM pg_cursor() c(name, statement, is_holdable, is_binary, is_scrollable, creation_time);
+-pg_file_settings| SELECT sourcefile,
+-    sourceline,
+-    seqno,
+-    name,
+-    setting,
+-    applied,
+-    error
+-   FROM pg_show_all_file_settings() a(sourcefile, sourceline, seqno, name, setting, applied, error);
+-pg_group| SELECT rolname AS groname,
+-    oid AS grosysid,
+-    ARRAY( SELECT pg_auth_members.member
+-           FROM pg_auth_members
+-          WHERE (pg_auth_members.roleid = pg_authid.oid)) AS grolist
+-   FROM pg_authid
+-  WHERE (NOT rolcanlogin);
+-pg_hba_file_rules| SELECT rule_number,
+-    file_name,
+-    line_number,
+-    type,
+-    database,
+-    user_name,
+-    address,
+-    netmask,
+-    auth_method,
+-    options,
+-    error
+-   FROM pg_hba_file_rules() a(rule_number, file_name, line_number, type, database, user_name, address, netmask, auth_method, options, error);
+-pg_ident_file_mappings| SELECT map_number,
+-    file_name,
+-    line_number,
+-    map_name,
+-    sys_name,
+-    pg_username,
+-    error
+-   FROM pg_ident_file_mappings() a(map_number, file_name, line_number, map_name, sys_name, pg_username, error);
+-pg_indexes| SELECT n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    i.relname AS indexname,
+-    t.spcname AS tablespace,
+-    pg_get_indexdef(i.oid) AS indexdef
+-   FROM ((((pg_index x
+-     JOIN pg_class c ON ((c.oid = x.indrelid)))
+-     JOIN pg_class i ON ((i.oid = x.indexrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-     LEFT JOIN pg_tablespace t ON ((t.oid = i.reltablespace)))
+-  WHERE ((c.relkind = ANY (ARRAY['r'::"char", 'm'::"char", 'p'::"char"])) AND (i.relkind = ANY (ARRAY['i'::"char", 'I'::"char"])));
+-pg_locks| SELECT locktype,
+-    database,
+-    relation,
+-    page,
+-    tuple,
+-    virtualxid,
+-    transactionid,
+-    classid,
+-    objid,
+-    objsubid,
+-    virtualtransaction,
+-    pid,
+-    mode,
+-    granted,
+-    fastpath,
+-    waitstart
+-   FROM pg_lock_status() l(locktype, database, relation, page, tuple, virtualxid, transactionid, classid, objid, objsubid, virtualtransaction, pid, mode, granted, fastpath, waitstart);
+-pg_matviews| SELECT n.nspname AS schemaname,
+-    c.relname AS matviewname,
+-    pg_get_userbyid(c.relowner) AS matviewowner,
+-    t.spcname AS tablespace,
+-    c.relhasindex AS hasindexes,
+-    c.relispopulated AS ispopulated,
+-    pg_get_viewdef(c.oid) AS definition
+-   FROM ((pg_class c
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-     LEFT JOIN pg_tablespace t ON ((t.oid = c.reltablespace)))
+-  WHERE (c.relkind = 'm'::"char");
+-pg_policies| SELECT n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    pol.polname AS policyname,
+-        CASE
+-            WHEN pol.polpermissive THEN 'PERMISSIVE'::text
+-            ELSE 'RESTRICTIVE'::text
+-        END AS permissive,
+-        CASE
+-            WHEN (pol.polroles = '{0}'::oid[]) THEN (string_to_array('public'::text, ''::text))::name[]
+-            ELSE ARRAY( SELECT pg_authid.rolname
+-               FROM pg_authid
+-              WHERE (pg_authid.oid = ANY (pol.polroles))
+-              ORDER BY pg_authid.rolname)
+-        END AS roles,
+-        CASE pol.polcmd
+-            WHEN 'r'::"char" THEN 'SELECT'::text
+-            WHEN 'a'::"char" THEN 'INSERT'::text
+-            WHEN 'w'::"char" THEN 'UPDATE'::text
+-            WHEN 'd'::"char" THEN 'DELETE'::text
+-            WHEN '*'::"char" THEN 'ALL'::text
+-            ELSE NULL::text
+-        END AS cmd,
+-    pg_get_expr(pol.polqual, pol.polrelid) AS qual,
+-    pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+-   FROM ((pg_policy pol
+-     JOIN pg_class c ON ((c.oid = pol.polrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)));
+-pg_prepared_statements| SELECT name,
+-    statement,
+-    prepare_time,
+-    parameter_types,
+-    result_types,
+-    from_sql,
+-    generic_plans,
+-    custom_plans
+-   FROM pg_prepared_statement() p(name, statement, prepare_time, parameter_types, result_types, from_sql, generic_plans, custom_plans);
+-pg_prepared_xacts| SELECT p.transaction,
+-    p.gid,
+-    p.prepared,
+-    u.rolname AS owner,
+-    d.datname AS database
+-   FROM ((pg_prepared_xact() p(transaction, gid, prepared, ownerid, dbid)
+-     LEFT JOIN pg_authid u ON ((p.ownerid = u.oid)))
+-     LEFT JOIN pg_database d ON ((p.dbid = d.oid)));
+-pg_publication_tables| SELECT p.pubname,
+-    n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    ( SELECT array_agg(a.attname ORDER BY a.attnum) AS array_agg
+-           FROM pg_attribute a
+-          WHERE ((a.attrelid = gpt.relid) AND (a.attnum = ANY ((gpt.attrs)::smallint[])))) AS attnames,
+-    pg_get_expr(gpt.qual, gpt.relid) AS rowfilter
+-   FROM pg_publication p,
+-    LATERAL pg_get_publication_tables(VARIADIC ARRAY[(p.pubname)::text]) gpt(pubid, relid, attrs, qual),
+-    (pg_class c
+-     JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.oid = gpt.relid);
+-pg_replication_origin_status| SELECT local_id,
+-    external_id,
+-    remote_lsn,
+-    local_lsn
+-   FROM pg_show_replication_origin_status() pg_show_replication_origin_status(local_id, external_id, remote_lsn, local_lsn);
+-pg_replication_slots| SELECT l.slot_name,
+-    l.plugin,
+-    l.slot_type,
+-    l.datoid,
+-    d.datname AS database,
+-    l.temporary,
+-    l.active,
+-    l.active_pid,
+-    l.xmin,
+-    l.catalog_xmin,
+-    l.restart_lsn,
+-    l.confirmed_flush_lsn,
+-    l.wal_status,
+-    l.safe_wal_size,
+-    l.two_phase,
+-    l.conflicting
+-   FROM (pg_get_replication_slots() l(slot_name, plugin, slot_type, datoid, temporary, active, active_pid, xmin, catalog_xmin, restart_lsn, confirmed_flush_lsn, wal_status, safe_wal_size, two_phase, conflicting)
+-     LEFT JOIN pg_database d ON ((l.datoid = d.oid)));
+-pg_roles| SELECT pg_authid.rolname,
+-    pg_authid.rolsuper,
+-    pg_authid.rolinherit,
+-    pg_authid.rolcreaterole,
+-    pg_authid.rolcreatedb,
+-    pg_authid.rolcanlogin,
+-    pg_authid.rolreplication,
+-    pg_authid.rolconnlimit,
+-    '********'::text AS rolpassword,
+-    pg_authid.rolvaliduntil,
+-    pg_authid.rolbypassrls,
+-    s.setconfig AS rolconfig,
+-    pg_authid.oid
+-   FROM (pg_authid
+-     LEFT JOIN pg_db_role_setting s ON (((pg_authid.oid = s.setrole) AND (s.setdatabase = (0)::oid))));
+-pg_rules| SELECT n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    r.rulename,
+-    pg_get_ruledef(r.oid) AS definition
+-   FROM ((pg_rewrite r
+-     JOIN pg_class c ON ((c.oid = r.ev_class)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (r.rulename <> '_RETURN'::name);
+-pg_seclabels| SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-        CASE
+-            WHEN (rel.relkind = ANY (ARRAY['r'::"char", 'p'::"char"])) THEN 'table'::text
+-            WHEN (rel.relkind = 'v'::"char") THEN 'view'::text
+-            WHEN (rel.relkind = 'm'::"char") THEN 'materialized view'::text
+-            WHEN (rel.relkind = 'S'::"char") THEN 'sequence'::text
+-            WHEN (rel.relkind = 'f'::"char") THEN 'foreign table'::text
+-            ELSE NULL::text
+-        END AS objtype,
+-    rel.relnamespace AS objnamespace,
+-        CASE
+-            WHEN pg_table_is_visible(rel.oid) THEN quote_ident((rel.relname)::text)
+-            ELSE ((quote_ident((nsp.nspname)::text) || '.'::text) || quote_ident((rel.relname)::text))
+-        END AS objname,
+-    l.provider,
+-    l.label
+-   FROM ((pg_seclabel l
+-     JOIN pg_class rel ON (((l.classoid = rel.tableoid) AND (l.objoid = rel.oid))))
+-     JOIN pg_namespace nsp ON ((rel.relnamespace = nsp.oid)))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'column'::text AS objtype,
+-    rel.relnamespace AS objnamespace,
+-    ((
+-        CASE
+-            WHEN pg_table_is_visible(rel.oid) THEN quote_ident((rel.relname)::text)
+-            ELSE ((quote_ident((nsp.nspname)::text) || '.'::text) || quote_ident((rel.relname)::text))
+-        END || '.'::text) || (att.attname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (((pg_seclabel l
+-     JOIN pg_class rel ON (((l.classoid = rel.tableoid) AND (l.objoid = rel.oid))))
+-     JOIN pg_attribute att ON (((rel.oid = att.attrelid) AND (l.objsubid = att.attnum))))
+-     JOIN pg_namespace nsp ON ((rel.relnamespace = nsp.oid)))
+-  WHERE (l.objsubid <> 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-        CASE pro.prokind
+-            WHEN 'a'::"char" THEN 'aggregate'::text
+-            WHEN 'f'::"char" THEN 'function'::text
+-            WHEN 'p'::"char" THEN 'procedure'::text
+-            WHEN 'w'::"char" THEN 'window'::text
+-            ELSE NULL::text
+-        END AS objtype,
+-    pro.pronamespace AS objnamespace,
+-    (((
+-        CASE
+-            WHEN pg_function_is_visible(pro.oid) THEN quote_ident((pro.proname)::text)
+-            ELSE ((quote_ident((nsp.nspname)::text) || '.'::text) || quote_ident((pro.proname)::text))
+-        END || '('::text) || pg_get_function_arguments(pro.oid)) || ')'::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM ((pg_seclabel l
+-     JOIN pg_proc pro ON (((l.classoid = pro.tableoid) AND (l.objoid = pro.oid))))
+-     JOIN pg_namespace nsp ON ((pro.pronamespace = nsp.oid)))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-        CASE
+-            WHEN (typ.typtype = 'd'::"char") THEN 'domain'::text
+-            ELSE 'type'::text
+-        END AS objtype,
+-    typ.typnamespace AS objnamespace,
+-        CASE
+-            WHEN pg_type_is_visible(typ.oid) THEN quote_ident((typ.typname)::text)
+-            ELSE ((quote_ident((nsp.nspname)::text) || '.'::text) || quote_ident((typ.typname)::text))
+-        END AS objname,
+-    l.provider,
+-    l.label
+-   FROM ((pg_seclabel l
+-     JOIN pg_type typ ON (((l.classoid = typ.tableoid) AND (l.objoid = typ.oid))))
+-     JOIN pg_namespace nsp ON ((typ.typnamespace = nsp.oid)))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'large object'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    (l.objoid)::text AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_seclabel l
+-     JOIN pg_largeobject_metadata lom ON ((l.objoid = lom.oid)))
+-  WHERE ((l.classoid = ('pg_largeobject'::regclass)::oid) AND (l.objsubid = 0))
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'language'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((lan.lanname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_seclabel l
+-     JOIN pg_language lan ON (((l.classoid = lan.tableoid) AND (l.objoid = lan.oid))))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'schema'::text AS objtype,
+-    nsp.oid AS objnamespace,
+-    quote_ident((nsp.nspname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_seclabel l
+-     JOIN pg_namespace nsp ON (((l.classoid = nsp.tableoid) AND (l.objoid = nsp.oid))))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'event trigger'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((evt.evtname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_seclabel l
+-     JOIN pg_event_trigger evt ON (((l.classoid = evt.tableoid) AND (l.objoid = evt.oid))))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    l.objsubid,
+-    'publication'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((p.pubname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_seclabel l
+-     JOIN pg_publication p ON (((l.classoid = p.tableoid) AND (l.objoid = p.oid))))
+-  WHERE (l.objsubid = 0)
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    0 AS objsubid,
+-    'subscription'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((s.subname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_shseclabel l
+-     JOIN pg_subscription s ON (((l.classoid = s.tableoid) AND (l.objoid = s.oid))))
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    0 AS objsubid,
+-    'database'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((dat.datname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_shseclabel l
+-     JOIN pg_database dat ON (((l.classoid = dat.tableoid) AND (l.objoid = dat.oid))))
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    0 AS objsubid,
+-    'tablespace'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((spc.spcname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_shseclabel l
+-     JOIN pg_tablespace spc ON (((l.classoid = spc.tableoid) AND (l.objoid = spc.oid))))
+-UNION ALL
+- SELECT l.objoid,
+-    l.classoid,
+-    0 AS objsubid,
+-    'role'::text AS objtype,
+-    NULL::oid AS objnamespace,
+-    quote_ident((rol.rolname)::text) AS objname,
+-    l.provider,
+-    l.label
+-   FROM (pg_shseclabel l
+-     JOIN pg_authid rol ON (((l.classoid = rol.tableoid) AND (l.objoid = rol.oid))));
+-pg_sequences| SELECT n.nspname AS schemaname,
+-    c.relname AS sequencename,
+-    pg_get_userbyid(c.relowner) AS sequenceowner,
+-    (s.seqtypid)::regtype AS data_type,
+-    s.seqstart AS start_value,
+-    s.seqmin AS min_value,
+-    s.seqmax AS max_value,
+-    s.seqincrement AS increment_by,
+-    s.seqcycle AS cycle,
+-    s.seqcache AS cache_size,
+-        CASE
+-            WHEN has_sequence_privilege(c.oid, 'SELECT,USAGE'::text) THEN pg_sequence_last_value((c.oid)::regclass)
+-            ELSE NULL::bigint
+-        END AS last_value
+-   FROM ((pg_sequence s
+-     JOIN pg_class c ON ((c.oid = s.seqrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE ((NOT pg_is_other_temp_schema(n.oid)) AND (c.relkind = 'S'::"char"));
+-pg_settings| SELECT name,
+-    setting,
+-    unit,
+-    category,
+-    short_desc,
+-    extra_desc,
+-    context,
+-    vartype,
+-    source,
+-    min_val,
+-    max_val,
+-    enumvals,
+-    boot_val,
+-    reset_val,
+-    sourcefile,
+-    sourceline,
+-    pending_restart
+-   FROM pg_show_all_settings() a(name, setting, unit, category, short_desc, extra_desc, context, vartype, source, min_val, max_val, enumvals, boot_val, reset_val, sourcefile, sourceline, pending_restart);
+-pg_shadow| SELECT pg_authid.rolname AS usename,
+-    pg_authid.oid AS usesysid,
+-    pg_authid.rolcreatedb AS usecreatedb,
+-    pg_authid.rolsuper AS usesuper,
+-    pg_authid.rolreplication AS userepl,
+-    pg_authid.rolbypassrls AS usebypassrls,
+-    pg_authid.rolpassword AS passwd,
+-    pg_authid.rolvaliduntil AS valuntil,
+-    s.setconfig AS useconfig
+-   FROM (pg_authid
+-     LEFT JOIN pg_db_role_setting s ON (((pg_authid.oid = s.setrole) AND (s.setdatabase = (0)::oid))))
+-  WHERE pg_authid.rolcanlogin;
+-pg_shmem_allocations| SELECT name,
+-    off,
+-    size,
+-    allocated_size
+-   FROM pg_get_shmem_allocations() pg_get_shmem_allocations(name, off, size, allocated_size);
+-pg_stat_activity| SELECT s.datid,
+-    d.datname,
+-    s.pid,
+-    s.leader_pid,
+-    s.usesysid,
+-    u.rolname AS usename,
+-    s.application_name,
+-    s.client_addr,
+-    s.client_hostname,
+-    s.client_port,
+-    s.backend_start,
+-    s.xact_start,
+-    s.query_start,
+-    s.state_change,
+-    s.wait_event_type,
+-    s.wait_event,
+-    s.state,
+-    s.backend_xid,
+-    s.backend_xmin,
+-    s.query_id,
+-    s.query,
+-    s.backend_type
+-   FROM ((pg_stat_get_activity(NULL::integer) s(datid, pid, usesysid, application_name, state, query, wait_event_type, wait_event, xact_start, query_start, backend_start, state_change, client_addr, client_hostname, client_port, backend_xid, backend_xmin, backend_type, ssl, sslversion, sslcipher, sslbits, ssl_client_dn, ssl_client_serial, ssl_issuer_dn, gss_auth, gss_princ, gss_enc, gss_delegation, leader_pid, query_id)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)))
+-     LEFT JOIN pg_authid u ON ((s.usesysid = u.oid)));
+-pg_stat_all_indexes| SELECT c.oid AS relid,
+-    i.oid AS indexrelid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    i.relname AS indexrelname,
+-    pg_stat_get_numscans(i.oid) AS idx_scan,
+-    pg_stat_get_lastscan(i.oid) AS last_idx_scan,
+-    pg_stat_get_tuples_returned(i.oid) AS idx_tup_read,
+-    pg_stat_get_tuples_fetched(i.oid) AS idx_tup_fetch
+-   FROM (((pg_class c
+-     JOIN pg_index x ON ((c.oid = x.indrelid)))
+-     JOIN pg_class i ON ((i.oid = x.indexrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 't'::"char", 'm'::"char"]));
+-pg_stat_all_tables| SELECT c.oid AS relid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    pg_stat_get_numscans(c.oid) AS seq_scan,
+-    pg_stat_get_lastscan(c.oid) AS last_seq_scan,
+-    pg_stat_get_tuples_returned(c.oid) AS seq_tup_read,
+-    (sum(pg_stat_get_numscans(i.indexrelid)))::bigint AS idx_scan,
+-    max(pg_stat_get_lastscan(i.indexrelid)) AS last_idx_scan,
+-    ((sum(pg_stat_get_tuples_fetched(i.indexrelid)))::bigint + pg_stat_get_tuples_fetched(c.oid)) AS idx_tup_fetch,
+-    pg_stat_get_tuples_inserted(c.oid) AS n_tup_ins,
+-    pg_stat_get_tuples_updated(c.oid) AS n_tup_upd,
+-    pg_stat_get_tuples_deleted(c.oid) AS n_tup_del,
+-    pg_stat_get_tuples_hot_updated(c.oid) AS n_tup_hot_upd,
+-    pg_stat_get_tuples_newpage_updated(c.oid) AS n_tup_newpage_upd,
+-    pg_stat_get_live_tuples(c.oid) AS n_live_tup,
+-    pg_stat_get_dead_tuples(c.oid) AS n_dead_tup,
+-    pg_stat_get_mod_since_analyze(c.oid) AS n_mod_since_analyze,
+-    pg_stat_get_ins_since_vacuum(c.oid) AS n_ins_since_vacuum,
+-    pg_stat_get_last_vacuum_time(c.oid) AS last_vacuum,
+-    pg_stat_get_last_autovacuum_time(c.oid) AS last_autovacuum,
+-    pg_stat_get_last_analyze_time(c.oid) AS last_analyze,
+-    pg_stat_get_last_autoanalyze_time(c.oid) AS last_autoanalyze,
+-    pg_stat_get_vacuum_count(c.oid) AS vacuum_count,
+-    pg_stat_get_autovacuum_count(c.oid) AS autovacuum_count,
+-    pg_stat_get_analyze_count(c.oid) AS analyze_count,
+-    pg_stat_get_autoanalyze_count(c.oid) AS autoanalyze_count
+-   FROM ((pg_class c
+-     LEFT JOIN pg_index i ON ((c.oid = i.indrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 't'::"char", 'm'::"char", 'p'::"char"]))
+-  GROUP BY c.oid, n.nspname, c.relname;
+-pg_stat_archiver| SELECT archived_count,
+-    last_archived_wal,
+-    last_archived_time,
+-    failed_count,
+-    last_failed_wal,
+-    last_failed_time,
+-    stats_reset
+-   FROM pg_stat_get_archiver() s(archived_count, last_archived_wal, last_archived_time, failed_count, last_failed_wal, last_failed_time, stats_reset);
+-pg_stat_bgwriter| SELECT pg_stat_get_bgwriter_timed_checkpoints() AS checkpoints_timed,
+-    pg_stat_get_bgwriter_requested_checkpoints() AS checkpoints_req,
+-    pg_stat_get_checkpoint_write_time() AS checkpoint_write_time,
+-    pg_stat_get_checkpoint_sync_time() AS checkpoint_sync_time,
+-    pg_stat_get_bgwriter_buf_written_checkpoints() AS buffers_checkpoint,
+-    pg_stat_get_bgwriter_buf_written_clean() AS buffers_clean,
+-    pg_stat_get_bgwriter_maxwritten_clean() AS maxwritten_clean,
+-    pg_stat_get_buf_written_backend() AS buffers_backend,
+-    pg_stat_get_buf_fsync_backend() AS buffers_backend_fsync,
+-    pg_stat_get_buf_alloc() AS buffers_alloc,
+-    pg_stat_get_bgwriter_stat_reset_time() AS stats_reset;
+-pg_stat_database| SELECT oid AS datid,
+-    datname,
+-        CASE
+-            WHEN (oid = (0)::oid) THEN 0
+-            ELSE pg_stat_get_db_numbackends(oid)
+-        END AS numbackends,
+-    pg_stat_get_db_xact_commit(oid) AS xact_commit,
+-    pg_stat_get_db_xact_rollback(oid) AS xact_rollback,
+-    (pg_stat_get_db_blocks_fetched(oid) - pg_stat_get_db_blocks_hit(oid)) AS blks_read,
+-    pg_stat_get_db_blocks_hit(oid) AS blks_hit,
+-    pg_stat_get_db_tuples_returned(oid) AS tup_returned,
+-    pg_stat_get_db_tuples_fetched(oid) AS tup_fetched,
+-    pg_stat_get_db_tuples_inserted(oid) AS tup_inserted,
+-    pg_stat_get_db_tuples_updated(oid) AS tup_updated,
+-    pg_stat_get_db_tuples_deleted(oid) AS tup_deleted,
+-    pg_stat_get_db_conflict_all(oid) AS conflicts,
+-    pg_stat_get_db_temp_files(oid) AS temp_files,
+-    pg_stat_get_db_temp_bytes(oid) AS temp_bytes,
+-    pg_stat_get_db_deadlocks(oid) AS deadlocks,
+-    pg_stat_get_db_checksum_failures(oid) AS checksum_failures,
+-    pg_stat_get_db_checksum_last_failure(oid) AS checksum_last_failure,
+-    pg_stat_get_db_blk_read_time(oid) AS blk_read_time,
+-    pg_stat_get_db_blk_write_time(oid) AS blk_write_time,
+-    pg_stat_get_db_session_time(oid) AS session_time,
+-    pg_stat_get_db_active_time(oid) AS active_time,
+-    pg_stat_get_db_idle_in_transaction_time(oid) AS idle_in_transaction_time,
+-    pg_stat_get_db_sessions(oid) AS sessions,
+-    pg_stat_get_db_sessions_abandoned(oid) AS sessions_abandoned,
+-    pg_stat_get_db_sessions_fatal(oid) AS sessions_fatal,
+-    pg_stat_get_db_sessions_killed(oid) AS sessions_killed,
+-    pg_stat_get_db_stat_reset_time(oid) AS stats_reset
+-   FROM ( SELECT 0 AS oid,
+-            NULL::name AS datname
+-        UNION ALL
+-         SELECT pg_database.oid,
+-            pg_database.datname
+-           FROM pg_database) d;
+-pg_stat_database_conflicts| SELECT oid AS datid,
+-    datname,
+-    pg_stat_get_db_conflict_tablespace(oid) AS confl_tablespace,
+-    pg_stat_get_db_conflict_lock(oid) AS confl_lock,
+-    pg_stat_get_db_conflict_snapshot(oid) AS confl_snapshot,
+-    pg_stat_get_db_conflict_bufferpin(oid) AS confl_bufferpin,
+-    pg_stat_get_db_conflict_startup_deadlock(oid) AS confl_deadlock,
+-    pg_stat_get_db_conflict_logicalslot(oid) AS confl_active_logicalslot
+-   FROM pg_database d;
+-pg_stat_gssapi| SELECT pid,
+-    gss_auth AS gss_authenticated,
+-    gss_princ AS principal,
+-    gss_enc AS encrypted,
+-    gss_delegation AS credentials_delegated
+-   FROM pg_stat_get_activity(NULL::integer) s(datid, pid, usesysid, application_name, state, query, wait_event_type, wait_event, xact_start, query_start, backend_start, state_change, client_addr, client_hostname, client_port, backend_xid, backend_xmin, backend_type, ssl, sslversion, sslcipher, sslbits, ssl_client_dn, ssl_client_serial, ssl_issuer_dn, gss_auth, gss_princ, gss_enc, gss_delegation, leader_pid, query_id)
+-  WHERE (client_port IS NOT NULL);
+-pg_stat_io| SELECT backend_type,
+-    object,
+-    context,
+-    reads,
+-    read_time,
+-    writes,
+-    write_time,
+-    writebacks,
+-    writeback_time,
+-    extends,
+-    extend_time,
+-    op_bytes,
+-    hits,
+-    evictions,
+-    reuses,
+-    fsyncs,
+-    fsync_time,
+-    stats_reset
+-   FROM pg_stat_get_io() b(backend_type, object, context, reads, read_time, writes, write_time, writebacks, writeback_time, extends, extend_time, op_bytes, hits, evictions, reuses, fsyncs, fsync_time, stats_reset);
+-pg_stat_progress_analyze| SELECT s.pid,
+-    s.datid,
+-    d.datname,
+-    s.relid,
+-        CASE s.param1
+-            WHEN 0 THEN 'initializing'::text
+-            WHEN 1 THEN 'acquiring sample rows'::text
+-            WHEN 2 THEN 'acquiring inherited sample rows'::text
+-            WHEN 3 THEN 'computing statistics'::text
+-            WHEN 4 THEN 'computing extended statistics'::text
+-            WHEN 5 THEN 'finalizing analyze'::text
+-            ELSE NULL::text
+-        END AS phase,
+-    s.param2 AS sample_blks_total,
+-    s.param3 AS sample_blks_scanned,
+-    s.param4 AS ext_stats_total,
+-    s.param5 AS ext_stats_computed,
+-    s.param6 AS child_tables_total,
+-    s.param7 AS child_tables_done,
+-    (s.param8)::oid AS current_child_table_relid
+-   FROM (pg_stat_get_progress_info('ANALYZE'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)));
+-pg_stat_progress_basebackup| SELECT pid,
+-        CASE param1
+-            WHEN 0 THEN 'initializing'::text
+-            WHEN 1 THEN 'waiting for checkpoint to finish'::text
+-            WHEN 2 THEN 'estimating backup size'::text
+-            WHEN 3 THEN 'streaming database files'::text
+-            WHEN 4 THEN 'waiting for wal archiving to finish'::text
+-            WHEN 5 THEN 'transferring wal files'::text
+-            ELSE NULL::text
+-        END AS phase,
+-        CASE param2
+-            WHEN '-1'::integer THEN NULL::bigint
+-            ELSE param2
+-        END AS backup_total,
+-    param3 AS backup_streamed,
+-    param4 AS tablespaces_total,
+-    param5 AS tablespaces_streamed
+-   FROM pg_stat_get_progress_info('BASEBACKUP'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20);
+-pg_stat_progress_cluster| SELECT s.pid,
+-    s.datid,
+-    d.datname,
+-    s.relid,
+-        CASE s.param1
+-            WHEN 1 THEN 'CLUSTER'::text
+-            WHEN 2 THEN 'VACUUM FULL'::text
+-            ELSE NULL::text
+-        END AS command,
+-        CASE s.param2
+-            WHEN 0 THEN 'initializing'::text
+-            WHEN 1 THEN 'seq scanning heap'::text
+-            WHEN 2 THEN 'index scanning heap'::text
+-            WHEN 3 THEN 'sorting tuples'::text
+-            WHEN 4 THEN 'writing new heap'::text
+-            WHEN 5 THEN 'swapping relation files'::text
+-            WHEN 6 THEN 'rebuilding index'::text
+-            WHEN 7 THEN 'performing final cleanup'::text
+-            ELSE NULL::text
+-        END AS phase,
+-    (s.param3)::oid AS cluster_index_relid,
+-    s.param4 AS heap_tuples_scanned,
+-    s.param5 AS heap_tuples_written,
+-    s.param6 AS heap_blks_total,
+-    s.param7 AS heap_blks_scanned,
+-    s.param8 AS index_rebuild_count
+-   FROM (pg_stat_get_progress_info('CLUSTER'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)));
+-pg_stat_progress_copy| SELECT s.pid,
+-    s.datid,
+-    d.datname,
+-    s.relid,
+-        CASE s.param5
+-            WHEN 1 THEN 'COPY FROM'::text
+-            WHEN 2 THEN 'COPY TO'::text
+-            ELSE NULL::text
+-        END AS command,
+-        CASE s.param6
+-            WHEN 1 THEN 'FILE'::text
+-            WHEN 2 THEN 'PROGRAM'::text
+-            WHEN 3 THEN 'PIPE'::text
+-            WHEN 4 THEN 'CALLBACK'::text
+-            ELSE NULL::text
+-        END AS type,
+-    s.param1 AS bytes_processed,
+-    s.param2 AS bytes_total,
+-    s.param3 AS tuples_processed,
+-    s.param4 AS tuples_excluded
+-   FROM (pg_stat_get_progress_info('COPY'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)));
+-pg_stat_progress_create_index| SELECT s.pid,
+-    s.datid,
+-    d.datname,
+-    s.relid,
+-    (s.param7)::oid AS index_relid,
+-        CASE s.param1
+-            WHEN 1 THEN 'CREATE INDEX'::text
+-            WHEN 2 THEN 'CREATE INDEX CONCURRENTLY'::text
+-            WHEN 3 THEN 'REINDEX'::text
+-            WHEN 4 THEN 'REINDEX CONCURRENTLY'::text
+-            ELSE NULL::text
+-        END AS command,
+-        CASE s.param10
+-            WHEN 0 THEN 'initializing'::text
+-            WHEN 1 THEN 'waiting for writers before build'::text
+-            WHEN 2 THEN ('building index'::text || COALESCE((': '::text || pg_indexam_progress_phasename((s.param9)::oid, s.param11)), ''::text))
+-            WHEN 3 THEN 'waiting for writers before validation'::text
+-            WHEN 4 THEN 'index validation: scanning index'::text
+-            WHEN 5 THEN 'index validation: sorting tuples'::text
+-            WHEN 6 THEN 'index validation: scanning table'::text
+-            WHEN 7 THEN 'waiting for old snapshots'::text
+-            WHEN 8 THEN 'waiting for readers before marking dead'::text
+-            WHEN 9 THEN 'waiting for readers before dropping'::text
+-            ELSE NULL::text
+-        END AS phase,
+-    s.param4 AS lockers_total,
+-    s.param5 AS lockers_done,
+-    s.param6 AS current_locker_pid,
+-    s.param16 AS blocks_total,
+-    s.param17 AS blocks_done,
+-    s.param12 AS tuples_total,
+-    s.param13 AS tuples_done,
+-    s.param14 AS partitions_total,
+-    s.param15 AS partitions_done
+-   FROM (pg_stat_get_progress_info('CREATE INDEX'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)));
+-pg_stat_progress_vacuum| SELECT s.pid,
+-    s.datid,
+-    d.datname,
+-    s.relid,
+-        CASE s.param1
+-            WHEN 0 THEN 'initializing'::text
+-            WHEN 1 THEN 'scanning heap'::text
+-            WHEN 2 THEN 'vacuuming indexes'::text
+-            WHEN 3 THEN 'vacuuming heap'::text
+-            WHEN 4 THEN 'cleaning up indexes'::text
+-            WHEN 5 THEN 'truncating heap'::text
+-            WHEN 6 THEN 'performing final cleanup'::text
+-            ELSE NULL::text
+-        END AS phase,
+-    s.param2 AS heap_blks_total,
+-    s.param3 AS heap_blks_scanned,
+-    s.param4 AS heap_blks_vacuumed,
+-    s.param5 AS index_vacuum_count,
+-    s.param6 AS max_dead_tuples,
+-    s.param7 AS num_dead_tuples
+-   FROM (pg_stat_get_progress_info('VACUUM'::text) s(pid, datid, relid, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12, param13, param14, param15, param16, param17, param18, param19, param20)
+-     LEFT JOIN pg_database d ON ((s.datid = d.oid)));
+-pg_stat_recovery_prefetch| SELECT stats_reset,
+-    prefetch,
+-    hit,
+-    skip_init,
+-    skip_new,
+-    skip_fpw,
+-    skip_rep,
+-    wal_distance,
+-    block_distance,
+-    io_depth
+-   FROM pg_stat_get_recovery_prefetch() s(stats_reset, prefetch, hit, skip_init, skip_new, skip_fpw, skip_rep, wal_distance, block_distance, io_depth);
+-pg_stat_replication| SELECT s.pid,
+-    s.usesysid,
+-    u.rolname AS usename,
+-    s.application_name,
+-    s.client_addr,
+-    s.client_hostname,
+-    s.client_port,
+-    s.backend_start,
+-    s.backend_xmin,
+-    w.state,
+-    w.sent_lsn,
+-    w.write_lsn,
+-    w.flush_lsn,
+-    w.replay_lsn,
+-    w.write_lag,
+-    w.flush_lag,
+-    w.replay_lag,
+-    w.sync_priority,
+-    w.sync_state,
+-    w.reply_time
+-   FROM ((pg_stat_get_activity(NULL::integer) s(datid, pid, usesysid, application_name, state, query, wait_event_type, wait_event, xact_start, query_start, backend_start, state_change, client_addr, client_hostname, client_port, backend_xid, backend_xmin, backend_type, ssl, sslversion, sslcipher, sslbits, ssl_client_dn, ssl_client_serial, ssl_issuer_dn, gss_auth, gss_princ, gss_enc, gss_delegation, leader_pid, query_id)
+-     JOIN pg_stat_get_wal_senders() w(pid, state, sent_lsn, write_lsn, flush_lsn, replay_lsn, write_lag, flush_lag, replay_lag, sync_priority, sync_state, reply_time) ON ((s.pid = w.pid)))
+-     LEFT JOIN pg_authid u ON ((s.usesysid = u.oid)));
+-pg_stat_replication_slots| SELECT s.slot_name,
+-    s.spill_txns,
+-    s.spill_count,
+-    s.spill_bytes,
+-    s.stream_txns,
+-    s.stream_count,
+-    s.stream_bytes,
+-    s.total_txns,
+-    s.total_bytes,
+-    s.stats_reset
+-   FROM pg_replication_slots r,
+-    LATERAL pg_stat_get_replication_slot((r.slot_name)::text) s(slot_name, spill_txns, spill_count, spill_bytes, stream_txns, stream_count, stream_bytes, total_txns, total_bytes, stats_reset)
+-  WHERE (r.datoid IS NOT NULL);
+-pg_stat_slru| SELECT name,
+-    blks_zeroed,
+-    blks_hit,
+-    blks_read,
+-    blks_written,
+-    blks_exists,
+-    flushes,
+-    truncates,
+-    stats_reset
+-   FROM pg_stat_get_slru() s(name, blks_zeroed, blks_hit, blks_read, blks_written, blks_exists, flushes, truncates, stats_reset);
+-pg_stat_ssl| SELECT pid,
+-    ssl,
+-    sslversion AS version,
+-    sslcipher AS cipher,
+-    sslbits AS bits,
+-    ssl_client_dn AS client_dn,
+-    ssl_client_serial AS client_serial,
+-    ssl_issuer_dn AS issuer_dn
+-   FROM pg_stat_get_activity(NULL::integer) s(datid, pid, usesysid, application_name, state, query, wait_event_type, wait_event, xact_start, query_start, backend_start, state_change, client_addr, client_hostname, client_port, backend_xid, backend_xmin, backend_type, ssl, sslversion, sslcipher, sslbits, ssl_client_dn, ssl_client_serial, ssl_issuer_dn, gss_auth, gss_princ, gss_enc, gss_delegation, leader_pid, query_id)
+-  WHERE (client_port IS NOT NULL);
+-pg_stat_subscription| SELECT su.oid AS subid,
+-    su.subname,
+-    st.pid,
+-    st.leader_pid,
+-    st.relid,
+-    st.received_lsn,
+-    st.last_msg_send_time,
+-    st.last_msg_receipt_time,
+-    st.latest_end_lsn,
+-    st.latest_end_time
+-   FROM (pg_subscription su
+-     LEFT JOIN pg_stat_get_subscription(NULL::oid) st(subid, relid, pid, leader_pid, received_lsn, last_msg_send_time, last_msg_receipt_time, latest_end_lsn, latest_end_time) ON ((st.subid = su.oid)));
+-pg_stat_subscription_stats| SELECT ss.subid,
+-    s.subname,
+-    ss.apply_error_count,
+-    ss.sync_error_count,
+-    ss.stats_reset
+-   FROM pg_subscription s,
+-    LATERAL pg_stat_get_subscription_stats(s.oid) ss(subid, apply_error_count, sync_error_count, stats_reset);
+-pg_stat_sys_indexes| SELECT relid,
+-    indexrelid,
+-    schemaname,
+-    relname,
+-    indexrelname,
+-    idx_scan,
+-    last_idx_scan,
+-    idx_tup_read,
+-    idx_tup_fetch
+-   FROM pg_stat_all_indexes
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_stat_sys_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    seq_scan,
+-    last_seq_scan,
+-    seq_tup_read,
+-    idx_scan,
+-    last_idx_scan,
+-    idx_tup_fetch,
+-    n_tup_ins,
+-    n_tup_upd,
+-    n_tup_del,
+-    n_tup_hot_upd,
+-    n_tup_newpage_upd,
+-    n_live_tup,
+-    n_dead_tup,
+-    n_mod_since_analyze,
+-    n_ins_since_vacuum,
+-    last_vacuum,
+-    last_autovacuum,
+-    last_analyze,
+-    last_autoanalyze,
+-    vacuum_count,
+-    autovacuum_count,
+-    analyze_count,
+-    autoanalyze_count
+-   FROM pg_stat_all_tables
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_stat_user_functions| SELECT p.oid AS funcid,
+-    n.nspname AS schemaname,
+-    p.proname AS funcname,
+-    pg_stat_get_function_calls(p.oid) AS calls,
+-    pg_stat_get_function_total_time(p.oid) AS total_time,
+-    pg_stat_get_function_self_time(p.oid) AS self_time
+-   FROM (pg_proc p
+-     LEFT JOIN pg_namespace n ON ((n.oid = p.pronamespace)))
+-  WHERE ((p.prolang <> (12)::oid) AND (pg_stat_get_function_calls(p.oid) IS NOT NULL));
+-pg_stat_user_indexes| SELECT relid,
+-    indexrelid,
+-    schemaname,
+-    relname,
+-    indexrelname,
+-    idx_scan,
+-    last_idx_scan,
+-    idx_tup_read,
+-    idx_tup_fetch
+-   FROM pg_stat_all_indexes
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_stat_user_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    seq_scan,
+-    last_seq_scan,
+-    seq_tup_read,
+-    idx_scan,
+-    last_idx_scan,
+-    idx_tup_fetch,
+-    n_tup_ins,
+-    n_tup_upd,
+-    n_tup_del,
+-    n_tup_hot_upd,
+-    n_tup_newpage_upd,
+-    n_live_tup,
+-    n_dead_tup,
+-    n_mod_since_analyze,
+-    n_ins_since_vacuum,
+-    last_vacuum,
+-    last_autovacuum,
+-    last_analyze,
+-    last_autoanalyze,
+-    vacuum_count,
+-    autovacuum_count,
+-    analyze_count,
+-    autoanalyze_count
+-   FROM pg_stat_all_tables
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_stat_wal| SELECT wal_records,
+-    wal_fpi,
+-    wal_bytes,
+-    wal_buffers_full,
+-    wal_write,
+-    wal_sync,
+-    wal_write_time,
+-    wal_sync_time,
+-    stats_reset
+-   FROM pg_stat_get_wal() w(wal_records, wal_fpi, wal_bytes, wal_buffers_full, wal_write, wal_sync, wal_write_time, wal_sync_time, stats_reset);
+-pg_stat_wal_receiver| SELECT pid,
+-    status,
+-    receive_start_lsn,
+-    receive_start_tli,
+-    written_lsn,
+-    flushed_lsn,
+-    received_tli,
+-    last_msg_send_time,
+-    last_msg_receipt_time,
+-    latest_end_lsn,
+-    latest_end_time,
+-    slot_name,
+-    sender_host,
+-    sender_port,
+-    conninfo
+-   FROM pg_stat_get_wal_receiver() s(pid, status, receive_start_lsn, receive_start_tli, written_lsn, flushed_lsn, received_tli, last_msg_send_time, last_msg_receipt_time, latest_end_lsn, latest_end_time, slot_name, sender_host, sender_port, conninfo)
+-  WHERE (pid IS NOT NULL);
+-pg_stat_xact_all_tables| SELECT c.oid AS relid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    pg_stat_get_xact_numscans(c.oid) AS seq_scan,
+-    pg_stat_get_xact_tuples_returned(c.oid) AS seq_tup_read,
+-    (sum(pg_stat_get_xact_numscans(i.indexrelid)))::bigint AS idx_scan,
+-    ((sum(pg_stat_get_xact_tuples_fetched(i.indexrelid)))::bigint + pg_stat_get_xact_tuples_fetched(c.oid)) AS idx_tup_fetch,
+-    pg_stat_get_xact_tuples_inserted(c.oid) AS n_tup_ins,
+-    pg_stat_get_xact_tuples_updated(c.oid) AS n_tup_upd,
+-    pg_stat_get_xact_tuples_deleted(c.oid) AS n_tup_del,
+-    pg_stat_get_xact_tuples_hot_updated(c.oid) AS n_tup_hot_upd,
+-    pg_stat_get_xact_tuples_newpage_updated(c.oid) AS n_tup_newpage_upd
+-   FROM ((pg_class c
+-     LEFT JOIN pg_index i ON ((c.oid = i.indrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 't'::"char", 'm'::"char", 'p'::"char"]))
+-  GROUP BY c.oid, n.nspname, c.relname;
+-pg_stat_xact_sys_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    seq_scan,
+-    seq_tup_read,
+-    idx_scan,
+-    idx_tup_fetch,
+-    n_tup_ins,
+-    n_tup_upd,
+-    n_tup_del,
+-    n_tup_hot_upd,
+-    n_tup_newpage_upd
+-   FROM pg_stat_xact_all_tables
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_stat_xact_user_functions| SELECT p.oid AS funcid,
+-    n.nspname AS schemaname,
+-    p.proname AS funcname,
+-    pg_stat_get_xact_function_calls(p.oid) AS calls,
+-    pg_stat_get_xact_function_total_time(p.oid) AS total_time,
+-    pg_stat_get_xact_function_self_time(p.oid) AS self_time
+-   FROM (pg_proc p
+-     LEFT JOIN pg_namespace n ON ((n.oid = p.pronamespace)))
+-  WHERE ((p.prolang <> (12)::oid) AND (pg_stat_get_xact_function_calls(p.oid) IS NOT NULL));
+-pg_stat_xact_user_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    seq_scan,
+-    seq_tup_read,
+-    idx_scan,
+-    idx_tup_fetch,
+-    n_tup_ins,
+-    n_tup_upd,
+-    n_tup_del,
+-    n_tup_hot_upd,
+-    n_tup_newpage_upd
+-   FROM pg_stat_xact_all_tables
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_statio_all_indexes| SELECT c.oid AS relid,
+-    i.oid AS indexrelid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    i.relname AS indexrelname,
+-    (pg_stat_get_blocks_fetched(i.oid) - pg_stat_get_blocks_hit(i.oid)) AS idx_blks_read,
+-    pg_stat_get_blocks_hit(i.oid) AS idx_blks_hit
+-   FROM (((pg_class c
+-     JOIN pg_index x ON ((c.oid = x.indrelid)))
+-     JOIN pg_class i ON ((i.oid = x.indexrelid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 't'::"char", 'm'::"char"]));
+-pg_statio_all_sequences| SELECT c.oid AS relid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    (pg_stat_get_blocks_fetched(c.oid) - pg_stat_get_blocks_hit(c.oid)) AS blks_read,
+-    pg_stat_get_blocks_hit(c.oid) AS blks_hit
+-   FROM (pg_class c
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = 'S'::"char");
+-pg_statio_all_tables| SELECT c.oid AS relid,
+-    n.nspname AS schemaname,
+-    c.relname,
+-    (pg_stat_get_blocks_fetched(c.oid) - pg_stat_get_blocks_hit(c.oid)) AS heap_blks_read,
+-    pg_stat_get_blocks_hit(c.oid) AS heap_blks_hit,
+-    i.idx_blks_read,
+-    i.idx_blks_hit,
+-    (pg_stat_get_blocks_fetched(t.oid) - pg_stat_get_blocks_hit(t.oid)) AS toast_blks_read,
+-    pg_stat_get_blocks_hit(t.oid) AS toast_blks_hit,
+-    x.idx_blks_read AS tidx_blks_read,
+-    x.idx_blks_hit AS tidx_blks_hit
+-   FROM ((((pg_class c
+-     LEFT JOIN pg_class t ON ((c.reltoastrelid = t.oid)))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-     LEFT JOIN LATERAL ( SELECT (sum((pg_stat_get_blocks_fetched(pg_index.indexrelid) - pg_stat_get_blocks_hit(pg_index.indexrelid))))::bigint AS idx_blks_read,
+-            (sum(pg_stat_get_blocks_hit(pg_index.indexrelid)))::bigint AS idx_blks_hit
+-           FROM pg_index
+-          WHERE (pg_index.indrelid = c.oid)) i ON (true))
+-     LEFT JOIN LATERAL ( SELECT (sum((pg_stat_get_blocks_fetched(pg_index.indexrelid) - pg_stat_get_blocks_hit(pg_index.indexrelid))))::bigint AS idx_blks_read,
+-            (sum(pg_stat_get_blocks_hit(pg_index.indexrelid)))::bigint AS idx_blks_hit
+-           FROM pg_index
+-          WHERE (pg_index.indrelid = t.oid)) x ON (true))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 't'::"char", 'm'::"char"]));
+-pg_statio_sys_indexes| SELECT relid,
+-    indexrelid,
+-    schemaname,
+-    relname,
+-    indexrelname,
+-    idx_blks_read,
+-    idx_blks_hit
+-   FROM pg_statio_all_indexes
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_statio_sys_sequences| SELECT relid,
+-    schemaname,
+-    relname,
+-    blks_read,
+-    blks_hit
+-   FROM pg_statio_all_sequences
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_statio_sys_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    heap_blks_read,
+-    heap_blks_hit,
+-    idx_blks_read,
+-    idx_blks_hit,
+-    toast_blks_read,
+-    toast_blks_hit,
+-    tidx_blks_read,
+-    tidx_blks_hit
+-   FROM pg_statio_all_tables
+-  WHERE ((schemaname = ANY (ARRAY['pg_catalog'::name, 'information_schema'::name])) OR (schemaname ~ '^pg_toast'::text));
+-pg_statio_user_indexes| SELECT relid,
+-    indexrelid,
+-    schemaname,
+-    relname,
+-    indexrelname,
+-    idx_blks_read,
+-    idx_blks_hit
+-   FROM pg_statio_all_indexes
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_statio_user_sequences| SELECT relid,
+-    schemaname,
+-    relname,
+-    blks_read,
+-    blks_hit
+-   FROM pg_statio_all_sequences
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_statio_user_tables| SELECT relid,
+-    schemaname,
+-    relname,
+-    heap_blks_read,
+-    heap_blks_hit,
+-    idx_blks_read,
+-    idx_blks_hit,
+-    toast_blks_read,
+-    toast_blks_hit,
+-    tidx_blks_read,
+-    tidx_blks_hit
+-   FROM pg_statio_all_tables
+-  WHERE ((schemaname <> ALL (ARRAY['pg_catalog'::name, 'information_schema'::name])) AND (schemaname !~ '^pg_toast'::text));
+-pg_stats| SELECT n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    a.attname,
+-    s.stainherit AS inherited,
+-    s.stanullfrac AS null_frac,
+-    s.stawidth AS avg_width,
+-    s.stadistinct AS n_distinct,
+-        CASE
+-            WHEN (s.stakind1 = 1) THEN s.stavalues1
+-            WHEN (s.stakind2 = 1) THEN s.stavalues2
+-            WHEN (s.stakind3 = 1) THEN s.stavalues3
+-            WHEN (s.stakind4 = 1) THEN s.stavalues4
+-            WHEN (s.stakind5 = 1) THEN s.stavalues5
+-            ELSE NULL::anyarray
+-        END AS most_common_vals,
+-        CASE
+-            WHEN (s.stakind1 = 1) THEN s.stanumbers1
+-            WHEN (s.stakind2 = 1) THEN s.stanumbers2
+-            WHEN (s.stakind3 = 1) THEN s.stanumbers3
+-            WHEN (s.stakind4 = 1) THEN s.stanumbers4
+-            WHEN (s.stakind5 = 1) THEN s.stanumbers5
+-            ELSE NULL::real[]
+-        END AS most_common_freqs,
+-        CASE
+-            WHEN (s.stakind1 = 2) THEN s.stavalues1
+-            WHEN (s.stakind2 = 2) THEN s.stavalues2
+-            WHEN (s.stakind3 = 2) THEN s.stavalues3
+-            WHEN (s.stakind4 = 2) THEN s.stavalues4
+-            WHEN (s.stakind5 = 2) THEN s.stavalues5
+-            ELSE NULL::anyarray
+-        END AS histogram_bounds,
+-        CASE
+-            WHEN (s.stakind1 = 3) THEN s.stanumbers1[1]
+-            WHEN (s.stakind2 = 3) THEN s.stanumbers2[1]
+-            WHEN (s.stakind3 = 3) THEN s.stanumbers3[1]
+-            WHEN (s.stakind4 = 3) THEN s.stanumbers4[1]
+-            WHEN (s.stakind5 = 3) THEN s.stanumbers5[1]
+-            ELSE NULL::real
+-        END AS correlation,
+-        CASE
+-            WHEN (s.stakind1 = 4) THEN s.stavalues1
+-            WHEN (s.stakind2 = 4) THEN s.stavalues2
+-            WHEN (s.stakind3 = 4) THEN s.stavalues3
+-            WHEN (s.stakind4 = 4) THEN s.stavalues4
+-            WHEN (s.stakind5 = 4) THEN s.stavalues5
+-            ELSE NULL::anyarray
+-        END AS most_common_elems,
+-        CASE
+-            WHEN (s.stakind1 = 4) THEN s.stanumbers1
+-            WHEN (s.stakind2 = 4) THEN s.stanumbers2
+-            WHEN (s.stakind3 = 4) THEN s.stanumbers3
+-            WHEN (s.stakind4 = 4) THEN s.stanumbers4
+-            WHEN (s.stakind5 = 4) THEN s.stanumbers5
+-            ELSE NULL::real[]
+-        END AS most_common_elem_freqs,
+-        CASE
+-            WHEN (s.stakind1 = 5) THEN s.stanumbers1
+-            WHEN (s.stakind2 = 5) THEN s.stanumbers2
+-            WHEN (s.stakind3 = 5) THEN s.stanumbers3
+-            WHEN (s.stakind4 = 5) THEN s.stanumbers4
+-            WHEN (s.stakind5 = 5) THEN s.stanumbers5
+-            ELSE NULL::real[]
+-        END AS elem_count_histogram
+-   FROM (((pg_statistic s
+-     JOIN pg_class c ON ((c.oid = s.starelid)))
+-     JOIN pg_attribute a ON (((c.oid = a.attrelid) AND (a.attnum = s.staattnum))))
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE ((NOT a.attisdropped) AND has_column_privilege(c.oid, a.attnum, 'select'::text) AND ((c.relrowsecurity = false) OR (NOT row_security_active(c.oid))));
+-pg_stats_ext| SELECT cn.nspname AS schemaname,
+-    c.relname AS tablename,
+-    sn.nspname AS statistics_schemaname,
+-    s.stxname AS statistics_name,
+-    pg_get_userbyid(s.stxowner) AS statistics_owner,
+-    ( SELECT array_agg(a.attname ORDER BY a.attnum) AS array_agg
+-           FROM (unnest(s.stxkeys) k(k)
+-             JOIN pg_attribute a ON (((a.attrelid = s.stxrelid) AND (a.attnum = k.k))))) AS attnames,
+-    pg_get_statisticsobjdef_expressions(s.oid) AS exprs,
+-    s.stxkind AS kinds,
+-    sd.stxdinherit AS inherited,
+-    sd.stxdndistinct AS n_distinct,
+-    sd.stxddependencies AS dependencies,
+-    m.most_common_vals,
+-    m.most_common_val_nulls,
+-    m.most_common_freqs,
+-    m.most_common_base_freqs
+-   FROM (((((pg_statistic_ext s
+-     JOIN pg_class c ON ((c.oid = s.stxrelid)))
+-     JOIN pg_statistic_ext_data sd ON ((s.oid = sd.stxoid)))
+-     LEFT JOIN pg_namespace cn ON ((cn.oid = c.relnamespace)))
+-     LEFT JOIN pg_namespace sn ON ((sn.oid = s.stxnamespace)))
+-     LEFT JOIN LATERAL ( SELECT array_agg(pg_mcv_list_items."values") AS most_common_vals,
+-            array_agg(pg_mcv_list_items.nulls) AS most_common_val_nulls,
+-            array_agg(pg_mcv_list_items.frequency) AS most_common_freqs,
+-            array_agg(pg_mcv_list_items.base_frequency) AS most_common_base_freqs
+-           FROM pg_mcv_list_items(sd.stxdmcv) pg_mcv_list_items(index, "values", nulls, frequency, base_frequency)) m ON ((sd.stxdmcv IS NOT NULL)))
+-  WHERE ((NOT (EXISTS ( SELECT 1
+-           FROM (unnest(s.stxkeys) k(k)
+-             JOIN pg_attribute a ON (((a.attrelid = s.stxrelid) AND (a.attnum = k.k))))
+-          WHERE (NOT has_column_privilege(c.oid, a.attnum, 'select'::text))))) AND ((c.relrowsecurity = false) OR (NOT row_security_active(c.oid))));
+-pg_stats_ext_exprs| SELECT cn.nspname AS schemaname,
+-    c.relname AS tablename,
+-    sn.nspname AS statistics_schemaname,
+-    s.stxname AS statistics_name,
+-    pg_get_userbyid(s.stxowner) AS statistics_owner,
+-    stat.expr,
+-    sd.stxdinherit AS inherited,
+-    (stat.a).stanullfrac AS null_frac,
+-    (stat.a).stawidth AS avg_width,
+-    (stat.a).stadistinct AS n_distinct,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 1) THEN (stat.a).stavalues1
+-            WHEN ((stat.a).stakind2 = 1) THEN (stat.a).stavalues2
+-            WHEN ((stat.a).stakind3 = 1) THEN (stat.a).stavalues3
+-            WHEN ((stat.a).stakind4 = 1) THEN (stat.a).stavalues4
+-            WHEN ((stat.a).stakind5 = 1) THEN (stat.a).stavalues5
+-            ELSE NULL::anyarray
+-        END AS most_common_vals,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 1) THEN (stat.a).stanumbers1
+-            WHEN ((stat.a).stakind2 = 1) THEN (stat.a).stanumbers2
+-            WHEN ((stat.a).stakind3 = 1) THEN (stat.a).stanumbers3
+-            WHEN ((stat.a).stakind4 = 1) THEN (stat.a).stanumbers4
+-            WHEN ((stat.a).stakind5 = 1) THEN (stat.a).stanumbers5
+-            ELSE NULL::real[]
+-        END AS most_common_freqs,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 2) THEN (stat.a).stavalues1
+-            WHEN ((stat.a).stakind2 = 2) THEN (stat.a).stavalues2
+-            WHEN ((stat.a).stakind3 = 2) THEN (stat.a).stavalues3
+-            WHEN ((stat.a).stakind4 = 2) THEN (stat.a).stavalues4
+-            WHEN ((stat.a).stakind5 = 2) THEN (stat.a).stavalues5
+-            ELSE NULL::anyarray
+-        END AS histogram_bounds,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 3) THEN (stat.a).stanumbers1[1]
+-            WHEN ((stat.a).stakind2 = 3) THEN (stat.a).stanumbers2[1]
+-            WHEN ((stat.a).stakind3 = 3) THEN (stat.a).stanumbers3[1]
+-            WHEN ((stat.a).stakind4 = 3) THEN (stat.a).stanumbers4[1]
+-            WHEN ((stat.a).stakind5 = 3) THEN (stat.a).stanumbers5[1]
+-            ELSE NULL::real
+-        END AS correlation,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 4) THEN (stat.a).stavalues1
+-            WHEN ((stat.a).stakind2 = 4) THEN (stat.a).stavalues2
+-            WHEN ((stat.a).stakind3 = 4) THEN (stat.a).stavalues3
+-            WHEN ((stat.a).stakind4 = 4) THEN (stat.a).stavalues4
+-            WHEN ((stat.a).stakind5 = 4) THEN (stat.a).stavalues5
+-            ELSE NULL::anyarray
+-        END AS most_common_elems,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 4) THEN (stat.a).stanumbers1
+-            WHEN ((stat.a).stakind2 = 4) THEN (stat.a).stanumbers2
+-            WHEN ((stat.a).stakind3 = 4) THEN (stat.a).stanumbers3
+-            WHEN ((stat.a).stakind4 = 4) THEN (stat.a).stanumbers4
+-            WHEN ((stat.a).stakind5 = 4) THEN (stat.a).stanumbers5
+-            ELSE NULL::real[]
+-        END AS most_common_elem_freqs,
+-        CASE
+-            WHEN ((stat.a).stakind1 = 5) THEN (stat.a).stanumbers1
+-            WHEN ((stat.a).stakind2 = 5) THEN (stat.a).stanumbers2
+-            WHEN ((stat.a).stakind3 = 5) THEN (stat.a).stanumbers3
+-            WHEN ((stat.a).stakind4 = 5) THEN (stat.a).stanumbers4
+-            WHEN ((stat.a).stakind5 = 5) THEN (stat.a).stanumbers5
+-            ELSE NULL::real[]
+-        END AS elem_count_histogram
+-   FROM (((((pg_statistic_ext s
+-     JOIN pg_class c ON ((c.oid = s.stxrelid)))
+-     LEFT JOIN pg_statistic_ext_data sd ON ((s.oid = sd.stxoid)))
+-     LEFT JOIN pg_namespace cn ON ((cn.oid = c.relnamespace)))
+-     LEFT JOIN pg_namespace sn ON ((sn.oid = s.stxnamespace)))
+-     JOIN LATERAL ( SELECT unnest(pg_get_statisticsobjdef_expressions(s.oid)) AS expr,
+-            unnest(sd.stxdexpr) AS a) stat ON ((stat.expr IS NOT NULL)));
+-pg_tables| SELECT n.nspname AS schemaname,
+-    c.relname AS tablename,
+-    pg_get_userbyid(c.relowner) AS tableowner,
+-    t.spcname AS tablespace,
+-    c.relhasindex AS hasindexes,
+-    c.relhasrules AS hasrules,
+-    c.relhastriggers AS hastriggers,
+-    c.relrowsecurity AS rowsecurity
+-   FROM ((pg_class c
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-     LEFT JOIN pg_tablespace t ON ((t.oid = c.reltablespace)))
+-  WHERE (c.relkind = ANY (ARRAY['r'::"char", 'p'::"char"]));
+-pg_timezone_abbrevs| SELECT abbrev,
+-    utc_offset,
+-    is_dst
+-   FROM pg_timezone_abbrevs() pg_timezone_abbrevs(abbrev, utc_offset, is_dst);
+-pg_timezone_names| SELECT name,
+-    abbrev,
+-    utc_offset,
+-    is_dst
+-   FROM pg_timezone_names() pg_timezone_names(name, abbrev, utc_offset, is_dst);
+-pg_user| SELECT usename,
+-    usesysid,
+-    usecreatedb,
+-    usesuper,
+-    userepl,
+-    usebypassrls,
+-    '********'::text AS passwd,
+-    valuntil,
+-    useconfig
+-   FROM pg_shadow;
+-pg_user_mappings| SELECT u.oid AS umid,
+-    s.oid AS srvid,
+-    s.srvname,
+-    u.umuser,
+-        CASE
+-            WHEN (u.umuser = (0)::oid) THEN 'public'::name
+-            ELSE a.rolname
+-        END AS usename,
+-        CASE
+-            WHEN (((u.umuser <> (0)::oid) AND (a.rolname = CURRENT_USER) AND (pg_has_role(s.srvowner, 'USAGE'::text) OR has_server_privilege(s.oid, 'USAGE'::text))) OR ((u.umuser = (0)::oid) AND pg_has_role(s.srvowner, 'USAGE'::text)) OR ( SELECT pg_authid.rolsuper
+-               FROM pg_authid
+-              WHERE (pg_authid.rolname = CURRENT_USER))) THEN u.umoptions
+-            ELSE NULL::text[]
+-        END AS umoptions
+-   FROM ((pg_user_mapping u
+-     JOIN pg_foreign_server s ON ((u.umserver = s.oid)))
+-     LEFT JOIN pg_authid a ON ((a.oid = u.umuser)));
+-pg_views| SELECT n.nspname AS schemaname,
+-    c.relname AS viewname,
+-    pg_get_userbyid(c.relowner) AS viewowner,
+-    pg_get_viewdef(c.oid) AS definition
+-   FROM (pg_class c
+-     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
+-  WHERE (c.relkind = 'v'::"char");
+ SELECT tablename, rulename, definition FROM pg_rules
+ WHERE schemaname = 'pg_catalog'
+ ORDER BY tablename, rulename;
+-pg_settings|pg_settings_n|CREATE RULE pg_settings_n AS
+-    ON UPDATE TO pg_catalog.pg_settings DO INSTEAD NOTHING;
+-pg_settings|pg_settings_u|CREATE RULE pg_settings_u AS
+-    ON UPDATE TO pg_catalog.pg_settings
+-   WHERE (new.name = old.name) DO  SELECT set_config(old.name, new.setting, false) AS set_config;
+ -- restore normal output mode
+ \a\t
+ --
+@@ -2646,16 +1726,44 @@
+ CREATE TABLE ruletest_tbl2 (a int, b int);
+ CREATE OR REPLACE RULE myrule AS ON INSERT TO ruletest_tbl
+ 	DO INSTEAD INSERT INTO ruletest_tbl2 VALUES (10, 10);
++ERROR:  at or near "myrule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OR REPLACE RULE myrule AS ON INSERT TO ruletest_tbl
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO ruletest_tbl VALUES (99, 99);
+ CREATE OR REPLACE RULE myrule AS ON INSERT TO ruletest_tbl
+ 	DO INSTEAD INSERT INTO ruletest_tbl2 VALUES (1000, 1000);
++ERROR:  at or near "myrule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OR REPLACE RULE myrule AS ON INSERT TO ruletest_tbl
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO ruletest_tbl VALUES (99, 99);
+ SELECT * FROM ruletest_tbl2;
+-  a   |  b   
+-------+------
+-   10 |   10
+- 1000 | 1000
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- Check that rewrite rules splitting one INSERT into multiple
+ -- conditional statements does not disable FK checking.
+@@ -2691,27 +1799,27 @@
+ insert into rule_and_refint_t3 values (1, 12, 11, 'row3');
+ insert into rule_and_refint_t3 values (1, 12, 12, 'row4');
+ insert into rule_and_refint_t3 values (1, 11, 13, 'row5');
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3c_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3c_fkey"
+ DETAIL:  Key (id3a, id3c)=(1, 13) is not present in table "rule_and_refint_t2".
+ insert into rule_and_refint_t3 values (1, 13, 11, 'row6');
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
+ DETAIL:  Key (id3a, id3b)=(1, 13) is not present in table "rule_and_refint_t1".
+ -- Ordinary table
+ insert into rule_and_refint_t3 values (1, 13, 11, 'row6')
+   on conflict do nothing;
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
+ DETAIL:  Key (id3a, id3b)=(1, 13) is not present in table "rule_and_refint_t1".
+ -- rule not fired, so fk violation
+ insert into rule_and_refint_t3 values (1, 13, 11, 'row6')
+   on conflict (id3a, id3b, id3c) do update
+   set id3b = excluded.id3b;
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
+ DETAIL:  Key (id3a, id3b)=(1, 13) is not present in table "rule_and_refint_t1".
+ -- rule fired, so unsupported
+ insert into shoelace values ('sl9', 0, 'pink', 35.0, 'inch', 0.0)
+   on conflict (sl_name) do update
+   set sl_avail = excluded.sl_avail;
+-ERROR:  INSERT with ON CONFLICT clause cannot be used with table that has INSERT or UPDATE rules
++ERROR:  "shoelace" is not a table
+ create rule rule_and_refint_t3_ins as on insert to rule_and_refint_t3
+ 	where (exists (select 1 from rule_and_refint_t3
+ 			where (((rule_and_refint_t3.id3a = new.id3a)
+@@ -2721,19 +1829,47 @@
+ 	where (((rule_and_refint_t3.id3a = new.id3a)
+ 	and (rule_and_refint_t3.id3b = new.id3b))
+ 	and (rule_and_refint_t3.id3c = new.id3c));
++ERROR:  at or near "rule_and_refint_t3_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rule_and_refint_t3_ins as on insert to rule_and_refint_t3
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into rule_and_refint_t3 values (1, 11, 13, 'row7');
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3c_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3c_fkey"
+ DETAIL:  Key (id3a, id3c)=(1, 13) is not present in table "rule_and_refint_t2".
+ insert into rule_and_refint_t3 values (1, 13, 11, 'row8');
+-ERROR:  insert or update on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
++ERROR:  insert on table "rule_and_refint_t3" violates foreign key constraint "rule_and_refint_t3_id3a_id3b_fkey"
+ DETAIL:  Key (id3a, id3b)=(1, 13) is not present in table "rule_and_refint_t1".
+ --
+ -- disallow dropping a view's rule (bug #5072)
+ --
+ create view rules_fooview as select 'rules_foo'::text;
+ drop rule "_RETURN" on rules_fooview;
+-ERROR:  cannot drop rule _RETURN on view rules_fooview because view rules_fooview requires it
+-HINT:  You can drop view rules_fooview instead.
++ERROR:  at or near "_RETURN": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule "_RETURN" on rules_fooview
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop view rules_fooview;
+ --
+ -- We used to allow converting a table to a view by creating a "_RETURN"
+@@ -2742,116 +1878,263 @@
+ create table rules_fooview (x int, y text);
+ create rule "_RETURN" as on select to rules_fooview do instead
+   select 1 as x, 'aaa'::text as y;
+-ERROR:  relation "rules_fooview" cannot have ON SELECT rules
+-DETAIL:  This operation is not supported for tables.
++ERROR:  at or near "_RETURN": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule "_RETURN" as on select to rules_fooview do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table rules_fooview;
+ -- likewise, converting a partitioned table or partition to view is not allowed
+ create table rules_fooview (x int, y text) partition by list (x);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table rules_fooview (x int, y text) partition by list (x)
++                                                                ^
++HINT:  try \h CREATE TABLE
+ create rule "_RETURN" as on select to rules_fooview do instead
+   select 1 as x, 'aaa'::text as y;
+-ERROR:  relation "rules_fooview" cannot have ON SELECT rules
+-DETAIL:  This operation is not supported for partitioned tables.
++ERROR:  at or near "_RETURN": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule "_RETURN" as on select to rules_fooview do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create table rules_fooview_part partition of rules_fooview for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table rules_fooview_part partition of rules_fooview for values in (1)
++                                ^
++HINT:  try \h CREATE TABLE
+ create rule "_RETURN" as on select to rules_fooview_part do instead
+   select 1 as x, 'aaa'::text as y;
+-ERROR:  relation "rules_fooview_part" cannot have ON SELECT rules
+-DETAIL:  This operation is not supported for tables.
++ERROR:  at or near "_RETURN": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule "_RETURN" as on select to rules_fooview_part do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table rules_fooview;
++ERROR:  relation "rules_fooview" does not exist
+ --
+ -- check for planner problems with complex inherited UPDATES
+ --
+ create table id (id serial primary key, name text);
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ -- currently, must respecify PKEY for each inherited subtable
+ create table test_1 (id integer primary key) inherits (id);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table test_1 (id integer primary key) inherits (id)
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table test_2 (id integer primary key) inherits (id);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table test_2 (id integer primary key) inherits (id)
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table test_3 (id integer primary key) inherits (id);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table test_3 (id integer primary key) inherits (id)
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into test_1 (name) values ('Test 1');
++ERROR:  relation "test_1" does not exist
+ insert into test_1 (name) values ('Test 2');
++ERROR:  relation "test_1" does not exist
+ insert into test_2 (name) values ('Test 3');
++ERROR:  relation "test_2" does not exist
+ insert into test_2 (name) values ('Test 4');
++ERROR:  relation "test_2" does not exist
+ insert into test_3 (name) values ('Test 5');
++ERROR:  relation "test_3" does not exist
+ insert into test_3 (name) values ('Test 6');
++ERROR:  relation "test_3" does not exist
+ create view id_ordered as select * from id order by id;
+ create rule update_id_ordered as on update to id_ordered
+ 	do instead update id set name = new.name where id = old.id;
++ERROR:  at or near "update_id_ordered": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule update_id_ordered as on update to id_ordered
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from id_ordered;
+- id |  name  
+-----+--------
+-  1 | Test 1
+-  2 | Test 2
+-  3 | Test 3
+-  4 | Test 4
+-  5 | Test 5
+-  6 | Test 6
+-(6 rows)
++ id | name 
++----+------
++(0 rows)
+ 
+ update id_ordered set name = 'update 2' where id = 2;
++ERROR:  "id_ordered" is not a table
+ update id_ordered set name = 'update 4' where id = 4;
++ERROR:  "id_ordered" is not a table
+ update id_ordered set name = 'update 5' where id = 5;
++ERROR:  "id_ordered" is not a table
+ select * from id_ordered;
+- id |   name   
+-----+----------
+-  1 | Test 1
+-  2 | update 2
+-  3 | Test 3
+-  4 | update 4
+-  5 | update 5
+-  6 | Test 6
+-(6 rows)
++ id | name 
++----+------
++(0 rows)
+ 
+ drop table id cascade;
+-NOTICE:  drop cascades to 4 other objects
+-DETAIL:  drop cascades to table test_1
+-drop cascades to table test_2
+-drop cascades to table test_3
+-drop cascades to view id_ordered
+ --
+ -- check corner case where an entirely-dummy subplan is created by
+ -- constraint exclusion
+ --
+ create temp table t1 (a integer primary key);
+ create temp table t1_1 (check (a >= 0 and a < 10)) inherits (t1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table t1_1 (check (a >= 0 and a < 10)) inherits (t1)
++                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create temp table t1_2 (check (a >= 10 and a < 20)) inherits (t1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table t1_2 (check (a >= 10 and a < 20)) inherits (t1)
++                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create rule t1_ins_1 as on insert to t1
+ 	where new.a >= 0 and new.a < 10
+ 	do instead
+ 	insert into t1_1 values (new.a);
++ERROR:  at or near "t1_ins_1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule t1_ins_1 as on insert to t1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule t1_ins_2 as on insert to t1
+ 	where new.a >= 10 and new.a < 20
+ 	do instead
+ 	insert into t1_2 values (new.a);
++ERROR:  at or near "t1_ins_2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule t1_ins_2 as on insert to t1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule t1_upd_1 as on update to t1
+ 	where old.a >= 0 and old.a < 10
+ 	do instead
+ 	update t1_1 set a = new.a where a = old.a;
++ERROR:  at or near "t1_upd_1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule t1_upd_1 as on update to t1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule t1_upd_2 as on update to t1
+ 	where old.a >= 10 and old.a < 20
+ 	do instead
+ 	update t1_2 set a = new.a where a = old.a;
++ERROR:  at or near "t1_upd_2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule t1_upd_2 as on update to t1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set constraint_exclusion = on;
++ERROR:  unimplemented: the configuration setting "constraint_exclusion" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into t1 select * from generate_series(5,19,1) g;
+ update t1 set a = 4 where a = 5;
+ select * from only t1;
+- a 
+----
+-(0 rows)
+-
+-select * from only t1_1;
+- a 
+----
+- 6
+- 7
+- 8
+- 9
+- 4
+-(5 rows)
+-
+-select * from only t1_2;
+  a  
+ ----
++  4
++  6
++  7
++  8
++  9
+  10
+  11
+  12
+@@ -2862,83 +2145,98 @@
+  17
+  18
+  19
+-(10 rows)
++(15 rows)
+ 
++select * from only t1_1;
++ERROR:  relation "t1_1" does not exist
++select * from only t1_2;
++ERROR:  relation "t1_2" does not exist
+ reset constraint_exclusion;
++ERROR:  unimplemented: the configuration setting "constraint_exclusion" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- test FOR UPDATE in rules
+ create table rules_base(f1 int, f2 int);
+ insert into rules_base values(1,2), (11,12);
+ create rule r1 as on update to rules_base do instead
+   select * from rules_base where f1 = 1 for update;
+-update rules_base set f2 = f2 + 1;
+- f1 | f2 
+-----+----
+-  1 |  2
+-(1 row)
++ERROR:  at or near "r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r1 as on update to rules_base do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++update rules_base set f2 = f2 + 1;
+ create or replace rule r1 as on update to rules_base do instead
+   select * from rules_base where f1 = 11 for update of rules_base;
+-update rules_base set f2 = f2 + 1;
+- f1 | f2 
+-----+----
+- 11 | 12
+-(1 row)
++ERROR:  at or near "r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create or replace rule r1 as on update to rules_base do instead
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++update rules_base set f2 = f2 + 1;
+ create or replace rule r1 as on update to rules_base do instead
+   select * from rules_base where f1 = 11 for update of old; -- error
+-ERROR:  relation "old" in FOR UPDATE clause not found in FROM clause
+-LINE 2:   select * from rules_base where f1 = 11 for update of old;
+-                                                               ^
++ERROR:  at or near "r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create or replace rule r1 as on update to rules_base do instead
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table rules_base;
+ -- test various flavors of pg_get_viewdef()
+ select pg_get_viewdef('shoe'::regclass) as unpretty;
+-                    unpretty                    
+-------------------------------------------------
+-  SELECT sh.shoename,                          +
+-     sh.sh_avail,                              +
+-     sh.slcolor,                               +
+-     sh.slminlen,                              +
+-     (sh.slminlen * un.un_fact) AS slminlen_cm,+
+-     sh.slmaxlen,                              +
+-     (sh.slmaxlen * un.un_fact) AS slmaxlen_cm,+
+-     sh.slunit                                 +
+-    FROM shoe_data sh,                         +
+-     unit un                                   +
+-   WHERE (sh.slunit = un.un_name);
++                                                                                                                         unpretty                                                                                                                         
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ SELECT sh.shoename, sh.sh_avail, sh.slcolor, sh.slminlen, sh.slminlen * un.un_fact AS slminlen_cm, sh.slmaxlen, sh.slmaxlen * un.un_fact AS slmaxlen_cm, sh.slunit FROM root.public.shoe_data AS sh, root.public.unit AS un WHERE sh.slunit = un.un_name
+ (1 row)
+ 
+ select pg_get_viewdef('shoe'::regclass,true) as pretty;
+-                    pretty                    
+-----------------------------------------------
+-  SELECT sh.shoename,                        +
+-     sh.sh_avail,                            +
+-     sh.slcolor,                             +
+-     sh.slminlen,                            +
+-     sh.slminlen * un.un_fact AS slminlen_cm,+
+-     sh.slmaxlen,                            +
+-     sh.slmaxlen * un.un_fact AS slmaxlen_cm,+
+-     sh.slunit                               +
+-    FROM shoe_data sh,                       +
+-     unit un                                 +
+-   WHERE sh.slunit = un.un_name;
++                                                                                                                          pretty                                                                                                                          
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ SELECT sh.shoename, sh.sh_avail, sh.slcolor, sh.slminlen, sh.slminlen * un.un_fact AS slminlen_cm, sh.slmaxlen, sh.slmaxlen * un.un_fact AS slmaxlen_cm, sh.slunit FROM root.public.shoe_data AS sh, root.public.unit AS un WHERE sh.slunit = un.un_name
+ (1 row)
+ 
+ select pg_get_viewdef('shoe'::regclass,0) as prettier;
+-                   prettier                   
+-----------------------------------------------
+-  SELECT sh.shoename,                        +
+-     sh.sh_avail,                            +
+-     sh.slcolor,                             +
+-     sh.slminlen,                            +
+-     sh.slminlen * un.un_fact AS slminlen_cm,+
+-     sh.slmaxlen,                            +
+-     sh.slmaxlen * un.un_fact AS slmaxlen_cm,+
+-     sh.slunit                               +
+-    FROM shoe_data sh,                       +
+-     unit un                                 +
+-   WHERE sh.slunit = un.un_name;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(regclass, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- check multi-row VALUES in rules
+ --
+@@ -2947,6 +2245,21 @@
+ insert into rules_src values(1,2), (11,12);
+ create rule r1 as on update to rules_src do also
+   insert into rules_log values(old.*, 'old', default), (new.*, 'new', default);
++ERROR:  at or near "r1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r1 as on update to rules_src do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update rules_src set f2 = f2 + 1;
+ update rules_src set f2 = f2 * 10;
+ select * from rules_src;
+@@ -2957,68 +2270,112 @@
+ (2 rows)
+ 
+ select * from rules_log;
+- f1 | f2  | tag | id 
+-----+-----+-----+----
+-  1 |   2 | old |  1
+-  1 |   3 | new |  2
+- 11 |  12 | old |  3
+- 11 |  13 | new |  4
+-  1 |   3 | old |  5
+-  1 |  30 | new |  6
+- 11 |  13 | old |  7
+- 11 | 130 | new |  8
+-(8 rows)
++ f1 | f2 | tag | id 
++----+----+-----+----
++(0 rows)
+ 
+ create rule r2 as on update to rules_src do also
+   values(old.*, 'old'), (new.*, 'new');
+-update rules_src set f2 = f2 / 10;
+- column1 | column2 | column3 
+----------+---------+---------
+-       1 |      30 | old
+-       1 |       3 | new
+-      11 |     130 | old
+-      11 |      13 | new
+-(4 rows)
++ERROR:  at or near "r2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r2 as on update to rules_src do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++update rules_src set f2 = f2 / 10;
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ create rule r3 as on insert to rules_src do also
+   insert into rules_log values(null, null, '-', default), (new.*, 'new', default);
++ERROR:  at or near "r3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r3 as on insert to rules_src do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into rules_src values(22,23), (33,default);
+ select * from rules_src;
+- f1 | f2 
+-----+----
+-  1 |  3
+- 11 | 13
+- 22 | 23
+- 33 |  0
++ f1 | f2  
++----+-----
++  1 |  30
++ 11 | 130
++ 22 |  23
++ 33 |   0
+ (4 rows)
+ 
+ select * from rules_log;
+- f1 | f2  | tag | id 
+-----+-----+-----+----
+-  1 |   2 | old |  1
+-  1 |   3 | new |  2
+- 11 |  12 | old |  3
+- 11 |  13 | new |  4
+-  1 |   3 | old |  5
+-  1 |  30 | new |  6
+- 11 |  13 | old |  7
+- 11 | 130 | new |  8
+-  1 |  30 | old |  9
+-  1 |   3 | new | 10
+- 11 | 130 | old | 11
+- 11 |  13 | new | 12
+-    |     | -   | 13
+- 22 |  23 | new | 14
+-    |     | -   | 15
+- 33 |   0 | new | 16
+-(16 rows)
++ f1 | f2 | tag | id 
++----+----+-----+----
++(0 rows)
+ 
+ create rule r4 as on delete to rules_src do notify rules_src_deletion;
++ERROR:  at or near "r4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r4 as on delete to rules_src do notify rules_src_deletion
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Ensure an aliased target relation for insert is correctly deparsed.
+ --
+ create rule r5 as on insert to rules_src do instead insert into rules_log AS trgt SELECT NEW.* RETURNING trgt.f1, trgt.f2;
++ERROR:  at or near "r5": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r5 as on insert to rules_src do instead insert into rules_log AS trgt SELECT NEW.* RETURNING trgt.f1, trgt.f2
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule r6 as on update to rules_src do instead UPDATE rules_log AS trgt SET tag = 'updated' WHERE trgt.f1 = new.f1;
++ERROR:  at or near "r6": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r6 as on update to rules_src do instead UPDATE rules_log AS trgt SET tag = 'updated' WHERE trgt.f1 = new.f1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Check deparse disambiguation of INSERT/UPDATE/DELETE targets.
+ --
+@@ -3028,52 +2385,32 @@
+        wdel as (delete from int4_tbl trgt where f1 = 0 returning *)
+   insert into rules_log AS trgt select old.* from wins, wupd, wdel
+   returning trgt.f1, trgt.f2;
++ERROR:  at or near "r7": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule r7 as on delete to rules_src do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- check display of all rules added above
+ \d+ rules_src
+-                                 Table "public.rules_src"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- f1     | integer |           |          |         | plain   |              | 
+- f2     | integer |           |          | 0       | plain   |              | 
+-Rules:
+-    r1 AS
+-    ON UPDATE TO rules_src DO  INSERT INTO rules_log (f1, f2, tag, id) VALUES (old.f1,old.f2,'old'::text,DEFAULT), (new.f1,new.f2,'new'::text,DEFAULT)
+-    r2 AS
+-    ON UPDATE TO rules_src DO  VALUES (old.f1,old.f2,'old'::text), (new.f1,new.f2,'new'::text)
+-    r3 AS
+-    ON INSERT TO rules_src DO  INSERT INTO rules_log (f1, f2, tag, id) VALUES (NULL::integer,NULL::integer,'-'::text,DEFAULT), (new.f1,new.f2,'new'::text,DEFAULT)
+-    r4 AS
+-    ON DELETE TO rules_src DO
+- NOTIFY rules_src_deletion
+-    r5 AS
+-    ON INSERT TO rules_src DO INSTEAD  INSERT INTO rules_log AS trgt (f1, f2)  SELECT new.f1,
+-            new.f2
+-  RETURNING trgt.f1,
+-    trgt.f2
+-    r6 AS
+-    ON UPDATE TO rules_src DO INSTEAD  UPDATE rules_log trgt SET tag = 'updated'::text
+-  WHERE trgt.f1 = new.f1
+-    r7 AS
+-    ON DELETE TO rules_src DO INSTEAD  WITH wins AS (
+-         INSERT INTO int4_tbl AS trgt_1 (f1)
+-          VALUES (0)
+-          RETURNING trgt_1.f1
+-        ), wupd AS (
+-         UPDATE int4_tbl trgt_1 SET f1 = trgt_1.f1 + 1
+-          RETURNING trgt_1.f1
+-        ), wdel AS (
+-         DELETE FROM int4_tbl trgt_1
+-          WHERE trgt_1.f1 = 0
+-          RETURNING trgt_1.f1
+-        )
+- INSERT INTO rules_log AS trgt (f1, f2)  SELECT old.f1,
+-            old.f2
+-           FROM wins,
+-            wupd,
+-            wdel
+-  RETURNING trgt.f1,
+-    trgt.f2
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rules_src)$' COLLATE pg_catalog.default
++                                                                         ^
+ --
+ -- Also check multiassignment deparsing.
+ --
+@@ -3082,21 +2419,31 @@
+ create rule rr as on update to rule_t1 do instead UPDATE rule_dest trgt
+   SET (f2[1], f1, tag) = (SELECT new.f2, new.f1, 'updated'::varchar)
+   WHERE trgt.f1 = new.f1 RETURNING new.*;
+-\d+ rule_t1
+-                                  Table "public.rule_t1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- f1     | integer |           |          |         | plain   |              | 
+- f2     | integer |           |          |         | plain   |              | 
+-Rules:
+-    rr AS
+-    ON UPDATE TO rule_t1 DO INSTEAD  UPDATE rule_dest trgt SET (f2[1], f1, tag) = ( SELECT new.f2,
+-            new.f1,
+-            'updated'::character varying AS "varchar")
+-  WHERE trgt.f1 = new.f1
+-  RETURNING new.f1,
+-    new.f2
++ERROR:  at or near "rr": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule rr as on update to rule_t1 do instead UPDATE rule_dest trgt
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++\d+ rule_t1
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_t1)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop table rule_t1, rule_dest;
+ --
+ -- Test implicit LATERAL references to old/new in rules
+@@ -3106,23 +2453,50 @@
+ CREATE RULE v1_ins AS ON INSERT TO rule_v1
+   DO ALSO INSERT INTO rule_t1
+   SELECT * FROM (SELECT a + 10 FROM rule_t1 WHERE a = NEW.a) tt;
++ERROR:  at or near "v1_ins": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE v1_ins AS ON INSERT TO rule_v1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE v1_upd AS ON UPDATE TO rule_v1
+   DO ALSO UPDATE rule_t1 t
+   SET c = tt.a * 10
+   FROM (SELECT a FROM rule_t1 WHERE a = OLD.a) tt WHERE t.a = tt.a;
++ERROR:  at or near "v1_upd": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE v1_upd AS ON UPDATE TO rule_v1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO rule_v1 VALUES (1, 'a'), (2, 'b');
++ERROR:  "rule_v1" is not a table
+ UPDATE rule_v1 SET b = upper(b);
++ERROR:  "rule_v1" is not a table
+ SELECT * FROM rule_t1;
+- a  |  b  |  c  
+-----+-----+-----
+-  1 | A   |  10
+-  2 | B   |  20
+- 11 | XXX | 110
+- 12 | XXX | 120
+-(4 rows)
++ a | b | c 
++---+---+---
++(0 rows)
+ 
+ DROP TABLE rule_t1 CASCADE;
+-NOTICE:  drop cascades to view rule_v1
+ --
+ -- check alter rename rule
+ --
+@@ -3132,36 +2506,65 @@
+     ON INSERT TO rule_v1
+     DO INSTEAD
+         INSERT INTO rule_t1 VALUES(new.a);
++ERROR:  at or near "insertrule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE InsertRule AS
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ALTER RULE InsertRule ON rule_v1 RENAME to NewInsertRule;
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER RULE InsertRule ON rule_v1 RENAME to NewInsertRule
++      ^
++HINT:  try \h ALTER
+ INSERT INTO rule_v1 VALUES(1);
++ERROR:  "rule_v1" is not a table
+ SELECT * FROM rule_v1;
+  a 
+ ---
+- 1
+-(1 row)
++(0 rows)
+ 
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT a
+-   FROM rule_t1;
+-Rules:
+- newinsertrule AS
+-    ON INSERT TO rule_v1 DO INSTEAD  INSERT INTO rule_t1 (a)
+-  VALUES (new.a)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ --
+ -- error conditions for alter rename rule
+ --
+ ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule; -- doesn't exist
+-ERROR:  rule "insertrule" for relation "rule_v1" does not exist
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER RULE InsertRule ON rule_v1 RENAME TO NewInsertRule
++      ^
++HINT:  try \h ALTER
+ ALTER RULE NewInsertRule ON rule_v1 RENAME TO "_RETURN"; -- already exists
+-ERROR:  rule "_RETURN" for relation "rule_v1" already exists
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER RULE NewInsertRule ON rule_v1 RENAME TO "_RETURN"
++      ^
++HINT:  try \h ALTER
+ ALTER RULE "_RETURN" ON rule_v1 RENAME TO abc; -- ON SELECT rule cannot be renamed
+-ERROR:  renaming an ON SELECT rule is not allowed
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER RULE "_RETURN" ON rule_v1 RENAME TO abc
++      ^
++HINT:  try \h ALTER
+ DROP VIEW rule_v1;
+ DROP TABLE rule_t1;
+ --
+@@ -3169,66 +2572,70 @@
+ --
+ create view rule_v1 as values(1,2);
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+- column1 | integer |           |          |         | plain   | 
+- column2 | integer |           |          |         | plain   | 
+-View definition:
+- VALUES (1,2);
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ alter table rule_v1 rename column column2 to q2;
++ERROR:  "rule_v1" is not a table
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+- column1 | integer |           |          |         | plain   | 
+- q2      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT column1,
+-    column2 AS q2
+-   FROM (VALUES (1,2)) "*VALUES*";
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop view rule_v1;
+ create view rule_v1(x) as values(1,2);
++ERROR:  CREATE VIEW specifies 1 column name, but data source has 2 columns
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+- x       | integer |           |          |         | plain   | 
+- column2 | integer |           |          |         | plain   | 
+-View definition:
+- SELECT column1 AS x,
+-    column2
+-   FROM (VALUES (1,2)) "*VALUES*";
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop view rule_v1;
++ERROR:  relation "rule_v1" does not exist
+ create view rule_v1(x) as select * from (values(1,2)) v;
++ERROR:  CREATE VIEW specifies 1 column name, but data source has 2 columns
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column  |  Type   | Collation | Nullable | Default | Storage | Description 
+----------+---------+-----------+----------+---------+---------+-------------
+- x       | integer |           |          |         | plain   | 
+- column2 | integer |           |          |         | plain   | 
+-View definition:
+- SELECT column1 AS x,
+-    column2
+-   FROM ( VALUES (1,2)) v;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop view rule_v1;
++ERROR:  relation "rule_v1" does not exist
+ create view rule_v1(x) as select * from (values(1,2)) v(q,w);
++ERROR:  CREATE VIEW specifies 1 column name, but data source has 2 columns
+ \d+ rule_v1
+-                           View "public.rule_v1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- x      | integer |           |          |         | plain   | 
+- w      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT q AS x,
+-    w
+-   FROM ( VALUES (1,2)) v(q, w);
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rule_v1)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop view rule_v1;
++ERROR:  relation "rule_v1" does not exist
+ --
+ -- Check DO INSTEAD rules with ON CONFLICT
+ --
+@@ -3242,6 +2649,12 @@
+ );
+ create unique index hat_data_unique_idx
+   on hat_data (hat_name COLLATE "C" bpchar_pattern_ops);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++create unique index hat_data_unique_idx
++  on hat_data (hat_name COLLATE "C" bpchar_pattern_ops)
++                        ^
++HINT:  try \h CREATE INDEX
+ -- DO NOTHING with ON CONFLICT
+ CREATE RULE hat_nosert AS ON INSERT TO hats
+     DO INSTEAD
+@@ -3251,16 +2664,25 @@
+         ON CONFLICT (hat_name COLLATE "C" bpchar_pattern_ops) WHERE hat_color = 'green'
+         DO NOTHING
+         RETURNING *;
++ERROR:  at or near "hat_nosert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE hat_nosert AS ON INSERT TO hats
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT definition FROM pg_rules WHERE tablename = 'hats' ORDER BY rulename;
+-                                         definition                                          
+----------------------------------------------------------------------------------------------
+- CREATE RULE hat_nosert AS                                                                  +
+-     ON INSERT TO public.hats DO INSTEAD  INSERT INTO hat_data (hat_name, hat_color)        +
+-   VALUES (new.hat_name, new.hat_color) ON CONFLICT(hat_name COLLATE "C" bpchar_pattern_ops)+
+-   WHERE (hat_color = 'green'::bpchar) DO NOTHING                                           +
+-   RETURNING hat_data.hat_name,                                                             +
+-     hat_data.hat_color;
+-(1 row)
++ definition 
++------------
++(0 rows)
+ 
+ -- Works (projects row)
+ INSERT INTO hats VALUES ('h7', 'black') RETURNING *;
+@@ -3271,23 +2693,30 @@
+ 
+ -- Works (does nothing)
+ INSERT INTO hats VALUES ('h7', 'black') RETURNING *;
+- hat_name | hat_color 
+-----------+-----------
+-(0 rows)
+-
++ERROR:  duplicate key value violates unique constraint "hats_pkey"
++DETAIL:  Key (hat_name)=('h7') already exists.
+ SELECT tablename, rulename, definition FROM pg_rules
+ 	WHERE tablename = 'hats';
+- tablename |  rulename  |                                         definition                                          
+------------+------------+---------------------------------------------------------------------------------------------
+- hats      | hat_nosert | CREATE RULE hat_nosert AS                                                                  +
+-           |            |     ON INSERT TO public.hats DO INSTEAD  INSERT INTO hat_data (hat_name, hat_color)        +
+-           |            |   VALUES (new.hat_name, new.hat_color) ON CONFLICT(hat_name COLLATE "C" bpchar_pattern_ops)+
+-           |            |   WHERE (hat_color = 'green'::bpchar) DO NOTHING                                           +
+-           |            |   RETURNING hat_data.hat_name,                                                             +
+-           |            |     hat_data.hat_color;
+-(1 row)
++ tablename | rulename | definition 
++-----------+----------+------------
++(0 rows)
+ 
+ DROP RULE hat_nosert ON hats;
++ERROR:  at or near "hat_nosert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP RULE hat_nosert ON hats
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- DO NOTHING without ON CONFLICT
+ CREATE RULE hat_nosert_all AS ON INSERT TO hats
+     DO INSTEAD
+@@ -3297,24 +2726,46 @@
+         ON CONFLICT
+         DO NOTHING
+         RETURNING *;
++ERROR:  at or near "hat_nosert_all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE hat_nosert_all AS ON INSERT TO hats
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT definition FROM pg_rules WHERE tablename = 'hats' ORDER BY rulename;
+-                                     definition                                      
+--------------------------------------------------------------------------------------
+- CREATE RULE hat_nosert_all AS                                                      +
+-     ON INSERT TO public.hats DO INSTEAD  INSERT INTO hat_data (hat_name, hat_color)+
+-   VALUES (new.hat_name, new.hat_color) ON CONFLICT DO NOTHING                      +
+-   RETURNING hat_data.hat_name,                                                     +
+-     hat_data.hat_color;
+-(1 row)
++ definition 
++------------
++(0 rows)
+ 
+ DROP RULE hat_nosert_all ON hats;
++ERROR:  at or near "hat_nosert_all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP RULE hat_nosert_all ON hats
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Works (does nothing)
+ INSERT INTO hats VALUES ('h7', 'black') RETURNING *;
+-  hat_name  | hat_color  
+-------------+------------
+- h7         | black     
+-(1 row)
+-
++ERROR:  duplicate key value violates unique constraint "hats_pkey"
++DETAIL:  Key (hat_name)=('h7') already exists.
+ -- DO UPDATE with a WHERE clause
+ CREATE RULE hat_upsert AS ON INSERT TO hats
+     DO INSTEAD
+@@ -3326,16 +2777,25 @@
+            SET hat_name = hat_data.hat_name, hat_color = excluded.hat_color
+            WHERE excluded.hat_color <>  'forbidden' AND hat_data.* != excluded.*
+         RETURNING *;
++ERROR:  at or near "hat_upsert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE hat_upsert AS ON INSERT TO hats
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT definition FROM pg_rules WHERE tablename = 'hats' ORDER BY rulename;
+-                                                               definition                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+- CREATE RULE hat_upsert AS                                                                                                              +
+-     ON INSERT TO public.hats DO INSTEAD  INSERT INTO hat_data (hat_name, hat_color)                                                    +
+-   VALUES (new.hat_name, new.hat_color) ON CONFLICT(hat_name) DO UPDATE SET hat_name = hat_data.hat_name, hat_color = excluded.hat_color+
+-   WHERE ((excluded.hat_color <> 'forbidden'::bpchar) AND (hat_data.* <> excluded.*))                                                   +
+-   RETURNING hat_data.hat_name,                                                                                                         +
+-     hat_data.hat_color;
+-(1 row)
++ definition 
++------------
++(0 rows)
+ 
+ -- Works (does upsert)
+ INSERT INTO hats VALUES ('h8', 'black') RETURNING *;
+@@ -3345,57 +2805,39 @@
+ (1 row)
+ 
+ SELECT * FROM hat_data WHERE hat_name = 'h8';
+-  hat_name  | hat_color  
+-------------+------------
+- h8         | black     
+-(1 row)
++ hat_name | hat_color 
++----------+-----------
++(0 rows)
+ 
+ INSERT INTO hats VALUES ('h8', 'white') RETURNING *;
+-  hat_name  | hat_color  
+-------------+------------
+- h8         | white     
+-(1 row)
+-
++ERROR:  duplicate key value violates unique constraint "hats_pkey"
++DETAIL:  Key (hat_name)=('h8') already exists.
+ SELECT * FROM hat_data WHERE hat_name = 'h8';
+-  hat_name  | hat_color  
+-------------+------------
+- h8         | white     
+-(1 row)
+-
+-INSERT INTO hats VALUES ('h8', 'forbidden') RETURNING *;
+  hat_name | hat_color 
+ ----------+-----------
+ (0 rows)
+ 
++INSERT INTO hats VALUES ('h8', 'forbidden') RETURNING *;
++ERROR:  duplicate key value violates unique constraint "hats_pkey"
++DETAIL:  Key (hat_name)=('h8') already exists.
+ SELECT * FROM hat_data WHERE hat_name = 'h8';
+-  hat_name  | hat_color  
+-------------+------------
+- h8         | white     
+-(1 row)
++ hat_name | hat_color 
++----------+-----------
++(0 rows)
+ 
+ SELECT tablename, rulename, definition FROM pg_rules
+ 	WHERE tablename = 'hats';
+- tablename |  rulename  |                                                               definition                                                                
+------------+------------+-----------------------------------------------------------------------------------------------------------------------------------------
+- hats      | hat_upsert | CREATE RULE hat_upsert AS                                                                                                              +
+-           |            |     ON INSERT TO public.hats DO INSTEAD  INSERT INTO hat_data (hat_name, hat_color)                                                    +
+-           |            |   VALUES (new.hat_name, new.hat_color) ON CONFLICT(hat_name) DO UPDATE SET hat_name = hat_data.hat_name, hat_color = excluded.hat_color+
+-           |            |   WHERE ((excluded.hat_color <> 'forbidden'::bpchar) AND (hat_data.* <> excluded.*))                                                   +
+-           |            |   RETURNING hat_data.hat_name,                                                                                                         +
+-           |            |     hat_data.hat_color;
+-(1 row)
++ tablename | rulename | definition 
++-----------+----------+------------
++(0 rows)
+ 
+ -- ensure explain works for on insert conflict rules
+ explain (costs off) INSERT INTO hats VALUES ('h8', 'forbidden') RETURNING *;
+-                                           QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+- Insert on hat_data
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: hat_data_unique_idx
+-   Conflict Filter: ((excluded.hat_color <> 'forbidden'::bpchar) AND (hat_data.* <> excluded.*))
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) INSERT INTO hats VALUES ('h8', 'forbidden') RETURNING *
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- ensure upserting into a rule, with a CTE (different offsets!) works
+ WITH data(hat_name, hat_color) AS MATERIALIZED (
+     VALUES ('h8', 'green'),
+@@ -3405,12 +2847,8 @@
+ INSERT INTO hats
+     SELECT * FROM data
+ RETURNING *;
+-  hat_name  | hat_color  
+-------------+------------
+- h8         | green     
+- h9         | blue      
+-(2 rows)
+-
++ERROR:  duplicate key value violates unique constraint "hats_pkey"
++DETAIL:  Key (hat_name)=('h8') already exists.
+ EXPLAIN (costs off)
+ WITH data(hat_name, hat_color) AS MATERIALIZED (
+     VALUES ('h8', 'green'),
+@@ -3420,26 +2858,32 @@
+ INSERT INTO hats
+     SELECT * FROM data
+ RETURNING *;
+-                                           QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+- Insert on hat_data
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: hat_data_unique_idx
+-   Conflict Filter: ((excluded.hat_color <> 'forbidden'::bpchar) AND (hat_data.* <> excluded.*))
+-   CTE data
+-     ->  Values Scan on "*VALUES*"
+-   ->  CTE Scan on data
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM hat_data WHERE hat_name IN ('h8', 'h9', 'h7') ORDER BY hat_name;
+-  hat_name  | hat_color  
+-------------+------------
+- h7         | black     
+- h8         | green     
+- h9         | blue      
+-(3 rows)
++ hat_name | hat_color 
++----------+-----------
++(0 rows)
+ 
+ DROP RULE hat_upsert ON hats;
++ERROR:  at or near "hat_upsert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP RULE hat_upsert ON hats
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table hats;
+ drop table hat_data;
+ -- test for pg_get_functiondef properly regurgitating SET parameters
+@@ -3453,22 +2897,26 @@
+     SET datestyle to iso, mdy
+     SET local_preload_libraries TO "Mixed/Case", 'c:/''a"/path', '', '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+     IMMUTABLE STRICT;
+-SELECT pg_get_functiondef('func_with_set_params()'::regprocedure);
+-                                                                            pg_get_functiondef                                                                            
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- CREATE OR REPLACE FUNCTION public.func_with_set_params()                                                                                                                +
+-  RETURNS integer                                                                                                                                                        +
+-  LANGUAGE sql                                                                                                                                                           +
+-  IMMUTABLE STRICT                                                                                                                                                       +
+-  SET search_path TO 'pg_catalog'                                                                                                                                        +
+-  SET extra_float_digits TO '2'                                                                                                                                          +
+-  SET work_mem TO '4MB'                                                                                                                                                  +
+-  SET "DateStyle" TO 'iso, mdy'                                                                                                                                          +
+-  SET local_preload_libraries TO 'Mixed/Case', 'c:/''a"/path', '', '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'+
+- AS $function$select 1;$function$                                                                                                                                        +
+- 
+-(1 row)
++ERROR:  at or near "set": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION func_with_set_params() RETURNS integer
++    AS 'select 1;'
++    LANGUAGE SQL
++    SET search_path TO PG_CATALOG
++    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++SELECT pg_get_functiondef('func_with_set_params()'::regprocedure);
++ERROR:  unknown function: func_with_set_params()
+ -- tests for pg_get_*def with invalid objects
+ SELECT pg_get_constraintdef(0);
+  pg_get_constraintdef 
+@@ -3489,23 +2937,11 @@
+ (1 row)
+ 
+ SELECT pg_get_ruledef(0);
+- pg_get_ruledef 
+-----------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_get_ruledef()
+ SELECT pg_get_statisticsobjdef(0);
+- pg_get_statisticsobjdef 
+--------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_get_statisticsobjdef()
+ SELECT pg_get_triggerdef(0);
+- pg_get_triggerdef 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_get_triggerdef()
+ SELECT pg_get_viewdef(0);
+  pg_get_viewdef 
+ ----------------
+@@ -3550,11 +2986,42 @@
+ 
+ -- test rename for a rule defined on a partitioned table
+ CREATE TABLE rules_parted_table (a int) PARTITION BY LIST (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE rules_parted_table (a int) PARTITION BY LIST (a)
++                                                             ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE rules_parted_table_1 PARTITION OF rules_parted_table FOR VALUES IN (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE rules_parted_table_1 PARTITION OF rules_parted_table FOR VALUES IN (1)
++                                  ^
++HINT:  try \h CREATE TABLE
+ CREATE RULE rules_parted_table_insert AS ON INSERT to rules_parted_table
+     DO INSTEAD INSERT INTO rules_parted_table_1 VALUES (NEW.*);
++ERROR:  at or near "rules_parted_table_insert": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rules_parted_table_insert AS ON INSERT to rules_parted_table
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ALTER RULE rules_parted_table_insert ON rules_parted_table RENAME TO rules_parted_table_insert_redirect;
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER RULE rules_parted_table_insert ON rules_parted_table RENAME TO rules_parted_table_insert_redirect
++      ^
++HINT:  try \h ALTER
+ DROP TABLE rules_parted_table;
++ERROR:  relation "rules_parted_table" does not exist
+ --
+ -- test MERGE
+ --
+@@ -3562,11 +3029,56 @@
+ CREATE TABLE rule_merge2 (a int, b text);
+ CREATE RULE rule1 AS ON INSERT TO rule_merge1
+ 	DO INSTEAD INSERT INTO rule_merge2 VALUES (NEW.*);
++ERROR:  at or near "rule1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule1 AS ON INSERT TO rule_merge1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE rule2 AS ON UPDATE TO rule_merge1
+ 	DO INSTEAD UPDATE rule_merge2 SET a = NEW.a, b = NEW.b
+ 	WHERE a = OLD.a;
++ERROR:  at or near "rule2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule2 AS ON UPDATE TO rule_merge1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE rule3 AS ON DELETE TO rule_merge1
+ 	DO INSTEAD DELETE FROM rule_merge2 WHERE a = OLD.a;
++ERROR:  at or near "rule3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule3 AS ON DELETE TO rule_merge1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- MERGE not supported for table with rules
+ MERGE INTO rule_merge1 t USING (SELECT 1 AS a) s
+ 	ON t.a = s.a
+@@ -3576,8 +3088,10 @@
+ 		DELETE
+ 	WHEN NOT MATCHED THEN
+ 		INSERT VALUES (s.a, '');
+-ERROR:  cannot execute MERGE on relation "rule_merge1"
+-DETAIL:  MERGE is not supported for relations with rules.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO rule_merge1 t USING (SELECT 1 AS a) s
++^
+ -- should be ok with the other table though
+ MERGE INTO rule_merge2 t USING (SELECT 1 AS a) s
+ 	ON t.a = s.a
+@@ -3587,6 +3101,10 @@
+ 		DELETE
+ 	WHEN NOT MATCHED THEN
+ 		INSERT VALUES (s.a, '');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO rule_merge2 t USING (SELECT 1 AS a) s
++^
+ -- test deparsing
+ CREATE TABLE sf_target(id int, data text, filling int[]);
+ CREATE FUNCTION merge_sf_test()
+@@ -3629,48 +3147,19 @@
+    THEN INSERT (filling[1], id)
+    VALUES (s.a, s.a);
+ END;
+-\sf merge_sf_test
+-CREATE OR REPLACE FUNCTION public.merge_sf_test()
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++CREATE FUNCTION merge_sf_test()
+  RETURNS void
+  LANGUAGE sql
+ BEGIN ATOMIC
+  MERGE INTO sf_target t
+-    USING rule_merge1 s
+-    ON (s.a = t.id)
+-    WHEN MATCHED
+-     AND ((s.a + t.id) = 42)
+-     THEN UPDATE SET data = (repeat(t.data, s.a) || s.b), id = length(s.b)
+-    WHEN NOT MATCHED
+-     AND (s.b IS NOT NULL)
+-     THEN INSERT (data, id)
+-      VALUES (s.b, s.a)
+-    WHEN MATCHED
+-     AND (length((s.b || t.data)) > 10)
+-     THEN UPDATE SET data = s.b
+-    WHEN MATCHED
+-     AND (s.a > 200)
+-     THEN UPDATE SET filling[s.a] = t.id
+-    WHEN MATCHED
+-     AND (s.a > 100)
+-     THEN DELETE
+-    WHEN MATCHED
+-     THEN DO NOTHING
+-    WHEN NOT MATCHED
+-     AND (s.a > 200)
+-     THEN INSERT DEFAULT VALUES
+-    WHEN NOT MATCHED
+-     AND (s.a > 100)
+-     THEN INSERT (id, data) OVERRIDING USER VALUE
+-      VALUES (s.a, DEFAULT)
+-    WHEN NOT MATCHED
+-     AND (s.a > 0)
+-     THEN INSERT (id, data, filling)
+-      VALUES (s.a, s.b, DEFAULT)
+-    WHEN NOT MATCHED
+-     THEN INSERT (filling[1], id)
+-      VALUES (s.a, s.a);
+-END
++ ^
++HINT:  try \h CREATE FUNCTION
++\sf merge_sf_test
++ERROR:  unknown function: merge_sf_test()
+ DROP FUNCTION merge_sf_test;
++ERROR:  unknown function: merge_sf_test()
+ DROP TABLE sf_target;
+ --
+ -- Test enabling/disabling
+@@ -3679,30 +3168,84 @@
+ CREATE TABLE ruletest2 (b int);
+ CREATE RULE rule1 AS ON INSERT TO ruletest1
+     DO INSTEAD INSERT INTO ruletest2 VALUES (NEW.*);
++ERROR:  at or near "rule1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule1 AS ON INSERT TO ruletest1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO ruletest1 VALUES (1);
+ ALTER TABLE ruletest1 DISABLE RULE rule1;
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ruletest1 DISABLE RULE rule1
++                              ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO ruletest1 VALUES (2);
+ ALTER TABLE ruletest1 ENABLE RULE rule1;
++ERROR:  at or near "rule": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ruletest1 ENABLE RULE rule1
++                             ^
++HINT:  try \h ALTER TABLE
+ SET session_replication_role = replica;
++ERROR:  unimplemented: the configuration setting "session_replication_role" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO ruletest1 VALUES (3);
+ ALTER TABLE ruletest1 ENABLE REPLICA RULE rule1;
++ERROR:  at or near "replica": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ruletest1 ENABLE REPLICA RULE rule1
++                             ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO ruletest1 VALUES (4);
+ RESET session_replication_role;
++ERROR:  unimplemented: the configuration setting "session_replication_role" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO ruletest1 VALUES (5);
+ SELECT * FROM ruletest1;
+  a 
+ ---
++ 1
+  2
+  3
++ 4
+  5
+-(3 rows)
++(5 rows)
+ 
+ SELECT * FROM ruletest2;
+  b 
+ ---
+- 1
+- 4
+-(2 rows)
++(0 rows)
+ 
+ DROP TABLE ruletest1;
+ DROP TABLE ruletest2;
+@@ -3715,24 +3258,82 @@
+ CREATE TABLE ruletest_t2 (x int);
+ CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
+     SELECT * FROM ruletest_t1;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
++                        ^
++HINT:  try \h CREATE VIEW
+ GRANT INSERT ON ruletest_v1 TO regress_rule_user1;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "ruletest_v1" does not exist
+ CREATE RULE rule1 AS ON INSERT TO ruletest_v1
+     DO INSTEAD INSERT INTO ruletest_t2 VALUES (NEW.*);
++ERROR:  at or near "rule1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule1 AS ON INSERT TO ruletest_v1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET SESSION AUTHORIZATION regress_rule_user1;
++ERROR:  at or near "regress_rule_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_rule_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO ruletest_v1 VALUES (1);
++ERROR:  relation "ruletest_v1" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ -- Test that main query's relation's permissions are checked before
+ -- the rule action's relation's.
+ CREATE TABLE ruletest_t3 (x int);
+ CREATE RULE rule2 AS ON UPDATE TO ruletest_t1
+     DO INSTEAD INSERT INTO ruletest_t2 VALUES (OLD.*);
++ERROR:  at or near "rule2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rule2 AS ON UPDATE TO ruletest_t1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ REVOKE ALL ON ruletest_t2 FROM regress_rule_user1;
+ REVOKE ALL ON ruletest_t3 FROM regress_rule_user1;
+ ALTER TABLE ruletest_t1 OWNER TO regress_rule_user1;
+ SET SESSION AUTHORIZATION regress_rule_user1;
++ERROR:  at or near "regress_rule_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_rule_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ UPDATE ruletest_t1 t1 SET x = 0 FROM ruletest_t3 t3 WHERE t1.x = t3.x;
+-ERROR:  permission denied for table ruletest_t3
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SELECT * FROM ruletest_t1;
+  x 
+ ---
+@@ -3741,11 +3342,26 @@
+ SELECT * FROM ruletest_t2;
+  x 
+ ---
+- 1
+-(1 row)
++(0 rows)
+ 
+ DROP VIEW ruletest_v1;
++ERROR:  relation "ruletest_v1" does not exist
+ DROP RULE rule2 ON ruletest_t1;
++ERROR:  at or near "rule2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP RULE rule2 ON ruletest_t1
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP TABLE ruletest_t3;
+ DROP TABLE ruletest_t2;
+ DROP TABLE ruletest_t1;

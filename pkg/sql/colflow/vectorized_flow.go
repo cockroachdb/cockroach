@@ -485,6 +485,11 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			// At the last outbox, we can accurately retrieve stats for the
 			// whole flow from parent monitors. These stats are added to a
 			// flow-level span.
+			// TODO(yuzefovich): in theory, we should be doing this in the very
+			// last goroutine that is part of the remote flow, which could be
+			// a goroutine corresponding to a remote router. It shouldn't matter
+			// as much in practice, so we approximate "the last goroutine of the
+			// flow" as "the last outbox goroutine of the flow".
 			result = append(result, &execinfrapb.ComponentStats{
 				Component: flowCtx.FlowComponentID(),
 				FlowStats: execinfrapb.FlowStats{
@@ -793,7 +798,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		sb.WriteString(s.StreamID.String())
 	}
 	streamIDs := redact.SafeString(sb.String())
-	mmName := "hash-router-[" + streamIDs + "]"
+	mmName := mon.MakeName("hash-router-[" + streamIDs + "]")
 
 	numOutputs := len(output.Streams)
 	// We need to create two memory accounts for each output (one for the
@@ -827,11 +832,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.AssertionFailedf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
+			// We pass nil statsCollectors here since the router is responsible
+			// for collecting stats from the input.
+			getStats := s.makeGetStatsFnForOutbox(flowCtx, nil /* statsCollectors */)
 			if _, err := s.setupRemoteOutputStream(
 				ctx, flowCtx, processorID, colexecargs.OpWithMetaInfo{
 					Root:            op,
 					MetadataSources: colexecop.MetadataSources{op},
-				}, outputTyps, stream, factory, nil, /* getStats */
+				}, outputTyps, stream, factory, getStats,
 			); err != nil {
 				return err
 			}

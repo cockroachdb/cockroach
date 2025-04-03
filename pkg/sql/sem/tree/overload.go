@@ -323,7 +323,7 @@ func (b Overload) defaultExprs() Exprs {
 	return b.DefaultExprs
 }
 
-// FixedReturnType returns a fixed type that the function returns, returning Any
+// FixedReturnType returns a fixed type that the function returns, returning AnyElement
 // if the return type is based on the function's arguments.
 func (b Overload) FixedReturnType() *types.T {
 	if b.ReturnType == nil {
@@ -424,16 +424,16 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
-	// MatchIdentical is similar to match but checks that the types are identical matches,
-	// instead of equivalent matches. See types.T.Equivalent and types.T.Identical.
-	MatchIdentical(types []*types.T) bool
+	// MatchOid is similar to match but checks that the types have the same
+	// Oids, instead of being equivalent (in types.T.Equivalent sense) matches.
+	MatchOid(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
-	// MatchAtIdentical is similar to MatchAt but checks that the type at index i of
-	// the Typelist is identical to typ.
-	MatchAtIdentical(typ *types.T, i int) bool
+	// MatchAtOid is similar to MatchAt but checks that the Oid of the type at
+	// index i of the Typelist is the same as the Oid of typ.
+	MatchAtOid(typ *types.T, i int) bool
 	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
 	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
@@ -474,12 +474,12 @@ func (p ParamTypes) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (p ParamTypes) MatchIdentical(types []*types.T) bool {
+func (p ParamTypes) MatchOid(types []*types.T) bool {
 	if len(types) != len(p) {
 		return false
 	}
 	for i := range types {
-		if !p.MatchAtIdentical(types[i], i) {
+		if !p.MatchAtOid(types[i], i) {
 			return false
 		}
 	}
@@ -491,7 +491,7 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the parameter
 	// type is p types.TUPLE below. This allows us to avoid defining overloads
-	// for types.Tuple{}, types.Tuple{types.Any}, types.Tuple{types.Any, types.Any},
+	// for types.Tuple{}, types.Tuple{types.AnyElement}, types.Tuple{types.AnyElement, types.AnyElement},
 	// etc. for Tuple operators.
 	if typ.Family() == types.TupleFamily {
 		typ = types.AnyTuple
@@ -500,15 +500,8 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 }
 
 // MatchAtIdentical is part of the TypeList interface.
-func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
-	return i < len(p) && (typ.Family() == types.UnknownFamily ||
-		p[i].Typ.Identical(typ) ||
-		// Special case for CHAR, CHAR(N), and BPCHAR which are not "identical"
-		// but have the same OID. See #129007.
-		(p[i].Typ.Oid() == oid.T_bpchar && typ.Oid() == oid.T_bpchar) ||
-		// Special case for BIT, BIT(N), and BIT(0) which are not "identical"
-		// but have the same OID. See #132944.
-		(p[i].Typ.Oid() == oid.T_bit && typ.Oid() == oid.T_bit))
+func (p ParamTypes) MatchAtOid(typ *types.T, i int) bool {
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Oid() == typ.Oid())
 }
 
 // MatchLen is part of the TypeList interface.
@@ -580,7 +573,7 @@ func (HomogeneousType) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (HomogeneousType) MatchIdentical(types []*types.T) bool {
+func (HomogeneousType) MatchOid(types []*types.T) bool {
 	return true
 }
 
@@ -590,7 +583,7 @@ func (HomogeneousType) MatchAt(typ *types.T, i int) bool {
 }
 
 // MatchAtIdentical is part of the TypeList interface.
-func (HomogeneousType) MatchAtIdentical(typ *types.T, i int) bool {
+func (HomogeneousType) MatchAtOid(typ *types.T, i int) bool {
 	return true
 }
 
@@ -601,7 +594,7 @@ func (HomogeneousType) MatchLen(l int) bool {
 
 // GetAt is part of the TypeList interface.
 func (HomogeneousType) GetAt(i int) *types.T {
-	return types.Any
+	return types.AnyElement
 }
 
 // Length is part of the TypeList interface.
@@ -611,7 +604,7 @@ func (HomogeneousType) Length() int {
 
 // Types is part of the TypeList interface.
 func (HomogeneousType) Types() []*types.T {
-	return []*types.T{types.Any}
+	return []*types.T{types.AnyElement}
 }
 
 func (HomogeneousType) String() string {
@@ -637,7 +630,7 @@ func (v VariadicType) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (VariadicType) MatchIdentical(types []*types.T) bool {
+func (VariadicType) MatchOid(types []*types.T) bool {
 	return true
 }
 
@@ -651,7 +644,7 @@ func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 
 // MatchAtIdentical is part of the TypeList interface.
 // TODO(mgartner): This will be incorrect once we add support for variadic UDFs
-func (VariadicType) MatchAtIdentical(typ *types.T, i int) bool {
+func (VariadicType) MatchAtOid(typ *types.T, i int) bool {
 	return true
 }
 
@@ -764,7 +757,7 @@ func returnTypeToFixedType(s ReturnTyper, inputTyps []TypedExpr) *types.T {
 	if t := s(inputTyps); t != UnknownReturnType {
 		return t
 	}
-	return types.Any
+	return types.AnyElement
 }
 
 type overloadTypeChecker struct {
@@ -921,10 +914,32 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	}
 	s.constIdxs, s.placeholderIdxs, s.resolvableIdxs = typeCheckSplitExprs(s.exprs)
 
+	// Process variadic functions with unrestrained wildcards as their variadic
+	// parameter. This special cas short circuits the logic below, most of which
+	// assumes AnyElement behavior for untyped parameters.
+	for i := range s.params {
+		if vt, ok := s.params[i].(VariadicType); ok && vt.VarType == types.Any {
+			if numOverloads > 1 {
+				return errors.AssertionFailedf(
+					"only one overload can have VariadicType {types.Any} parameters")
+			}
+			for j := range s.exprs {
+				typedExpr, err := s.exprs[j].TypeCheck(ctx, semaCtx, vt.GetAt(j))
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+						"error type checking resolved expression:")
+				}
+				s.typedExprs[j] = typedExpr
+			}
+			s.overloadIdxs = append(s.overloadIdxs[:0], uint8(i))
+			return nil
+		}
+	}
+
 	// If no overloads are provided, just type check parameters and return.
 	if numOverloads == 0 {
 		for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
-			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+			typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 			if err != nil {
 				return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 					"error type checking resolved expression:")
@@ -1028,7 +1043,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 	for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
-		paramDesired := types.Any
+		paramDesired := types.AnyElement
 
 		// If all remaining candidates require the same type for this parameter,
 		// begin desiring that type for the corresponding argument expression.
@@ -1095,7 +1110,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		argTypes := make([]*types.T, 0, len(params))
 		outArgTypes := make([]*types.T, 0, len(outParams))
 		for i := range s.exprs {
-			typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+			typedExpr, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 			if err != nil {
 				panic(errors.HandleAsAssertionFailure(err))
 			}
@@ -1500,14 +1515,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
-				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
 			}
 			right := s.typedExprs[1]
 			if right == nil {
-				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
@@ -1543,14 +1558,14 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
-				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.Any)
+				left, err = s.exprs[0].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
 			}
 			right := s.typedExprs[1]
 			if right == nil {
-				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.Any)
+				right, err = s.exprs[1].TypeCheck(ctx, semaCtx, types.AnyElement)
 				if err != nil {
 					return
 				}
@@ -1639,7 +1654,7 @@ func defaultTypeCheck(
 	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, errorOnPlaceholders bool,
 ) error {
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
+		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 				"error type checking constant value")
@@ -1648,7 +1663,7 @@ func defaultTypeCheck(
 	}
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
 		if errorOnPlaceholders {
-			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any); err != nil {
+			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.AnyElement); err != nil {
 				return err
 			}
 		}

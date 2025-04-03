@@ -1714,7 +1714,7 @@ func (u *CommonTestUtils) waitForJobSuccess(
 			continue
 		}
 
-		if jobs.Status(status) == jobs.StatusFailed {
+		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				lastErr = fmt.Errorf("job %d failed with error: %s", jobID, payload.Error)
@@ -1726,7 +1726,7 @@ func (u *CommonTestUtils) waitForJobSuccess(
 			break
 		}
 
-		if expected, actual := jobs.StatusSucceeded, jobs.Status(status); expected != actual {
+		if expected, actual := jobs.StateSucceeded, jobs.State(status); expected != actual {
 			lastErr = fmt.Errorf("job %d: current status %q, waiting for %q", jobID, actual, expected)
 			l.Printf("%v", lastErr)
 			continue
@@ -2684,7 +2684,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// of concurrent steps.
 				mixedversion.DisableMutators(
 					mixedversion.ClusterSettingMutator("kv.expiration_leases_only.enabled"),
-					mixedversion.ClusterSettingMutator("kv.snapshot_receiver.excise.enabled"),
 					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
 					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
 				),

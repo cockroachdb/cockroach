@@ -76,7 +76,7 @@ type restoreDataProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// restoreDataProcessors' trace recording.
-	agg      *bulkutil.TracingAggregator
+	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
 
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
@@ -180,7 +180,7 @@ func newRestoreDataProcessor(
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", rd.spec.JobID)
-	rd.agg = bulkutil.TracingAggregatorForContext(ctx)
+	rd.agg = tracing.TracingAggregatorForContext(ctx)
 	// If the aggregator is nil, we do not want the timer to fire.
 	if rd.agg != nil {
 		rd.aggTimer.Reset(15 * time.Second)
@@ -191,6 +191,14 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	rd.cancelWorkersAndWait = func() {
+		defer func() {
+			// A panic here will not have a useful stack trace. If the panic is an
+			// error that contains a stack trace, we want those full details.
+			// TODO(jeffswenson): improve panic recovery more generally.
+			if p := recover(); p != nil {
+				panic(fmt.Sprintf("restore worker hit panic: %+v", p))
+			}
+		}()
 		cancel()
 		_ = rd.phaseGroup.Wait()
 	}
@@ -289,7 +297,7 @@ func inputReader(
 
 type mergedSST struct {
 	entry        execinfrapb.RestoreSpanEntry
-	iter         *storage.ReadAsOfIterator
+	iter         storage.SimpleMVCCIterator
 	cleanup      func()
 	completeUpTo hlc.Timestamp
 }
@@ -320,7 +328,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	// getIter returns a multiplexed iterator covering the currently accumulated
 	// files over the channel.
-	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, completeUpTo hlc.Timestamp) (mergedSST, error) {
+	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, completeUpTo hlc.Timestamp) mergedSST {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
@@ -342,7 +350,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 
 		dirs = make([]cloud.ExternalStorage, 0)
-		return mSST, nil
+		return mSST
 	}
 
 	log.VEventf(ctx, 1, "ingesting %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
@@ -377,12 +385,12 @@ func (rd *restoreDataProcessor) openSSTs(
 		return mergedSST{}, nil, err
 	}
 
-	mSST, err := getIter(iter, dirs, rd.spec.RestoreTime)
+	mSST := getIter(iter, dirs, rd.spec.RestoreTime)
 	res := &resumeEntry{
 		idx:  idx,
 		done: true,
 	}
-	return mSST, res, err
+	return mSST, res, nil
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(

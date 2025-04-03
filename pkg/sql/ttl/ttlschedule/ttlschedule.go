@@ -169,12 +169,12 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobStatus jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StatusFailed {
+	if jobStatus == jobs.StateFailed {
 		jobs.DefaultHandleFailedRun(
 			sj,
 			"row level ttl for table [%d] job failed",
@@ -184,7 +184,7 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 		return nil
 	}
 
-	if jobStatus == jobs.StatusSucceeded {
+	if jobStatus == jobs.StateSucceeded {
 		s.metrics.NumSucceeded.Inc(1)
 	}
 

@@ -7,7 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/release",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/version",
+        "@com_github_cockroachdb_version//:version",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
@@ -17,7 +17,7 @@ go_test(
     srcs = ["releases_test.go"],
     embed = [":release"],
     deps = [
-        "//pkg/util/version",
+        "@com_github_cockroachdb_version//:version",
         "@com_github_stretchr_testify//require",
     ],
 )

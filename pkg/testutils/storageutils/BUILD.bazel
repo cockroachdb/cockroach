@@ -20,6 +20,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvccencoding",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",

@@ -12,13 +12,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type sysbenchWorkload int
@@ -61,6 +63,7 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 type extraSetup struct {
 	nameSuffix string
 	stmts      []string
+	useDRPC    bool
 }
 
 func (w sysbenchWorkload) String() string {
@@ -150,7 +153,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 	} else {
 		t.Status("installing cockroach")
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
+		settings := install.MakeClusterSettings()
+		if opts.extra.useDRPC {
+			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
+			t.L().Printf("extra setup to use DRPC")
+		}
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
@@ -186,32 +194,43 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
 		cmd := opts.cmd(useHAProxy /* haproxy */)
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" prepare")
-		if err != nil {
-			return err
-		} else if strings.Contains(result.Stdout, "FATAL") {
-			// sysbench prepare doesn't exit on errors for some reason, so we have
-			// to check that it didn't silently fail. We've seen it do so, causing
-			// the run step to segfault. Segfaults are an ignored error, so in the
-			// past, this would cause the test to silently fail.
-			return errors.Newf("sysbench prepare failed with FATAL error")
+		{
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" prepare"))
+			if err != nil {
+				return err
+			} else if msg, crashed := detectSysbenchCrash(result); crashed {
+				t.Skipf("%s; skipping test", msg)
+			} else if strings.Contains(result.Stdout, "FATAL") {
+				// sysbench prepare doesn't exit on errors for some reason, so we have
+				// to check that it didn't silently fail. We've seen it do so, causing
+				// the run step to segfault. Segfaults are an ignored error, so in the
+				// past, this would cause the test to silently fail.
+				return errors.Newf("sysbench prepare failed with FATAL error")
+			}
+		}
+
+		t.Status("warming up via oltp_read_only")
+		{
+			opts := opts
+			opts.workload = oltpReadOnly
+			opts.duration = 3 * time.Minute
+
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+				opts.cmd(useHAProxy)+" run")
+
+			if msg, crashed := detectSysbenchCrash(result); crashed {
+				t.L().Printf("%s; proceeding to main workload anyway", msg)
+				err = nil
+			}
+			require.NoError(t, err)
 		}
 
 		t.Status("running workload")
 		start = timeutil.Now()
-		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" run"))
 
-		// Sysbench occasionally segfaults. When that happens, don't fail the
-		// test.
-		if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
-			t.L().Printf("sysbench segfaulted; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
-			t.L().Printf("sysbench crashed with illegal instruction; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
-			t.L().Printf("sysbench crashed with an assertion failure; passing test anyway")
-			return nil
+		if msg, crashed := detectSysbenchCrash(result); crashed {
+			t.Skipf("%s; skipping test", msg)
 		}
 
 		if err != nil {
@@ -219,7 +238,27 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 
 		t.Status("exporting results")
-		return exportSysbenchResults(t, c, result.Stdout, start, opts)
+		idx := strings.Index(result.Stdout, "SQL statistics:")
+		if idx < 0 {
+			return errors.Errorf("no SQL statistics found in sysbench output:\n%s", result.Stdout)
+		}
+		t.L().Printf("sysbench results:\n%s", result.Stdout[idx:])
+
+		if err := exportSysbenchResults(t, c, result.Stdout, start, opts); err != nil {
+			return err
+		}
+
+		// Also produce standard Go benchmark output. This can be used to run
+		// benchstat comparisons.
+		goBenchOutput, err := sysbenchToGoBench(t.Name(), result.Stdout[idx:])
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "bench.txt"), []byte(goBenchOutput), 0666); err != nil {
+			return err
+		}
+
+		return nil
 	}
 	if opts.usePostgres {
 		if err := runWorkload(ctx); err != nil {
@@ -250,12 +289,18 @@ func registerSysbench(r registry.Registry) {
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
 		{n: 3, cpus: 8, pick: coreThree},
-		{n: 3, cpus: 8, pick: coreThree, extra: extraSetup{nameSuffix: "-settings", stmts: []string{
-			`set cluster setting sql.stats.flush.enabled = false`,
-			`set cluster setting sql.metrics.statement_details.enabled = false`,
-			`set cluster setting kv.split_queue.enabled = false`,
-			`set cluster setting sql.stats.histogram_collection.enabled = false`,
-			`set cluster setting kv.consistency_queue.enabled = false`}},
+		{n: 3, cpus: 8, pick: coreThree,
+			extra: extraSetup{
+				nameSuffix: "-settings",
+				stmts: []string{
+					`set cluster setting sql.stats.flush.enabled = false`,
+					`set cluster setting sql.metrics.statement_details.enabled = false`,
+					`set cluster setting kv.split_queue.enabled = false`,
+					`set cluster setting kv.consistency_queue.enabled = false`,
+					`set cluster setting kv.transaction.write_buffering.enabled = true`,
+				},
+				useDRPC: true,
+			},
 		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
@@ -277,6 +322,7 @@ func registerSysbench(r registry.Registry) {
 			if d.extra.nameSuffix != "" {
 				benchname += d.extra.nameSuffix
 			}
+
 			r.Add(registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
@@ -328,6 +374,27 @@ type openmetricsValues struct {
 	Time  int64
 }
 
+// Define units for sysbench metrics
+var units = map[string]string{
+	// Transaction rates - operations per second
+	"transactions": "unit=\"ops/sec\",is_higher_better=\"true\"",
+
+	// Query rates - queries per second
+	"qps":       "unit=\"qps\",is_higher_better=\"true\"",
+	"read_qps":  "unit=\"qps\",is_higher_better=\"true\"",
+	"write_qps": "unit=\"qps\",is_higher_better=\"true\"",
+	"other_qps": "unit=\"qps\",is_higher_better=\"true\"",
+
+	// Latency - milliseconds
+	"p95_latency": "unit=\"ms\",is_higher_better=\"false\"",
+
+	// Error rates - errors per second
+	"errors": "unit=\"errors/sec\",is_higher_better=\"false\"",
+
+	// Reconnection rates - reconnects per second
+	"reconnects": "unit=\"reconnects/sec\",is_higher_better=\"false\"",
+}
+
 // exportSysbenchResults parses the output of `sysbench` into a stats
 // file and writes it to the perf directory that roachperf expects. The
 // format of the stats file is dependent on t.ExportOpenmetrics().
@@ -367,7 +434,7 @@ func exportSysbenchResults(
 		"rows-per-table": fmt.Sprintf("%d", opts.rowsPerTable),
 		"use-postgres":   fmt.Sprintf("%t", opts.usePostgres),
 	}
-	labelString := clusterstats.GetOpenmetricsLabelString(t, c, labels)
+	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
 	openmetricsMap := make(map[string][]openmetricsValues)
 	tick := func(fields []string, qpsByType []string) error {
 		snapshotTick := sysbenchMetrics{
@@ -449,7 +516,6 @@ func addCurrentSnapshotToOpenmetrics(
 	metrics sysbenchMetrics, openmetricsMap map[string][]openmetricsValues,
 ) {
 	time := metrics.Time
-	openmetricsMap["threads"] = append(openmetricsMap["threads"], openmetricsValues{Value: metrics.Threads, Time: time})
 	openmetricsMap["transactions"] = append(openmetricsMap["transactions"], openmetricsValues{Value: metrics.Transactions, Time: time})
 	openmetricsMap["qps"] = append(openmetricsMap["qps"], openmetricsValues{Value: metrics.Qps, Time: time})
 	openmetricsMap["read_qps"] = append(openmetricsMap["read_qps"], openmetricsValues{Value: metrics.ReadQps, Time: time})
@@ -465,13 +531,106 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 	metricsBuf := bytes.NewBuffer([]byte{})
 	for key, values := range openmetricsMap {
 		metricName := util.SanitizeMetricName(key)
-		metricsBuf.WriteString(clusterstats.GetOpenmetricsGaugeType(metricName))
+		metricsBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
 		for _, value := range values {
-			metricsBuf.WriteString(fmt.Sprintf("%s{%s} %s %d\n", metricName, labelString, value.Value, value.Time))
+			metricsBuf.WriteString(fmt.Sprintf("%s{%s,%s} %s %d\n",
+				metricName,
+				labelString,
+				units[key],
+				value.Value,
+				value.Time))
 		}
 	}
 
 	// Add # EOF at the end for openmetrics
 	metricsBuf.WriteString("# EOF\n")
 	return metricsBuf.Bytes()
+}
+
+func detectSysbenchCrash(result install.RunResultDetails) (string, bool) {
+	// Sysbench occasionally segfaults. When that happens, don't fail the
+	// test.
+	if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
+		return "sysbench segfaulted", true
+	} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
+		return "sysbench crashed with illegal instruction", true
+	} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
+		return "sysbench crashed with an assertion failure", true
+	}
+	return "", false
+}
+
+// sysbenchToGoBench converts sysbench output into Go benchmark format.
+func sysbenchToGoBench(name string, result string) (string, error) {
+	// Extract key metrics from sysbench output using regex patterns.
+	var qps, tps string
+	var minLat, avgLat, p95Lat, maxLat string
+
+	// Parse transactions per second.
+	m := regexp.MustCompile(`transactions:\s+\d+\s+\(([\d.]+)\s+per sec`).FindStringSubmatch(result)
+	if len(m) <= 1 {
+		return "", errors.New("failed to parse transactions per second")
+	}
+	tps = m[1]
+
+	// Parse queries per second.
+	m = regexp.MustCompile(`queries:\s+\d+\s+\(([\d.]+)\s+per sec`).FindStringSubmatch(result)
+	if len(m) <= 1 {
+		return "", errors.New("failed to parse queries per second")
+	}
+	qps = m[1]
+
+	// Parse each latency metric using a loop.
+	metrics := map[string]*string{
+		"min":             &minLat,
+		"avg":             &avgLat,
+		"max":             &maxLat,
+		"95th percentile": &p95Lat,
+	}
+	for metric, ptr := range metrics {
+		pattern := fmt.Sprintf(`%s:\s+([\d.]+)`, metric)
+		m = regexp.MustCompile(pattern).FindStringSubmatch(result)
+		if len(m) <= 1 {
+			return "", errors.Newf("failed to parse %s latency", metric)
+		}
+		*ptr = m[1]
+	}
+
+	// Process the test name.
+	parts := strings.Split(name, "/")
+	if len(parts) == 0 {
+		return "", errors.New("empty test name")
+	}
+
+	// Normalize first segment (e.g. "sysbench-settings" -> "SysbenchSettings").
+	firstPart := parts[0]
+	// Split on non-alphanumeric characters.
+	words := regexp.MustCompile(`[^a-zA-Z0-9]+`).Split(firstPart, -1)
+	// Capitalize each word and join them.
+	var sb strings.Builder
+	for _, word := range words {
+		if word == "" {
+			continue
+		}
+		sb.WriteString(cases.Title(language.Und).String(strings.ToLower(word)))
+	}
+	firstPart = sb.String()
+
+	// Build the benchmark name.
+	benchName := "Benchmark" + firstPart
+
+	// Add remaining parts, using auto-assigned keys only for parts without keys.
+	nextKey := 'a'
+	for _, part := range parts[1:] {
+		if strings.Contains(part, "=") {
+			benchName += "/" + part
+		} else {
+			benchName += fmt.Sprintf("/%s=%s", string(nextKey), part)
+			nextKey++
+		}
+	}
+
+	// Return formatted benchmark string with all metrics.
+	return fmt.Sprintf("%s\t1\t%s queries/sec\t%s txns/sec\t%s ms/min\t%s ms/avg\t%s ms/p95\t%s ms/max",
+		benchName, qps, tps, minLat, avgLat, p95Lat, maxLat), nil
 }

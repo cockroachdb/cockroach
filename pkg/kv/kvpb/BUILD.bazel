@@ -31,6 +31,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/util/admission/admissionpb",
@@ -78,6 +79,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils/echotest",
+        "//pkg/testutils/skip",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -106,7 +108,7 @@ proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
+        "//pkg/multitenant/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/rpc/rpcpb:rpcpb_proto",
         "//pkg/settings:settings_proto",
@@ -129,7 +131,7 @@ go_proto_library(
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/readsummary/rspb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc/rpcpb",
         "//pkg/settings",

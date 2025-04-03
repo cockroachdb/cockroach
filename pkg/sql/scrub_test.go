@@ -221,7 +221,7 @@ func indexEntryForDatums(
 	}
 	indexEntries, err := rowenc.EncodeSecondaryIndex(
 		context.Background(), keys.SystemSQLCodec, tableDesc, index,
-		colIDtoRowIndex, row, true, /* includeEmpty */
+		colIDtoRowIndex, row, rowenc.EmptyVectorIndexEncodingHelper, true, /* includeEmpty */
 	)
 	if err != nil {
 		return rowenc.IndexEntry{}, err
@@ -544,6 +544,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, `SET autocommit_before_ddl = false`)
 
 	// Create the table and the row entry.
 	r.Exec(t, `

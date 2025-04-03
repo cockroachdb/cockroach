@@ -150,7 +150,8 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenUseToken tokenToUse
 	generateJWTAuthTokenSQLHost  string
 	generateJWTAuthTokenSQLPort  int64
-	clientTimeout                time.Duration
+	providerCustomCA             string
+	httpClient                   *httputil.Client
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -268,10 +269,7 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	// go-oidc, verifier instance can be created with VerifierContext
 	// https://github.com/coreos/go-oidc/blob/6d6be43e852de391805e5a5bc14146ba3cdd4195/oidc/verify.go#L125
 	ctx = context.WithoutCancel(ctx)
-
-	// Set the HTTP client in the context, as required by the `go-oidc` module.
-	httpClient := httputil.NewClientWithTimeout(conf.clientTimeout)
-	octx := oidc.ClientContext(ctx, httpClient.Client)
+	octx := oidc.ClientContext(ctx, conf.httpClient.Client)
 
 	provider, err := oidc.NewProvider(octx, conf.providerURL)
 	if err != nil {
@@ -292,7 +290,7 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	return &oidcManager{
 		verifier:     verifier,
 		oauth2Config: oauth2Config,
-		httpClient:   httpClient,
+		httpClient:   conf.httpClient,
 	}, nil
 }
 
@@ -313,6 +311,8 @@ func reloadConfigLocked(
 	locality roachpb.Locality,
 	st *cluster.Settings,
 ) {
+	clientTimeout := OIDCAuthClientTimeout.Get(&st.SV)
+
 	conf := oidcAuthenticationConf{
 		clientID:        OIDCClientID.Get(&st.SV),
 		clientSecret:    OIDCClientSecret.Get(&st.SV),
@@ -331,7 +331,12 @@ func reloadConfigLocked(
 		generateJWTAuthTokenUseToken: OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV),
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
-		clientTimeout:                OIDCAuthClientTimeout.Get(&st.SV),
+		providerCustomCA:             OIDCProviderCustomCA.Get(&st.SV),
+		httpClient: httputil.NewClient(
+			httputil.WithClientTimeout(clientTimeout),
+			httputil.WithDialerTimeout(clientTimeout),
+			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
+		),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {

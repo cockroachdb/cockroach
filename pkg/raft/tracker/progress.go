@@ -348,7 +348,7 @@ func (pr *Progress) ShouldSendEntries(last uint64, lazyReplication bool) bool {
 // We must send a message periodically even if all updates are already in flight
 // to this peer, to guarantee that eventually the flow is either accepted or
 // rejected.
-func (pr *Progress) ShouldSendProbe(last, commit uint64, advanceCommit bool) bool {
+func (pr *Progress) ShouldSendProbe(last, commit uint64) bool {
 	switch pr.State {
 	case StateProbe:
 		return !pr.MsgAppProbesPaused
@@ -379,10 +379,7 @@ func (pr *Progress) ShouldSendProbe(last, commit uint64, advanceCommit bool) boo
 		// to the follower.
 		// TODO(iskettaneh): Remove the dependency on MsgAppProbesPaused to send
 		// MsgApps.
-		if advanceCommit {
-			return pr.IsFollowerCommitStale(commit) && !pr.MsgAppProbesPaused
-		}
-		return false
+		return pr.IsFollowerCommitStale(commit) && !pr.MsgAppProbesPaused
 
 	case StateSnapshot:
 		return false

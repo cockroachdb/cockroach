@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -59,7 +60,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	skip.UnderDuress(t, "this test fails under duress")
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 
 	writesPopulated := false
 	var writesFn func() error
@@ -176,7 +177,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 
 	const (
 		rowCount  = 2000
@@ -213,12 +214,13 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		lastPercentage = fraction
 	}
 
+	var codec keys.SQLCodec
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 			RunBeforeResume: func(id jobspb.JobID) error {
 				jobID = id
-				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 				split(tableDesc, tableDesc.GetPrimaryIndex())
 				return nil
 			},
@@ -226,7 +228,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 				for i := rowCount + 1; i < (rowCount*2)+1; i++ {
 					sqlRunner.Exec(t, "INSERT INTO t.test VALUES ($1, $1)", i)
 				}
-				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 				tempIdx, err := findCorrespondingTemporaryIndex(tableDesc, "new_idx")
 				require.NoError(t, err)
 				split(tableDesc, tempIdx)
@@ -254,6 +256,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 	kvDB = tc.Server(0).DB()
+	codec = tc.Server(0).Codec()
 	sqlDB := tc.ServerConn(0)
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
 	require.NoError(t, err)
@@ -289,7 +292,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -484,7 +487,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var initialRows = 10000
 	rowIdx := 0
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -553,7 +556,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -595,6 +598,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
+	scratch = append(s.Codec().TenantPrefix(), scratch...)
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
@@ -660,7 +664,8 @@ func splitIndex(
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
 
-		pik, err := randgen.TestingMakeSecondaryIndexKey(desc, index, keys.SystemSQLCodec, sp.Vals...)
+		pik, err := randgen.TestingMakeSecondaryIndexKey(
+			desc, index, tc.Server(0).Codec(), sp.Vals...)
 		if err != nil {
 			return err
 		}
@@ -741,7 +746,7 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	rowIdx := 0
 	mergeSerializeCh := make(chan struct{}, 1)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
@@ -785,6 +790,107 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	require.NoError(t, writeMore(), "initial insert")
 	_, err = sqlDB.Exec("CREATE INDEX ON t.test (v)")
 	require.NoError(t, err)
+}
+
+// TestIndexOverwritesChunksDuringMerge intentionally overwrites as chunks
+// during merge process and confirms those rows are removed.
+func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	chunkSize := 10
+	const maxAutoRetries = 10
+	params, _ := createTestServerParamsAllowTenants()
+	var writeMore func(sampleData bool) error
+	retryTracker := struct {
+		limitedPerKey map[string]int
+		syncutil.Mutex
+		commitChannel chan struct{}
+	}{
+		limitedPerKey: make(map[string]int),
+		commitChannel: make(chan struct{}),
+	}
+	var smallerChunkSizeObserved atomic.Int64
+	var nonZeroKeysToSkipObserved atomic.Int64
+
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				// Overwrite all rows something exists in the temp index.
+				return writeMore(false)
+			},
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(startKey roachpb.Key) error {
+					// Modify 1 in 4 rows on each scan chunk, so that those
+					// keys are skipped over.
+					return writeMore(true)
+				},
+				RunBeforeMergeTxn: func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkip int) error {
+					if len(sourceKeys) < chunkSize {
+						smallerChunkSizeObserved.Add(1)
+					}
+					if keysToSkip > 0 {
+						nonZeroKeysToSkipObserved.Add(1)
+					}
+					return nil
+				},
+				RunDuringMergeTxn: func(ctx context.Context, txn *kv.Txn, startKey, endKey roachpb.Key) error {
+					retryTracker.Lock()
+					defer retryTracker.Unlock()
+					if count := retryTracker.limitedPerKey[string(startKey)]; count >= maxAutoRetries {
+						return nil
+					}
+					retryTracker.limitedPerKey[string(startKey)]++
+					return txn.GenerateForcedRetryableErr(ctx, "forcing a retry error")
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	var mu syncutil.Mutex
+	var iteration = 0
+	// Upserts rows in the table. If sampleData is false,
+	// then all rows are updated. Otherwise, 1 in 4 rows are
+	// updated.
+	writeMore = func(sampleData bool) error {
+		const rowsPerWrite = 500
+		mu.Lock()
+		defer mu.Unlock()
+		for i := 0; i <= rowsPerWrite; i++ {
+			if sampleData {
+				if i%4 != 0 {
+					continue
+				}
+			}
+			if _, err := sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", i, iteration); err != nil {
+				return err
+			}
+		}
+		iteration += 1
+		return nil
+	}
+	_, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = %d`, maxAutoRetries))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v int);`)
+	require.NoError(t, err)
+	require.NoError(t, writeMore(false), "initial insert")
+	_, err = sqlDB.Exec("ALTER TABLE t.test ADD COLUMN j INT DEFAULT 32")
+	require.NoError(t, err)
+	require.Greater(t,
+		smallerChunkSizeObserved.Load(),
+		int64(0),
+		"no chunks have decreased in size %d.",
+		smallerChunkSizeObserved.Load())
+	require.Greater(t,
+		nonZeroKeysToSkipObserved.Load(),
+		int64(0),
+		"no chunks have had keys to skip %d.",
+		nonZeroKeysToSkipObserved.Load())
 }
 
 // TestIndexMergeWithSplitsAndDistSQL tests the case where there's an index
@@ -847,7 +953,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	// Wait for the beginning of the Merge step of the schema change.
 	// Write data to the temp index and split it at the hazardous
 	// points.
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {

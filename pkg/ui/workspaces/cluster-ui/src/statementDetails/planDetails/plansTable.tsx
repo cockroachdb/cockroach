@@ -46,9 +46,6 @@ const planDetailsColumnLabels = {
   lastExecTime: "Last Execution Time",
   latencyMax: "Max Latency",
   latencyMin: "Min Latency",
-  latencyP50: "P50 Latency",
-  latencyP90: "P90 Latency",
-  latencyP99: "P99 Latency",
   planGist: "Plan Gist",
   vectorized: "Vectorized",
 };
@@ -98,45 +95,6 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
         content={"The average execution time for this Explain Plan."}
       >
         {planDetailsColumnLabels.avgExecTime}
-      </Tooltip>
-    );
-  },
-  latencyP50: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 50th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP50}
-      </Tooltip>
-    );
-  },
-  latencyP90: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 90th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP90}
-      </Tooltip>
-    );
-  },
-  latencyP99: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 99th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP99}
       </Tooltip>
     );
   },
@@ -408,27 +366,6 @@ export function makeExplainPlanColumns(
       cell: (item: PlanHashStats) =>
         formatNumberForDisplay(item.stats.latency_info.max, duration),
       sort: (item: PlanHashStats) => item.stats.latency_info.max,
-    },
-    {
-      name: "latencyP50",
-      title: planDetailsTableTitles.latencyP50(),
-      cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p50, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p50,
-    },
-    {
-      name: "latencyP90",
-      title: planDetailsTableTitles.latencyP90(),
-      cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p90, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p90,
-    },
-    {
-      name: "latencyP99",
-      title: planDetailsTableTitles.latencyP99(),
-      cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p99, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p99,
     },
     {
       name: "distSQL",

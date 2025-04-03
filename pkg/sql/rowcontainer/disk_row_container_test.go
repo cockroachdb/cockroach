@@ -94,21 +94,21 @@ func compareRowToEncRow(
 
 func getMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-mem"),
+		Name:     mon.MakeName("test-mem"),
 		Settings: st,
 	})
 }
 
 func getUnlimitedMemoryMonitor(st *cluster.Settings) *mon.BytesMonitor {
 	return mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("test-mem"),
+		Name:     mon.MakeName("test-mem"),
 		Settings: st,
 	})
 }
 
 func getDiskMonitor(st *cluster.Settings) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-disk"),
+		Name:     mon.MakeName("test-disk"),
 		Res:      mon.DiskResource,
 		Settings: st,
 	})

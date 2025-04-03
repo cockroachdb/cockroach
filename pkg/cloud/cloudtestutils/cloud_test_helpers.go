@@ -193,6 +193,7 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			//nolint:deferloop TODO(#137605)
 			defer r.Close(ctx)
 
 			res, err := ioctx.ReadAll(ctx, r)
@@ -351,6 +352,13 @@ func checkExportStore(t *testing.T, info StoreInfo, skipSingleFile bool) {
 		require.Error(t, err)
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
 
+		require.NoError(t, s.Delete(ctx, testingFilename))
+		// Deleting a file that does not exist is okay. This behavior is somewhat
+		// forced by the behavior of S3. In non-versioned S3 buckets, S3 does not
+		// return an error or metadata indicating the object did not exist before
+		// the delete. So if we want consistent behavior across all cloud.Storage
+		// interfaces, and we don't want to read before we delete an S3 object, we
+		// need to treat this as a non-error.
 		require.NoError(t, s.Delete(ctx, testingFilename))
 	})
 }

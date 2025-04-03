@@ -360,7 +360,7 @@ memo (optimized, ~25KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
 memo set=reorder_joins_limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~36KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
+memo (optimized, ~37KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+10) (merge-join G3 G2 G8 inner-join,+10,+1) (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12)) (merge-join G5 G6 G8 inner-join,+5,+11) (merge-join G6 G5 G8 inner-join,+11,+5) (lookup-join G6 G8 cy,keyCols=[11],outCols=(1,2,5,6,9-12))
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12))
@@ -469,7 +469,7 @@ inner-join (cross)
  │    ├── interesting orderings: (+7) (+11) (+15)
  │    ├── inner-join (cross)
  │    │    ├── columns: t.public.cy.c:11(int!null) t.public.cy.y:12(int) t.public.dz.d:15(int!null) t.public.dz.z:16(int)
- │    │    ├── stats: [rows=1000000]
+ │    │    ├── stats: [rows=1e+06]
  │    │    ├── cost: 12167.0063
  │    │    ├── key: (11,15)
  │    │    ├── fd: (11)-->(12), (15)-->(16)
@@ -587,7 +587,7 @@ memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:
 memo set=reorder_joins_limit=3
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~68KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
+memo (optimized, ~69KB, required=[presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (inner-join G13 G14 G12) (inner-join G14 G13 G12) (inner-join G15 G16 G12) (inner-join G16 G15 G12) (inner-join G17 G18 G12) (inner-join G18 G17 G12) (merge-join G3 G2 G19 inner-join,+6,+2) (merge-join G6 G5 G19 inner-join,+10,+6) (merge-join G9 G8 G19 inner-join,+10,+6) (merge-join G11 G10 G19 inner-join,+13,+10) (merge-join G14 G13 G19 inner-join,+13,+10) (merge-join G16 G15 G19 inner-join,+13,+10) (lookup-join G17 G19 abc,keyCols=[10],outCols=(1,2,5,6,9,10,13-16)) (merge-join G18 G17 G19 inner-join,+13,+10)
  │    └── [presentation: b:1,x:2,c:5,y:6,d:9,z:10,a:13,b:14,c:15,d:16]
  │         ├── best: (inner-join G3 G2 G4)

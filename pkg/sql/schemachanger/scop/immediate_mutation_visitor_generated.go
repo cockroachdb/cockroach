@@ -96,6 +96,9 @@ type ImmediateMutationVisitor interface {
 	SetPolicyName(context.Context, SetPolicyName) error
 	AddPolicyRole(context.Context, AddPolicyRole) error
 	RemovePolicyRole(context.Context, RemovePolicyRole) error
+	SetPolicyUsingExpression(context.Context, SetPolicyUsingExpression) error
+	SetPolicyWithCheckExpression(context.Context, SetPolicyWithCheckExpression) error
+	SetPolicyForwardReferences(context.Context, SetPolicyForwardReferences) error
 	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
 	UpdateTypeBackReferencesInTypes(context.Context, UpdateTypeBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
@@ -108,6 +111,8 @@ type ImmediateMutationVisitor interface {
 	RemoveTableColumnBackReferencesInFunctions(context.Context, RemoveTableColumnBackReferencesInFunctions) error
 	AddTriggerBackReferencesInRoutines(context.Context, AddTriggerBackReferencesInRoutines) error
 	RemoveTriggerBackReferencesInRoutines(context.Context, RemoveTriggerBackReferencesInRoutines) error
+	AddPolicyBackReferenceInFunctions(context.Context, AddPolicyBackReferenceInFunctions) error
+	RemovePolicyBackReferenceInFunctions(context.Context, RemovePolicyBackReferenceInFunctions) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
 	SetConstraintName(context.Context, SetConstraintName) error
@@ -159,6 +164,11 @@ type ImmediateMutationVisitor interface {
 	AddTableZoneConfig(context.Context, AddTableZoneConfig) error
 	AddIndexZoneConfig(context.Context, AddIndexZoneConfig) error
 	AddPartitionZoneConfig(context.Context, AddPartitionZoneConfig) error
+	EnableRowLevelSecurityMode(context.Context, EnableRowLevelSecurityMode) error
+	ForcedRowLevelSecurityMode(context.Context, ForcedRowLevelSecurityMode) error
+	MarkRecreatedIndexAsInvisible(context.Context, MarkRecreatedIndexAsInvisible) error
+	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
+	SetTableSchemaLocked(context.Context, SetTableSchemaLocked) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -557,6 +567,21 @@ func (op RemovePolicyRole) Visit(ctx context.Context, v ImmediateMutationVisitor
 }
 
 // Visit is part of the ImmediateMutationOp interface.
+func (op SetPolicyUsingExpression) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetPolicyUsingExpression(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetPolicyWithCheckExpression) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetPolicyWithCheckExpression(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetPolicyForwardReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetPolicyForwardReferences(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
 func (op UpdateTableBackReferencesInTypes) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateTableBackReferencesInTypes(ctx, op)
 }
@@ -614,6 +639,16 @@ func (op AddTriggerBackReferencesInRoutines) Visit(ctx context.Context, v Immedi
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveTriggerBackReferencesInRoutines) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveTriggerBackReferencesInRoutines(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddPolicyBackReferenceInFunctions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddPolicyBackReferenceInFunctions(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemovePolicyBackReferenceInFunctions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemovePolicyBackReferenceInFunctions(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -869,4 +904,29 @@ func (op AddIndexZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisit
 // Visit is part of the ImmediateMutationOp interface.
 func (op AddPartitionZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.AddPartitionZoneConfig(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op EnableRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.EnableRowLevelSecurityMode(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op ForcedRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.ForcedRowLevelSecurityMode(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MarkRecreatedIndexAsInvisible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MarkRecreatedIndexAsInvisible(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MarkRecreatedIndexesAsVisible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MarkRecreatedIndexesAsVisible(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTableSchemaLocked) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTableSchemaLocked(ctx, op)
 }

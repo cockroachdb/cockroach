@@ -1,0 +1,584 @@
+# empty string
+error
+
+----
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+
+^
+----
+----
+
+parse
+$
+----
+$
+
+parse
+   $
+----
+$
+
+parse
+$.abc
+----
+$."abc" -- normalized!
+
+parse
+$."abc-def"."abc_def"
+----
+$."abc-def"."abc_def"
+
+parse
+$.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
+----
+$."a"."b"."c"."d"."e"."f"."g"."h"."i"."j"."k"."l"."m"."n"."o"."p"."q"."r"."s"."t"."u"."v"."w"."x"."y"."z" -- normalized!
+
+parse
+   $ .a .b . c
+----
+$."a"."b"."c" -- normalized!
+
+parse
+$.a[*].b.c[*]
+----
+$."a"[*]."b"."c"[*] -- normalized!
+
+parse
+  $  .  a  [  *  ] .  bcd
+----
+$."a"[*]."bcd" -- normalized!
+
+error
+$.a[
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+$.a[
+    ^
+
+error
+$.a[]
+----
+at or near "]": syntax error
+DETAIL: source SQL:
+$.a[]
+    ^
+
+parse
+strict $
+----
+strict $
+
+parse
+lax $
+----
+$ -- normalized!
+
+parse
+strict $.strict.lax
+----
+strict $."strict"."lax" -- normalized!
+
+error
+strict lax $.strict.lax
+----
+at or near "lax": syntax error
+DETAIL: source SQL:
+strict lax $.strict.lax
+       ^
+
+error
+$.$
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+$.$
+  ^
+
+error
+$.a$
+----
+at or near "$": syntax error
+DETAIL: source SQL:
+$.a$
+   ^
+
+error
+$.a$b
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+$.a$b
+   ^
+
+parse
+$."a$b"
+----
+$."a$b"
+
+parse
+$.a1
+----
+$."a1" -- normalized!
+
+error
+word $
+----
+at or near "word": syntax error
+DETAIL: source SQL:
+word $
+^
+
+error
+$.1e
+----
+at or near "invalid floating point literal": syntax error
+DETAIL: source SQL:
+$.1e
+  ^
+
+parse
+$.abc.ABC
+----
+$."abc"."ABC" -- normalized!
+
+parse
+$.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
+----
+$."mLmTGLKZsrNL"."ZawfwNmnfbFoRsISbQXD"[*]."JgTODFNN" -- normalized!
+
+parse
+$."1a"
+----
+$."1a"
+
+parse
+$."2e"
+----
+$."2e"
+
+error
+$.2e
+----
+at or near "invalid floating point literal": syntax error
+DETAIL: source SQL:
+$.2e
+  ^
+
+parse
+$var
+----
+$"var" -- normalized!
+
+parse
+$1a
+----
+$"1a" -- normalized!
+
+parse
+$2e
+----
+$"2e" -- normalized!
+
+parse
+$"1a"
+----
+$"1a"
+
+parse
+$"2e"
+----
+$"2e"
+
+parse
+$.a[1]
+----
+$."a"[1] -- normalized!
+
+parse
+$.abc[0]
+----
+$."abc"[0] -- normalized!
+
+parse
+$.abc[213].def[23198]
+----
+$."abc"[213]."def"[23198] -- normalized!
+
+parse
+$.abc[1 to 2]
+----
+$."abc"[1 to 2] -- normalized!
+
+parse
+$.abc[4 to 1]
+----
+$."abc"[4 to 1] -- normalized!
+
+parse
+$.abc[5 to 5]
+----
+$."abc"[5 to 5] -- normalized!
+
+parse
+$.abc[1, 2, 3]
+----
+$."abc"[1,2,3] -- normalized!
+
+parse
+$.abc[1 to 3, 4 to 3, 5, 9 to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
+parse
+$.abc[  1    to    3   , 4 to 3, 5  , 9     to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
+parse
+$[1]
+----
+$[1]
+
+parse
+$[$var]
+----
+$[$"var"] -- normalized!
+
+parse
+$.a[$.a]
+----
+$."a"[$."a"] -- normalized!
+
+parse
+$[true]
+----
+$[true]
+
+parse
+$[false]
+----
+$[false]
+
+parse
+1 < 1
+----
+(1 < 1) -- normalized!
+
+parse
+1 <= 1
+----
+(1 <= 1) -- normalized!
+
+parse
+1 > 1
+----
+(1 > 1) -- normalized!
+
+parse
+1 >= 1
+----
+(1 >= 1) -- normalized!
+
+parse
+1 != 1
+----
+(1 != 1) -- normalized!
+
+parse
+1 == 1
+----
+(1 == 1) -- normalized!
+
+parse
+((true < false))
+----
+(true < false) -- normalized!
+
+parse
+((true <= false))
+----
+(true <= false) -- normalized!
+
+parse
+((true > false))
+----
+(true > false) -- normalized!
+
+parse
+((true >= false))
+----
+(true >= false) -- normalized!
+
+parse
+((true != false))
+----
+(true != false) -- normalized!
+
+parse
+((true == false))
+----
+(true == false) -- normalized!
+
+parse
+$ < 1
+----
+($ < 1) -- normalized!
+
+parse
+$ == $
+----
+($ == $) -- normalized!
+
+parse
+1 == 1 && 1 != 1
+----
+((1 == 1) && (1 != 1)) -- normalized!
+
+parse
+1 == 1 || 1 != 1
+----
+((1 == 1) || (1 != 1)) -- normalized!
+
+parse
+$.abc ? ($.a[1] > 2)
+----
+$."abc"?(($."a"[1] > 2)) -- normalized!
+
+# TODO(normanchenn): this should be not allowed
+parse
+@
+----
+@
+
+parse
+$.a[*] ? (@.b > 100)
+----
+$."a"[*]?((@."b" > 100)) -- normalized!
+
+parse
+$.a[*] ? (@.b > 100 || (@.c < 100))
+----
+$."a"[*]?(((@."b" > 100) || (@."c" < 100))) -- normalized!
+
+parse
+1 + 1
+----
+(1 + 1) -- normalized!
+
+parse
+1 + 1 * 2
+----
+(1 + (1 * 2)) -- normalized!
+
+parse
+1 + 2 - 3 * 4 / 5 % 6
+----
+((1 + 2) - (((3 * 4) / 5) % 6)) -- normalized!
+
+parse
+(1 + 2) * (3 - 4) / 5
+----
+(((1 + 2) * (3 - 4)) / 5) -- normalized!
+
+parse
+1 * 2 + 3 * 4
+----
+((1 * 2) + (3 * 4)) -- normalized!
+
+parse
+1 + 2 * (3 - 4) / (5 + 6) - 7 % 8
+----
+((1 + ((2 * (3 - 4)) / (5 + 6))) - (7 % 8)) -- normalized!
+
+parse
+1 * (2 + 3) - 4 / (5 - 6) % 7
+----
+((1 * (2 + 3)) - ((4 / (5 - 6)) % 7)) -- normalized!
+
+parse
+((1 + 2) * 3) - (4 % 5) * 6
+----
+(((1 + 2) * 3) - ((4 % 5) * 6)) -- normalized!
+
+parse
+1 + 2 - 3 + 4 - 5
+----
+((((1 + 2) - 3) + 4) - 5) -- normalized!
+
+parse
+$.c[$.b - $.a]
+----
+$."c"[($."b" - $."a")] -- normalized!
+
+parse
+$.c[$.b - $.a to $.d - $.b]
+----
+$."c"[($."b" - $."a") to ($."d" - $."b")] -- normalized!
+
+parse
+"hello" == "hello"
+----
+("hello" == "hello") -- normalized!
+
+parse
+$.a ? (@.b == "string")
+----
+$."a"?((@."b" == "string")) -- normalized!
+
+error
+"a" && "b"
+----
+at or near "&": syntax error
+DETAIL: source SQL:
+"a" && "b"
+    ^
+
+parse
+null == null
+----
+(null == null) -- normalized!
+
+parse
+null + null
+----
+(null + null) -- normalized!
+
+error
+!null
+----
+at or near "null": syntax error
+DETAIL: source SQL:
+!null
+ ^
+
+parse
+$.a ? (@.b like_regex "^[aeiou]")
+----
+$."a"?((@."b" like_regex "^[aeiou]")) -- normalized!
+
+parse
+$.*
+----
+$.*
+
+parse
+$.abc.*.def.*
+----
+$."abc".*."def".* -- normalized!
+
+parse
+-1
+----
+(-1) -- normalized!
+
+parse
+- "hello"
+----
+(-"hello") -- normalized!
+
+parse
++ "hello"
+----
+(+"hello") -- normalized!
+
+parse
+- - $.a[2]
+----
+(-(-$."a"[2])) -- normalized!
+
+parse
+1 + 2 * -4
+----
+(1 + (2 * (-4))) -- normalized!
+
+error
+$ ? (@ like_regex "(invalid pattern")
+----
+at or near ")": syntax error: invalid regular expression: error parsing regexp: missing closing ): `(invalid pattern`
+DETAIL: source SQL:
+$ ? (@ like_regex "(invalid pattern")
+                                    ^
+
+# TODO(normanchenn): This shouldn't be parsed, as the last keyword isn't within
+# array subscripts.
+parse
+last
+----
+last
+
+parse
+$[last]
+----
+$[last]
+
+parse
+$[1 to last, last to last]
+----
+$[1 to last,last to last] -- normalized!
+
+parse
+exists($.a)
+----
+exists ($."a") -- normalized!
+
+parse
+$.a ? (exists(@.b) && !exists(@.c))
+----
+$."a"?((exists (@."b") && !(exists (@."c")))) -- normalized!
+
+parse
+(1 + 2 == 3) is unknown
+----
+(((1 + 2) == 3)) is unknown -- normalized!
+
+parse
+($ < 1) is unknown
+----
+(($ < 1)) is unknown -- normalized!
+
+parse
+(null like_regex "^he.*$") is unknown
+----
+((null like_regex "^he.*$")) is unknown -- normalized!
+
+# postgres allows floats as array indexes
+# parse
+# $.abc[1.0]
+# ----
+
+# parse
+# $.abc[1.1]
+# ----
+
+# in postgres this becomes $."a"[1000000000]
+# parse
+# $.abc[1e9]
+# ----
+
+# parse
+# $.abc[0.0]
+# ----
+
+# postgres allows negatives as array indexes
+# parse
+# $.abc[-0]
+# ----
+
+# parse
+# $.abc[-1.99]
+# ----
+
+# parse
+# $[1.999999999999999]
+# ----
+
+# parse
+# $.1a
+# ----
+
+# parse
+# $[null]
+# ----

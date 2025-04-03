@@ -196,6 +196,9 @@ GRANT role_foo TO testuser WITH ADMIN OPTION;
 user testuser
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 query TTT colnames
@@ -227,3 +230,6 @@ grantee  role_name  is_grantable
 
 statement ok
 COMMIT
+
+statement ok
+RESET autocommit_before_ddl

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -348,7 +349,7 @@ func TestExplainKVInfo(t *testing.T) {
 			}
 
 			scanQuery := "SELECT count(*) FROM ab"
-			info := getKVInfo(t, r, scanQuery)
+			info, fullOutput := getKVInfo(t, r, scanQuery)
 
 			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
@@ -357,9 +358,14 @@ func TestExplainKVInfo(t *testing.T) {
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 1000, info.counters[stepCount])
 			assert.Equal(t, 1, info.counters[seekCount])
+			// Additionally assert that correct distribution is shown.
+			assert.Truef(
+				t, strings.Contains(fullOutput, "distribution: local"),
+				"expected local distribution, found\n\n%s", fullOutput,
+			)
 
 			lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
-			info = getKVInfo(t, r, lookupJoinQuery)
+			info, fullOutput = getKVInfo(t, r, lookupJoinQuery)
 
 			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
@@ -368,6 +374,10 @@ func TestExplainKVInfo(t *testing.T) {
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 0, info.counters[stepCount])
 			assert.Equal(t, 1000, info.counters[seekCount])
+			assert.Truef(
+				t, strings.Contains(fullOutput, "distribution: local"),
+				"expected local distribution\n\n%s", fullOutput,
+			)
 		}
 	}
 }
@@ -405,7 +415,10 @@ func init() {
 // of the given query from the top-most operator in the plan (i.e. if there are
 // multiple operators exposing the scan stats, then the first info that appears
 // in the EXPLAIN output is used).
-func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) kvInfo {
+//
+// It additionally returns the full output of EXPLAIN ANALYZE of the given
+// query.
+func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) (_ kvInfo, fullOutput string) {
 	rows := r.Query(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 	var output strings.Builder
 	var str string
@@ -441,7 +454,7 @@ func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) kvInfo {
 		fmt.Println("Explain output:")
 		fmt.Println(output.String())
 	}
-	return info
+	return info, output.String()
 }
 
 // TestExplainAnalyzeWarnings verifies that warnings are printed whenever the
@@ -517,7 +530,7 @@ func TestExplainRedact(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 
@@ -563,4 +576,71 @@ func TestExplainRedact(t *testing.T) {
 	defer smith.Close()
 
 	tests.GenerateAndCheckRedactedExplainsForPII(t, smith, numStatements, conn, containsPII)
+}
+
+// TestExplainAnalyzeSQLNodes verifies the 'sql nodes' attribute of EXPLAIN
+// ANALYZE output.
+func TestExplainAnalyzeSQLNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t)
+
+	c := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
+	defer c.Stopper().Stop(context.Background())
+	r := sqlutils.MakeSQLRunner(c.ApplicationLayer(0).SQLConn(t))
+
+	r.Exec(t, `CREATE TABLE kv (k INT PRIMARY KEY, v INT);`)
+	r.Exec(t, `INSERT INTO kv SELECT i, i FROM generate_series (1, 300) AS g(i);`)
+	r.Exec(t, `ANALYZE kv;`)
+	r.Exec(t, `ALTER TABLE kv SPLIT AT VALUES (100), (200);`)
+	r.ExecSucceedsSoon(t, `ALTER TABLE kv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 101), (ARRAY[3], 201);`)
+
+	for _, tc := range []struct {
+		setup    string
+		query    string
+		op       string
+		sqlNodes string
+	}{
+		{
+			setup:    `SET distribute_sort_row_count_threshold = 1`,
+			query:    `SELECT v FROM kv ORDER BY v LIMIT 10`,
+			op:       `top-k`,
+			sqlNodes: `n1, n2, n3`,
+		},
+		{
+			setup:    `SET distribute_group_by_row_count_threshold = 1`,
+			query:    `SELECT min(v) FROM kv`,
+			op:       `group`,
+			sqlNodes: `n1, n2, n3`,
+		},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			if tc.setup != "" {
+				r.Exec(t, tc.setup)
+			}
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE "+tc.query)
+			for i := range rows {
+				// Find the first row that corresponds to the target operator.
+				if strings.Contains(rows[i][0], tc.op) {
+					// Now find the 'sql nodes' attribute of the operator.
+					for j := i + 1; j < len(rows); j++ {
+						if strings.Contains(rows[j][0], `sql nodes`) {
+							if !strings.Contains(rows[j][0], tc.sqlNodes) {
+								t.Fatalf(
+									"expected 'sql nodes' to be %s for %q, found %s\n%s",
+									tc.sqlNodes, tc.op, rows[j][0], rows,
+								)
+							}
+							return
+						} else if strings.Contains(rows[j][0], "•") {
+							// We already reached the next operator.
+							t.Fatalf("didn't find 'sql nodes' for %q\n%s", tc.op, rows)
+						}
+					}
+				}
+			}
+			t.Fatalf("didn't find 'sql nodes' for %q\n%s", tc.op, rows)
+		})
+	}
 }

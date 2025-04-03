@@ -297,7 +297,6 @@ DROP TABLE d.foofoo;
 DROP TABLE d.baz;
 ----
 
-
 exec-sql
 RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' WITH into_db= d;
 ----

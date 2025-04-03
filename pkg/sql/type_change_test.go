@@ -36,7 +36,7 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	// Protects errorReturned.
 	var mu syncutil.Mutex
 	errorReturned := false
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
 			mu.Lock()
@@ -81,7 +81,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	var mu syncutil.Mutex
 	// Ensures just the first try to cleanup returns a retryable error.
 	errReturned := false
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	cleanupSuccessfullyFinished := make(chan struct{})
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
@@ -141,7 +141,7 @@ func TestFailedTypeSchemaChangeIgnoresDrops(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	startDrop := make(chan struct{})
 	dropFinished := make(chan struct{})
 	cancelled := atomic.Bool{}
@@ -201,7 +201,7 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -226,6 +226,7 @@ INSERT INTO use_greetings VALUES(1, 'yo');
 	}{
 		{
 			`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greetings DROP VALUE 'hello'; 
 ALTER TYPE greetings ADD VALUE 'howdy'; 
 ALTER TYPE greetings DROP VALUE 'yo'; 
@@ -241,6 +242,7 @@ COMMIT`,
 		},
 		{
 			`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greetings ADD VALUE 'sup'; 
 ALTER TYPE greetings ADD VALUE 'howdy'; 
 ALTER TYPE greetings DROP VALUE 'yo'; 
@@ -256,6 +258,7 @@ COMMIT`,
 		},
 		{
 			`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greetings DROP VALUE 'hi'; 
 ALTER TYPE greetings DROP VALUE 'hello'; 
 ALTER TYPE greetings DROP VALUE 'yo'; 
@@ -270,6 +273,7 @@ COMMIT`,
 		},
 		{
 			`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greetings ADD VALUE 'sup'; 
 ALTER TYPE greetings ADD VALUE 'howdy'; 
 ALTER TYPE greetings DROP VALUE 'hello'; 
@@ -286,6 +290,7 @@ COMMIT`,
 		{
 			// This test works on a type created in the same txn that modifies it.
 			`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE abc AS ENUM ('a', 'b', 'c');
 ALTER TYPE abc ADD VALUE 'd';
 ALTER TYPE abc DROP VALUE 'c';
@@ -341,7 +346,7 @@ func TestEnumMemberTransitionIsolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	// Protects blocker.
 	var mu syncutil.Mutex
 	blocker := make(chan struct{})
@@ -377,7 +382,10 @@ CREATE TYPE ab AS ENUM ('a', 'b')`,
 	}
 
 	go func() {
-		_, err := sqlDB.Exec(`BEGIN; ALTER TYPE ab DROP VALUE 'a'; ALTER TYPE ab ADD VALUE 'c'; COMMIT`)
+		_, err := sqlDB.Exec(`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TYPE ab DROP VALUE 'a'; ALTER TYPE ab ADD VALUE 'c';
+COMMIT`)
 		if err != nil {
 			t.Error(err)
 		}
@@ -395,7 +403,11 @@ CREATE TYPE ab AS ENUM ('a', 'b')`,
 			}
 			mu.Unlock()
 		}
-		_, err := sqlDB.Exec(`BEGIN; ALTER TYPE ab DROP VALUE 'b'; ALTER TYPE ab ADD VALUE 'd'; COMMIT`)
+		_, err := sqlDB.Exec(`BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TYPE ab DROP VALUE 'b';
+ALTER TYPE ab ADD VALUE 'd';
+COMMIT`)
 		if err == nil {
 			t.Error("expected error, found nil")
 		}
@@ -463,17 +475,17 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 		},
 		{
 			"txn add drop",
-			"BEGIN; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings DROP VALUE 'yo'; COMMIT",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings DROP VALUE 'yo'; COMMIT",
 			true,
 		},
 		{
 			"txn add add",
-			"BEGIN; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings ADD VALUE 'hello'; COMMIT",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings ADD VALUE 'hello'; COMMIT",
 			false,
 		},
 		{
 			"txn drop drop",
-			"BEGIN; ALTER TYPE db.greetings DROP VALUE 'yo'; ALTER TYPE db.greetings DROP VALUE 'hi'; COMMIT",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; ALTER TYPE db.greetings DROP VALUE 'yo'; ALTER TYPE db.greetings DROP VALUE 'hi'; COMMIT",
 			true,
 		},
 	}
@@ -481,7 +493,7 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
-			params, _ := createTestServerParams()
+			params, _ := createTestServerParamsAllowTenants()
 
 			// Wait groups for synchronizing various parts of the test.
 			typeSchemaChangeStarted := make(chan struct{})
@@ -530,7 +542,7 @@ SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'TYPEDESC SCHEMA CHANGE' AND 
 	status = $1
-	)`, jobs.StatusRunning)
+	)`, jobs.StateRunning)
 
 			if !tc.cancelable && !testutils.IsError(err, "not cancelable") {
 				t.Fatalf("expected type schema change job to be not cancelable; found %v ", err)
@@ -571,7 +583,7 @@ func TestAddDropEnumValues(t *testing.T) {
 	defer ccl.TestingEnableEnterprise()()
 	ctx := context.Background()
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 

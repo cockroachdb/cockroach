@@ -207,6 +207,11 @@ type Context struct {
 
 	SQLLivenessReader sqlliveness.Reader
 
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
+
 	SQLStatsController SQLStatsController
 
 	SchemaTelemetryController SchemaTelemetryController
@@ -427,7 +432,7 @@ func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placehol
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-monitor"),
+		Name:     mon.MakeName("test-monitor"),
 		Settings: st,
 	})
 	return MakeTestingEvalContextWithMon(st, monitor)
@@ -819,7 +824,7 @@ func (ec *Context) BoundedStaleness() bool {
 }
 
 // ensureExpectedType will return an error if a datum does not match the
-// provided type. If the expected type is Any or if the datum is a Null
+// provided type. If the expected type is AnyElement or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
@@ -915,8 +920,8 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
-	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
+	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
+	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -927,6 +932,9 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		req streampb.ReplicationProducerRequest,
 	) (streampb.ReplicationProducerSpec, error)
+
+	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
+	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

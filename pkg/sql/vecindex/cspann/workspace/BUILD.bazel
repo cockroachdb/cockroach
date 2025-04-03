@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workspace",
+    srcs = ["workspace.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/vector",
+    ],
+)
+
+go_test(
+    name = "workspace_test",
+    srcs = ["workspace_test.go"],
+    embed = [":workspace"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

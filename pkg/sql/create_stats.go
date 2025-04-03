@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -63,6 +64,18 @@ var statsOnVirtualCols = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
+// Collecting histograms on non-indexed JSON columns can require a lot of memory
+// when the JSON values are large. This is true even when only two histogram
+// buckets are generated because we still sample many JSON values which exist in
+// memory for the duration of the stats collection job. By default, we do not
+// collect histograms for non-indexed JSON columns.
+var nonIndexJSONHistograms = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.non_indexed_json_histograms.enabled",
+	"set to true to collect table statistics histograms on non-indexed JSON columns",
+	false,
+	settings.WithPublic)
+
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -72,8 +85,10 @@ func StubTableStats(
 	desc catalog.TableDescriptor, name string,
 ) ([]*stats.TableStatisticProto, error) {
 	colStats, err := createStatsDefaultColumns(
-		context.Background(), desc, false /* virtColEnabled */, false, /* multiColEnabled */
-		false /* partialStats */, nonIndexColHistogramBuckets, nil, /* evalCtx */
+		context.Background(), desc,
+		false /* virtColEnabled */, false, /* multiColEnabled */
+		false /* nonIndexJSONHistograms */, false, /* partialStats */
+		nonIndexColHistogramBuckets, nil, /* evalCtx */
 	)
 	if err != nil {
 		return nil, err
@@ -256,6 +271,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			tableDesc,
 			virtColEnabled,
 			multiColEnabled,
+			nonIndexJSONHistograms.Get(n.p.ExecCfg().SV()),
 			n.Options.UsingExtremes,
 			defaultHistogramBuckets,
 			n.p.EvalContext(),
@@ -375,6 +391,9 @@ const maxNonIndexCols = 100
 // predicate expressions are also likely to appear in query filters, so stats
 // are collected for those columns as well.
 //
+// If nonIndexJsonHistograms is true, 2-bucket histograms are collected for
+// non-indexed JSON columns.
+//
 // If partialStats is true, we only collect statistics on single columns that
 // are prefixes of forward indexes, and skip over partial, sharded, and
 // implicitly partitioned indexes. Partial statistic creation only supports
@@ -386,7 +405,7 @@ const maxNonIndexCols = 100
 func createStatsDefaultColumns(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	virtColEnabled, multiColEnabled, partialStats bool,
+	virtColEnabled, multiColEnabled, nonIndexJSONHistograms, partialStats bool,
 	defaultHistogramBuckets uint32,
 	evalCtx *eval.Context,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -491,7 +510,7 @@ func createStatsDefaultColumns(
 	// implicitly partitioned indexes.
 	if partialStats {
 		for _, idx := range desc.ActiveIndexes() {
-			if idx.GetType() != descpb.IndexDescriptor_FORWARD ||
+			if idx.GetType() != idxtype.FORWARD ||
 				idx.IsPartial() ||
 				idx.IsSharded() ||
 				idx.ImplicitPartitioningColumnCount() > 0 {
@@ -559,9 +578,13 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
+		if idx.GetType() == idxtype.VECTOR {
+			// Skip vector indexes for now.
+			continue
+		}
 		for j, n := 0, idx.NumKeyColumns(); j < n; j++ {
 			colID := idx.GetKeyColumnID(j)
-			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && colID == idx.InvertedColumnID()
+			isInverted := idx.GetType() == idxtype.INVERTED && colID == idx.InvertedColumnID()
 
 			// Generate stats for each indexed column.
 			if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
@@ -663,9 +686,13 @@ func createStatsDefaultColumns(
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
 			maxHistBuckets = defaultHistogramBuckets
 		}
+		hasHistogram := !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
+		if col.GetType().Family() == types.JsonFamily {
+			hasHistogram = nonIndexJSONHistograms
+		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
-			HasHistogram:        !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()),
+			HasHistogram:        hasHistogram,
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++

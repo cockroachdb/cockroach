@@ -1,0 +1,284 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/case.out --label=/mnt/data1/postgres/src/test/regress/results/case.out /mnt/data1/postgres/src/test/regress/expected/case.out /mnt/data1/postgres/src/test/regress/results/case.out
+--- /mnt/data1/postgres/src/test/regress/expected/case.out
++++ /mnt/data1/postgres/src/test/regress/results/case.out
+@@ -96,7 +96,14 @@
+ -- However we do not currently suppress folding of potentially
+ -- reachable subexpressions
+ SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl;
+-ERROR:  division by zero
++ case 
++------
++    0
++    0
++    0
++    0
++(4 rows)
++
+ -- Test for cases involving untyped literals in test expression
+ SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END;
+  case 
+@@ -174,120 +181,73 @@
+ --  defined in the SQL standard.
+ --
+ SELECT * FROM CASE_TBL WHERE COALESCE(f,i) = 4;
+- i | f 
+----+---
+- 4 |  
+-(1 row)
+-
++ERROR:  incompatible COALESCE expressions: expected i to be of type float, found type int
+ SELECT * FROM CASE_TBL WHERE NULLIF(f,i) = 2;
+- i | f 
+----+---
+-(0 rows)
+-
++ERROR:  incompatible NULLIF expressions: expected i to be of type float, found type int
+ SELECT COALESCE(a.f, b.i, b.j)
+   FROM CASE_TBL a, CASE2_TBL b;
+- coalesce 
+-----------
+-     10.1
+-     20.2
+-    -30.3
+-        1
+-     10.1
+-     20.2
+-    -30.3
+-        2
+-     10.1
+-     20.2
+-    -30.3
+-        3
+-     10.1
+-     20.2
+-    -30.3
+-        2
+-     10.1
+-     20.2
+-    -30.3
+-        1
+-     10.1
+-     20.2
+-    -30.3
+-       -6
+-(24 rows)
+-
++ERROR:  incompatible COALESCE expressions: expected i to be of type float, found type int
+ SELECT *
+   FROM CASE_TBL a, CASE2_TBL b
+   WHERE COALESCE(a.f, b.i, b.j) = 2;
+- i | f | i | j  
+----+---+---+----
+- 4 |   | 2 | -2
+- 4 |   | 2 | -4
+-(2 rows)
+-
++ERROR:  incompatible COALESCE expressions: expected i to be of type float, found type int
+ SELECT NULLIF(a.i,b.i) AS "NULLIF(a.i,b.i)",
+   NULLIF(b.i, 4) AS "NULLIF(b.i,4)"
+   FROM CASE_TBL a, CASE2_TBL b;
+  NULLIF(a.i,b.i) | NULLIF(b.i,4) 
+ -----------------+---------------
+                  |             1
+-               2 |             1
+-               3 |             1
+-               4 |             1
+                1 |             2
+-                 |             2
+-               3 |             2
+-               4 |             2
+                1 |             3
+-               2 |             3
+-                 |             3
+-               4 |             3
+                1 |             2
+-                 |             2
+-               3 |             2
+-               4 |             2
+                  |             1
+-               2 |             1
+-               3 |             1
+-               4 |             1
+                1 |              
++               2 |             1
++                 |             2
++               2 |             3
++                 |             2
++               2 |             1
+                2 |              
++               3 |             1
++               3 |             2
++                 |             3
++               3 |             2
++               3 |             1
+                3 |              
++               4 |             1
++               4 |             2
++               4 |             3
++               4 |             2
++               4 |             1
+                4 |              
+ (24 rows)
+ 
+ SELECT *
+   FROM CASE_TBL a, CASE2_TBL b
+   WHERE COALESCE(f,b.i) = 2;
+- i | f | i | j  
+----+---+---+----
+- 4 |   | 2 | -2
+- 4 |   | 2 | -4
+-(2 rows)
+-
++ERROR:  incompatible COALESCE expressions: expected i to be of type float, found type int
+ -- Tests for constant subexpression simplification
+ explain (costs off)
+ SELECT * FROM CASE_TBL WHERE NULLIF(1, 2) = 2;
+-        QUERY PLAN        
+---------------------------
+- Result
+-   One-Time Filter: false
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ SELECT * FROM CASE_TBL WHERE NULLIF(1, 1) IS NOT NULL;
+-        QUERY PLAN        
+---------------------------
+- Result
+-   One-Time Filter: false
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ SELECT * FROM CASE_TBL WHERE NULLIF(1, null) = 2;
+-        QUERY PLAN        
+---------------------------
+- Result
+-   One-Time Filter: false
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ --
+ -- Examples of updates involving tables
+ --
+@@ -323,10 +283,10 @@
+ SELECT * FROM CASE_TBL;
+   i  |   f   
+ -----+-------
++  -8 |  10.1
+    8 |  20.2
+   -9 | -30.3
+  -12 |      
+-  -8 |  10.1
+ (4 rows)
+ 
+ --
+@@ -343,6 +303,7 @@
+ BEGIN;
+ CREATE FUNCTION vol(text) returns text as
+   'begin return $1; end' language plpgsql volatile;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT CASE
+   (CASE vol('bar')
+     WHEN 'foo' THEN 'it was foo!'
+@@ -359,48 +320,70 @@
+ 
+ -- In this case, we can't inline the SQL function without confusing things.
+ CREATE DOMAIN foodomain AS text;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN foodomain AS text
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE FUNCTION volfoo(text) returns foodomain as
+   'begin return $1::foodomain; end' language plpgsql volatile;
++ERROR:  type "foodomain" does not exist
+ CREATE FUNCTION inline_eq(foodomain, foodomain) returns boolean as
+   'SELECT CASE $2::text WHEN $1::text THEN true ELSE false END' language sql;
++ERROR:  type "foodomain" does not exist
+ CREATE OPERATOR = (procedure = inline_eq,
+                    leftarg = foodomain, rightarg = foodomain);
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR = (procedure = inline_eq,
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ SELECT CASE volfoo('bar') WHEN 'foo'::foodomain THEN 'is foo' ELSE 'is not foo' END;
+-    case    
+-------------
+- is not foo
+-(1 row)
+-
++ERROR:  unknown function: volfoo()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- Test multiple evaluation of a CASE arg that is a read/write object (#14472)
+ -- Wrap this in a single transaction so the transient '=' operator doesn't
+ -- cause problems in concurrent sessions
+ BEGIN;
+ CREATE DOMAIN arrdomain AS int[];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN arrdomain AS int[]
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE FUNCTION make_ad(int,int) returns arrdomain as
+   'declare x arrdomain;
+    begin
+      x := array[$1,$2];
+      return x;
+    end' language plpgsql volatile;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE FUNCTION ad_eq(arrdomain, arrdomain) returns boolean as
+   'begin return array_eq($1, $2); end' language plpgsql;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CREATE OPERATOR = (procedure = ad_eq,
+                    leftarg = arrdomain, rightarg = arrdomain);
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR = (procedure = ad_eq,
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ SELECT CASE make_ad(1,2)
+   WHEN array[2,4]::arrdomain THEN 'wrong'
+   WHEN array[2,5]::arrdomain THEN 'still wrong'
+   WHEN array[1,2]::arrdomain THEN 'right'
+   END;
+- case  
+--------
+- right
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- Test interaction of CASE with ArrayCoerceExpr (bug #15471)
+ BEGIN;
+ CREATE TYPE casetestenum AS ENUM ('e', 'f', 'g');
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT
+   CASE 'foo'::text
+     WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
+@@ -412,6 +395,7 @@
+ (1 row)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ --
+ -- Clean up
+ --

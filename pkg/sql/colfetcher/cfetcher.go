@@ -1085,6 +1085,11 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	if cf.traceKV {
 		defer func() {
 			if err == nil {
+				if cf.table.spec.MaxKeysPerRow > 1 {
+					// If the index has more than one column family, then
+					// include the column family ID.
+					prettyKey = fmt.Sprintf("%s:cf=%d", prettyKey, familyID)
+				}
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
 			}
 		}()
@@ -1126,7 +1131,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueBytes(table, tupleBytes, prettyKey)
 
 		default:
 			// If familyID is 0, this is the row sentinel (in the legacy pre-family format),
@@ -1148,7 +1153,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 					errors.AssertionFailedf("single entry value with no default column id"),
 				)
 			}
-			prettyKey, prettyValue, err = cf.processValueSingle(ctx, table, defaultColumnID, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueSingle(table, defaultColumnID, prettyKey)
 		}
 		if err != nil {
 			return scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1198,9 +1203,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = cf.processValueBytes(
-				ctx, table, valueBytes, prettyKey,
-			)
+			prettyKey, prettyValue, err = cf.processValueBytes(table, valueBytes, prettyKey)
 			if err != nil {
 				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
@@ -1218,7 +1221,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 // value in cf.machine.colvecs accordingly.
 // The key is only used for logging.
 func (cf *cFetcher) processValueSingle(
-	ctx context.Context, table *cTableInfo, colID descpb.ColumnID, prettyKeyPrefix string,
+	table *cTableInfo, colID descpb.ColumnID, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
@@ -1242,22 +1245,16 @@ func (cf *cFetcher) processValueSingle(
 		if cf.traceKV {
 			prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
 		}
-		if row.DebugRowFetch {
-			log.Infof(ctx, "Scan %s -> %v", cf.machine.nextKV.Key, "?")
-		}
 		return prettyKey, prettyValue, nil
 	}
 
 	// No need to unmarshal the column value. Either the column was part of
 	// the index key or it isn't needed.
-	if row.DebugRowFetch {
-		log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
-	}
 	return prettyKey, prettyValue, nil
 }
 
 func (cf *cFetcher) processValueBytes(
-	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
+	table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if cf.traceKV {
@@ -1274,7 +1271,7 @@ func (cf *cFetcher) processValueBytes(
 	cf.machine.remainingValueColsByIdx.UnionWith(cf.table.compositeIndexColOrdinals)
 
 	var (
-		colIDDiff      uint32
+		colIDDelta     uint32
 		lastColID      descpb.ColumnID
 		dataOffset     int
 		typ            encoding.Type
@@ -1286,11 +1283,11 @@ func (cf *cFetcher) processValueBytes(
 	// it's expensive to keep calling .Len() in the loop.
 	remainingValueCols := cf.machine.remainingValueColsByIdx.Len()
 	for len(valueBytes) > 0 && remainingValueCols > 0 {
-		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		vecIdx := -1
 		// Find the ordinal into table.cols for the column ID we just decoded,
@@ -1315,9 +1312,6 @@ func (cf *cFetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[len:]
-			if row.DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
-			}
 			continue
 		}
 

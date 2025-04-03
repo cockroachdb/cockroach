@@ -7,13 +7,13 @@ package tpch
 
 import (
 	"bytes"
+	"math/rand/v2"
 	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/workload/faker"
-	"golang.org/x/exp/rand"
 )
 
 const alphanumericLen64 = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890, `
@@ -21,7 +21,7 @@ const alphanumericLen64 = `abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1
 // randInt returns a random value between x and y inclusively, with a mean of
 // (x+y)/2. See 4.2.2.3.
 func randInt(rng *rand.Rand, x, y int) int {
-	return rng.Intn(y-x+1) + x
+	return rng.IntN(y-x+1) + x
 }
 
 func randFloat(rng *rand.Rand, x, y, shift int) float32 {
@@ -53,7 +53,7 @@ type fakeTextPool struct {
 func (p *fakeTextPool) randString(rng *rand.Rand, minLen, maxLen int) []byte {
 	const fakeTextPoolSize = 1 << 20 // 1 MiB
 	p.once.Do(func() {
-		bufRng := rand.New(rand.NewSource(p.seed))
+		bufRng := rand.New(rand.NewPCG(p.seed, 0))
 		f := faker.NewFaker()
 		// This loop generates random paragraphs and adds them until the length is
 		// >= fakeTextPoolSize. Add some extra capacity so that we don't allocate
@@ -65,8 +65,8 @@ func (p *fakeTextPool) randString(rng *rand.Rand, minLen, maxLen int) []byte {
 		}
 		p.once.buf = buf.Bytes()[:fakeTextPoolSize:fakeTextPoolSize]
 	})
-	start := rng.Intn(len(p.once.buf) - maxLen)
-	end := start + rng.Intn(maxLen-minLen) + minLen
+	start := rng.IntN(len(p.once.buf) - maxLen)
+	end := start + rng.IntN(maxLen-minLen) + minLen
 	return p.once.buf[start:end]
 }
 
@@ -77,7 +77,7 @@ func randVString(rng *rand.Rand, a *bufalloc.ByteAllocator, minLen, maxLen int) 
 	var buf []byte
 	*a, buf = a.Alloc(randInt(rng, minLen, maxLen), 0)
 	for i := range buf {
-		buf[i] = alphanumericLen64[rng.Intn(len(alphanumericLen64))]
+		buf[i] = alphanumericLen64[rng.IntN(len(alphanumericLen64))]
 	}
 	return buf
 }
@@ -129,7 +129,7 @@ func randPartName(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
 	// Fisher–Yates shuffle.
 	for i := 0; i < nPartNames; i++ {
 		// N.B. Correctness requires that i <= j < len(namePerm)
-		j := rng.Intn(len(namePerm)-i) + i
+		j := rng.IntN(len(namePerm)-i) + i
 		namePerm[i], namePerm[j] = namePerm[j], namePerm[i]
 	}
 	var buf []byte
@@ -151,7 +151,7 @@ func randMfgr(rng *rand.Rand, a *bufalloc.ByteAllocator) (byte, []byte) {
 	*a, buf = a.Alloc(len(manufacturerString)+1, 0)
 
 	copy(buf, manufacturerString)
-	m := byte(rng.Intn(5) + '1')
+	m := byte(rng.IntN(5) + '1')
 	buf[len(buf)-1] = m
 	return m, buf
 }
@@ -163,7 +163,7 @@ func randBrand(rng *rand.Rand, a *bufalloc.ByteAllocator, m byte) []byte {
 	*a, buf = a.Alloc(len(brandString)+2, 0)
 
 	copy(buf, brandString)
-	n := byte(rng.Intn(5) + '1')
+	n := byte(rng.IntN(5) + '1')
 	buf[len(buf)-2] = m
 	buf[len(buf)-1] = n
 	return buf
@@ -220,7 +220,7 @@ func randSyllables(
 		if i != 0 {
 			buf = append(buf, ' ')
 		}
-		buf = append(buf, syl[rng.Intn(len(syl))]...)
+		buf = append(buf, syl[rng.IntN(len(syl))]...)
 	}
 	return buf
 }
@@ -253,7 +253,7 @@ var segments = []string{
 }
 
 func randSegment(rng *rand.Rand) []byte {
-	return encoding.UnsafeConvertStringToBytes(segments[rng.Intn(len(segments))])
+	return encoding.UnsafeConvertStringToBytes(segments[rng.IntN(len(segments))])
 }
 
 var priorities = []string{
@@ -261,7 +261,7 @@ var priorities = []string{
 }
 
 func randPriority(rng *rand.Rand) []byte {
-	return encoding.UnsafeConvertStringToBytes(priorities[rng.Intn(len(priorities))])
+	return encoding.UnsafeConvertStringToBytes(priorities[rng.IntN(len(priorities))])
 }
 
 var instructions = []string{
@@ -271,7 +271,7 @@ var instructions = []string{
 }
 
 func randInstruction(rng *rand.Rand) []byte {
-	return encoding.UnsafeConvertStringToBytes(instructions[rng.Intn(len(instructions))])
+	return encoding.UnsafeConvertStringToBytes(instructions[rng.IntN(len(instructions))])
 }
 
 var modes = []string{
@@ -279,5 +279,5 @@ var modes = []string{
 }
 
 func randMode(rng *rand.Rand) []byte {
-	return []byte(modes[rng.Intn(len(modes))])
+	return []byte(modes[rng.IntN(len(modes))])
 }

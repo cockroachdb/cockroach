@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,8 +64,18 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 
 	// Encode the secondary index rows.
 	for _, idx := range w.tableDesc.PublicNonPrimaryIndexes() {
+		if idx.GetType() == idxtype.VECTOR {
+			return nil, errors.AssertionFailedf("system tables cannot have vector indexes")
+		}
 		indexEntries, err := rowenc.EncodeSecondaryIndex(
-			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
+			context.Background(),
+			w.codec,
+			w.tableDesc,
+			idx,
+			w.colIDtoRowIndex,
+			values,
+			rowenc.EmptyVectorIndexEncodingHelper,
+			true, /* includeEmpty */
 		)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(

@@ -113,8 +113,10 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 				continue
 			}
 			func() {
+				t.Status("Stalling disk on n1")
 				stopStall := time.After(30 * time.Second)
 				s.Stall(ctx, c.Node(1))
+				t.Status("Stalled disk on n1")
 				// NB: We use a background context in the defer'ed unstall command,
 				// otherwise on test failure our Unstall calls will be ignored. Leaving
 				// the disk stalled will prevent artifact collection, making debugging
@@ -122,9 +124,12 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 				defer func() {
 					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 					defer cancel()
+					t.Status("Unstalling disk on n1")
 					s.Unstall(ctx, c.Node(1))
+					t.Status("Unstalled disk on n1")
 				}()
 
+				t.Status("waiting for 30s to elapse before unstalling")
 				select {
 				case <-ctx.Done():
 					t.Fatalf("context done while stall induced: %s", ctx.Err())

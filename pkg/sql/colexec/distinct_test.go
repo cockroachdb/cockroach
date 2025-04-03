@@ -466,6 +466,7 @@ func runDistinctBenchmarks(
 	ctx context.Context,
 	b *testing.B,
 	distinctConstructor func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error),
+	afterEachRun func(),
 	getNumOrderedCols func(nCols int) int,
 	namePrefix string,
 	isExternal bool,
@@ -611,6 +612,7 @@ func runDistinctBenchmarks(
 								distinct.Init(ctx)
 								for b := distinct.Next(); b.Length() > 0; b = distinct.Next() {
 								}
+								afterEachRun()
 							}
 							b.StopTimer()
 						})
@@ -643,6 +645,7 @@ func BenchmarkDistinct(b *testing.B) {
 			ctx,
 			b,
 			distinctConstructor,
+			func() {},
 			func(nCols int) int {
 				return int(float64(nCols) * orderedColsFraction[distinctIdx])
 			},

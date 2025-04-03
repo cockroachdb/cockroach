@@ -10,34 +10,32 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"slices"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 // ScanSST scans the SSTable in the given RangeFeedSSTable within
@@ -128,7 +126,7 @@ func ScanSST(
 					StartKey:               intersectedSpan.Key.Clone(),
 					EndKey:                 intersectedSpan.EndKey.Clone(),
 					Timestamp:              rangeKeyVersion.Timestamp,
-					EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(rangeKeyVersion.Timestamp),
+					EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(rangeKeyVersion.Timestamp),
 				},
 				Value: rangeKeyVersion.Value,
 			})
@@ -296,93 +294,6 @@ func fingerprintClustersByTable(
 		dstFingerprints)
 }
 
-func TestingGetStreamIngestionStatsFromReplicationJob(
-	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
-) *streampb.StreamIngestionStats {
-	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(ingestionJobID))
-	progress := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
-	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStats(ctx, *details, *progress)
-	require.NoError(t, err)
-	return stats
-}
-
-func TestingGetPTSFromReplicationJob(
-	t *testing.T,
-	ctx context.Context,
-	sqlRunner *sqlutils.SQLRunner,
-	srv serverutils.ApplicationLayerInterface,
-	producerJobID jobspb.JobID,
-) hlc.Timestamp {
-	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, producerJobID)
-	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-
-	var ptsRecord *ptpb.Record
-	err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		ptsRecord, err = ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
-		return err
-	})
-	require.NoError(t, err)
-
-	return ptsRecord.Timestamp
-}
-
-func WaitForPTSProtection(
-	t *testing.T,
-	ctx context.Context,
-	sqlRunner *sqlutils.SQLRunner,
-	srv serverutils.ApplicationLayerInterface,
-	producerJobID jobspb.JobID,
-	minTime hlc.Timestamp,
-) {
-	testutils.SucceedsSoon(t, func() error {
-		protected := TestingGetPTSFromReplicationJob(t, ctx, sqlRunner, srv, producerJobID)
-		if protected.Less(minTime) {
-			return errors.Newf("pts %s is less than min time %s", protected, minTime)
-		}
-		return nil
-	})
-}
-
-func WaitForPTSProtectionToNotExist(
-	t *testing.T,
-	ctx context.Context,
-	sqlRunner *sqlutils.SQLRunner,
-	srv serverutils.ApplicationLayerInterface,
-	producerJobID jobspb.JobID,
-) {
-	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, producerJobID)
-	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-	testutils.SucceedsSoon(t, func() error {
-		err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			_, err := ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
-			return err
-		})
-		if errors.Is(err, protectedts.ErrNotExists) {
-			return nil
-		}
-		if err == nil {
-			return errors.New("PTS record still exists")
-		}
-		return err
-	})
-}
-
-func getPTSRecordIDFromProducerJob(
-	t *testing.T, sqlRunner *sqlutils.SQLRunner, producerJobID jobspb.JobID,
-) uuid.UUID {
-	payload := jobutils.GetJobPayload(t, sqlRunner, producerJobID)
-	return payload.GetStreamReplication().ProtectedTimestampRecordID
-}
-
-func GetProducerJobIDFromLDRJob(
-	t *testing.T, sqlRunner *sqlutils.SQLRunner, ldrJobID jobspb.JobID,
-) jobspb.JobID {
-	payload := jobutils.GetJobPayload(t, sqlRunner, ldrJobID)
-	return jobspb.JobID(payload.GetLogicalReplicationDetails().StreamID)
-}
-
 func LockLDRTables(
 	ctx context.Context, txn descs.Txn, dstTableDescs []*tabledesc.Mutable, jobID jobspb.JobID,
 ) error {
@@ -421,4 +332,40 @@ func UnlockLDRTables(
 		}
 		return nil
 	})
+}
+
+func AuthorizeTableLevelPriv(
+	ctx context.Context,
+	r resolver.SchemaResolver,
+	sessionAccessor eval.SessionAccessor,
+	priv privilege.Kind,
+	tableNames []string,
+) error {
+	for _, name := range tableNames {
+		uon, err := parser.ParseTableName(name)
+		if err != nil {
+			return err
+		}
+		lookupFlags := tree.ObjectLookupFlags{
+			// TODO(msbutler): for reasons beyond my paygrade, to grab offline
+			// descriptors, we need to also pass RequireMutable.
+			RequireMutable:       true,
+			IncludeOffline:       true,
+			Required:             true,
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: tree.ResolveRequireTableDesc,
+		}
+		d, _, err := resolver.ResolveExistingObject(ctx, r, uon, lookupFlags)
+		if err != nil {
+			return err
+		}
+		td, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return errors.New("expected table descriptor")
+		}
+		if err := sessionAccessor.CheckPrivilege(ctx, td, priv); err != nil {
+			return err
+		}
+	}
+	return nil
 }

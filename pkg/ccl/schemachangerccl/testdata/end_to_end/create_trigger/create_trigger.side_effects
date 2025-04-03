@@ -17,6 +17,14 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE TRIGGER
 increment telemetry for sql.schema.create_trigger
+write *eventpb.CreateTrigger to event log:
+  sql:
+    descriptorId: 104
+    statement: CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON ‹defaultdb›.‹t› FOR EACH ROW EXECUTE FUNCTION ‹f›()
+    tag: CREATE TRIGGER
+    user: root
+  tableName: defaultdb.public.t
+  triggerName: tr
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
 upsert descriptor #104
   ...

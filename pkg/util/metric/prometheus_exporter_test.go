@@ -47,8 +47,9 @@ func TestPrometheusExporter(t *testing.T) {
 
 	pe := MakePrometheusExporter()
 	const includeChildMetrics = false
-	pe.ScrapeRegistry(r1, includeChildMetrics)
-	pe.ScrapeRegistry(r2, includeChildMetrics)
+	const includeAggregateMetrics = true
+	pe.ScrapeRegistry(r1, includeChildMetrics, includeAggregateMetrics)
+	pe.ScrapeRegistry(r2, includeChildMetrics, includeAggregateMetrics)
 
 	type metricLabels map[string]string
 	type family struct {
@@ -141,8 +142,8 @@ func TestPrometheusExporter(t *testing.T) {
 	// Remove a metric, followed by a call to scrape and Gather. Results should
 	// only include metrics with data points.
 	r2.RemoveMetric(c2Dup)
-	pe.ScrapeRegistry(r1, includeChildMetrics)
-	pe.ScrapeRegistry(r2, includeChildMetrics)
+	pe.ScrapeRegistry(r1, includeChildMetrics, includeAggregateMetrics)
+	pe.ScrapeRegistry(r2, includeChildMetrics, includeAggregateMetrics)
 	families, err = pe.Gather()
 	if err != nil {
 		t.Errorf("unexpected error from Gather(): %v", err)
@@ -157,7 +158,7 @@ func TestPrometheusExporter(t *testing.T) {
 	var buf bytes.Buffer
 	pe = MakePrometheusExporter()
 	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
-		exporter.ScrapeRegistry(r1, true)
+		exporter.ScrapeRegistry(r1, true, includeAggregateMetrics)
 	})
 	require.NoError(t, err)
 	output := buf.String()
@@ -173,7 +174,7 @@ func TestPrometheusExporter(t *testing.T) {
 	buf.Reset()
 	r1.RemoveMetric(g1Dup)
 	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
-		exporter.ScrapeRegistry(r1, true)
+		exporter.ScrapeRegistry(r1, true, includeAggregateMetrics)
 	})
 	require.NoError(t, err)
 	output = buf.String()
@@ -209,7 +210,7 @@ func TestPrometheusExporterNativeHistogram(t *testing.T) {
 	// Print metrics as proto text, since native histograms aren't yet supported.
 	// in the prometheus text exposition format.
 	err := pe.ScrapeAndPrintAsText(&buf, expfmt.FmtProtoText, func(exporter *PrometheusExporter) {
-		exporter.ScrapeRegistry(r, false)
+		exporter.ScrapeRegistry(r, false, true)
 	})
 	require.NoError(t, err)
 	output := buf.String()
@@ -219,7 +220,7 @@ func TestPrometheusExporterNativeHistogram(t *testing.T) {
 	buf.Reset()
 	r.RemoveMetric(histogram)
 	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtProtoText, func(exporter *PrometheusExporter) {
-		exporter.ScrapeRegistry(r, false)
+		exporter.ScrapeRegistry(r, false, true)
 	})
 	require.NoError(t, err)
 	output = buf.String()

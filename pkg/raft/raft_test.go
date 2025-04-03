@@ -46,7 +46,7 @@ func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 
 	// Return committed entries.
 	ents = r.raftLog.nextCommittedEnts(true)
-	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
+	r.raftLog.appliedTo(r.raftLog.committed)
 	return ents
 }
 
@@ -1066,7 +1066,6 @@ func TestCandidateConcede(t *testing.T) {
 	assert.Equal(t, uint64(1), a.Term)
 
 	wantLog := ltoa(newLog(&MemoryStorage{ls: LogSlice{
-		term:    1,
 		entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 	}}, nil))
 	for i, p := range tt.peers {
@@ -1134,10 +1133,7 @@ func testOldMessages(t *testing.T, storeLivenessEnabled bool) {
 
 	ents := index(1).terms(1, 2, 3, 3)
 	ents[3].Data = []byte("somedata")
-	ilog := newLog(&MemoryStorage{ls: LogSlice{
-		term:    3,
-		entries: ents,
-	}}, nil)
+	ilog := newLog(&MemoryStorage{ls: LogSlice{entries: ents}}, nil)
 	base := ltoa(ilog)
 	for i, p := range tt.peers {
 		if sm, ok := p.(*raft); ok {
@@ -1187,7 +1183,6 @@ func TestProposal(t *testing.T) {
 		wantLog := newLog(NewMemoryStorage(), raftlogger.RaftLogger)
 		if tt.success {
 			wantLog = newLog(&MemoryStorage{ls: LogSlice{
-				term:    2,
 				entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 			}}, nil)
 		}
@@ -1219,7 +1214,6 @@ func TestProposalByProxy(t *testing.T) {
 		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
 		wantLog := newLog(&MemoryStorage{ls: LogSlice{
-			term:    1,
 			entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 		}}, nil)
 		base := ltoa(wantLog)
@@ -1237,49 +1231,66 @@ func TestProposalByProxy(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	tests := []struct {
-		matches []uint64
-		logs    []pb.Entry
-		smTerm  uint64
-		w       uint64
+	m := func(indices ...uint64) []uint64 { return indices }
+	for _, tt := range []struct {
+		term  uint64     // term before becoming leader
+		log   []pb.Entry // log before becoming leader
+		app   []pb.Entry // appended entries after becoming leader
+		match []uint64   // match indices for all peers
+		want  uint64     // expected commit index
 	}{
-		// single
-		{[]uint64{1}, index(1).terms(1), 1, 1},
-		{[]uint64{1}, index(1).terms(1), 2, 0},
-		{[]uint64{2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{1}, index(1).terms(2), 2, 1},
+		// single node
+		{term: 0, match: m(0), want: 0},
+		{term: 0, match: m(1), want: 1},
+		{term: 1, log: index(1).terms(1), match: m(1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2), want: 2},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(1), want: 0},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(2), want: 2},
+		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(3), want: 3},
 
-		// odd
-		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 2, 0},
+		// odd number of nodes
+		{term: 1, log: index(1).terms(1), match: m(1, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2), want: 2},
+		{term: 1, log: index(1).terms(1), match: m(2, 2, 2), want: 2},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 2), want: 3},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 5), want: 4},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5), want: 5},
 
-		// even
-		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 2), 1, 1},
-		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
-		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
-	}
+		// even number of nodes
+		{term: 1, log: index(1).terms(1), match: m(1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 1, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 1), want: 0},
+		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 2), want: 2},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2, 1), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 2, 2, 3), want: 0},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 1, 3), want: 3},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 4, 5), want: 4},
+		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5, 5), want: 5},
+	} {
+		t.Run("", func(t *testing.T) {
+			storage := newTestMemoryStorage(withPeers(1))
+			require.NoError(t, storage.Append(tt.log))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: tt.term}))
+			sm := newTestRaft(1, 10, 2, storage)
+			sm.becomeCandidate()
+			sm.becomeLeader()
+			require.Equal(t, tt.term+1, sm.Term)
+			require.True(t, sm.appendEntry(tt.app...))
 
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1))
-		storage.Append(tt.logs)
-		storage.hardState = pb.HardState{Term: tt.smTerm}
-
-		sm := newTestRaft(1, 10, 2, storage)
-		for j := 0; j < len(tt.matches); j++ {
-			id := pb.PeerID(j + 1)
-			if id > 1 {
-				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
+			for i, match := range tt.match {
+				id := pb.PeerID(i + 1)
+				if id > 1 {
+					sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
+				}
+				require.LessOrEqual(t, match, sm.raftLog.lastIndex())
+				pr := sm.trk.Progress(id)
+				pr.MaybeUpdate(match)
 			}
-			pr := sm.trk.Progress(id)
-			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
-		}
-		sm.maybeCommit()
-		assert.Equal(t, tt.w, sm.raftLog.committed, "#%d", i)
+			sm.maybeCommit()
+			assert.Equal(t, tt.want, sm.raftLog.committed)
+		})
 	}
 }
 
@@ -1294,36 +1305,40 @@ func TestAtRandomizedElectionTimeout(t *testing.T) {
 		wprobability float64
 		round        bool
 	}{
-		// randomizedElectionTimeout = [10,20).
+		// randomizedElectionTimeout = [10,15) since we are setting the
+		// electionTimeoutJitter field to 5 below.
 		// electionElapsed less than the electionTimeout should never campaign.
 		{0, 0, false},
 		{5, 0, false},
 		{9, 0, false},
 
-		// Since there are 10 possible values for randomizedElectionTimeout, we
-		// expect the probability to be 1/10 for each value.
-		{10, 0.1, true},
-		{13, 0.1, true},
-		{15, 0.1, true},
-		{18, 0.1, true},
-		{20, 0.1, true},
-
-		// No possible value of randomizedElectionTimeout [10,20) would cause an
-		// election at electionElapsed = 21.
-		{21, 0, false},
-
-		// Only one out of ten values of randomizedElectionTimeout (11) leads to
-		// election at electionElapsed = 22.
-		{22, 0.1, true},
-
+		// Since there are 5 possible values for randomizedElectionTimeout, we
+		// expect the probability to be 1/5 for each value.
+		{10, 0.2, true},
+		{11, 0.2, true},
+		{14, 0.2, true},
+		//
+		// No possible value of randomizedElectionTimeout [10,15) would cause an
+		// election at electionElapsed = [15,19].
+		{15, 0, false},
+		{16, 0, false},
+		{17, 0, false},
+		{18, 0, false},
+		{19, 0, false},
+		//
+		// Only one out of ten values of randomizedElectionTimeout (10) leads to
+		// election at electionElapsed = 20.
+		{22, 0.2, true},
+		//
 		// Two out of ten values of randomizedElectionTimeout (10, 11) would lead
 		// to election at electionElapsed = 120.
-		{110, 0.2, true},
+		{110, 0.4, true},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 		sm.electionElapsed = tt.electionElapsed
+		sm.electionTimeoutJitter = 5
 		c := 0
 		for j := 0; j < 10000; j++ {
 			sm.resetRandomizedElectionTimeout()
@@ -1629,7 +1644,6 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		}
 		sm.Vote = tt.voteFor
 		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
-			term:    2,
 			entries: index(1).terms(2, 2),
 		}}, nil)
 
@@ -1848,7 +1862,6 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnable
 	assert.Equal(t, pb.StateFollower, c.state)
 	// follower c term is reset with leader's
 	assert.Equal(t, a.Term, c.Term)
-
 }
 
 // The following three tests exercise the behavior of a (pre-)candidate when its
@@ -2548,63 +2561,103 @@ func TestPreCandidateIgnoresDefortification(t *testing.T) {
 }
 
 func TestLeaderAppResp(t *testing.T) {
-	// initial progress: match = 0; next = 3
-	tests := []struct {
+	// The test creates a leader node at term 2, with raft log [1 1 1 2 2 2].
+	// Initial progress: match = 0, next = 4.
+	for _, tt := range []struct {
 		index  uint64
 		reject bool
 		// progress
 		wmatch uint64
-		wnext  uint64
-		// message
-		wmsgNum    int
-		windex     uint64
+		// log index of the next entry to send to this follower
+		wnext uint64
+		// number of messages the leader sends out
+		wmsgNum int
+		// prevLogIndex in MsgApp from leader to followers
+		windex uint64
+		// leader's commit index
 		wcommitted uint64
+		// storage access counts for getting term number
+		ctStgTerm int
 	}{
-		{3, true, 0, 3, 0, 0, 0},  // stale resp; no replies
-		{2, true, 0, 2, 1, 1, 0},  // denied resp; leader does not commit; decrease next and send probing msg
-		{2, false, 2, 4, 2, 2, 2}, // accept resp; leader commits; broadcast with commit index
-		// Follower is StateProbing at 0, it sends MsgAppResp for 0 (which
-		// matches the pr.Match) so it is moved to StateReplicate and as many
-		// entries as possible are sent to it (1, 2, and 3). Correspondingly the
-		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
-		// will be up to date should it process the emitted MsgApp).
-		{0, false, 0, 4, 1, 0, 0},
-	}
+		// stale resp; no replies
+		{2, true, 0, 4, 0, 0, 0, 1},
+		// stale resp; no replies
+		{6, true, 0, 4, 0, 0, 0, 1},
 
-	for _, tt := range tests {
+		// denied resp; leader does not commit; decrease next and send probing msg
+		// An additional term storage access is involved for an entry
+		// that's already persisted since we are probing backwards.
+		{3, true, 0, 3, 1, 2, 0, 2},
+
+		// Follower 2 responds to leader, indicating log index 2 is replicated.
+		// Leader tries to commit, but commit index doesn't advance since the index
+		// is from a previous term.
+		// We hit maybeCommit() and do term check comparison by using the
+		// last "term flip" entryID stored in the termCache.
+		// There is no storage access for term in the maybeCommit() code path
+		{2, false, 2, 7, 1, 2, 0, 2},
+
+		// Follower 2 responds to leader, indicating log index 3 is replicated.
+		// Leader tries to commit, but commit index doesn't advance since the index
+		// is from a previous term. Same as above.
+		{3, false, 3, 7, 1, 3, 0, 1},
+
+		// NB: For the following tests, we are skipping the MsgAppResp for the first
+		// 3 entries, by directly processing MsgAppResp for later entries.
+		//
+		// Follower 2 is StateProbing at 4, it sends MsgAppResp for 4, and is moved
+		// to StateReplicate and as many entries as possible are sent to it (5, 6).
+		// Correspondingly the Next is then 7 (entry 7 does not exist, indicating
+		// the follower will be up to date should it process the emitted MsgApp).
+		// accept resp; leader commits; respond with commit index.
+		// maybeCommit() is successful.
+		{4, false, 4, 7, 1, 4, 4, 1},
+
+		// Follower 2 says term2, index5 is already replicated.
+		// The leader responds with the updated commit index to follower 2.
+		// maybeCommit() is successful.
+		{5, false, 5, 7, 1, 5, 5, 1},
+		// Follower 2 says term2, index6 is already replicated.
+		// The leader responds with the updated commit index to follower 2.
+		// maybeCommit() is successful.
+		{6, false, 6, 7, 1, 6, 6, 1},
+	} {
 		t.Run("", func(t *testing.T) {
-			// sm term is 1 after it becomes the leader.
-			// thus the last log term must be 1 to be committed.
-			sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-			sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
-				term:    1,
-				entries: index(1).terms(1, 1),
-			}}, nil)
+			storage := newTestMemoryStorage(withPeers(1, 2, 3))
+			require.NoError(t, storage.Append(index(1).terms(1, 1, 1)))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: 1}))
+			sm := newTestRaft(1, 10, 1, storage)
 			sm.becomeCandidate()
+			require.Equal(t, uint64(2), sm.Term)
+			require.Equal(t, uint64(3), sm.raftLog.lastIndex())
 			sm.becomeLeader()
+			require.Equal(t, uint64(4), sm.raftLog.lastIndex()) // appended a dummy
+			sm.appendEntry(index(5).terms(2, 2)...)
+			require.Equal(t, uint64(0), sm.raftLog.committed)
+			sm.bcastAppend()
 			sm.readMessages()
-			require.NoError(t, sm.Step(
-				pb.Message{
-					From:       2,
-					Type:       pb.MsgAppResp,
-					Index:      tt.index,
-					Term:       sm.Term,
-					Reject:     tt.reject,
-					RejectHint: tt.index,
-				},
-			))
+
+			require.NoError(t, sm.Step(pb.Message{
+				From:       2,
+				Type:       pb.MsgAppResp,
+				Index:      tt.index,
+				Term:       sm.Term,
+				Reject:     tt.reject,
+				RejectHint: tt.index,
+			}))
 
 			p := sm.trk.Progress(2)
 			require.Equal(t, tt.wmatch, p.Match)
 			require.Equal(t, tt.wnext, p.Next)
 
 			msgs := sm.readMessages()
-
 			require.Len(t, msgs, tt.wmsgNum)
 			for _, msg := range msgs {
 				require.Equal(t, tt.windex, msg.Index, "%v", DescribeMessage(msg, nil))
 				require.Equal(t, tt.wcommitted, msg.Commit, "%v", DescribeMessage(msg, nil))
 			}
+
+			assert.Equal(t, tt.ctStgTerm, storage.callStats.term)
 		})
 	}
 }
@@ -2703,7 +2756,6 @@ func TestRecvMsgBeat(t *testing.T) {
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
-			term:    1,
 			entries: index(1).terms(1, 1),
 		}}, nil)
 		sm.Term = 1
@@ -3128,7 +3180,7 @@ func TestProvideSnap(t *testing.T) {
 	sm.becomeLeader()
 
 	// force set the next of node 2, so that node 2 needs a snapshot
-	sm.trk.Progress(2).Next = sm.raftLog.firstIndex()
+	sm.trk.Progress(2).Next = sm.raftLog.compacted() + 1
 	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
 
 	msgs := sm.readMessages()
@@ -3157,7 +3209,7 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 
 	// force set the next of node 2, so that node 2 needs a snapshot
 	// change node 2 to be inactive, expect node 1 ignore sending snapshot to 2
-	sm.trk.Progress(2).Next = sm.raftLog.firstIndex() - 1
+	sm.trk.Progress(2).Next = sm.raftLog.compacted()
 	sm.trk.Progress(2).RecentActive = false
 
 	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
@@ -5053,6 +5105,77 @@ func TestFortificationMetrics(t *testing.T) {
 	require.Equal(t, int64(1), n1.metrics.SkippedFortificationDueToLackOfSupport.Count())
 }
 
+// TestPeerForgetsLeaderWhenIsolated ensures that peers forget the leader when
+// they are isolated.
+func TestPeerForgetsLeaderWhenIsolated(t *testing.T) {
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testPeerForgetsLeaderWhenIsolated(t, storeLivenessEnabled)
+		})
+}
+
+func testPeerForgetsLeaderWhenIsolated(t *testing.T, storeLivenessEnabled bool) {
+	var n1, n2 *raft
+	var fabric *raftstoreliveness.LivenessFabric
+
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+			withStoreLiveness(fabric.GetStoreLiveness(1)))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+			withStoreLiveness(fabric.GetStoreLiveness(2)))
+	} else {
+		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+			withStoreLiveness(raftstoreliveness.Disabled{}))
+	}
+
+	n1.becomeFollower(1, None)
+	n2.becomeFollower(1, None)
+
+	n1.preVote = true
+	n2.preVote = true
+
+	n1.checkQuorum = true
+	n2.checkQuorum = true
+
+	// Randomly select a leader between node 1, and 2.
+	leader := pb.PeerID(rand.Intn(2) + 1)
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2)
+	nt.send(pb.Message{From: leader, To: leader, Type: pb.MsgHup})
+
+	// Iterate over all peers and check that they have the same leader.
+	for _, peer := range nt.peers {
+		sm := peer.(*raft)
+		require.Equal(t, leader, sm.lead)
+	}
+
+	// Isolate node one from the quorum.
+	nt.isolate(1)
+	if storeLivenessEnabled {
+		nt.livenessFabric.SetSupportExpired(1, true)
+		nt.livenessFabric.Isolate(1)
+	}
+
+	// Tick node 1 until it attempts to campaign.
+	for i := int64(0); i < 2*n1.randomizedElectionTimeout; i++ {
+		n1.tick()
+	}
+
+	// If storeliveness is enabled, the follower will never become a
+	// pre-candidate since it's not supported by a quorum. However, if
+	// storeliveness is disabled, the follower may become a pre-candidate.
+	if storeLivenessEnabled {
+		require.Equal(t, pb.StateFollower, n1.state)
+	} else {
+		require.True(t, n1.state == pb.StateFollower || n1.state == pb.StatePreCandidate)
+	}
+
+	// Make sure that 1 has forgotten the leader.
+	require.Equal(t, None, n1.lead)
+}
+
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")
@@ -5335,16 +5458,17 @@ func newTestConfig(
 	}
 
 	return &Config{
-		ID:              id,
-		ElectionTick:    election,
-		HeartbeatTick:   heartbeat,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   storeLiveness,
-		Logger:          logger,
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 id,
+		ElectionTick:       election,
+		ElectionJitterTick: election,
+		HeartbeatTick:      heartbeat,
+		Storage:            storage,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      storeLiveness,
+		Logger:             logger,
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 }
 
@@ -5385,8 +5509,10 @@ func newTestLearnerRaft(
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(id pb.PeerID, election, heartbeat int64, storage Storage) *RawNode {
-	cfg := newTestConfig(id, election, heartbeat, storage)
+func newTestRawNode(
+	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
+) *RawNode {
+	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	rn, err := NewRawNode(cfg)
 	if err != nil {
 		panic(err)

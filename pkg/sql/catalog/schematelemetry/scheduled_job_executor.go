@@ -79,17 +79,17 @@ func (s schemaTelemetryExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobStatus jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 ) error {
 	switch jobStatus {
-	case jobs.StatusFailed:
+	case jobs.StateFailed:
 		jobs.DefaultHandleFailedRun(sj, "SQL schema telemetry job failed")
 		s.metrics.NumFailed.Inc(1)
 		return nil
-	case jobs.StatusSucceeded:
+	case jobs.StateSucceeded:
 		s.metrics.NumSucceeded.Inc(1)
 	}
 	sj.SetScheduleStatus(string(jobStatus))

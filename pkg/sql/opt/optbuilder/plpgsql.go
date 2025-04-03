@@ -503,8 +503,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
-			defer b.popContinuation()
-			return b.buildBlock(t, s)
+			scope := b.buildBlock(t, s)
+			b.popContinuation()
+			return scope
 
 		case *ast.Return:
 			// If the routine has OUT-parameters or a VOID return type, the RETURN
@@ -671,12 +672,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Build a continuation that will resume execution after the loop.
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
-			b.pushContinuation(exitCon)
-			defer b.popContinuation()
 			switch c := t.Control.(type) {
 			case *ast.IntForLoopControl:
+				b.pushContinuation(exitCon)
 				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
-				return b.handleIntForLoop(s, t, c)
+				scope := b.handleIntForLoop(s, t, c)
+				b.popContinuation()
+				return scope
 			default:
 				panic(errors.WithDetail(unsupportedPLStmtErr,
 					"query and cursor FOR loops are not yet supported",
@@ -1053,6 +1055,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				col.scalar = b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
 			})
 			b.ob.constructProjectForScope(callCon.s, callScope)
+			if overload.Volatility == volatility.Volatile {
+				b.ob.addBarrier(callScope)
+			}
 
 			// Collect any target variables in OUT-parameter position. The result of
 			// the procedure will be assigned to these variables, if any.
@@ -2201,13 +2206,34 @@ func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
+	// Save any outer CTEs before building the expression, which may have
+	// subqueries with inner CTEs.
+	prevCTEs := b.ob.ctes
+	b.ob.ctes = nil
+	defer func() {
+		b.ob.ctes = prevCTEs
+	}()
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
 		panic(err)
 	}
 	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
-	return b.coerceType(scalar, typ)
+	scalar = b.coerceType(scalar, typ)
+	if len(b.ob.ctes) == 0 {
+		return scalar
+	}
+	// There was at least one CTE within the scalar expression. It is possible to
+	// "hoist" them above this point, but building them eagerly here means that
+	// callers don't have to worry about CTE handling.
+	f := b.ob.factory
+	valuesCol := f.Metadata().AddColumn("", scalar.DataType())
+	valuesExpr := f.ConstructValues(
+		memo.ScalarListExpr{f.ConstructTuple(memo.ScalarListExpr{scalar}, scalar.DataType())},
+		&memo.ValuesPrivate{Cols: opt.ColList{valuesCol}, ID: f.Metadata().NextUniqueID()},
+	)
+	withExpr := b.ob.buildWiths(valuesExpr, b.ob.ctes)
+	return f.ConstructSubquery(withExpr, &memo.SubqueryPrivate{})
 }
 
 // buildSQLStatement type-checks and builds the given SQL statement into a
@@ -2594,7 +2620,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 			return t, false
 		}
 	case *ast.Return:
-		desired := types.Any
+		desired := types.AnyElement
 		if r.typ != nil && r.typ.Family() != types.UnknownFamily {
 			desired = r.typ
 		}

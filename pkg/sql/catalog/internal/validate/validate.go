@@ -18,6 +18,10 @@ import (
 )
 
 const (
+	// ImmutableRead is the default validation level when reading many immutable
+	// descriptors all at once.
+	ImmutableReadBatch = catalog.ValidationLevelSelfOnly
+
 	// ImmutableRead is the default validation level when reading an immutable
 	// descriptor.
 	ImmutableRead = catalog.ValidationLevelForwardReferences

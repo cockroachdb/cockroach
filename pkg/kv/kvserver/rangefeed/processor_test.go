@@ -1100,7 +1100,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		s := cluster.MakeTestingClusterSettings()
 		m := mon.NewMonitor(mon.Options{
-			Name:      mon.MakeMonitorName("rangefeed"),
+			Name:      mon.MakeName("rangefeed"),
 			Res:       mon.MemoryResource,
 			Increment: 1,
 			Limit:     math.MaxInt64,

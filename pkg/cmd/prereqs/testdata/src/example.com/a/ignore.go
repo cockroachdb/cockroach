@@ -4,6 +4,5 @@
 // included in the /LICENSE file.
 
 //go:build notme
-// +build notme
 
 package a

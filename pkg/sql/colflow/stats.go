@@ -293,6 +293,8 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BatchRequestsIssued.Set(uint64(vsc.kvReader.GetBatchRequestsIssued()))
 		s.KV.ContentionTime.Set(vsc.kvReader.GetContentionTime())
+		s.KV.LockWaitTime.Set(vsc.kvReader.GetLockWaitTime())
+		s.KV.LatchWaitTime.Set(vsc.kvReader.GetLatchWaitTime())
 		s.KV.UsedStreamer = vsc.kvReader.UsedStreamer()
 		scanStats := vsc.kvReader.GetScanStats()
 		execstats.PopulateKVMVCCStats(&s.KV, &scanStats)
@@ -304,7 +306,7 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 	} else {
 		s.Exec.ExecTime.Set(time)
 	}
-	if cpuTime > 0 && grunning.Supported() {
+	if cpuTime > 0 && grunning.Supported {
 		// Note that in rare cases, the measured CPU time can be less than zero
 		// grunning uses a non-monotonic clock. This should only happen rarely when
 		// the actual CPU time is very small, so it seems OK to not set the value in

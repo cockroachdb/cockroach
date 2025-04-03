@@ -270,7 +270,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			Settings: s.ClusterSettings(),
 			Codec:    s.Codec(),
 			BackupMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
-				Name:     mon.MakeMonitorName("test"),
+				Name:     mon.MakeName("test"),
 				Settings: s.ClusterSettings(),
 			}),
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),

@@ -1,0 +1,422 @@
+# This file contains tests for special cases for the power function as described
+# in https://github.com/cockroachdb/cockroach/issues/114872. Additionally, there
+# was more changes to be made as the apd library follows a different spec than
+# postgres. More details can be found in pkg/sql/sem/builtins/math_builtins.go:handlePowEdgeCases.
+
+# NaN ^ 0 = 1.
+eval
+power('NaN'::numeric, '0'::numeric)
+----
+1
+
+eval
+'NaN'::numeric ^ 0
+----
+1
+
+# 1 ^ NaN = 1.
+eval
+power('1'::numeric, 'NaN')
+----
+1
+
+eval
+1 ^ 'NaN'::numeric
+----
+1
+
+# Zero raised to a negative power is undefined.
+eval
+power('0'::numeric, '-1')
+----
+power(): zero raised to a negative power is undefined
+
+eval
+'0'::numeric ^ -1
+----
+zero raised to a negative power is undefined
+
+eval
+power('0'::numeric, '-0.0001')
+----
+power(): zero raised to a negative power is undefined
+
+eval
+'0'::numeric ^ -0.0001
+----
+zero raised to a negative power is undefined
+
+eval
+power('0'::numeric, '-Inf'::numeric)
+----
+power(): zero raised to a negative power is undefined
+
+eval
+'0'::numeric ^ '-Inf'::numeric
+----
+zero raised to a negative power is undefined
+
+# A negative number raised to a non-integer power yields a complex result.
+eval
+power('-2'::numeric, '-1.5')
+----
+power(): a negative number raised to a non-integer power yields a complex result
+
+eval
+'-2'::numeric ^ '-1.5'
+----
+a negative number raised to a non-integer power yields a complex result
+
+eval
+power('-0.0001'::numeric, '3.3')
+----
+power(): a negative number raised to a non-integer power yields a complex result
+
+eval
+'-0.0001'::numeric ^ '3.3'
+----
+a negative number raised to a non-integer power yields a complex result
+
+eval
+power('-Inf'::numeric, '4.5')
+----
+power(): a negative number raised to a non-integer power yields a complex result
+
+eval
+'-Inf'::numeric ^ '4.5'
+----
+a negative number raised to a non-integer power yields a complex result
+
+# For x = 1 and any value of y, 1.0 shall be returned.
+eval
+power('1'::numeric, 'Inf'::numeric)
+----
+1
+
+eval
+'1'::numeric ^ 'Inf'::numeric
+----
+1
+
+eval
+power('1'::numeric, '-Inf'::numeric)
+----
+1
+
+eval
+'1'::numeric ^ '-Inf'::numeric
+----
+1
+
+eval
+power('1'::numeric, '0.0001'::numeric)
+----
+1
+
+eval
+'1'::numeric ^ '0.0001'::numeric
+----
+1
+
+eval
+power('1'::numeric, '-0.0001'::numeric)
+----
+1
+
+eval
+'1'::numeric ^ '-0.0001'::numeric
+----
+1
+
+# For any value of x and y is 0, 1.0 shall be returned.
+# apd.Context.Pow() would return NaN for 0 ^ 0.
+eval
+power('0'::numeric, '0'::numeric)
+----
+1
+
+eval
+'0'::numeric ^ '0'::numeric
+----
+1
+
+eval
+power('0.0001'::numeric, '0'::numeric)
+----
+1
+
+eval
+'0.0001'::numeric ^ '0'::numeric
+----
+1
+
+eval
+power('-0.0001'::numeric, '0'::numeric)
+----
+1
+
+eval
+'-0.0001'::numeric ^ '0'::numeric
+----
+1
+
+eval
+power('Inf'::numeric, '0'::numeric)
+----
+1
+
+eval
+'Inf'::numeric ^ '0'::numeric
+----
+1
+
+eval
+power('-Inf'::numeric, '0'::numeric)
+----
+1
+
+eval
+'-Inf'::numeric ^ '0'::numeric
+----
+1
+
+# If x is 0 and y is positive, 0 shall be returned. This is handled in apd.
+eval
+power('0'::numeric, '0.0001'::numeric)
+----
+0
+
+eval
+'0'::numeric ^ '0.0001'::numeric
+----
+0
+
+eval
+power('0'::numeric, 'Inf'::numeric)
+----
+0
+
+eval
+'0'::numeric ^ 'Inf'::numeric
+----
+0
+
+# If x is -1 and y is (+/-)Inf, 1.0 shall be returned.
+eval
+power('-1'::numeric, 'Inf'::numeric)
+----
+1
+
+eval
+'-1'::numeric ^ 'Inf'::numeric
+----
+1
+
+eval
+power('-1'::numeric, '-Inf'::numeric)
+----
+1
+
+eval
+'-1'::numeric ^ '-Inf'::numeric
+----
+1
+
+# If |x| < 1 and y is -Inf, +Inf is returned.
+eval
+power('0.999'::numeric, '-Inf'::numeric)
+----
+Infinity
+
+eval
+'0.999'::numeric ^ '-Inf'::numeric
+----
+Infinity
+
+eval
+power('-0.999'::numeric, '-Inf'::numeric)
+----
+Infinity
+
+eval
+'-0.999'::numeric ^ '-Inf'::numeric
+----
+Infinity
+
+# If |x| < 1 and y is +Inf, +0 shall be returned.
+eval
+power('0.999'::numeric, 'Inf'::numeric)
+----
+0
+
+eval
+'0.999'::numeric ^ 'Inf'::numeric
+----
+0
+
+eval
+power('-0.999'::numeric, 'Inf'::numeric)
+----
+0
+
+eval
+'-0.999'::numeric ^ 'Inf'::numeric
+----
+0
+
+# If |x| > 1 and y is -Inf, +0 shall be returned.
+eval
+power('1.001'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'1.001'::numeric ^ '-Inf'::numeric
+----
+0
+
+eval
+power('-1.001'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'-1.001'::numeric ^ '-Inf'::numeric
+----
+0
+
+eval
+power('-2'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'-2'::numeric ^ '-Inf'::numeric
+----
+0
+
+# If |x| > 1 and y is +Inf, +Inf shall be returned.
+eval
+power('1.001'::numeric, 'Inf'::numeric)
+----
+Infinity
+
+eval
+'1.001'::numeric ^ 'Inf'::numeric
+----
+Infinity
+
+eval
+power('-1.001'::numeric, 'Inf'::numeric)
+----
+Infinity
+
+eval
+'-1.001'::numeric ^ 'Inf'::numeric
+----
+Infinity
+
+eval
+power('-2'::numeric, 'Inf'::numeric)
+----
+Infinity
+
+eval
+'-2'::numeric ^ 'Inf'::numeric
+----
+Infinity
+
+# If x is +Inf and y < 0, 0 shall be returned. This is handled in apd.
+eval
+power('Inf'::numeric, '-0.0001'::numeric)
+----
+0
+
+eval
+'Inf'::numeric ^ '-0.0001'::numeric
+----
+0
+
+eval
+power('Inf'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'Inf'::numeric ^ '-Inf'::numeric
+----
+0
+
+# If x is +Inf and y > 0, +Inf shall be returned. This is handled in apd.
+eval
+power('Inf'::numeric, '0.0001'::numeric)
+----
+Infinity
+
+eval
+'Inf'::numeric ^ '0.0001'::numeric
+----
+Infinity
+
+eval
+power('Inf'::numeric, 'Inf'::numeric)
+----
+Infinity
+
+eval
+'Inf'::numeric ^ 'Inf'::numeric
+----
+Infinity
+
+# If x is -Inf and y < 0, 0 shall be returned.
+eval
+power('-Inf'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'-Inf'::numeric ^ '-Inf'::numeric
+----
+0
+
+# If x is -Inf and y > 0 and y is odd, -Inf shall be returned. This is handled in apd.
+# If x is -Inf and y > 0 and y is even, +Inf shall be returned. This is handled in apd.
+eval
+power('-Inf'::numeric, '1'::numeric)
+----
+-Infinity
+
+eval
+'-Inf'::numeric ^ '1'::numeric
+----
+-Infinity
+
+eval
+power('-Inf'::numeric, '2'::numeric)
+----
+Infinity
+
+eval
+'-Inf'::numeric ^ '2'::numeric
+----
+Infinity
+
+eval
+power('-Inf'::numeric, 'Inf'::numeric)
+----
+Infinity
+
+eval
+'-Inf'::numeric ^ 'Inf'::numeric
+----
+Infinity
+
+eval
+power('-Inf'::numeric, '-Inf'::numeric)
+----
+0
+
+eval
+'-Inf'::numeric ^ '-Inf'::numeric
+----
+0

@@ -129,6 +129,9 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *TransferLeaseOperation:
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
 		o.Result = resultInit(ctx, err)
+	case *ChangeSettingOperation:
+		err := changeClusterSettingInEnv(ctx, env, o)
+		o.Result = resultInit(ctx, err)
 	case *ChangeZoneOperation:
 		err := updateZoneConfigInEnv(ctx, env, o.Type)
 		o.Result = resultInit(ctx, err)
@@ -681,6 +684,39 @@ func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 		}
 		return voters, nonVoters
 	}
+}
+
+func changeClusterSettingInEnv(ctx context.Context, env *Env, op *ChangeSettingOperation) error {
+	var settings map[string]string
+	switch op.Type {
+	case ChangeSettingType_SetLeaseType:
+		switch op.LeaseType {
+		case roachpb.LeaseExpiration:
+			settings = map[string]string{
+				"kv.lease.expiration_leases_only.enabled": "true",
+			}
+		case roachpb.LeaseEpoch:
+			settings = map[string]string{
+				"kv.lease.expiration_leases_only.enabled":       "false",
+				"kv.raft.leader_fortification.fraction_enabled": "0.0",
+			}
+		case roachpb.LeaseLeader:
+			settings = map[string]string{
+				"kv.lease.expiration_leases_only.enabled":       "false",
+				"kv.raft.leader_fortification.fraction_enabled": "1.0",
+			}
+		default:
+			panic(errors.AssertionFailedf(`unknown LeaseType: %v`, op.LeaseType))
+		}
+	default:
+		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
+	}
+	for name, val := range settings {
+		if err := env.SetClusterSetting(ctx, name, val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func updateZoneConfig(zone *zonepb.ZoneConfig, change ChangeZoneType) {

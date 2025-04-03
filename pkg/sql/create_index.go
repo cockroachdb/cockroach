@@ -7,10 +7,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
@@ -143,9 +146,7 @@ func makeIndexDescriptor(
 			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 		)
 	}
-	if n.Vector {
-		return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
-	}
+
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
 	// mutated columns.
@@ -172,7 +173,7 @@ func makeIndexDescriptor(
 		tableDesc,
 		tn,
 		columns,
-		n.Inverted,
+		n.Type,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
 		activeVersion,
@@ -194,7 +195,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Inverted, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Type, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
 		return nil, err
 	}
 
@@ -206,22 +207,25 @@ func makeIndexDescriptor(
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 		NotVisible:        n.Invisibility.Value != 0.0,
 		Invisibility:      n.Invisibility.Value,
+		Type:              n.Type,
 	}
 
-	if n.Inverted {
-		if n.Sharded != nil {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
-		}
+	if !n.Type.SupportsSharding() && n.Sharded != nil {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support hash sharding", strings.ToLower(n.Type.String()))
+	}
 
-		if len(indexDesc.StoreColumnNames) > 0 {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns")
-		}
+	if !n.Type.SupportsStoring() && len(indexDesc.StoreColumnNames) > 0 {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes don't support stored columns", strings.ToLower(n.Type.String()))
+	}
 
-		if n.Unique {
-			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
-		}
+	if !n.Type.CanBeUnique() && n.Unique {
+		return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+			"%s indexes can't be unique", strings.ToLower(n.Type.String()))
+	}
 
-		indexDesc.Type = descpb.IndexDescriptor_INVERTED
+	if n.Type == idxtype.INVERTED {
 		invCol := columns[len(columns)-1]
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, invCol.Column)
 		if err != nil {
@@ -231,6 +235,16 @@ func makeIndexDescriptor(
 			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
 			return nil, err
 		}
+	}
+
+	if n.Type == idxtype.VECTOR {
+		vecCol := columns[len(columns)-1]
+		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
+		if err != nil {
+			return nil, err
+		}
+		indexDesc.VecConfig.Dims = column.GetType().Width()
+		indexDesc.VecConfig.Seed = params.extendedEvalCtx.GetRNG().Int63()
 	}
 
 	if n.Sharded != nil {
@@ -285,7 +299,7 @@ func makeIndexDescriptor(
 	}
 
 	// Increment telemetry once a descriptor has been successfully created.
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED {
+	if indexDesc.Type == idxtype.INVERTED {
 		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 		if indexDesc.GeoConfig.IsGeometry() {
 			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
@@ -303,6 +317,15 @@ func makeIndexDescriptor(
 			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 		}
 	}
+	if indexDesc.Type == idxtype.VECTOR {
+		telemetry.Inc(sqltelemetry.VectorIndexCounter)
+		if indexDesc.IsPartial() {
+			telemetry.Inc(sqltelemetry.PartialVectorIndexCounter)
+		}
+		if len(indexDesc.KeyColumnNames) > 1 {
+			telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
+		}
+	}
 	if indexDesc.IsSharded() {
 		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
@@ -317,7 +340,7 @@ func checkIndexColumns(
 	desc catalog.TableDescriptor,
 	columns tree.IndexElemList,
 	storing tree.NameList,
-	inverted bool,
+	indexType idxtype.T,
 	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
@@ -331,7 +354,7 @@ func checkIndexColumns(
 				"cannot index system column %v", colDef.Column,
 			)
 		}
-		if colDef.OpClass != "" && (i < len(columns)-1 || !inverted) {
+		if colDef.OpClass != "" && (i < len(columns)-1 || !indexType.SupportsOpClass()) {
 			return pgerror.New(pgcode.DatatypeMismatch,
 				"operator classes are only allowed for the last column of an inverted index")
 		}
@@ -418,7 +441,8 @@ func populateInvertedIndexDescriptor(
 			return newUndefinedOpclassError(invCol.OpClass)
 		}
 	default:
-		return tabledesc.NewInvalidInvertedColumnError(column.GetName(), column.GetType().Name())
+		return sqlerrors.NewInvalidLastColumnError(
+			column.GetName(), column.GetType().Name(), idxtype.INVERTED)
 	}
 	return nil
 }
@@ -478,7 +502,7 @@ func replaceExpressionElemsWithVirtualCols(
 	desc *tabledesc.Mutable,
 	tn *tree.TableName,
 	elems tree.IndexElemList,
-	isInverted bool,
+	indexType idxtype.T,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
 	version clusterversion.ClusterVersion,
@@ -497,10 +521,10 @@ func replaceExpressionElemsWithVirtualCols(
 		elem := &elems[i]
 		if elem.Expr != nil {
 			// Create a dummy ColumnTableDef to use for validating the
-			// expression. The type is Any because it is unknown until
+			// expression. The type is AnyElement because it is unknown until
 			// validation is performed.
 			colDef := &tree.ColumnTableDef{
-				Type: types.Any,
+				Type: types.AnyElement,
 			}
 			colDef.Computed.Computed = true
 			colDef.Computed.Expr = elem.Expr
@@ -543,49 +567,10 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if !isInverted && !colinfo.ColumnTypeIsIndexable(typ) {
-				if colinfo.ColumnTypeIsInvertedIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not indexable in a non-inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"you may want to create an inverted index instead. See the documentation for inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
-				return pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					"index element %s of type %s is not indexable",
-					elem.Expr.String(),
-					typ.Name(),
-				)
-			}
-
-			if isInverted {
-				if i < lastColumnIdx && !colinfo.ColumnTypeIsIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not allowed as a prefix column in an inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
-				if i == lastColumnIdx && !colinfo.ColumnTypeIsInvertedIndexable(typ) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							"index element %s of type %s is not allowed as the last column in an inverted index",
-							elem.Expr.String(),
-							typ.Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-				}
+			colDesc := fmt.Sprintf("(%v)", elem.Expr)
+			isLastCol := i == lastColumnIdx
+			if err = colinfo.ValidateColumnForIndex(indexType, colDesc, typ, isLastCol); err != nil {
+				return err
 			}
 
 			// Create a new virtual column and add it to the table descriptor.
@@ -784,8 +769,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && indexDesc.Partitioning.NumColumns != 0 {
-		telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+	if indexDesc.Partitioning.NumColumns != 0 {
+		if indexDesc.Type == idxtype.INVERTED {
+			telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+		} else if indexDesc.Type == idxtype.VECTOR {
+			telemetry.Inc(sqltelemetry.PartitionedVectorIndexCounter)
+		}
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)

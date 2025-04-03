@@ -171,6 +171,8 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
 		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99, 0, false /* omitInRangefeeds */)
+		txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 111, Logical: 1})
+		txn.UpdateObservedTimestamp(2, hlc.ClockTimestamp{WallTime: 222, Logical: 2})
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -180,7 +182,7 @@ func TestErrorRedaction(t *testing.T) {
 		var s redact.StringBuilder
 		s.Print(r)
 		act := s.RedactableString().Redact()
-		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› iso=Serializable pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› iso=Serializable pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0 obs={n1@0.000000111,1 n2@0.000000222,2}"
 		require.Equal(t, exp, string(act))
 	})
 

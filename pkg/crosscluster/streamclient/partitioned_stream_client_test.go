@@ -87,7 +87,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 
 	var emptyFrontier span.Frontier
 
-	expectStreamState := func(streamID streampb.StreamID, status jobs.Status) {
+	expectStreamState := func(streamID streampb.StreamID, status jobs.State) {
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
 	}
@@ -153,7 +153,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `PAUSE JOB $1`, targetStreamID)
-		expectStreamState(targetStreamID, jobs.StatusPaused)
+		expectStreamState(targetStreamID, jobs.StatePaused)
 		t.Run("plan fails", func(t *testing.T) {
 			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, "must be running")
@@ -179,7 +179,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `CANCEL JOB $1`, targetStreamID)
-		expectStreamState(targetStreamID, jobs.StatusCanceled)
+		expectStreamState(targetStreamID, jobs.StateCanceled)
 		t.Run("plan fails", func(t *testing.T) {
 			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, "must be running")
@@ -286,7 +286,7 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, client.Close(ctx))
 	}()
 	require.NoError(t, err)
-	expectStreamState := func(streamID streampb.StreamID, status jobs.Status) {
+	expectStreamState := func(streamID streampb.StreamID, status jobs.State) {
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
 	}
@@ -321,7 +321,7 @@ INSERT INTO d.t2 VALUES (2);
 	// We can create multiple replication streams for the same tenant.
 	_, err = client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
-	expectStreamState(streamID, jobs.StatusRunning)
+	expectStreamState(streamID, jobs.StateRunning)
 
 	top, err := client.PlanPhysicalReplication(ctx, streamID)
 	require.NoError(t, err)
@@ -416,7 +416,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'
 	streamID = rps.StreamID
 	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 	require.NoError(t, client.Complete(ctx, streamID, true))
-	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
+	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, testTenantName))
 	jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
 
 }

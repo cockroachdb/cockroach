@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -136,10 +138,12 @@ type JSON interface {
 	// produced if this JSON gets included in an inverted index.
 	numInvertedIndexEntries() (int, error)
 
-	// allPaths returns a slice of new JSON documents, each a path to a leaf
-	// through the receiver. Note that leaves include the empty object and array
-	// in addition to scalars.
-	allPaths() ([]JSON, error)
+	// allPathsWithDepth returns a slice of new JSON documents, each a path
+	// through the receiver. The depth parameter specifies the maximum depth of
+	// the paths to return. If the depth is negative, all paths of any depth are
+	// returned. If the depth is 0, the receiver itself is returned. Note that
+	// leaves include the empty object and array in addition to scalars.
+	allPathsWithDepth(depth int) ([]JSON, error)
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -233,6 +237,8 @@ type JSON interface {
 	// either the empty array or the empty object.
 	HasContainerLeaf() (bool, error)
 }
+
+var EmptyJSONValue = NewObjectBuilder(0).Build()
 
 type jsonTrue struct{}
 
@@ -454,6 +460,78 @@ func (b *FixedKeysObjectBuilder) Build() (JSON, error) {
 	b.updated = intsets.Fast{}
 	// Must copy b.pairs in case builder is reused.
 	return jsonObject(append([]jsonKeyValuePair(nil), b.pairs...)), nil
+}
+
+// PartialObject is a JSON object builder that builds an object using a set of
+// fixed key-values (supplied at construction) and a set of keys which are
+// settable when building the final JSON object.
+type PartialObject struct {
+	basePairs      []jsonKeyValuePair
+	keyOrd         map[string]int
+	allowedNewKeys map[string]struct{}
+}
+
+// NewPartialObject creates a PartialObject with the specified base key-value
+// pairs, and allows for setting the values of newKeys when building the final
+// JSON object.
+func NewPartialObject(base map[string]JSON, newKeys []string) (*PartialObject, error) {
+	// Check that newKeys are unique and disjoint from base keys.
+	newKeySet := make(map[string]struct{}, len(newKeys))
+	for _, k := range newKeys {
+		if _, ok := newKeySet[k]; ok {
+			return nil, errors.AssertionFailedf("expected unique keys, found %v", newKeys)
+		}
+		if _, ok := base[k]; ok {
+			return nil, errors.AssertionFailedf("expected new keys to be disjoint from base keys, found %v in both", k)
+		}
+		newKeySet[k] = struct{}{}
+	}
+
+	keys := slices.Collect(maps.Keys(base))
+	keys = append(keys, newKeys...)
+	sort.Strings(keys)
+
+	pairs := make([]jsonKeyValuePair, 0, len(base))
+	keyOrd := make(map[string]int, len(keys))
+
+	for i, k := range keys {
+		keyOrd[k] = i
+		if _, ok := base[k]; !ok {
+			continue
+		}
+		pairs = append(pairs, jsonKeyValuePair{k: jsonString(k), v: base[k]})
+	}
+
+	return &PartialObject{basePairs: pairs, keyOrd: keyOrd, allowedNewKeys: newKeySet}, nil
+}
+
+// NewObject creates a new JSON object with the specified new key-values. The
+// keys of newData must be exactly the same as the newKeys supplied to the
+// constructor.
+func (po *PartialObject) NewObject(newData map[string]JSON) (JSON, error) {
+	if len(newData) != len(po.allowedNewKeys) {
+		return nil, errors.AssertionFailedf(
+			"expected all %d keys to be updated, %d updated",
+			len(po.allowedNewKeys), len(newData))
+	}
+
+	pairs := make([]jsonKeyValuePair, len(po.basePairs)+len(newData))
+
+	for _, p := range po.basePairs {
+		pairs[po.keyOrd[string(p.k)]] = p
+	}
+
+	for k, v := range newData {
+		if _, ok := po.allowedNewKeys[k]; !ok {
+			return nil, errors.AssertionFailedf("unknown new key %s", k)
+		}
+		if _, ok := po.keyOrd[k]; !ok {
+			return nil, errors.AssertionFailedf("unknown key %s", k)
+		}
+		pairs[po.keyOrd[k]] = jsonKeyValuePair{k: jsonString(k), v: v}
+	}
+
+	return jsonObject(pairs), nil
 }
 
 // pairSorter sorts and uniqueifies JSON pairs. In order to keep
@@ -967,6 +1045,19 @@ func ParseJSON(s string, opts ...ParseOption) (JSON, error) {
 	return cfg.parseJSON(s)
 }
 
+func init() {
+	encoding.PrettyPrintJSONValueEncoded = func(b []byte) (string, error) {
+		rem, j, err := DecodeJSON(b)
+		if err != nil {
+			return "", err
+		}
+		if len(rem) != 0 {
+			return "", errors.Newf("unexpected remainder after decoding JSON: %v", rem)
+		}
+		return j.String(), nil
+	}
+}
+
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 // one per unique path through the receiver.
 func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
@@ -1186,7 +1277,7 @@ func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// to emit duplicate keys from this method, as it's more expensive to
 	// deduplicate keys via KV (which will actually write the keys) than to do
 	// it now (just an in-memory sort and distinct).
-	outKeys = uniq.UniquifyByteSlices(outKeys)
+	outKeys = deduplicate.ByteSlices(outKeys)
 	return outKeys, nil
 }
 
@@ -1704,36 +1795,51 @@ func (j jsonObject) numInvertedIndexEntries() (int, error) {
 // through the input. Note that leaves include the empty object and array
 // in addition to scalars.
 func AllPaths(j JSON) ([]JSON, error) {
-	return j.allPaths()
+	return j.allPathsWithDepth(-1)
 }
 
-func (j jsonNull) allPaths() ([]JSON, error) {
+// AllPathsWithDepth returns a slice of new JSON documents, each a path
+// through the receiver. The depth parameter specifies the maximum depth of
+// the paths to return. If the depth is negative, all paths of any depth are
+// returned. If the depth is 0, the receiver itself is returned. Note that
+// leaves include the empty object and array in addition to scalars.
+func AllPathsWithDepth(j JSON, depth int) ([]JSON, error) {
+	return j.allPathsWithDepth(depth)
+}
+
+func (j jsonNull) allPathsWithDepth(depth int) ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonTrue) allPaths() ([]JSON, error) {
+func (j jsonTrue) allPathsWithDepth(depth int) ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonFalse) allPaths() ([]JSON, error) {
+func (j jsonFalse) allPathsWithDepth(depth int) ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonString) allPaths() ([]JSON, error) {
+func (j jsonString) allPathsWithDepth(depth int) ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonNumber) allPaths() ([]JSON, error) {
+func (j jsonNumber) allPathsWithDepth(depth int) ([]JSON, error) {
 	return []JSON{j}, nil
 }
 
-func (j jsonArray) allPaths() ([]JSON, error) {
-	if len(j) == 0 {
+func (j jsonArray) allPathsWithDepth(depth int) ([]JSON, error) {
+	if len(j) == 0 || depth == 0 {
 		return []JSON{j}, nil
 	}
 	ret := make([]JSON, 0, len(j))
 	for i := range j {
-		paths, err := j[i].allPaths()
+		var paths []JSON
+		var err error
+		if depth > 0 {
+			paths, err = j[i].allPathsWithDepth(depth - 1)
+		} else {
+			paths, err = j[i].allPathsWithDepth(depth)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -1744,13 +1850,19 @@ func (j jsonArray) allPaths() ([]JSON, error) {
 	return ret, nil
 }
 
-func (j jsonObject) allPaths() ([]JSON, error) {
-	if len(j) == 0 {
+func (j jsonObject) allPathsWithDepth(depth int) ([]JSON, error) {
+	if len(j) == 0 || depth == 0 {
 		return []JSON{j}, nil
 	}
 	ret := make([]JSON, 0, len(j))
 	for i := range j {
-		paths, err := j[i].v.allPaths()
+		var paths []JSON
+		var err error
+		if depth > 0 {
+			paths, err = j[i].v.allPathsWithDepth(depth - 1)
+		} else {
+			paths, err = j[i].v.allPathsWithDepth(depth)
+		}
 		if err != nil {
 			return nil, err
 		}

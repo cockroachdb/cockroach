@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -249,7 +249,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 		streamID := replicationProducerSpec.StreamID
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
-		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, testTenantName))
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1ms'`, testTenantName))
 		jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(streamID))
 		testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
@@ -261,7 +261,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{"running"}})
-		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1hr'`, testTenantName))
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1hr'`, testTenantName))
 		// Ensures the job is continuously running for 3 seconds.
 		testDuration, now := 3*time.Second, timeutil.Now()
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
@@ -565,7 +565,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 	timedOutStreamID := replicationProducerSpec.StreamID
 	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
-	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, testTenantName))
+	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1ms'`, testTenantName))
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
 	testCompleteStreamReplication := func(t *testing.T, successfulIngestion bool) {
@@ -579,7 +579,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
 			streamID, successfulIngestion)
-		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
+		h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, testTenantName))
 
 		if successfulIngestion {
 			jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
@@ -767,7 +767,7 @@ USE d;
 
 	// Using same batch ts so that this SST can be emitted through rangefeed.
 	_, _, _, err := h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
-		false, hlc.Timestamp{}, nil, false, batchHLCTime)
+		hlc.Timestamp{}, nil, false, batchHLCTime)
 	require.NoError(t, err)
 
 	receivedKVs, receivedDelRangeSpans := consumeUntilTimestamp(batchHLCTime)

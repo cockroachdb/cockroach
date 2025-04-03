@@ -69,7 +69,7 @@ func TestVerify(t *testing.T) {
 				LocalReplicaID: repl1.ReplicaID,
 				Desc:           &descCpy,
 				RaftStatus:     makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader),
-				RaftFirstIndex: 5,
+				RaftCompacted:  4,
 				PrevLease: roachpb.Lease{
 					Replica:  repl2,
 					Epoch:    2,
@@ -196,11 +196,30 @@ func TestVerify(t *testing.T) {
 				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
 				expRedirect: roachpb.ReplicaDescriptor{},
 			},
+			{
+				name: "follower, unknown leader, reject leader lease on leader unknown",
+				st: func() Settings {
+					st := defaultSettings()
+					return st
+				}(),
+				input: func() VerifyInput {
+					in := defaultFollowerInput()
+					// Unknown leader.
+					in.RaftStatus.Lead = raft.None
+					// Leader lease.
+					in.DesiredLeaseType = roachpb.LeaseLeader
+					return in
+				}(),
+				// Rejection if the leader is unknown. However, we don't know who to
+				// redirect to, so we don't include a hint.
+				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
+				expRedirect: roachpb.ReplicaDescriptor{},
+			},
 		})
 	})
 
 	t.Run("transfer", func(t *testing.T) {
-		const repl1RaftFirstIndex = 5
+		const compactedIndex = 4
 		defaultInput := func() VerifyInput {
 			descCpy := desc
 			descCpy.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
@@ -209,7 +228,7 @@ func TestVerify(t *testing.T) {
 				LocalReplicaID: repl1.ReplicaID,
 				Desc:           &descCpy,
 				RaftStatus:     nil, // set below
-				RaftFirstIndex: repl1RaftFirstIndex,
+				RaftCompacted:  compactedIndex,
 				PrevLease: roachpb.Lease{
 					Replica:  repl1,
 					Epoch:    2,
@@ -230,7 +249,7 @@ func TestVerify(t *testing.T) {
 			in := defaultInput()
 			in.RaftStatus = makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader)
 			in.RaftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
-				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftFirstIndex)},
+				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftCompacted)},
 			}
 			if targetState != noTargetState {
 				in.RaftStatus.Progress[raftpb.PeerID(repl2.ReplicaID)] = rafttracker.Progress{
@@ -274,17 +293,17 @@ func TestVerify(t *testing.T) {
 			},
 			{
 				name:   "leader, target state replicate, match+1 < firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex-2),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex-1),
 				expErr: leaseTransferErrPrefix + raftutil.ReplicaMatchBelowLeadersFirstIndex.String(),
 			},
 			{
 				name:   "leader, target state replicate, match+1 == firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex-1),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex),
 				expErr: ``,
 			},
 			{
 				name:   "leader, target state replicate, match+1 > firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex+1),
 				expErr: ``,
 			},
 		})

@@ -38,6 +38,18 @@ var (
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedBufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_registrations",
+		Help:        "Number of active RangeFeed buffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedUnbufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.unbuffered_registrations",
+		Help:        "Number of active RangeFeed unbuffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeFeedClosedTimestampMaxBehindNanos = metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp_max_behind_nanos",
 		Help: "Largest latency between realtime and replica max closed timestamp for replicas " +
@@ -89,6 +101,13 @@ var (
 		Measurement: "Failure Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedOutputLoopNanosUnbufferedRegistration = metric.Metadata{
+		Name: "kv.rangefeed.output_loop_unbuffered_registration_nanos",
+		Help: "Duration of the Rangefeed O(range) output loop goroutine. This is only applicable for " +
+			"unbuffered registrations since buffered registrations spawns long-living goroutines.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
@@ -102,6 +121,9 @@ type Metrics struct {
 	RangeFeedClosedTimestampMaxBehindNanos      *metric.Gauge
 	RangeFeedSlowClosedTimestampRanges          *metric.Gauge
 	RangeFeedSlowClosedTimestampLogN            log.EveryN
+	RangeFeedBufferedRegistrations              *metric.Gauge
+	RangeFeedUnbufferedRegistrations            *metric.Gauge
+	RangefeedOutputLoopNanosForUnbufferedReg    *metric.Counter
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -132,6 +154,9 @@ func NewMetrics() *Metrics {
 		RangeFeedSlowClosedTimestampNudgeSem:        make(chan struct{}, 1024),
 		RangeFeedProcessorsGO:                       metric.NewGauge(metaRangeFeedProcessorsGO),
 		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
+		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
+		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
+		RangefeedOutputLoopNanosForUnbufferedReg:    metric.NewCounter(metaRangeFeedOutputLoopNanosUnbufferedRegistration),
 	}
 }
 
@@ -207,5 +232,60 @@ func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *Shard
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		QueueSize: metric.NewGauge(expandTemplate(metaQueueSizeTemplate)),
+	}
+}
+
+// StreamManagerMetrics are for monitoring of a StreamManager. Used by both
+// buffered and unbuffered sender.
+type StreamManagerMetrics struct {
+	NumMuxRangeFeed    *metric.Counter
+	ActiveMuxRangeFeed *metric.Gauge
+}
+
+var (
+	metaActiveMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.active",
+		Help:        `Number of currently running MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.recv",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func (*StreamManagerMetrics) MetricStruct() {}
+
+// NewStreamManagerMetrics creates new metrics for StreamManager.
+func NewStreamManagerMetrics() *StreamManagerMetrics {
+	return &StreamManagerMetrics{
+		ActiveMuxRangeFeed: metric.NewGauge(metaActiveMuxRangeFeed),
+		NumMuxRangeFeed:    metric.NewCounter(metaTotalMuxRangeFeed),
+	}
+}
+
+// BufferedSenderMetrics are for monitoring of BufferedSender.
+type BufferedSenderMetrics struct {
+	BufferedSenderQueueSize *metric.Gauge
+}
+
+var (
+	metaBufferedSenderQueueSize = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_sender.queue_size",
+		Help:        `Number of entries in the buffered sender queue`,
+		Measurement: "Pending Events",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func (*BufferedSenderMetrics) MetricStruct() {}
+
+// NewBufferedSenderMetrics makes the metrics for BufferedSender.
+func NewBufferedSenderMetrics() *BufferedSenderMetrics {
+	return &BufferedSenderMetrics{
+		BufferedSenderQueueSize: metric.NewGauge(metaBufferedSenderQueueSize),
 	}
 }

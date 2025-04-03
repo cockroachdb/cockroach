@@ -106,6 +106,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
                 "partitioning": {},
                 "predicate": "i = _:::INT8",
                 "sharded": {},
+                "vecConfig": {},
                 "version": 3
             }
         ],
@@ -144,6 +145,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
                 "j"
             ],
             "unique": true,
+            "vecConfig": {},
             "version": 4
         },
         "privileges": {

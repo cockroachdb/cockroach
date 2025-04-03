@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -46,9 +47,6 @@ import (
 // has been optimized.
 type RelExpr interface {
 	opt.Expr
-
-	// Memo is the memo which contains this relational expression.
-	Memo() *Memo
 
 	// Relational is the set of logical properties that describe the content and
 	// characteristics of this expression's behavior and results.
@@ -596,19 +594,19 @@ func (jf JoinFlags) String() string {
 }
 
 func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(ij)
+	initJoinMultiplicity(mem, ij)
 }
 
 func (lj *LeftJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(lj)
+	initJoinMultiplicity(mem, lj)
 }
 
 func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(fj)
+	initJoinMultiplicity(mem, fj)
 }
 
 func (sj *SemiJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(sj)
+	initJoinMultiplicity(mem, sj)
 }
 
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
@@ -862,7 +860,7 @@ func (s *ScanPrivate) IsFullIndexScan() bool {
 // IsInvertedScan returns true if the index being scanned is an inverted
 // index.
 func (s *ScanPrivate) IsInvertedScan(md *opt.Metadata) bool {
-	return md.Table(s.Table).Index(s.Index).IsInverted()
+	return md.Table(s.Table).Index(s.Index).Type() == idxtype.INVERTED
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.

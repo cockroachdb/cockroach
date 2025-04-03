@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "deferloop",
+    srcs = ["deferloop.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferloop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/passesutil",
+        "@org_golang_x_tools//go/analysis",
+    ],
+)
+
+go_test(
+    name = "deferloop_test",
+    srcs = ["deferloop_test.go"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
+    deps = [
+        ":deferloop",
+        "//pkg/build/bazel",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)

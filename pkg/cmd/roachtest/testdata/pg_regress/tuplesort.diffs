@@ -1,0 +1,952 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tuplesort.out --label=/mnt/data1/postgres/src/test/regress/results/tuplesort.out /mnt/data1/postgres/src/test/regress/expected/tuplesort.out /mnt/data1/postgres/src/test/regress/results/tuplesort.out
+--- /mnt/data1/postgres/src/test/regress/expected/tuplesort.out
++++ /mnt/data1/postgres/src/test/regress/results/tuplesort.out
+@@ -1,12 +1,27 @@
+ -- only use parallelism when explicitly intending to do so
+ SET max_parallel_maintenance_workers = 0;
++ERROR:  unrecognized configuration parameter "max_parallel_maintenance_workers"
+ SET max_parallel_workers = 0;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- A table with contents that, when sorted, triggers abbreviated
+ -- key aborts. One easy way to achieve that is to use uuids that all
+ -- have the same prefix, as abbreviated keys for uuids just use the
+ -- first sizeof(Datum) bytes.
++CREATE TEMP SEQUENCE id_seq;
++ERROR:  relation "root.public.id_seq" already exists
+ CREATE TEMP TABLE abbrev_abort_uuids (
+-    id serial not null,
++    id int not null default nextval('id_seq'),
+     abort_increasing uuid,
+     abort_decreasing uuid,
+     noabort_increasing uuid,
+@@ -18,6 +33,8 @@
+         (to_char(g.i % 10009, '00000000FM')||'-0000-0000-0000-'||to_char(g.i, '000000000000FM'))::uuid noabort_increasing,
+         (to_char(((20000 - g.i) % 10009), '00000000FM')||'-0000-0000-0000-'||to_char(20000 - g.i, '000000000000FM'))::uuid noabort_decreasing
+     FROM generate_series(0, 20000, 1) g(i);
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- and a few NULLs
+ INSERT INTO abbrev_abort_uuids(id) VALUES(0);
+ INSERT INTO abbrev_abort_uuids DEFAULT VALUES;
+@@ -32,106 +49,42 @@
+ ----
+ -- plain sort triggering abbreviated abort
+ SELECT abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_increasing OFFSET 20000 - 4;
+-           abort_increasing           |           abort_decreasing           
+---------------------------------------+--------------------------------------
+- 00000000-0000-0000-0000-000000019992 | 00000000-0000-0000-0000-000000000008
+- 00000000-0000-0000-0000-000000019993 | 00000000-0000-0000-0000-000000000007
+- 00000000-0000-0000-0000-000000019994 | 00000000-0000-0000-0000-000000000006
+- 00000000-0000-0000-0000-000000019994 | 00000000-0000-0000-0000-000000000006
+- 00000000-0000-0000-0000-000000019995 | 00000000-0000-0000-0000-000000000005
+- 00000000-0000-0000-0000-000000019996 | 00000000-0000-0000-0000-000000000004
+- 00000000-0000-0000-0000-000000019997 | 00000000-0000-0000-0000-000000000003
+- 00000000-0000-0000-0000-000000019997 | 00000000-0000-0000-0000-000000000003
+- 00000000-0000-0000-0000-000000019998 | 00000000-0000-0000-0000-000000000002
+- 00000000-0000-0000-0000-000000019999 | 00000000-0000-0000-0000-000000000001
+- 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+-                                      | 
+-                                      | 
+-                                      | 
+-(15 rows)
++ abort_increasing | abort_decreasing 
++------------------+------------------
++(0 rows)
+ 
+ SELECT abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_decreasing NULLS FIRST OFFSET 20000 - 4;
+-           abort_increasing           |           abort_decreasing           
+---------------------------------------+--------------------------------------
+- 00000000-0000-0000-0000-000000000011 | 00000000-0000-0000-0000-000000019989
+- 00000000-0000-0000-0000-000000000010 | 00000000-0000-0000-0000-000000019990
+- 00000000-0000-0000-0000-000000000009 | 00000000-0000-0000-0000-000000019991
+- 00000000-0000-0000-0000-000000000008 | 00000000-0000-0000-0000-000000019992
+- 00000000-0000-0000-0000-000000000008 | 00000000-0000-0000-0000-000000019992
+- 00000000-0000-0000-0000-000000000007 | 00000000-0000-0000-0000-000000019993
+- 00000000-0000-0000-0000-000000000006 | 00000000-0000-0000-0000-000000019994
+- 00000000-0000-0000-0000-000000000005 | 00000000-0000-0000-0000-000000019995
+- 00000000-0000-0000-0000-000000000005 | 00000000-0000-0000-0000-000000019995
+- 00000000-0000-0000-0000-000000000004 | 00000000-0000-0000-0000-000000019996
+- 00000000-0000-0000-0000-000000000003 | 00000000-0000-0000-0000-000000019997
+- 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998
+- 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998
+- 00000000-0000-0000-0000-000000000001 | 00000000-0000-0000-0000-000000019999
+- 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000020000
+-(15 rows)
++ abort_increasing | abort_decreasing 
++------------------+------------------
++(0 rows)
+ 
+ -- plain sort not triggering abbreviated abort
+ SELECT noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_increasing OFFSET 20000 - 4;
+-          noabort_increasing          |          noabort_decreasing          
+---------------------------------------+--------------------------------------
+- 00009997-0000-0000-0000-000000009997 | 00010003-0000-0000-0000-000000010003
+- 00009998-0000-0000-0000-000000009998 | 00010002-0000-0000-0000-000000010002
+- 00009999-0000-0000-0000-000000009999 | 00010001-0000-0000-0000-000000010001
+- 00010000-0000-0000-0000-000000010000 | 00010000-0000-0000-0000-000000010000
+- 00010001-0000-0000-0000-000000010001 | 00009999-0000-0000-0000-000000009999
+- 00010002-0000-0000-0000-000000010002 | 00009998-0000-0000-0000-000000009998
+- 00010003-0000-0000-0000-000000010003 | 00009997-0000-0000-0000-000000009997
+- 00010004-0000-0000-0000-000000010004 | 00009996-0000-0000-0000-000000009996
+- 00010005-0000-0000-0000-000000010005 | 00009995-0000-0000-0000-000000009995
+- 00010006-0000-0000-0000-000000010006 | 00009994-0000-0000-0000-000000009994
+- 00010007-0000-0000-0000-000000010007 | 00009993-0000-0000-0000-000000009993
+- 00010008-0000-0000-0000-000000010008 | 00009992-0000-0000-0000-000000009992
+-                                      | 
+-                                      | 
+-                                      | 
+-(15 rows)
++ noabort_increasing | noabort_decreasing 
++--------------------+--------------------
++(0 rows)
+ 
+ SELECT noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing NULLS FIRST OFFSET 20000 - 4;
+-          noabort_increasing          |          noabort_decreasing          
+---------------------------------------+--------------------------------------
+- 00010006-0000-0000-0000-000000010006 | 00009994-0000-0000-0000-000000009994
+- 00010005-0000-0000-0000-000000010005 | 00009995-0000-0000-0000-000000009995
+- 00010004-0000-0000-0000-000000010004 | 00009996-0000-0000-0000-000000009996
+- 00010003-0000-0000-0000-000000010003 | 00009997-0000-0000-0000-000000009997
+- 00010002-0000-0000-0000-000000010002 | 00009998-0000-0000-0000-000000009998
+- 00010001-0000-0000-0000-000000010001 | 00009999-0000-0000-0000-000000009999
+- 00010000-0000-0000-0000-000000010000 | 00010000-0000-0000-0000-000000010000
+- 00009999-0000-0000-0000-000000009999 | 00010001-0000-0000-0000-000000010001
+- 00009998-0000-0000-0000-000000009998 | 00010002-0000-0000-0000-000000010002
+- 00009997-0000-0000-0000-000000009997 | 00010003-0000-0000-0000-000000010003
+- 00009996-0000-0000-0000-000000009996 | 00010004-0000-0000-0000-000000010004
+- 00009995-0000-0000-0000-000000009995 | 00010005-0000-0000-0000-000000010005
+- 00009994-0000-0000-0000-000000009994 | 00010006-0000-0000-0000-000000010006
+- 00009993-0000-0000-0000-000000009993 | 00010007-0000-0000-0000-000000010007
+- 00009992-0000-0000-0000-000000009992 | 00010008-0000-0000-0000-000000010008
+-(15 rows)
++ noabort_increasing | noabort_decreasing 
++--------------------+--------------------
++(0 rows)
+ 
+ -- bounded sort (disables abbreviated keys)
+ SELECT abort_increasing, noabort_increasing FROM abbrev_abort_uuids ORDER BY abort_increasing LIMIT 5;
+-           abort_increasing           |          noabort_increasing          
+---------------------------------------+--------------------------------------
+- 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000000000
+- 00000000-0000-0000-0000-000000000001 | 00000001-0000-0000-0000-000000000001
+- 00000000-0000-0000-0000-000000000002 | 00000002-0000-0000-0000-000000000002
+- 00000000-0000-0000-0000-000000000002 | 00000002-0000-0000-0000-000000000002
+- 00000000-0000-0000-0000-000000000003 | 00000003-0000-0000-0000-000000000003
+-(5 rows)
++ abort_increasing | noabort_increasing 
++------------------+--------------------
++                  | 
++                  | 
++                  | 
++(3 rows)
+ 
+ SELECT abort_increasing, noabort_increasing FROM abbrev_abort_uuids ORDER BY noabort_increasing NULLS FIRST LIMIT 5;
+-           abort_increasing           |          noabort_increasing          
+---------------------------------------+--------------------------------------
+-                                      | 
+-                                      | 
+-                                      | 
+- 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000000000
+- 00000000-0000-0000-0000-000000010009 | 00000000-0000-0000-0000-000000010009
+-(5 rows)
++ abort_increasing | noabort_increasing 
++------------------+--------------------
++                  | 
++                  | 
++                  | 
++(3 rows)
+ 
+ ----
+ -- Check index creation uses of tuplesort wrt. abbreviated keys
+@@ -142,39 +95,33 @@
+ -- verify
+ EXPLAIN (COSTS OFF)
+ SELECT id, noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_increasing LIMIT 5;
+-                                       QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+- Limit
+-   ->  Index Scan using abbrev_abort_uuids__noabort_increasing_idx on abbrev_abort_uuids
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT id, noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_increasing LIMIT 5;
+-  id   |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------
+-     1 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000
+- 10010 | 00000000-0000-0000-0000-000000010009 | 00009991-0000-0000-0000-000000009991
+-     2 | 00000001-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999
+- 10011 | 00000001-0000-0000-0000-000000010010 | 00009990-0000-0000-0000-000000009990
+-     3 | 00000002-0000-0000-0000-000000000002 | 00009989-0000-0000-0000-000000019998
+-(5 rows)
++ id | noabort_increasing | noabort_decreasing 
++----+--------------------+--------------------
++  0 |                    | 
++ 22 |                    | 
++ 23 |                    | 
++(3 rows)
+ 
+ EXPLAIN (COSTS OFF)
+ SELECT id, noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing LIMIT 5;
+-                                       QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+- Limit
+-   ->  Index Scan using abbrev_abort_uuids__noabort_decreasing_idx on abbrev_abort_uuids
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT id, noabort_increasing, noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing LIMIT 5;
+-  id   |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------
+- 20001 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20010 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+-  9992 | 00009991-0000-0000-0000-000000009991 | 00000000-0000-0000-0000-000000010009
+- 20000 | 00009990-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001
+-  9991 | 00009990-0000-0000-0000-000000009990 | 00000001-0000-0000-0000-000000010010
+-(5 rows)
++ id | noabort_increasing | noabort_decreasing 
++----+--------------------+--------------------
++  0 |                    | 
++ 22 |                    | 
++ 23 |                    | 
++(3 rows)
+ 
+ -- index creation using abbreviated keys, hitting abort
+ CREATE INDEX abbrev_abort_uuids__abort_increasing_idx ON abbrev_abort_uuids (abort_increasing);
+@@ -182,39 +129,33 @@
+ -- verify
+ EXPLAIN (COSTS OFF)
+ SELECT id, abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_increasing LIMIT 5;
+-                                      QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+- Limit
+-   ->  Index Scan using abbrev_abort_uuids__abort_increasing_idx on abbrev_abort_uuids
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT id, abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_increasing LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           
+--------+--------------------------------------+--------------------------------------
+-     1 | 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000020000
+-     2 | 00000000-0000-0000-0000-000000000001 | 00000000-0000-0000-0000-000000019999
+-     3 | 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998
+- 20004 | 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998
+-     4 | 00000000-0000-0000-0000-000000000003 | 00000000-0000-0000-0000-000000019997
+-(5 rows)
++ id | abort_increasing | abort_decreasing 
++----+------------------+------------------
++  0 |                  | 
++ 22 |                  | 
++ 23 |                  | 
++(3 rows)
+ 
+ EXPLAIN (COSTS OFF)
+ SELECT id, abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_decreasing LIMIT 5;
+-                                      QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+- Limit
+-   ->  Index Scan using abbrev_abort_uuids__abort_decreasing_idx on abbrev_abort_uuids
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT id, abort_increasing, abort_decreasing FROM abbrev_abort_uuids ORDER BY abort_decreasing LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           
+--------+--------------------------------------+--------------------------------------
+- 20001 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20010 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20000 | 00000000-0000-0000-0000-000000019999 | 00000000-0000-0000-0000-000000000001
+- 19999 | 00000000-0000-0000-0000-000000019998 | 00000000-0000-0000-0000-000000000002
+- 19998 | 00000000-0000-0000-0000-000000019997 | 00000000-0000-0000-0000-000000000003
+-(5 rows)
++ id | abort_increasing | abort_decreasing 
++----+------------------+------------------
++  0 |                  | 
++ 22 |                  | 
++ 23 |                  | 
++(3 rows)
+ 
+ ----
+ -- Check CLUSTER uses of tuplesort wrt. abbreviated keys
+@@ -222,126 +163,126 @@
+ -- when aborting, increasing order
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__abort_increasing_idx;
++ERROR:  at or near "cluster": syntax error
++DETAIL:  source SQL:
++CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__abort_increasing_idx
++^
+ -- head
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     1 | 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000
+-     2 | 00000000-0000-0000-0000-000000000001 | 00000000-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999
+-     3 | 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998 | 00000002-0000-0000-0000-000000000002 | 00009989-0000-0000-0000-000000019998
+- 20004 | 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998 | 00000002-0000-0000-0000-000000000002 | 00009989-0000-0000-0000-000000019998
+-     4 | 00000000-0000-0000-0000-000000000003 | 00000000-0000-0000-0000-000000019997 | 00000003-0000-0000-0000-000000000003 | 00009988-0000-0000-0000-000000019997
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- tail
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid DESC LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     0 |                                      |                                      |                                      | 
+- 20002 |                                      |                                      |                                      | 
+- 20003 |                                      |                                      |                                      | 
+- 20001 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20010 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- when aborting, decreasing order
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__abort_decreasing_idx;
++ERROR:  at or near "cluster": syntax error
++DETAIL:  source SQL:
++CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__abort_decreasing_idx
++^
+ -- head
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+- 20010 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20001 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20000 | 00000000-0000-0000-0000-000000019999 | 00000000-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001
+- 19999 | 00000000-0000-0000-0000-000000019998 | 00000000-0000-0000-0000-000000000002 | 00009989-0000-0000-0000-000000019998 | 00000002-0000-0000-0000-000000000002
+- 20009 | 00000000-0000-0000-0000-000000019997 | 00000000-0000-0000-0000-000000000003 | 00009988-0000-0000-0000-000000019997 | 00000003-0000-0000-0000-000000000003
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- tail
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid DESC LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     0 |                                      |                                      |                                      | 
+- 20002 |                                      |                                      |                                      | 
+- 20003 |                                      |                                      |                                      | 
+-     1 | 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000
+-     2 | 00000000-0000-0000-0000-000000000001 | 00000000-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- when not aborting, increasing order
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__noabort_increasing_idx;
++ERROR:  at or near "cluster": syntax error
++DETAIL:  source SQL:
++CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__noabort_increasing_idx
++^
+ -- head
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     1 | 00000000-0000-0000-0000-000000000000 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000
+- 10010 | 00000000-0000-0000-0000-000000010009 | 00000000-0000-0000-0000-000000009991 | 00000000-0000-0000-0000-000000010009 | 00009991-0000-0000-0000-000000009991
+-     2 | 00000000-0000-0000-0000-000000000001 | 00000000-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999
+- 10011 | 00000000-0000-0000-0000-000000010010 | 00000000-0000-0000-0000-000000009990 | 00000001-0000-0000-0000-000000010010 | 00009990-0000-0000-0000-000000009990
+- 20004 | 00000000-0000-0000-0000-000000000002 | 00000000-0000-0000-0000-000000019998 | 00000002-0000-0000-0000-000000000002 | 00009989-0000-0000-0000-000000019998
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- tail
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid DESC LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     0 |                                      |                                      |                                      | 
+- 20002 |                                      |                                      |                                      | 
+- 20003 |                                      |                                      |                                      | 
+- 10009 | 00000000-0000-0000-0000-000000010008 | 00000000-0000-0000-0000-000000009992 | 00010008-0000-0000-0000-000000010008 | 00009992-0000-0000-0000-000000009992
+- 10008 | 00000000-0000-0000-0000-000000010007 | 00000000-0000-0000-0000-000000009993 | 00010007-0000-0000-0000-000000010007 | 00009993-0000-0000-0000-000000009993
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- when no aborting, decreasing order
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__noabort_decreasing_idx;
++ERROR:  at or near "cluster": syntax error
++DETAIL:  source SQL:
++CLUSTER abbrev_abort_uuids USING abbrev_abort_uuids__noabort_decreasing_idx
++^
+ -- head
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+- 20010 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+- 20001 | 00000000-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000 | 00009991-0000-0000-0000-000000020000 | 00000000-0000-0000-0000-000000000000
+-  9992 | 00000000-0000-0000-0000-000000009991 | 00000000-0000-0000-0000-000000010009 | 00009991-0000-0000-0000-000000009991 | 00000000-0000-0000-0000-000000010009
+- 20000 | 00000000-0000-0000-0000-000000019999 | 00000000-0000-0000-0000-000000000001 | 00009990-0000-0000-0000-000000019999 | 00000001-0000-0000-0000-000000000001
+-  9991 | 00000000-0000-0000-0000-000000009990 | 00000000-0000-0000-0000-000000010010 | 00009990-0000-0000-0000-000000009990 | 00000001-0000-0000-0000-000000010010
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- tail
+ SELECT id, abort_increasing, abort_decreasing, noabort_increasing, noabort_decreasing
+ FROM abbrev_abort_uuids
+ ORDER BY ctid DESC LIMIT 5;
+-  id   |           abort_increasing           |           abort_decreasing           |          noabort_increasing          |          noabort_decreasing          
+--------+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------
+-     0 |                                      |                                      |                                      | 
+- 20003 |                                      |                                      |                                      | 
+- 20002 |                                      |                                      |                                      | 
+-  9993 | 00000000-0000-0000-0000-000000009992 | 00000000-0000-0000-0000-000000010008 | 00009992-0000-0000-0000-000000009992 | 00010008-0000-0000-0000-000000010008
+-  9994 | 00000000-0000-0000-0000-000000009993 | 00000000-0000-0000-0000-000000010007 | 00009993-0000-0000-0000-000000009993 | 00010007-0000-0000-0000-000000010007
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ ----
+ -- test forward and backward scans for in-memory and disk based tuplesort
+@@ -349,195 +290,118 @@
+ -- in-memory
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- unfortunately can't show analyze output confirming sort method,
+ -- the memory used output wouldn't be stable
+ EXPLAIN (COSTS OFF) DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing;
+-              QUERY PLAN              
+---------------------------------------
+- Sort
+-   Sort Key: noabort_decreasing
+-   ->  Seq Scan on abbrev_abort_uuids
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- first and second
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- scroll beyond beginning
+ FETCH BACKWARD FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- scroll beyond end end
+ FETCH LAST FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- disk based
+ BEGIN;
+ SET LOCAL enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL work_mem = '100kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- unfortunately can't show analyze output confirming sort method,
+ -- the memory used output wouldn't be stable
+ EXPLAIN (COSTS OFF) DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing;
+-              QUERY PLAN              
+---------------------------------------
+- Sort
+-   Sort Key: noabort_decreasing
+-   ->  Seq Scan on abbrev_abort_uuids
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DECLARE c SCROLL CURSOR FOR SELECT noabort_decreasing FROM abbrev_abort_uuids ORDER BY noabort_decreasing;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- first and second
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- scroll beyond beginning
+ FETCH BACKWARD FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+-          noabort_decreasing          
+---------------------------------------
+- 00000000-0000-0000-0000-000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- scroll beyond end end
+ FETCH LAST FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH BACKWARD FROM c;
+- noabort_decreasing 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM c;
+- noabort_decreasing 
+---------------------
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ ----
+ -- test tuplesort using both in-memory and disk sort
+@@ -564,14 +428,41 @@
+     SELECT * FROM abbrev_abort_uuids
+     UNION ALL
+     SELECT NULL, NULL, NULL, NULL, NULL) s;
+-           array_agg            |                                                                                         array_agg                                                                                          |         array_agg          | percentile_disc | percentile_disc |           percentile_disc            | percentile_disc | rank 
+---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------+-----------------+-----------------+--------------------------------------+-----------------+------
+- {NULL,20010,20009,20008,20007} | {00000000-0000-0000-0000-000000020000,00000000-0000-0000-0000-000000020000,00000000-0000-0000-0000-000000019999,00000000-0000-0000-0000-000000019998,00000000-0000-0000-0000-000000019997} | {9999,9998,9997,9996,9995} |           19810 |             200 | 00000000-0000-0000-0000-000000016003 | 136             |    2
+-(1 row)
+-
++ERROR:  at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
++DETAIL:  source SQL:
++SELECT
++    
++    (array_agg(id ORDER BY id DESC NULLS FIRST))[0:5],
++    
++    (array_agg(abort_increasing ORDER BY abort_increasing DESC NULLS LAST))[0:5],
++    
++    (array_agg(id::text ORDER BY id::text DESC NULLS LAST))[0:5],
++    
++    percentile_disc(0.99) WITHIN GROUP (ORDER BY id),
++    
++    percentile_disc(0.01) WITHIN GROUP (ORDER BY id),
++    
++    percentile_disc(0.8) WITHIN GROUP (ORDER BY abort_increasing),
++    
++    percentile_disc(0.2) WITHIN GROUP (ORDER BY id::text),
++    
++    rank('00000000-0000-0000-0000-000000000000', '2', '2') WITHIN GROUP (ORDER BY noabort_increasing, id, id::text)
++                                                                                                                  ^
+ -- disk based (see also above)
+ BEGIN;
+ SET LOCAL work_mem = '100kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT
+     (array_agg(id ORDER BY id DESC NULLS FIRST))[0:5],
+     (array_agg(abort_increasing ORDER BY abort_increasing DESC NULLS LAST))[0:5],
+@@ -585,11 +476,18 @@
+     SELECT * FROM abbrev_abort_uuids
+     UNION ALL
+     SELECT NULL, NULL, NULL, NULL, NULL) s;
+-           array_agg            |                                                                                         array_agg                                                                                          |         array_agg          | percentile_disc | percentile_disc |           percentile_disc            | percentile_disc | rank 
+---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------+-----------------+-----------------+--------------------------------------+-----------------+------
+- {NULL,20010,20009,20008,20007} | {00000000-0000-0000-0000-000000020000,00000000-0000-0000-0000-000000020000,00000000-0000-0000-0000-000000019999,00000000-0000-0000-0000-000000019998,00000000-0000-0000-0000-000000019997} | {9999,9998,9997,9996,9995} |           19810 |             200 | 00000000-0000-0000-0000-000000016003 | 136             |    2
+-(1 row)
+-
++ERROR:  at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
++DETAIL:  source SQL:
++SELECT
++    (array_agg(id ORDER BY id DESC NULLS FIRST))[0:5],
++    (array_agg(abort_increasing ORDER BY abort_increasing DESC NULLS LAST))[0:5],
++    (array_agg(id::text ORDER BY id::text DESC NULLS LAST))[0:5],
++    percentile_disc(0.99) WITHIN GROUP (ORDER BY id),
++    percentile_disc(0.01) WITHIN GROUP (ORDER BY id),
++    percentile_disc(0.8) WITHIN GROUP (ORDER BY abort_increasing),
++    percentile_disc(0.2) WITHIN GROUP (ORDER BY id::text),
++    rank('00000000-0000-0000-0000-000000000000', '2', '2') WITHIN GROUP (ORDER BY noabort_increasing, id, id::text)
++                                                                                                                  ^
+ ROLLBACK;
+ ----
+ -- test tuplesort mark/restore
+@@ -600,8 +498,22 @@
+    SELECT a.i, b.i, a.i * b.i FROM generate_series(1, 500) a(i), generate_series(1, 5) b(i);
+ BEGIN;
+ SET LOCAL enable_nestloop = off;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL enable_hashjoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET LOCAL enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- set query into variable once, to avoid repetition of the fairly long query
+ SELECT $$
+     SELECT col12, count(distinct a.col1), count(distinct a.col2), count(distinct b.col1), count(distinct b.col2), count(*)
+@@ -612,81 +524,31 @@
+     ORDER BY 2 DESC, 1 DESC, 3 DESC, 4 DESC, 5 DESC, 6 DESC
+     LIMIT 10
+ $$ AS qry \gset
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- test mark/restore with in-memory sorts
+ EXPLAIN (COSTS OFF) :qry;
+-                                                                                 QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Limit
+-   ->  Sort
+-         Sort Key: (count(DISTINCT a.col1)) DESC, a.col12 DESC, (count(DISTINCT a.col2)) DESC, (count(DISTINCT b.col1)) DESC, (count(DISTINCT b.col2)) DESC, (count(*)) DESC
+-         ->  GroupAggregate
+-               Group Key: a.col12
+-               Filter: (count(*) > 1)
+-               ->  Incremental Sort
+-                     Sort Key: a.col12 DESC, a.col1
+-                     Presorted Key: a.col12
+-                     ->  Merge Join
+-                           Merge Cond: (a.col12 = b.col12)
+-                           ->  Sort
+-                                 Sort Key: a.col12 DESC
+-                                 ->  Seq Scan on test_mark_restore a
+-                           ->  Sort
+-                                 Sort Key: b.col12 DESC
+-                                 ->  Seq Scan on test_mark_restore b
+-(17 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) :qry
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ :qry;
+- col12 | count | count | count | count | count 
+--------+-------+-------+-------+-------+-------
+-   480 |     5 |     5 |     5 |     5 |    25
+-   420 |     5 |     5 |     5 |     5 |    25
+-   360 |     5 |     5 |     5 |     5 |    25
+-   300 |     5 |     5 |     5 |     5 |    25
+-   240 |     5 |     5 |     5 |     5 |    25
+-   180 |     5 |     5 |     5 |     5 |    25
+-   120 |     5 |     5 |     5 |     5 |    25
+-    60 |     5 |     5 |     5 |     5 |    25
+-   960 |     4 |     4 |     4 |     4 |    16
+-   900 |     4 |     4 |     4 |     4 |    16
+-(10 rows)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++:qry
++^
+ -- test mark/restore with on-disk sorts
+ SET LOCAL work_mem = '100kB';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS OFF) :qry;
+-                                                                                 QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Limit
+-   ->  Sort
+-         Sort Key: (count(DISTINCT a.col1)) DESC, a.col12 DESC, (count(DISTINCT a.col2)) DESC, (count(DISTINCT b.col1)) DESC, (count(DISTINCT b.col2)) DESC, (count(*)) DESC
+-         ->  GroupAggregate
+-               Group Key: a.col12
+-               Filter: (count(*) > 1)
+-               ->  Incremental Sort
+-                     Sort Key: a.col12 DESC, a.col1
+-                     Presorted Key: a.col12
+-                     ->  Merge Join
+-                           Merge Cond: (a.col12 = b.col12)
+-                           ->  Sort
+-                                 Sort Key: a.col12 DESC
+-                                 ->  Seq Scan on test_mark_restore a
+-                           ->  Sort
+-                                 Sort Key: b.col12 DESC
+-                                 ->  Seq Scan on test_mark_restore b
+-(17 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) :qry
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ :qry;
+- col12 | count | count | count | count | count 
+--------+-------+-------+-------+-------+-------
+-   480 |     5 |     5 |     5 |     5 |    25
+-   420 |     5 |     5 |     5 |     5 |    25
+-   360 |     5 |     5 |     5 |     5 |    25
+-   300 |     5 |     5 |     5 |     5 |    25
+-   240 |     5 |     5 |     5 |     5 |    25
+-   180 |     5 |     5 |     5 |     5 |    25
+-   120 |     5 |     5 |     5 |     5 |    25
+-    60 |     5 |     5 |     5 |     5 |    25
+-   960 |     4 |     4 |     4 |     4 |    16
+-   900 |     4 |     4 |     4 |     4 |    16
+-(10 rows)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++:qry
++^
+ COMMIT;

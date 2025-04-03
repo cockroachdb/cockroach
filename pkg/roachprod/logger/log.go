@@ -126,8 +126,8 @@ func (cfg *Config) NewLogger(path string) (*Logger, error) {
 		return &Logger{
 			Stdout:  newSafeWriter(stdout),
 			Stderr:  newSafeWriter(stderr),
-			stdoutL: log.New(os.Stdout, cfg.Prefix, logFlags),
-			stderrL: log.New(os.Stderr, cfg.Prefix, logFlags),
+			stdoutL: log.New(stdout, cfg.Prefix, logFlags),
+			stderrL: log.New(stderr, cfg.Prefix, logFlags),
 		}, nil
 	}
 

@@ -418,6 +418,10 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	if c.p.SessionData().VectorizeMode == sessiondatapb.VectorizeOff {
 		return false
 	}
+	// Columnar vector index encoding is not yet supported.
+	if len(table.VectorIndexes()) > 0 {
+		return false
+	}
 	// Vectorized COPY doesn't support foreign key checks, no reason it couldn't
 	// but it doesn't work right now because we don't have the ability to
 	// hold the results in a bufferNode. We wouldn't want to enable it
@@ -518,7 +522,7 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
 	memMetrics := &MemoryMetrics{}
 	c.copyMon = mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("copy"),
+		Name:     mon.MakeName("copy"),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: c.p.ExecCfg().Settings,
@@ -1206,6 +1210,11 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	var vc tree.SelectStatement
 	if c.copyFastPath {
 		if c.vectorized {
+			if buildutil.CrdbTestBuild {
+				if c.txnOpt.txn.BufferedWritesEnabled() {
+					return errors.AssertionFailedf("buffered writes should have been disabled for COPY")
+				}
+			}
 			b := tree.VectorRows{Batch: c.batch}
 			vc = &tree.LiteralValuesClause{Rows: &b}
 		} else {

@@ -71,9 +71,7 @@ cockroachdb/test-eng:
 cockroachdb/test-eng-prs:
   triage_column_id: 14041337
   label: T-testeng
-cockroachdb/security:
-  label: T-security-engineering
-cockroachdb/prodsec:
+cockroachdb/security-engineering:
   label: T-security-engineering
 cockroachdb/product-security:
   label: T-product-security
@@ -90,6 +88,7 @@ cockroachdb/server:
   aliases:
     cockroachdb/cli-prs: other
     cockroachdb/server-prs: other
+  label: T-db-server
   triage_column_id: 2521812
 cockroachdb/obs-prs:
   # The observability team uses Jira for managing issues. So there is no triage column ID.

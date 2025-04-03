@@ -9,6 +9,14 @@ DROP TRIGGER tr ON defaultdb.t;
 begin transaction #1
 # begin StatementPhase
 checking for feature: DROP TRIGGER
+write *eventpb.DropTrigger to event log:
+  sql:
+    descriptorId: 104
+    statement: DROP TRIGGER ‹tr› ON ‹defaultdb›.‹t›
+    tag: DROP TRIGGER
+    user: root
+  tableName: defaultdb.public.t
+  triggerName: tr
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
   ...

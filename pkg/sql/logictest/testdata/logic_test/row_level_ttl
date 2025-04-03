@@ -280,6 +280,9 @@ subtest end
 subtest existing_ttl_concurrent_schema_change
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE TABLE tbl_existing_ttl_concurrent_schema_change (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
@@ -303,9 +306,15 @@ CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 statement ok
 ROLLBACK
 
+statement ok
+RESET autocommit_before_ddl
+
 subtest end
 
 subtest add_ttl_concurrent_schema_change
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement ok
 CREATE TABLE tbl_add_ttl_concurrent_schema_change (
@@ -338,6 +347,9 @@ CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 subtest end
 
@@ -766,6 +778,7 @@ subtest end
 
 subtest set_ttl_params
 
+onlyif config local-read-committed local-repeatable-read
 statement ok
 CREATE TABLE tbl_set_ttl_params (
   id INT PRIMARY KEY
@@ -781,6 +794,25 @@ CREATE TABLE tbl_set_ttl_params (
   ttl_disable_changefeed_replication = true
 )
 
+skipif config local-read-committed local-repeatable-read
+query T noticetrace
+CREATE TABLE tbl_set_ttl_params (
+  id INT PRIMARY KEY
+) WITH (
+  ttl_expire_after = '10 minutes',
+  ttl_select_batch_size = 10,
+  ttl_delete_batch_size = 20,
+  ttl_select_rate_limit = 30,
+  ttl_delete_rate_limit = 40,
+  ttl_pause = true,
+  ttl_row_stats_poll_interval = '1 minute',
+  ttl_label_metrics = true,
+  ttl_disable_changefeed_replication = true
+)
+----
+NOTICE: The TTL rate limit is per leaseholder per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.2/row-level-ttl#ttl-storage-parameters
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
@@ -790,6 +822,14 @@ CREATE TABLE public.tbl_set_ttl_params (
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_select_rate_limit = 30, ttl_delete_rate_limit = 40, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true, ttl_disable_changefeed_replication = true)
 
+skipif config local-read-committed local-repeatable-read
+query T noticetrace
+ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
+----
+NOTICE: The TTL rate limit is per leaseholder per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v25.2/row-level-ttl#ttl-storage-parameters
+
+onlyif config local-read-committed local-repeatable-read
 statement ok
 ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
 

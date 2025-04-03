@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -504,7 +505,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// assertion.
 					rec := collectAndFinish()
 					expFollowerRead := store.StoreID() != lh.StoreID && strict && routeNearest
-					wasFollowerRead := kv.OnlyFollowerReads(rec)
+					wasFollowerRead := kvtestutils.OnlyFollowerReads(rec)
 					ambiguous := !strict && routeNearest
 					if expFollowerRead != wasFollowerRead && !ambiguous {
 						if expFollowerRead {

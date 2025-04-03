@@ -213,9 +213,11 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
 	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
+	afterEachRun := func() {
+		closerRegistry.BenchmarkReset(ctx)
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
@@ -246,8 +248,9 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 							// purposes of this benchmark.
 							return colexecop.NewNoop(op)
 						},
-						name:  fmt.Sprintf("spilled=%t", spillForced),
-						order: unordered,
+						afterEachRun: afterEachRun,
+						name:         fmt.Sprintf("spilled=%t", spillForced),
+						order:        unordered,
 					},
 					aggFn, []*types.T{types.Int}, 1 /* numGroupCol */, groupSize,
 					0 /* distinctProb */, numInputRows, 0, /* chunkSize */

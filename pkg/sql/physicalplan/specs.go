@@ -34,6 +34,7 @@ func ReleaseFlowSpec(spec *execinfrapb.FlowSpec) {
 		if tr := spec.Processors[i].Core.TableReader; tr != nil {
 			releaseTableReaderSpec(tr)
 		}
+		spec.Processors[i] = execinfrapb.ProcessorSpec{}
 	}
 	*spec = execinfrapb.FlowSpec{
 		Processors: spec.Processors[:0],

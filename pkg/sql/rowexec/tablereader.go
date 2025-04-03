@@ -169,6 +169,9 @@ func newTableReader(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			tr.contentionEventsListener.Init(flowTxn.ID())
+		}
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {
@@ -314,6 +317,8 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			TuplesRead:          is.NumTuples,
 			KVTime:              is.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(tr.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:        optional.MakeTimeValue(tr.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:       optional.MakeTimeValue(tr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(is.kvCPUTime),
 		},

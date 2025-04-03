@@ -1372,6 +1372,10 @@ define WithScanPrivate {
     # Mtr is the materialization behavior of the CTE referenced by the WithScan.
     # It matches the Mtr field of the WithPrivate with a matching WithID.
     Mtr CTEMaterializeClause
+
+    # CheckInput is true if the WithScan is an input to a foreign key or a
+    # uniqueness check.
+    CheckInput bool
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:
@@ -1451,35 +1455,40 @@ define VectorSearchPrivate {
     # cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
 
+    # PrefixConstraint, if set, contains a set of spans that each constrain
+    # every index prefix column to a single value.
+    PrefixConstraint Constraint
+
     # Cols is the set of columns produced by the vector search operator. This
     # is currently always the set of primary key columns.
     Cols ColSet
-
-    # PrefixConstraint is set iff the vector index has a prefix of non-vector
-    # columns. It contains one or more spans that each constrain every prefix
-    # column to a single value. The vector search will be conducted within each
-    # span independently.
-    PrefixConstraint Constraint
 
     # TargetNeighborCount is the number of nearest neighbors to search for.
     # The set of candidates returning will generally be larger than this number.
     TargetNeighborCount int64
 }
 
-# VectorPartitionSearch is used to determine the vector-index partition that
-# contains (or should contain) each vector from the input. It is used in the
-# input of mutation operators. It always produces exactly one row for each
-# input row, containing the partition key and optionally the centroid of the
-# partition. If the input query vector is NULL, no vector search is performed,
-# and the projected output columns are NULL.
+# VectorMutationSearch is used to determine the vector-index partition that
+# contains (or should contain) each vector from the input. It can also produce
+# the quantized and encoded vector for insertion into the index.
+#
+# VectorMutationSearch is used in the input of mutation operators. It always
+# produces exactly one output row for each input row, containing the partition
+# key and optionally (for INSERT/UPSERT/UPDATE) the quantized and encoded
+# vector. If the input query vector is NULL, no vector search is performed, and
+# the projected output columns are NULL.
+#
+# For DELETE operations, the primary key columns are used to constrain the
+# search to a specific row. In rare cases it is possible not to find the
+# requested row, in which case the output partition key will be NULL.
 [Relational]
-define VectorPartitionSearch {
+define VectorMutationSearch {
     Input RelExpr
-    _ VectorPartitionSearchPrivate
+    _ VectorMutationSearchPrivate
 }
 
 [Private]
-define VectorPartitionSearchPrivate {
+define VectorMutationSearchPrivate {
     # Table identifies the table to perform the search in.
     Table TableID
 
@@ -1493,24 +1502,31 @@ define VectorPartitionSearchPrivate {
     PrefixKeyCols ColList
 
     # QueryVectorCol is the input column that contains the query vectors.
-    # When the query vector is NULL, the partition and centroid output columns
-    # will be NULL.
+    # When the query vector is NULL, the partition and quantized vector output
+    # columns will be NULL.
     QueryVectorCol ColumnID
 
-    # PrimaryKeyCols is the optional set of input columns used to constrain
+    # SuffixKeyCols is the optional list of input columns used to constrain
     # the search to a specific row. This is used for deletion from the index.
     # In rare cases it is possible not to find the requested row, in which case
     # the partition key will be NULL.
-    PrimaryKeyCols ColSet
+    #
+    # If it is set, SuffixKeyCols must contain every primary key column that is
+    # not part of PrefixKeyCols.
+    SuffixKeyCols ColList
 
     # PartitionCol is the output column that contains the partition key for each
     # vector. It is always set.
     PartitionCol ColumnID
 
-    # CentroidCol is the output column that contains the centroid of the
-    # partition. It is only set for inserts into the index (including those
-    # performed for a SQL UPDATE or UPSERT).
-    CentroidCol ColumnID
+    # QuantizedVectorCol is the output column that contains the quantized and
+    # encoded form of the vector, which will be inserted as a value into the
+    # index. It is only set for inserts into the index.
+    QuantizedVectorCol ColumnID
+
+    # IsIndexPut if the vector index search is being conducted to prepare an
+    # index PUT operation. Otherwise, it is an index DELETE operation.
+    IsIndexPut bool
 }
 
 # Barrier is a relational operator that simply passes through its input columns

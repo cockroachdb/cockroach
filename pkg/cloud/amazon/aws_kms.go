@@ -206,7 +206,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				}
 			})
 			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			cfg.Credentials = intermediateCreds
+			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds)
 		}
 
 		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
@@ -215,7 +215,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			}
 		})
 		creds := stscreds.NewAssumeRoleProvider(client, kmsURIParams.roleProvider.roleARN, withExternalID(kmsURIParams.roleProvider.externalID))
-		cfg.Credentials = creds
+		cfg.Credentials = aws.NewCredentialsCache(creds)
 	}
 
 	reuse := reuseKMSSession.Get(&env.ClusterSettings().SV)

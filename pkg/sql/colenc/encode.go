@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -51,6 +53,8 @@ type BatchEncoder struct {
 	// Cache of lastColID to support column delta encoding.
 	lastColIDs []catid.ColumnID
 
+	useCPutsOnNonUniqueIndexes bool
+
 	// Slice of keys we can reuse across each call to Prepare and between each
 	// column family.
 	keys []roachpb.Key
@@ -75,6 +79,7 @@ type BatchEncoder struct {
 func MakeEncoder(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
 	b coldata.Batch,
 	insCols []catalog.Column,
@@ -82,11 +87,17 @@ func MakeEncoder(
 	partialIndexes map[descpb.IndexID][]bool,
 	memoryUsageCheck func() error,
 ) BatchEncoder {
-	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sv, false /*internal*/, metrics)
+	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
 	rh.Init()
 	colMap := row.ColIDtoRowIndexFromCols(insCols)
-	return BatchEncoder{rh: &rh, b: b, colMap: colMap,
-		partialIndexes: partialIndexes, memoryUsageCheck: memoryUsageCheck}
+	return BatchEncoder{
+		rh:                         &rh,
+		b:                          b,
+		colMap:                     colMap,
+		partialIndexes:             partialIndexes,
+		useCPutsOnNonUniqueIndexes: sd.UseCPutsOnNonUniqueIndexes,
+		memoryUsageCheck:           memoryUsageCheck,
+	}
 }
 
 // PrepareBatch encodes a subset of rows from the batch to the given row.Putter.
@@ -427,10 +438,15 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 
 	// Store nulls we encounter so we can properly make the key unique below.
 	var nulls coldata.Nulls
-	if ind.GetType() == descpb.IndexDescriptor_INVERTED {
+	if ind.GetType() == idxtype.INVERTED {
 		// Since the inverted indexes generate multiple keys per row just handle them
 		// separately.
 		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
+	} else if ind.GetType() == idxtype.VECTOR {
+		// TODO(mw5h, drewk): Implement encoding for vector indexes. This is complicated
+		// by vector indexes needing output from the mutation search operator, which will
+		// need to be plumbed through to the encoder.
+		return errors.AssertionFailedf("vector indexes not supported")
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
@@ -494,7 +510,11 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 	if err := b.writeColumnValues(kys, values, ind, cols); err != nil {
 		return err
 	}
-	b.p.CPutBytesEmpty(kys, values)
+	if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
+		b.p.CPutBytesEmpty(kys, values)
+	} else {
+		b.p.PutBytes(kys, values)
+	}
 	return nil
 }
 
@@ -556,9 +576,17 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 		// include encoded primary key columns. For other families,
 		// use the tuple encoding for the value.
 		if familyID == 0 {
-			b.p.CPutBytesEmpty(kys, values)
+			if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
+				b.p.CPutBytesEmpty(kys, values)
+			} else {
+				b.p.PutBytes(kys, values)
+			}
 		} else {
-			b.p.CPutTuplesEmpty(kys, values)
+			if ind.IsUnique() || b.useCPutsOnNonUniqueIndexes {
+				b.p.CPutTuplesEmpty(kys, values)
+			} else {
+				b.p.PutTuples(kys, values)
+			}
 		}
 		if err := b.checkMemory(); err != nil {
 			return err

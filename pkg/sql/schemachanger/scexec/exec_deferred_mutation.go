@@ -132,7 +132,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		DescriptorIDs: descriptorIDs.Ordered(),
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
-		RunningStatus: jobs.RunningStatus(runningStatus),
+		StatusMessage: jobs.StatusMessage(runningStatus),
 		NonCancelable: isNonCancelable,
 	}
 	return rec
@@ -243,7 +243,7 @@ func manageJobs(
 		) error {
 			s := schemaChangeJobUpdateState{md: md}
 			defer s.doUpdate(updateProgress, updatePayload)
-			s.updatedProgress().RunningStatus = update.runningStatus
+			s.updatedProgress().StatusMessage = update.runningStatus
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				s.updatedPayload().Noncancelable = true
 			}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -50,7 +51,7 @@ func runAddDatabase(
 		withOpts += " CONNECTION LIMIT = -1"
 	}
 	if rng.Float64() < 0.5 {
-		roleName := pickRandomRole(ctx, o, conn)
+		roleName := helpers.PickRandomRole(ctx, o, conn)
 		withOpts += fmt.Sprintf(" OWNER = %s", roleName)
 	}
 	// TODO(jaylim-crl): Consider creating a multi-region database in the future.

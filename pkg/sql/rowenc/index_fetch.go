@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -72,7 +73,7 @@ func InitIndexFetchSpec(
 	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
-	if index.GetType() == descpb.IndexDescriptor_INVERTED {
+	if index.GetType() == idxtype.INVERTED {
 		invertedColumnID = index.InvertedColumnID()
 	}
 

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1642,9 +1643,10 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Unique {
 		title = append(title, pretty.Keyword("UNIQUE"))
 	}
-	if node.Inverted {
+	switch node.Type {
+	case idxtype.INVERTED:
 		title = append(title, pretty.Keyword("INVERTED"))
-	} else if node.Vector {
+	case idxtype.VECTOR:
 		title = append(title, pretty.Keyword("VECTOR"))
 	}
 	title = append(title, pretty.Keyword("INDEX"))
@@ -1737,9 +1739,10 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Name != "" {
 		title = pretty.ConcatSpace(title, p.Doc(&node.Name))
 	}
-	if node.Inverted {
+	switch node.Type {
+	case idxtype.INVERTED:
 		title = pretty.ConcatSpace(pretty.Keyword("INVERTED"), title)
-	} else if node.Vector {
+	case idxtype.VECTOR:
 		title = pretty.ConcatSpace(pretty.Keyword("VECTOR"), title)
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))

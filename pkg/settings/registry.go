@@ -254,6 +254,18 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kv.bulkio.write_metadata_sst.enabled":                       {},
 	"jobs.execution_errors.max_entries":                          {},
 	"jobs.execution_errors.max_entry_size":                       {},
+	"sql.metrics.statement_details.plan_collection.enabled":      {},
+	"sql.metrics.statement_details.plan_collection.period":       {},
+
+	// removed as of 25.2
+	"kv.snapshot_receiver.excise.enabled":                    {},
+	"sql.catalog.experimental_use_session_based_leasing":     {},
+	"bulkio.backup.merge_file_buffer_size":                   {},
+	"changefeed.new_webhook_sink_enabled":                    {},
+	"changefeed.new_webhook_sink.enabled":                    {},
+	"changefeed.new_pubsub_sink_enabled":                     {},
+	"changefeed.new_pubsub_sink.enabled":                     {},
+	"logical_replication.consumer.use_implicit_txns.enabled": {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults

@@ -1,0 +1,2826 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out --label=/mnt/data1/postgres/src/test/regress/results/create_view.out /mnt/data1/postgres/src/test/regress/expected/create_view.out /mnt/data1/postgres/src/test/regress/results/create_view.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_view.out
++++ /mnt/data1/postgres/src/test/regress/results/create_view.out
+@@ -5,127 +5,218 @@
+ --
+ -- directory paths and dlsuffix are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ \getenv libdir PG_LIBDIR
++invalid command \getenv
+ \getenv dlsuffix PG_DLSUFFIX
++invalid command \getenv
+ \set regresslib :libdir '/regress' :dlsuffix
+ CREATE FUNCTION interpt_pp(path, path)
+     RETURNS point
+     AS :'regresslib'
+     LANGUAGE C STRICT;
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION interpt_pp(path, path)
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ CREATE TABLE real_city (
+ 	pop			int4,
+ 	cname		text,
+ 	outline 	path
+ );
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE real_city (
++	pop			int4,
++	cname		text,
++	outline 	path
++)
++^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ \set filename :abs_srcdir '/data/real_city.data'
+ COPY real_city FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/real_city.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY real_city FROM ':abs_srcdir/data/real_city.data'
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ANALYZE real_city;
++ERROR:  relation "real_city" does not exist
+ SELECT *
+    INTO TABLE ramp
+    FROM ONLY road
+    WHERE name ~ '.*Ramp';
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++SELECT *
++   INTO TABLE ramp
++   ^
+ CREATE VIEW street AS
+    SELECT r.name, r.thepath, c.cname AS cname
+    FROM ONLY road r, real_city c
+    WHERE c.outline ?# r.thepath;
++ERROR:  at or near "#": syntax error
++DETAIL:  source SQL:
++CREATE VIEW street AS
++   SELECT r.name, r.thepath, c.cname AS cname
++   FROM ONLY road r, real_city c
++   WHERE c.outline ?# r.thepath
++                    ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW iexit AS
+    SELECT ih.name, ih.thepath,
+ 	interpt_pp(ih.thepath, r.thepath) AS exit
+    FROM ihighway ih, ramp r
+    WHERE ih.thepath ?# r.thepath;
++ERROR:  at or near "#": syntax error
++DETAIL:  source SQL:
++CREATE VIEW iexit AS
++   SELECT ih.name, ih.thepath,
++	interpt_pp(ih.thepath, r.thepath) AS exit
++   FROM ihighway ih, ramp r
++   WHERE ih.thepath ?# r.thepath
++                     ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW toyemp AS
+    SELECT name, age, location, 12*salary AS annualsal
+    FROM emp;
++ERROR:  relation "emp" does not exist
+ -- Test comments
+ COMMENT ON VIEW noview IS 'no view';
+-ERROR:  relation "noview" does not exist
++ERROR:  at or near "view": syntax error
++DETAIL:  source SQL:
++COMMENT ON VIEW noview IS 'no view'
++           ^
+ COMMENT ON VIEW toyemp IS 'is a view';
++ERROR:  at or near "view": syntax error
++DETAIL:  source SQL:
++COMMENT ON VIEW toyemp IS 'is a view'
++           ^
+ COMMENT ON VIEW toyemp IS NULL;
++ERROR:  at or near "view": syntax error
++DETAIL:  source SQL:
++COMMENT ON VIEW toyemp IS NULL
++           ^
+ -- These views are left around mainly to exercise special cases in pg_dump.
+ CREATE TABLE view_base_table (key int PRIMARY KEY, data varchar(20));
+ CREATE VIEW key_dependent_view AS
+    SELECT * FROM view_base_table GROUP BY key;
+ ALTER TABLE view_base_table DROP CONSTRAINT view_base_table_pkey;  -- fails
+-ERROR:  cannot drop constraint view_base_table_pkey on table view_base_table because other objects depend on it
+-DETAIL:  view key_dependent_view depends on constraint view_base_table_pkey on table view_base_table
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "view_base_table" (325): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ CREATE VIEW key_dependent_view_no_cols AS
+    SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0;
++ERROR:  relation "key_dependent_view_no_cols" (327): table must contain at least 1 column
+ --
+ -- CREATE OR REPLACE VIEW
+ --
+ CREATE TABLE viewtest_tbl (a int, b int, c numeric(10,1), d text COLLATE "C");
++ERROR:  at or near ")": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE viewtest_tbl (a int, b int, c numeric(10,1), d text COLLATE "C")
++                                                                            ^
+ COPY viewtest_tbl FROM stdin;
++ERROR:  relation "viewtest_tbl" does not exist
++5	10	1.1	xy
++10	15	2.2	xyz
++15	20	3.3	xyzz
++20	25	4.4	xyzzy
++\.
++invalid command \.
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT * FROM viewtest_tbl;
++ERROR:  at or near "5": syntax error
++DETAIL:  source SQL:
++5	10	1.1	xy
++^
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT * FROM viewtest_tbl WHERE a > 10;
++ERROR:  relation "viewtest_tbl" does not exist
+ SELECT * FROM viewtest;
+- a  | b  |  c  |   d   
+-----+----+-----+-------
+- 15 | 20 | 3.3 | xyzz
+- 20 | 25 | 4.4 | xyzzy
+-(2 rows)
+-
++ERROR:  relation "viewtest" does not exist
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a, b, c, d FROM viewtest_tbl WHERE a > 5 ORDER BY b DESC;
++ERROR:  relation "viewtest_tbl" does not exist
+ SELECT * FROM viewtest;
+- a  | b  |  c  |   d   
+-----+----+-----+-------
+- 20 | 25 | 4.4 | xyzzy
+- 15 | 20 | 3.3 | xyzz
+- 10 | 15 | 2.2 | xyz
+-(3 rows)
+-
++ERROR:  relation "viewtest" does not exist
+ -- should fail
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a FROM viewtest_tbl WHERE a <> 20;
+-ERROR:  cannot drop columns from view
++ERROR:  relation "viewtest_tbl" does not exist
+ -- should fail
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT 1, * FROM viewtest_tbl;
+-ERROR:  cannot change name of view column "a" to "?column?"
+-HINT:  Use ALTER VIEW ... RENAME COLUMN ... to change name of view column instead.
++ERROR:  relation "viewtest_tbl" does not exist
+ -- should fail
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a, b::numeric, c, d FROM viewtest_tbl;
+-ERROR:  cannot change data type of view column "b" from integer to numeric
++ERROR:  relation "viewtest_tbl" does not exist
+ -- should fail
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a, b, c::numeric(10,2), d FROM viewtest_tbl;
+-ERROR:  cannot change data type of view column "c" from numeric(10,1) to numeric(10,2)
++ERROR:  relation "viewtest_tbl" does not exist
+ -- should fail
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a, b, c, d COLLATE "POSIX" FROM viewtest_tbl;
+-ERROR:  cannot change collation of view column "d" from "C" to "POSIX"
++ERROR:  relation "viewtest_tbl" does not exist
+ -- should work
+ CREATE OR REPLACE VIEW viewtest AS
+ 	SELECT a, b, c, d, 0 AS e FROM viewtest_tbl;
++ERROR:  relation "viewtest_tbl" does not exist
+ DROP VIEW viewtest;
++ERROR:  relation "viewtest" does not exist
+ DROP TABLE viewtest_tbl;
++ERROR:  relation "viewtest_tbl" does not exist
+ -- tests for temporary views
+ CREATE SCHEMA temp_view_test
+     CREATE TABLE base_table (a int, id int)
+     CREATE TABLE base_table2 (a int, id int);
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA temp_view_test
++    CREATE TABLE base_table (a int, id int)
++    ^
+ SET search_path TO temp_view_test, public;
+ CREATE TEMPORARY TABLE temp_table (a int, id int);
+ -- should be created in temp_view_test schema
+ CREATE VIEW v1 AS SELECT * FROM base_table;
++ERROR:  relation "base_table" does not exist
+ -- should be created in temp object schema
+ CREATE VIEW v1_temp AS SELECT * FROM temp_table;
+ NOTICE:  view "v1_temp" will be a temporary view
+ -- should be created in temp object schema
+ CREATE TEMP VIEW v2_temp AS SELECT * FROM base_table;
++ERROR:  relation "base_table" does not exist
+ -- should be created in temp_views schema
+ CREATE VIEW temp_view_test.v2 AS SELECT * FROM base_table;
++ERROR:  cannot create "temp_view_test.v2" because the target database or schema does not exist
++HINT:  verify that the current database and search_path are valid and/or the target database exists
+ -- should fail
+ CREATE VIEW temp_view_test.v3_temp AS SELECT * FROM temp_table;
+-NOTICE:  view "v3_temp" will be a temporary view
+-ERROR:  cannot create temporary relation in non-temporary schema
++ERROR:  cannot create "temp_view_test.v3_temp" because the target database or schema does not exist
++HINT:  verify that the current database and search_path are valid and/or the target database exists
+ -- should fail
+ CREATE SCHEMA test_view_schema
+     CREATE TEMP VIEW testview AS SELECT 1;
+-ERROR:  cannot create temporary relation in non-temporary schema
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA test_view_schema
++    CREATE TEMP VIEW testview AS SELECT 1
++    ^
+ -- joins: if any of the join relations are temporary, the view
+ -- should also be temporary
+ -- should be non-temp
+@@ -133,39 +224,45 @@
+     SELECT t1.a AS t1_a, t2.a AS t2_a
+     FROM base_table t1, base_table2 t2
+     WHERE t1.id = t2.id;
++ERROR:  relation "base_table" does not exist
+ -- should be temp (one join rel is temp)
+ CREATE VIEW v4_temp AS
+     SELECT t1.a AS t1_a, t2.a AS t2_a
+     FROM base_table t1, temp_table t2
+     WHERE t1.id = t2.id;
+-NOTICE:  view "v4_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ -- should be temp
+ CREATE VIEW v5_temp AS
+     SELECT t1.a AS t1_a, t2.a AS t2_a, t3.a AS t3_a
+     FROM base_table t1, base_table2 t2, temp_table t3
+     WHERE t1.id = t2.id and t2.id = t3.id;
+-NOTICE:  view "v5_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ -- subqueries
+ CREATE VIEW v4 AS SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2);
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v5 AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2;
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v6 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2);
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v7 AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2);
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v8 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1);
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v6_temp AS SELECT * FROM base_table WHERE id IN (SELECT id FROM temp_table);
+-NOTICE:  view "v6_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v7_temp AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM temp_table) t2;
+-NOTICE:  view "v7_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v8_temp AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM temp_table);
+-NOTICE:  view "v8_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v9_temp AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM temp_table);
+-NOTICE:  view "v9_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ -- a view should also be temporary if it references a temporary view
+ CREATE VIEW v10_temp AS SELECT * FROM v7_temp;
+-NOTICE:  view "v10_temp" will be a temporary view
++ERROR:  relation "v7_temp" does not exist
+ CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2;
+-NOTICE:  view "v11_temp" will be a temporary view
++ERROR:  relation "base_table" does not exist
+ CREATE VIEW v12_temp AS SELECT true FROM v11_temp;
+-NOTICE:  view "v12_temp" will be a temporary view
++ERROR:  relation "v11_temp" does not exist
+ -- a view should also be temporary if it references a temporary sequence
+ CREATE SEQUENCE seq1;
+ CREATE TEMPORARY SEQUENCE seq1_temp;
+@@ -178,16 +275,7 @@
+     ORDER BY relname;
+  relname 
+ ---------
+- v1
+- v2
+- v3
+- v4
+- v5
+- v6
+- v7
+- v8
+- v9
+-(9 rows)
++(0 rows)
+ 
+ SELECT relname FROM pg_class
+     WHERE relname LIKE 'v%'
+@@ -195,19 +283,9 @@
+     ORDER BY relname;
+  relname  
+ ----------
+- v10_temp
+- v11_temp
+- v12_temp
+  v13_temp
+  v1_temp
+- v2_temp
+- v4_temp
+- v5_temp
+- v6_temp
+- v7_temp
+- v8_temp
+- v9_temp
+-(12 rows)
++(2 rows)
+ 
+ CREATE SCHEMA testviewschm2;
+ SET search_path TO testviewschm2, public;
+@@ -286,99 +364,132 @@
+        AS SELECT * FROM tbl1 WHERE a = 0;
+ CREATE VIEW mysecview2 WITH (security_barrier=true)
+        AS SELECT * FROM tbl1 WHERE a > 0;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview2 WITH (security_barrier=true)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview3 WITH (security_barrier=false)
+        AS SELECT * FROM tbl1 WHERE a < 0;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview3 WITH (security_barrier=false)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview4 WITH (security_barrier)
+        AS SELECT * FROM tbl1 WHERE a <> 0;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview4 WITH (security_barrier)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview5 WITH (security_barrier=100)	-- Error
+        AS SELECT * FROM tbl1 WHERE a > 100;
+-ERROR:  invalid value for boolean option "security_barrier": 100
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview5 WITH (security_barrier=100)	
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview6 WITH (invalid_option)		-- Error
+        AS SELECT * FROM tbl1 WHERE a < 100;
+-ERROR:  unrecognized parameter "invalid_option"
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview6 WITH (invalid_option)		
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview7 WITH (security_invoker=true)
+        AS SELECT * FROM tbl1 WHERE a = 100;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview7 WITH (security_invoker=true)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview8 WITH (security_invoker=false, security_barrier=true)
+        AS SELECT * FROM tbl1 WHERE a > 100;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview8 WITH (security_invoker=false, security_barrier=true)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview9 WITH (security_invoker)
+        AS SELECT * FROM tbl1 WHERE a < 100;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview9 WITH (security_invoker)
++                       ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW mysecview10 WITH (security_invoker=100)	-- Error
+        AS SELECT * FROM tbl1 WHERE a <> 100;
+-ERROR:  invalid value for boolean option "security_invoker": 100
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW mysecview10 WITH (security_invoker=100)	
++                        ^
++HINT:  try \h CREATE VIEW
+ SELECT relname, relkind, reloptions FROM pg_class
+        WHERE oid in ('mysecview1'::regclass, 'mysecview2'::regclass,
+                      'mysecview3'::regclass, 'mysecview4'::regclass,
+                      'mysecview7'::regclass, 'mysecview8'::regclass,
+                      'mysecview9'::regclass)
+        ORDER BY relname;
+-  relname   | relkind |                   reloptions                   
+-------------+---------+------------------------------------------------
+- mysecview1 | v       | 
+- mysecview2 | v       | {security_barrier=true}
+- mysecview3 | v       | {security_barrier=false}
+- mysecview4 | v       | {security_barrier=true}
+- mysecview7 | v       | {security_invoker=true}
+- mysecview8 | v       | {security_invoker=false,security_barrier=true}
+- mysecview9 | v       | {security_invoker=true}
+-(7 rows)
+-
++ERROR:  relation "mysecview2" does not exist
+ CREATE OR REPLACE VIEW mysecview1
+        AS SELECT * FROM tbl1 WHERE a = 256;
+ CREATE OR REPLACE VIEW mysecview2
+        AS SELECT * FROM tbl1 WHERE a > 256;
+ CREATE OR REPLACE VIEW mysecview3 WITH (security_barrier=true)
+        AS SELECT * FROM tbl1 WHERE a < 256;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW mysecview3 WITH (security_barrier=true)
++                                  ^
++HINT:  try \h CREATE
+ CREATE OR REPLACE VIEW mysecview4 WITH (security_barrier=false)
+        AS SELECT * FROM tbl1 WHERE a <> 256;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW mysecview4 WITH (security_barrier=false)
++                                  ^
++HINT:  try \h CREATE
+ CREATE OR REPLACE VIEW mysecview7
+        AS SELECT * FROM tbl1 WHERE a > 256;
+ CREATE OR REPLACE VIEW mysecview8 WITH (security_invoker=true)
+        AS SELECT * FROM tbl1 WHERE a < 256;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW mysecview8 WITH (security_invoker=true)
++                                  ^
++HINT:  try \h CREATE
+ CREATE OR REPLACE VIEW mysecview9 WITH (security_invoker=false, security_barrier=true)
+        AS SELECT * FROM tbl1 WHERE a <> 256;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW mysecview9 WITH (security_invoker=false, security_barrier=true)
++                                  ^
++HINT:  try \h CREATE
+ SELECT relname, relkind, reloptions FROM pg_class
+        WHERE oid in ('mysecview1'::regclass, 'mysecview2'::regclass,
+                      'mysecview3'::regclass, 'mysecview4'::regclass,
+                      'mysecview7'::regclass, 'mysecview8'::regclass,
+                      'mysecview9'::regclass)
+        ORDER BY relname;
+-  relname   | relkind |                   reloptions                   
+-------------+---------+------------------------------------------------
+- mysecview1 | v       | 
+- mysecview2 | v       | 
+- mysecview3 | v       | {security_barrier=true}
+- mysecview4 | v       | {security_barrier=false}
+- mysecview7 | v       | 
+- mysecview8 | v       | {security_invoker=true}
+- mysecview9 | v       | {security_invoker=false,security_barrier=true}
+-(7 rows)
+-
++ERROR:  relation "mysecview3" does not exist
+ -- Check that unknown literals are converted to "text" in CREATE VIEW,
+ -- so that we don't end up with unknown-type columns.
+ CREATE VIEW unspecified_types AS
+   SELECT 42 as i, 42.5 as num, 'foo' as u, 'foo'::unknown as u2, null as n;
++ERROR:  invalid cast: string -> unknown
+ \d+ unspecified_types
+-                   View "testviewschm2.unspecified_types"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- i      | integer |           |          |         | plain    | 
+- num    | numeric |           |          |         | main     | 
+- u      | text    |           |          |         | extended | 
+- u2     | text    |           |          |         | extended | 
+- n      | text    |           |          |         | extended | 
+-View definition:
+- SELECT 42 AS i,
+-    42.5 AS num,
+-    'foo'::text AS u,
+-    'foo'::text AS u2,
+-    NULL::text AS n;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(unspecified_types)$' COLLATE pg_catalog.default
++                                                                                 ^
+ SELECT * FROM unspecified_types;
+- i  | num  |  u  | u2  | n 
+-----+------+-----+-----+---
+- 42 | 42.5 | foo | foo | 
+-(1 row)
+-
++ERROR:  relation "unspecified_types" does not exist
+ -- This test checks that proper typmods are assigned in a multi-row VALUES
+ CREATE VIEW tt1 AS
+   SELECT * FROM (
+@@ -386,40 +497,29 @@
+        ('abc'::varchar(3), '0123456789', 42, 'abcd'::varchar(4)),
+        ('0123456789', 'abc'::varchar(3), 42.12, 'abc'::varchar(4))
+   ) vv(a,b,c,d);
++ERROR:  VALUES types decimal and int cannot be matched
+ \d+ tt1
+-                                View "testviewschm2.tt1"
+- Column |         Type         | Collation | Nullable | Default | Storage  | Description 
+---------+----------------------+-----------+----------+---------+----------+-------------
+- a      | character varying    |           |          |         | extended | 
+- b      | character varying    |           |          |         | extended | 
+- c      | numeric              |           |          |         | main     | 
+- d      | character varying(4) |           |          |         | extended | 
+-View definition:
+- SELECT a,
+-    b,
+-    c,
+-    d
+-   FROM ( VALUES ('abc'::character varying(3),'0123456789'::character varying,42,'abcd'::character varying(4)), ('0123456789'::character varying,'abc'::character varying(3),42.12,'abc'::character varying(4))) vv(a, b, c, d);
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tt1)$' COLLATE pg_catalog.default
++                                                                   ^
+ SELECT * FROM tt1;
+-     a      |     b      |   c   |  d   
+-------------+------------+-------+------
+- abc        | 0123456789 |    42 | abcd
+- 0123456789 | abc        | 42.12 | abc
+-(2 rows)
+-
++ERROR:  relation "tt1" does not exist
+ SELECT a::varchar(3) FROM tt1;
+-  a  
+------
+- abc
+- 012
+-(2 rows)
+-
++ERROR:  relation "tt1" does not exist
+ DROP VIEW tt1;
++ERROR:  relation "tt1" does not exist
+ -- Test view decompilation in the face of relation renaming conflicts
+ CREATE TABLE tt1 (f1 int, f2 int, f3 text);
+ CREATE TABLE tx1 (x1 int, x2 int, x3 text);
+ CREATE TABLE temp_view_test.tt1 (y1 int, f2 int, f3 text);
++ERROR:  cannot create "temp_view_test.tt1" because the target database or schema does not exist
++HINT:  verify that the current database and search_path are valid and/or the target database exists
+ CREATE VIEW aliased_view_1 AS
+   select * from tt1
+     where exists (select 1 from tx1 where tt1.f1 = tx1.x1);
+@@ -432,478 +532,307 @@
+ CREATE VIEW aliased_view_4 AS
+   select * from temp_view_test.tt1
+     where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1);
++ERROR:  relation "temp_view_test.tt1" does not exist
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tx1
+-          WHERE tt1.f1 = tx1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tx1
+-          WHERE a1.f1 = tx1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tx1 a2
+-          WHERE tt1.f1 = a2.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1 tt1_1
+-          WHERE tt1.y1 = tt1_1.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ ALTER TABLE tx1 RENAME TO a1;
++ERROR:  cannot rename relation "tx1" because view "aliased_view_1" depends on it
++HINT:  consider dropping "aliased_view_1" first.
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1
+-          WHERE tt1.f1 = a1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1 a1_1
+-          WHERE a1.f1 = a1_1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1 a2
+-          WHERE tt1.f1 = a2.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1 tt1_1
+-          WHERE tt1.y1 = tt1_1.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ ALTER TABLE tt1 RENAME TO a2;
++ERROR:  cannot rename relation "tt1" because view "aliased_view_1" depends on it
++HINT:  consider dropping "aliased_view_1" first.
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1
+-          WHERE a2.f1 = a1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1 a1_1
+-          WHERE a1.f1 = a1_1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a1 a2_1
+-          WHERE a2.f1 = a2_1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a2
+-          WHERE tt1.y1 = a2.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ ALTER TABLE a1 RENAME TO tt1;
++ERROR:  relation "a1" does not exist
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE a2.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE a1.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM a2
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1 a2_1
+-          WHERE a2.f1 = a2_1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM a2
+-          WHERE tt1.y1 = a2.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ ALTER TABLE a2 RENAME TO tx1;
++ERROR:  relation "a2" does not exist
+ ALTER TABLE tx1 SET SCHEMA temp_view_test;
++ERROR:  cannot set schema on relation "tx1" because view "aliased_view_1" depends on it
++HINT:  consider dropping "aliased_view_1" first.
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE tx1.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE a1.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1 a2
+-          WHERE tx1.f1 = a2.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tt1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM temp_view_test.tx1
+-          WHERE tt1.y1 = tx1.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ ALTER TABLE temp_view_test.tt1 RENAME TO tmp1;
++ERROR:  relation "temp_view_test.tt1" does not exist
+ ALTER TABLE temp_view_test.tmp1 SET SCHEMA testviewschm2;
++ERROR:  relation "temp_view_test.tmp1" does not exist
+ ALTER TABLE tmp1 RENAME TO tx1;
++ERROR:  relation "tmp1" does not exist
+ \d+ aliased_view_1
+-                    View "testviewschm2.aliased_view_1"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE tx1.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_2
+-                    View "testviewschm2.aliased_view_2"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1 a1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1
+-          WHERE a1.f1 = tt1.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_3
+-                    View "testviewschm2.aliased_view_3"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- f1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f2,
+-    f3
+-   FROM temp_view_test.tx1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM tt1 a2
+-          WHERE tx1.f1 = a2.x1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d+ aliased_view_4
+-                    View "testviewschm2.aliased_view_4"
+- Column |  Type   | Collation | Nullable | Default | Storage  | Description 
+---------+---------+-----------+----------+---------+----------+-------------
+- y1     | integer |           |          |         | plain    | 
+- f2     | integer |           |          |         | plain    | 
+- f3     | text    |           |          |         | extended | 
+-View definition:
+- SELECT y1,
+-    f2,
+-    f3
+-   FROM tx1
+-  WHERE (EXISTS ( SELECT 1
+-           FROM temp_view_test.tx1 tx1_1
+-          WHERE tx1.y1 = tx1_1.f1));
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
++                                                                              ^
+ -- Test aliasing of joins
+ create view view_of_joins as
+ select * from
+   (select * from (tbl1 cross join tbl2) same) ss,
+   (tbl3 cross join tbl4) same;
+ \d+ view_of_joins
+-                    View "testviewschm2.view_of_joins"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+- b      | integer |           |          |         | plain   | 
+- c      | integer |           |          |         | plain   | 
+- d      | integer |           |          |         | plain   | 
+- e      | integer |           |          |         | plain   | 
+- f      | integer |           |          |         | plain   | 
+- g      | integer |           |          |         | plain   | 
+- h      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT ss.a,
+-    ss.b,
+-    ss.c,
+-    ss.d,
+-    same.e,
+-    same.f,
+-    same.g,
+-    same.h
+-   FROM ( SELECT same_1.a,
+-            same_1.b,
+-            same_1.c,
+-            same_1.d
+-           FROM (tbl1
+-             CROSS JOIN tbl2) same_1) ss,
+-    (tbl3
+-     CROSS JOIN tbl4) same;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(view_of_joins)$' COLLATE pg_catalog.default
++                                                                             ^
+ create table tbl1a (a int, c int);
+ create view view_of_joins_2a as select * from tbl1 join tbl1a using (a);
+ create view view_of_joins_2b as select * from tbl1 join tbl1a using (a) as x;
++ERROR:  at or near "as": syntax error
++DETAIL:  source SQL:
++create view view_of_joins_2b as select * from tbl1 join tbl1a using (a) as x
++                                                                        ^
+ create view view_of_joins_2c as select * from (tbl1 join tbl1a using (a)) as y;
+ create view view_of_joins_2d as select * from (tbl1 join tbl1a using (a) as x) as y;
++ERROR:  at or near "as": syntax error
++DETAIL:  source SQL:
++create view view_of_joins_2d as select * from (tbl1 join tbl1a using (a) as x) as y
++                                                                         ^
++HINT:  try \h <SOURCE>
+ select pg_get_viewdef('view_of_joins_2a', true);
+-       pg_get_viewdef       
+-----------------------------
+-  SELECT tbl1.a,           +
+-     tbl1.b,               +
+-     tbl1a.c               +
+-    FROM tbl1              +
+-      JOIN tbl1a USING (a);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('view_of_joins_2b', true);
+-         pg_get_viewdef          
+----------------------------------
+-  SELECT tbl1.a,                +
+-     tbl1.b,                    +
+-     tbl1a.c                    +
+-    FROM tbl1                   +
+-      JOIN tbl1a USING (a) AS x;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('view_of_joins_2c', true);
+-        pg_get_viewdef         
+--------------------------------
+-  SELECT y.a,                 +
+-     y.b,                     +
+-     y.c                      +
+-    FROM (tbl1                +
+-      JOIN tbl1a USING (a)) y;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('view_of_joins_2d', true);
+-           pg_get_viewdef           
+-------------------------------------
+-  SELECT y.a,                      +
+-     y.b,                          +
+-     y.c                           +
+-    FROM (tbl1                     +
+-      JOIN tbl1a USING (a) AS x) y;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Test view decompilation in the face of column addition/deletion/renaming
+ create table tt2 (a int, b int, c int);
+ create table tt3 (ax int8, b int2, c numeric);
+@@ -914,404 +843,120 @@
+ create view v2a as select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j;
+ create view v3 as select * from tt2 join tt3 using (b,c) full join tt4 using (b);
+ select pg_get_viewdef('v1', true);
+-       pg_get_viewdef        
+------------------------------
+-  SELECT tt2.b,             +
+-     tt3.c,                 +
+-     tt2.a,                 +
+-     tt3.ax                 +
+-    FROM tt2                +
+-      JOIN tt3 USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v1a', true);
+-         pg_get_viewdef         
+---------------------------------
+-  SELECT j.b,                  +
+-     j.c,                      +
+-     j.a,                      +
+-     j.ax                      +
+-    FROM (tt2                  +
+-      JOIN tt3 USING (b, c)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2', true);
+-       pg_get_viewdef       
+-----------------------------
+-  SELECT tt2.b,            +
+-     tt3.c,                +
+-     tt2.a,                +
+-     tt3.ax,               +
+-     tt4.ay,               +
+-     tt4.q                 +
+-    FROM tt2               +
+-      JOIN tt3 USING (b, c)+
+-      JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2a', true);
+-       pg_get_viewdef        
+------------------------------
+-  SELECT j.b,               +
+-     j.c,                   +
+-     j.a,                   +
+-     j.ax,                  +
+-     j.ay,                  +
+-     j.q                    +
+-    FROM (tt2               +
+-      JOIN tt3 USING (b, c) +
+-      JOIN tt4 USING (b)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v3', true);
+-        pg_get_viewdef         
+--------------------------------
+-  SELECT b,                   +
+-     tt3.c,                   +
+-     tt2.a,                   +
+-     tt3.ax,                  +
+-     tt4.ay,                  +
+-     tt4.q                    +
+-    FROM tt2                  +
+-      JOIN tt3 USING (b, c)   +
+-      FULL JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt2 add column d int;
+ alter table tt2 add column e int;
+ select pg_get_viewdef('v1', true);
+-       pg_get_viewdef        
+------------------------------
+-  SELECT tt2.b,             +
+-     tt3.c,                 +
+-     tt2.a,                 +
+-     tt3.ax                 +
+-    FROM tt2                +
+-      JOIN tt3 USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v1a', true);
+-         pg_get_viewdef         
+---------------------------------
+-  SELECT j.b,                  +
+-     j.c,                      +
+-     j.a,                      +
+-     j.ax                      +
+-    FROM (tt2                  +
+-      JOIN tt3 USING (b, c)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2', true);
+-       pg_get_viewdef       
+-----------------------------
+-  SELECT tt2.b,            +
+-     tt3.c,                +
+-     tt2.a,                +
+-     tt3.ax,               +
+-     tt4.ay,               +
+-     tt4.q                 +
+-    FROM tt2               +
+-      JOIN tt3 USING (b, c)+
+-      JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2a', true);
+-       pg_get_viewdef        
+------------------------------
+-  SELECT j.b,               +
+-     j.c,                   +
+-     j.a,                   +
+-     j.ax,                  +
+-     j.ay,                  +
+-     j.q                    +
+-    FROM (tt2               +
+-      JOIN tt3 USING (b, c) +
+-      JOIN tt4 USING (b)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v3', true);
+-        pg_get_viewdef         
+--------------------------------
+-  SELECT b,                   +
+-     tt3.c,                   +
+-     tt2.a,                   +
+-     tt3.ax,                  +
+-     tt4.ay,                  +
+-     tt4.q                    +
+-    FROM tt2                  +
+-      JOIN tt3 USING (b, c)   +
+-      FULL JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt3 rename c to d;
++ERROR:  cannot rename column "c" because view "v1" depends on it
++HINT:  consider dropping "v1" first.
+ select pg_get_viewdef('v1', true);
+-              pg_get_viewdef               
+--------------------------------------------
+-  SELECT tt2.b,                           +
+-     tt3.c,                               +
+-     tt2.a,                               +
+-     tt3.ax                               +
+-    FROM tt2                              +
+-      JOIN tt3 tt3(ax, b, c) USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v1a', true);
+-                pg_get_viewdef                
+-----------------------------------------------
+-  SELECT j.b,                                +
+-     j.c,                                    +
+-     j.a,                                    +
+-     j.ax                                    +
+-    FROM (tt2                                +
+-      JOIN tt3 tt3(ax, b, c) USING (b, c)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2', true);
+-              pg_get_viewdef              
+-------------------------------------------
+-  SELECT tt2.b,                          +
+-     tt3.c,                              +
+-     tt2.a,                              +
+-     tt3.ax,                             +
+-     tt4.ay,                             +
+-     tt4.q                               +
+-    FROM tt2                             +
+-      JOIN tt3 tt3(ax, b, c) USING (b, c)+
+-      JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2a', true);
+-              pg_get_viewdef              
+-------------------------------------------
+-  SELECT j.b,                            +
+-     j.c,                                +
+-     j.a,                                +
+-     j.ax,                               +
+-     j.ay,                               +
+-     j.q                                 +
+-    FROM (tt2                            +
+-      JOIN tt3 tt3(ax, b, c) USING (b, c)+
+-      JOIN tt4 USING (b)) j;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v3', true);
+-              pg_get_viewdef              
+-------------------------------------------
+-  SELECT b,                              +
+-     tt3.c,                              +
+-     tt2.a,                              +
+-     tt3.ax,                             +
+-     tt4.ay,                             +
+-     tt4.q                               +
+-    FROM tt2                             +
+-      JOIN tt3 tt3(ax, b, c) USING (b, c)+
+-      FULL JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt3 add column c int;
++ERROR:  column "c" of relation "tt3" already exists
+ alter table tt3 add column e int;
+ select pg_get_viewdef('v1', true);
+-                  pg_get_viewdef                   
+----------------------------------------------------
+-  SELECT tt2.b,                                   +
+-     tt3.c,                                       +
+-     tt2.a,                                       +
+-     tt3.ax                                       +
+-    FROM tt2                                      +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v1a', true);
+-                                  pg_get_viewdef                                   
+------------------------------------------------------------------------------------
+-  SELECT j.b,                                                                     +
+-     j.c,                                                                         +
+-     j.a,                                                                         +
+-     j.ax                                                                         +
+-    FROM (tt2                                                                     +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)) j(b, c, a, d, e, ax, c_1, e_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2', true);
+-                  pg_get_viewdef                  
+---------------------------------------------------
+-  SELECT tt2.b,                                  +
+-     tt3.c,                                      +
+-     tt2.a,                                      +
+-     tt3.ax,                                     +
+-     tt4.ay,                                     +
+-     tt4.q                                       +
+-    FROM tt2                                     +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)+
+-      JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2a', true);
+-                         pg_get_viewdef                          
+------------------------------------------------------------------
+-  SELECT j.b,                                                   +
+-     j.c,                                                       +
+-     j.a,                                                       +
+-     j.ax,                                                      +
+-     j.ay,                                                      +
+-     j.q                                                        +
+-    FROM (tt2                                                   +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)               +
+-      JOIN tt4 USING (b)) j(b, c, a, d, e, ax, c_1, e_1, ay, q);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v3', true);
+-                  pg_get_viewdef                  
+---------------------------------------------------
+-  SELECT b,                                      +
+-     tt3.c,                                      +
+-     tt2.a,                                      +
+-     tt3.ax,                                     +
+-     tt4.ay,                                     +
+-     tt4.q                                       +
+-    FROM tt2                                     +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)+
+-      FULL JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt2 drop column d;
+ select pg_get_viewdef('v1', true);
+-                  pg_get_viewdef                   
+----------------------------------------------------
+-  SELECT tt2.b,                                   +
+-     tt3.c,                                       +
+-     tt2.a,                                       +
+-     tt3.ax                                       +
+-    FROM tt2                                      +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v1a', true);
+-                                 pg_get_viewdef                                 
+---------------------------------------------------------------------------------
+-  SELECT j.b,                                                                  +
+-     j.c,                                                                      +
+-     j.a,                                                                      +
+-     j.ax                                                                      +
+-    FROM (tt2                                                                  +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)) j(b, c, a, e, ax, c_1, e_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2', true);
+-                  pg_get_viewdef                  
+---------------------------------------------------
+-  SELECT tt2.b,                                  +
+-     tt3.c,                                      +
+-     tt2.a,                                      +
+-     tt3.ax,                                     +
+-     tt4.ay,                                     +
+-     tt4.q                                       +
+-    FROM tt2                                     +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)+
+-      JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v2a', true);
+-                        pg_get_viewdef                        
+---------------------------------------------------------------
+-  SELECT j.b,                                                +
+-     j.c,                                                    +
+-     j.a,                                                    +
+-     j.ax,                                                   +
+-     j.ay,                                                   +
+-     j.q                                                     +
+-    FROM (tt2                                                +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)            +
+-      JOIN tt4 USING (b)) j(b, c, a, e, ax, c_1, e_1, ay, q);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v3', true);
+-                  pg_get_viewdef                  
+---------------------------------------------------
+-  SELECT b,                                      +
+-     tt3.c,                                      +
+-     tt2.a,                                      +
+-     tt3.ax,                                     +
+-     tt4.ay,                                     +
+-     tt4.q                                       +
+-    FROM tt2                                     +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c)+
+-      FULL JOIN tt4 USING (b);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create table tt5 (a int, b int);
+ create table tt6 (c int, d int);
+ create view vv1 as select * from (tt5 cross join tt6) j(aa,bb,cc,dd);
+ select pg_get_viewdef('vv1', true);
+-             pg_get_viewdef              
+------------------------------------------
+-  SELECT j.aa,                          +
+-     j.bb,                              +
+-     j.cc,                              +
+-     j.dd                               +
+-    FROM (tt5                           +
+-      CROSS JOIN tt6) j(aa, bb, cc, dd);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt5 add column c int;
+ select pg_get_viewdef('vv1', true);
+-               pg_get_viewdef               
+---------------------------------------------
+-  SELECT j.aa,                             +
+-     j.bb,                                 +
+-     j.cc,                                 +
+-     j.dd                                  +
+-    FROM (tt5                              +
+-      CROSS JOIN tt6) j(aa, bb, c, cc, dd);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt5 add column cc int;
+ select pg_get_viewdef('vv1', true);
+-                  pg_get_viewdef                  
+---------------------------------------------------
+-  SELECT j.aa,                                   +
+-     j.bb,                                       +
+-     j.cc,                                       +
+-     j.dd                                        +
+-    FROM (tt5                                    +
+-      CROSS JOIN tt6) j(aa, bb, c, cc_1, cc, dd);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt5 drop column c;
+ select pg_get_viewdef('vv1', true);
+-                pg_get_viewdef                 
+------------------------------------------------
+-  SELECT j.aa,                                +
+-     j.bb,                                    +
+-     j.cc,                                    +
+-     j.dd                                     +
+-    FROM (tt5                                 +
+-      CROSS JOIN tt6) j(aa, bb, cc_1, cc, dd);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create view v4 as select * from v1;
+ alter view v1 rename column a to x;
++ERROR:  at or near "column": syntax error
++DETAIL:  source SQL:
++alter view v1 rename column a to x
++                     ^
++HINT:  try \h ALTER VIEW
+ select pg_get_viewdef('v1', true);
+-                  pg_get_viewdef                   
+----------------------------------------------------
+-  SELECT tt2.b,                                   +
+-     tt3.c,                                       +
+-     tt2.a AS x,                                  +
+-     tt3.ax                                       +
+-    FROM tt2                                      +
+-      JOIN tt3 tt3(ax, b, c, c_1, e) USING (b, c);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('v4', true);
+- pg_get_viewdef 
+-----------------
+-  SELECT b,    +
+-     c,        +
+-     x AS a,   +
+-     ax        +
+-    FROM v1;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Unnamed FULL JOIN USING is lots of fun too
+ create table tt7 (x int, xx int, y int);
+ alter table tt7 drop column xx;
+@@ -1321,25 +966,8 @@
+ union all
+ select * from tt7 full join tt8 using (x), tt8 tt8x;
+ select pg_get_viewdef('vv2', true);
+-                 pg_get_viewdef                 
+-------------------------------------------------
+-  SELECT v.a,                                  +
+-     v.b,                                      +
+-     v.c,                                      +
+-     v.d,                                      +
+-     v.e                                       +
+-    FROM ( VALUES (1,2,3,4,5)) v(a, b, c, d, e)+
+- UNION ALL                                     +
+-  SELECT x AS a,                               +
+-     tt7.y AS b,                               +
+-     tt8.z AS c,                               +
+-     tt8x.x_1 AS d,                            +
+-     tt8x.z AS e                               +
+-    FROM tt7                                   +
+-      FULL JOIN tt8 USING (x),                 +
+-     tt8 tt8x(x_1, z);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create view vv3 as
+ select * from (values(1,2,3,4,5,6)) v(a,b,c,x,e,f)
+ union all
+@@ -1347,28 +975,8 @@
+   tt7 full join tt8 using (x),
+   tt7 tt7x full join tt8 tt8x using (x);
+ select pg_get_viewdef('vv3', true);
+-                   pg_get_viewdef                    
+------------------------------------------------------
+-  SELECT v.a,                                       +
+-     v.b,                                           +
+-     v.c,                                           +
+-     v.x,                                           +
+-     v.e,                                           +
+-     v.f                                            +
+-    FROM ( VALUES (1,2,3,4,5,6)) v(a, b, c, x, e, f)+
+- UNION ALL                                          +
+-  SELECT x AS a,                                    +
+-     tt7.y AS b,                                    +
+-     tt8.z AS c,                                    +
+-     x_1 AS x,                                      +
+-     tt7x.y AS e,                                   +
+-     tt8x.z AS f                                    +
+-    FROM tt7                                        +
+-      FULL JOIN tt8 USING (x),                      +
+-     tt7 tt7x(x_1, y)                               +
+-      FULL JOIN tt8 tt8x(x_1, z) USING (x_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create view vv4 as
+ select * from (values(1,2,3,4,5,6,7)) v(a,b,c,x,e,f,g)
+ union all
+@@ -1376,104 +984,21 @@
+   tt7 full join tt8 using (x),
+   tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x);
+ select pg_get_viewdef('vv4', true);
+-                      pg_get_viewdef                      
+-----------------------------------------------------------
+-  SELECT v.a,                                            +
+-     v.b,                                                +
+-     v.c,                                                +
+-     v.x,                                                +
+-     v.e,                                                +
+-     v.f,                                                +
+-     v.g                                                 +
+-    FROM ( VALUES (1,2,3,4,5,6,7)) v(a, b, c, x, e, f, g)+
+- UNION ALL                                               +
+-  SELECT x AS a,                                         +
+-     tt7.y AS b,                                         +
+-     tt8.z AS c,                                         +
+-     x_1 AS x,                                           +
+-     tt7x.y AS e,                                        +
+-     tt8x.z AS f,                                        +
+-     tt8y.z AS g                                         +
+-    FROM tt7                                             +
+-      FULL JOIN tt8 USING (x),                           +
+-     tt7 tt7x(x_1, y)                                    +
+-      FULL JOIN tt8 tt8x(x_1, z) USING (x_1)             +
+-      FULL JOIN tt8 tt8y(x_1, z) USING (x_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt7 add column zz int;
+ alter table tt7 add column z int;
+ alter table tt7 drop column zz;
+ alter table tt8 add column z2 int;
+ select pg_get_viewdef('vv2', true);
+-                 pg_get_viewdef                 
+-------------------------------------------------
+-  SELECT v.a,                                  +
+-     v.b,                                      +
+-     v.c,                                      +
+-     v.d,                                      +
+-     v.e                                       +
+-    FROM ( VALUES (1,2,3,4,5)) v(a, b, c, d, e)+
+- UNION ALL                                     +
+-  SELECT x AS a,                               +
+-     tt7.y AS b,                               +
+-     tt8.z AS c,                               +
+-     tt8x.x_1 AS d,                            +
+-     tt8x.z AS e                               +
+-    FROM tt7                                   +
+-      FULL JOIN tt8 USING (x),                 +
+-     tt8 tt8x(x_1, z, z2);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('vv3', true);
+-                   pg_get_viewdef                    
+------------------------------------------------------
+-  SELECT v.a,                                       +
+-     v.b,                                           +
+-     v.c,                                           +
+-     v.x,                                           +
+-     v.e,                                           +
+-     v.f                                            +
+-    FROM ( VALUES (1,2,3,4,5,6)) v(a, b, c, x, e, f)+
+- UNION ALL                                          +
+-  SELECT x AS a,                                    +
+-     tt7.y AS b,                                    +
+-     tt8.z AS c,                                    +
+-     x_1 AS x,                                      +
+-     tt7x.y AS e,                                   +
+-     tt8x.z AS f                                    +
+-    FROM tt7                                        +
+-      FULL JOIN tt8 USING (x),                      +
+-     tt7 tt7x(x_1, y, z)                            +
+-      FULL JOIN tt8 tt8x(x_1, z, z2) USING (x_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_viewdef('vv4', true);
+-                      pg_get_viewdef                      
+-----------------------------------------------------------
+-  SELECT v.a,                                            +
+-     v.b,                                                +
+-     v.c,                                                +
+-     v.x,                                                +
+-     v.e,                                                +
+-     v.f,                                                +
+-     v.g                                                 +
+-    FROM ( VALUES (1,2,3,4,5,6,7)) v(a, b, c, x, e, f, g)+
+- UNION ALL                                               +
+-  SELECT x AS a,                                         +
+-     tt7.y AS b,                                         +
+-     tt8.z AS c,                                         +
+-     x_1 AS x,                                           +
+-     tt7x.y AS e,                                        +
+-     tt8x.z AS f,                                        +
+-     tt8y.z AS g                                         +
+-    FROM tt7                                             +
+-      FULL JOIN tt8 USING (x),                           +
+-     tt7 tt7x(x_1, y, z)                                 +
+-      FULL JOIN tt8 tt8x(x_1, z, z2) USING (x_1)         +
+-      FULL JOIN tt8 tt8y(x_1, z, z2) USING (x_1);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Implicit coercions in a JOIN USING create issues similar to FULL JOIN
+ create table tt7a (x date, xx int, y int);
+ alter table tt7a drop column xx;
+@@ -1482,26 +1007,10 @@
+ select * from (values(now(),2,3,now(),5)) v(a,b,c,d,e)
+ union all
+ select * from tt7a left join tt8a using (x), tt8a tt8ax;
++ERROR:  UNION types timestamptz and date cannot be matched
+ select pg_get_viewdef('vv2a', true);
+-                     pg_get_viewdef                     
+---------------------------------------------------------
+-  SELECT v.a,                                          +
+-     v.b,                                              +
+-     v.c,                                              +
+-     v.d,                                              +
+-     v.e                                               +
+-    FROM ( VALUES (now(),2,3,now(),5)) v(a, b, c, d, e)+
+- UNION ALL                                             +
+-  SELECT x AS a,                                       +
+-     tt7a.y AS b,                                      +
+-     tt8a.z AS c,                                      +
+-     tt8ax.x_1 AS d,                                   +
+-     tt8ax.z AS e                                      +
+-    FROM tt7a                                          +
+-      LEFT JOIN tt8a USING (x),                        +
+-     tt8a tt8ax(x_1, z);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Also check dropping a column that existed when the view was made
+ --
+@@ -1509,26 +1018,12 @@
+ create table tt10 (x int, z int);
+ create view vv5 as select x,y,z from tt9 join tt10 using(x);
+ select pg_get_viewdef('vv5', true);
+-      pg_get_viewdef       
+----------------------------
+-  SELECT tt9.x,           +
+-     tt9.y,               +
+-     tt10.z               +
+-    FROM tt9              +
+-      JOIN tt10 USING (x);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt9 drop column xx;
+ select pg_get_viewdef('vv5', true);
+-      pg_get_viewdef       
+----------------------------
+-  SELECT tt9.x,           +
+-     tt9.y,               +
+-     tt10.z               +
+-    FROM tt9              +
+-      JOIN tt10 USING (x);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Another corner case is that we might add a column to a table below a
+ -- JOIN USING, and thereby make the USING column name ambiguous
+@@ -1539,30 +1034,12 @@
+ create view vv6 as select x,y,z,q from
+   (tt11 join tt12 using(x)) join tt13 using(z);
+ select pg_get_viewdef('vv6', true);
+-      pg_get_viewdef       
+----------------------------
+-  SELECT tt11.x,          +
+-     tt11.y,              +
+-     tt12.z,              +
+-     tt13.q               +
+-    FROM tt11             +
+-      JOIN tt12 USING (x) +
+-      JOIN tt13 USING (z);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ alter table tt11 add column z int;
+ select pg_get_viewdef('vv6', true);
+-        pg_get_viewdef        
+-------------------------------
+-  SELECT tt11.x,             +
+-     tt11.y,                 +
+-     tt12.z,                 +
+-     tt13.q                  +
+-    FROM tt11 tt11(x, y, z_1)+
+-      JOIN tt12 USING (x)    +
+-      JOIN tt13 USING (z);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Check cases involving dropped/altered columns in a function's rowtype result
+ --
+@@ -1581,26 +1058,18 @@
+ end;
+ $$
+ language plpgsql;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ create view tt14v as select t.* from tt14f() t;
++ERROR:  unknown function: tt14f()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select pg_get_viewdef('tt14v', true);
+-         pg_get_viewdef         
+---------------------------------
+-  SELECT f1,                   +
+-     f3,                       +
+-     f4                        +
+-    FROM tt14f() t(f1, f3, f4);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from tt14v;
+- f1  | f3  | f4 
+------+-----+----
+- foo | baz | 42
+-(1 row)
+-
++ERROR:  relation "tt14v" does not exist
+ alter table tt14t drop column f3;  -- fail, view has explicit reference to f3
+-ERROR:  cannot drop column f3 of table tt14t because other objects depend on it
+-DETAIL:  view tt14v depends on column f3 of table tt14t
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+ -- We used to have a bug that would allow the above to succeed, posing
+ -- hazards for later execution of the view.  Check that the internal
+ -- defenses for those hazards haven't bit-rotted, in case some other
+@@ -1614,46 +1083,28 @@
+ returning pg_describe_object(classid, objid, objsubid) as obj,
+           pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
+           deptype;
+-            obj             |           ref            | deptype 
+-----------------------------+--------------------------+---------
+- rule _RETURN on view tt14v | column f3 of table tt14t | n
+-(1 row)
+-
++ERROR:  user test_admin does not have DELETE privilege on relation pg_depend
+ -- this will now succeed:
+ alter table tt14t drop column f3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- column f3 is still in the view, sort of ...
+ select pg_get_viewdef('tt14v', true);
+-        pg_get_viewdef         
+--------------------------------
+-  SELECT f1,                  +
+-     "?dropped?column?" AS f3,+
+-     f4                       +
+-    FROM tt14f() t(f1, f4);
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- ... and you can even EXPLAIN it ...
+ explain (verbose, costs off) select * from tt14v;
+-               QUERY PLAN               
+-----------------------------------------
+- Function Scan on testviewschm2.tt14f t
+-   Output: t.f1, t.f3, t.f4
+-   Function Call: tt14f()
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from tt14v
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- but it will fail at execution
+ select f1, f4 from tt14v;
+- f1  | f4 
+------+----
+- foo | 42
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from tt14v;
+-ERROR:  attribute 3 of type record has been dropped
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;
+ -- likewise, altering a referenced column's type is prohibited ...
+ alter table tt14t alter column f4 type integer using f4::integer;  -- fail
+-ERROR:  cannot alter type of a column used by a view or rule
+-DETAIL:  rule _RETURN on view tt14v depends on column "f4"
+ -- ... but some bug might let it happen, so check defenses
+ begin;
+ -- destroy the dependency entry that prevents the ALTER:
+@@ -1664,124 +1115,63 @@
+ returning pg_describe_object(classid, objid, objsubid) as obj,
+           pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
+           deptype;
+-            obj             |           ref            | deptype 
+-----------------------------+--------------------------+---------
+- rule _RETURN on view tt14v | column f4 of table tt14t | n
+-(1 row)
+-
++ERROR:  user test_admin does not have DELETE privilege on relation pg_depend
+ -- this will now succeed:
+ alter table tt14t alter column f4 type integer using f4::integer;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- f4 is still in the view ...
+ select pg_get_viewdef('tt14v', true);
+-         pg_get_viewdef         
+---------------------------------
+-  SELECT f1,                   +
+-     f3,                       +
+-     f4                        +
+-    FROM tt14f() t(f1, f3, f4);
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- but will fail at execution
+ select f1, f3 from tt14v;
+- f1  | f3  
+------+-----
+- foo | baz
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from tt14v;
+-ERROR:  attribute 4 of type record has wrong type
+-DETAIL:  Table has type integer, but query expects text.
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;
+ drop view tt14v;
++ERROR:  relation "tt14v" does not exist
+ create view tt14v as select t.f1, t.f4 from tt14f() t;
++ERROR:  unknown function: tt14f()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select pg_get_viewdef('tt14v', true);
+-         pg_get_viewdef         
+---------------------------------
+-  SELECT f1,                   +
+-     f4                        +
+-    FROM tt14f() t(f1, f3, f4);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from tt14v;
+- f1  | f4 
+------+----
+- foo | 42
+-(1 row)
+-
++ERROR:  relation "tt14v" does not exist
+ alter table tt14t drop column f3;  -- ok
++ERROR:  column "f3" does not exist
+ select pg_get_viewdef('tt14v', true);
+-       pg_get_viewdef       
+-----------------------------
+-  SELECT f1,               +
+-     f4                    +
+-    FROM tt14f() t(f1, f4);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ explain (verbose, costs off) select * from tt14v;
+-               QUERY PLAN               
+-----------------------------------------
+- Function Scan on testviewschm2.tt14f t
+-   Output: t.f1, t.f4
+-   Function Call: tt14f()
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from tt14v
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from tt14v;
+- f1  | f4 
+------+----
+- foo | 42
+-(1 row)
+-
++ERROR:  relation "tt14v" does not exist
+ -- check display of whole-row variables in some corner cases
+ create type nestedcomposite as (x int8_tbl);
++ERROR:  unimplemented: composite types that reference user-defined types not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/91779/_version_
+ create view tt15v as select row(i)::nestedcomposite from int8_tbl i;
++ERROR:  type "nestedcomposite" does not exist
+ select * from tt15v;
+-                   row                    
+-------------------------------------------
+- ("(123,456)")
+- ("(123,4567890123456789)")
+- ("(4567890123456789,123)")
+- ("(4567890123456789,4567890123456789)")
+- ("(4567890123456789,-4567890123456789)")
+-(5 rows)
+-
++ERROR:  relation "tt15v" does not exist
+ select pg_get_viewdef('tt15v', true);
+-                    pg_get_viewdef                    
+-------------------------------------------------------
+-  SELECT ROW(i.*::int8_tbl)::nestedcomposite AS "row"+
+-    FROM int8_tbl i;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select row(i.*::int8_tbl)::nestedcomposite from int8_tbl i;
+-                   row                    
+-------------------------------------------
+- ("(123,456)")
+- ("(123,4567890123456789)")
+- ("(4567890123456789,123)")
+- ("(4567890123456789,4567890123456789)")
+- ("(4567890123456789,-4567890123456789)")
+-(5 rows)
+-
++ERROR:  type "nestedcomposite" does not exist
+ create view tt16v as select * from int8_tbl i, lateral(values(i)) ss;
++ERROR:  cannot use anonymous record type as table column
+ select * from tt16v;
+-        q1        |        q2         |               column1                
+-------------------+-------------------+--------------------------------------
+-              123 |               456 | (123,456)
+-              123 |  4567890123456789 | (123,4567890123456789)
+- 4567890123456789 |               123 | (4567890123456789,123)
+- 4567890123456789 |  4567890123456789 | (4567890123456789,4567890123456789)
+- 4567890123456789 | -4567890123456789 | (4567890123456789,-4567890123456789)
+-(5 rows)
+-
++ERROR:  relation "tt16v" does not exist
+ select pg_get_viewdef('tt16v', true);
+-              pg_get_viewdef               
+--------------------------------------------
+-  SELECT i.q1,                            +
+-     i.q2,                                +
+-     ss.column1                           +
+-    FROM int8_tbl i,                      +
+-     LATERAL ( VALUES (i.*::int8_tbl)) ss;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from int8_tbl i, lateral(values(i.*::int8_tbl)) ss;
+         q1        |        q2         |               column1                
+ ------------------+-------------------+--------------------------------------
+@@ -1804,14 +1194,8 @@
+ (5 rows)
+ 
+ select pg_get_viewdef('tt17v', true);
+-               pg_get_viewdef                
+----------------------------------------------
+-  SELECT q1,                                +
+-     q2                                     +
+-    FROM int8_tbl i                         +
+-   WHERE (i.* IN ( VALUES (i.*::int8_tbl)));
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from int8_tbl i where i.* in (values(i.*::int8_tbl));
+         q1        |        q2         
+ ------------------+-------------------
+@@ -1823,48 +1207,48 @@
+ (5 rows)
+ 
+ create table tt15v_log(o tt15v, n tt15v, incr bool);
++ERROR:  type "tt15v" does not exist
+ create rule updlog as on update to tt15v do also
+   insert into tt15v_log values(old, new, row(old,old) < row(new,new));
+-\d+ tt15v
+-                             View "testviewschm2.tt15v"
+- Column |      Type       | Collation | Nullable | Default | Storage  | Description 
+---------+-----------------+-----------+----------+---------+----------+-------------
+- row    | nestedcomposite |           |          |         | extended | 
+-View definition:
+- SELECT ROW(i.*::int8_tbl)::nestedcomposite AS "row"
+-   FROM int8_tbl i;
+-Rules:
+- updlog AS
+-    ON UPDATE TO tt15v DO  INSERT INTO tt15v_log (o, n, incr)
+-  VALUES (old.*::tt15v, new.*::tt15v, (ROW(old.*::tt15v, old.*::tt15v) < ROW(new.*::tt15v, new.*::tt15v)))
++ERROR:  at or near "updlog": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule updlog as on update to tt15v do also
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++\d+ tt15v
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(tt15v)$' COLLATE pg_catalog.default
++                                                                     ^
+ -- check unique-ification of overlength names
+ create view tt18v as
+   select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy
+   union all
+   select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz;
+-NOTICE:  identifier "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy" will be truncated to "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+-NOTICE:  identifier "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz" will be truncated to "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ select pg_get_viewdef('tt18v', true);
+-                                  pg_get_viewdef                                   
+------------------------------------------------------------------------------------
+-  SELECT xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.q1,      +
+-     xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.q2           +
+-    FROM int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx +
+- UNION ALL                                                                        +
+-  SELECT xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.q1,      +
+-     xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.q2           +
+-    FROM int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ explain (costs off) select * from tt18v;
+-                                         QUERY PLAN                                         
+---------------------------------------------------------------------------------------------
+- Append
+-   ->  Seq Scan on int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+-   ->  Seq Scan on int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_1
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from tt18v
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check display of ScalarArrayOp with a sub-select
+ select 'foo'::text = any(array['abc','def','foo']::text[]);
+  ?column? 
+@@ -1873,10 +1257,7 @@
+ (1 row)
+ 
+ select 'foo'::text = any((select array['abc','def','foo']::text[]));  -- fail
+-ERROR:  operator does not exist: text = text[]
+-LINE 1: select 'foo'::text = any((select array['abc','def','foo']::t...
+-                           ^
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unsupported comparison operator: <string> = ANY <tuple{string[]}>
+ select 'foo'::text = any((select array['abc','def','foo']::text[])::text[]);
+  ?column? 
+ ----------
+@@ -1887,12 +1268,8 @@
+ select 'foo'::text = any(array['abc','def','foo']::text[]) c1,
+        'foo'::text = any((select array['abc','def','foo']::text[])::text[]) c2;
+ select pg_get_viewdef('tt19v', true);
+-                                               pg_get_viewdef                                               
+-------------------------------------------------------------------------------------------------------------
+-  SELECT 'foo'::text = ANY (ARRAY['abc'::text, 'def'::text, 'foo'::text]) AS c1,                           +
+-     'foo'::text = ANY ((( SELECT ARRAY['abc'::text, 'def'::text, 'foo'::text] AS "array"))::text[]) AS c2;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- check display of assorted RTE_FUNCTION expressions
+ create view tt20v as
+ select * from
+@@ -1902,23 +1279,14 @@
+   localtimestamp(3) as t,
+   cast(1+2 as int4) as i4,
+   cast(1+2 as int8) as i8;
++ERROR:  failed to parse query string: at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT c.c, col.col, d.d, t.t, i4.i4, i8.i8 FROM ROWS FROM (COALESCE(1:::INT8, 2:::INT8)) AS c, ROWS FROM (pg_collation_for('x':::STRING)) AS col, ROWS FROM (current_date()) AS d, ROWS FROM (localtimestamp(3:::INT8):::TIMESTAMP) AS t, ROWS FROM (CAST(1:::INT8 + 2:::INT8 AS INT4)) AS i4, ROWS FROM (CAST(1:::INT8 + 2:::INT8 AS INT8)) AS i8
++                                                                                                                                                                                                                       ^
++HINT:  try \h <SOURCE>
+ select pg_get_viewdef('tt20v', true);
+-               pg_get_viewdef                
+----------------------------------------------
+-  SELECT c.c,                               +
+-     col.col,                               +
+-     d.d,                                   +
+-     t.t,                                   +
+-     i4.i4,                                 +
+-     i8.i8                                  +
+-    FROM COALESCE(1, 2) c(c),               +
+-     COLLATION FOR ('x'::text) col(col),    +
+-     CURRENT_DATE d(d),                     +
+-     LOCALTIMESTAMP(3) t(t),                +
+-     CAST(1 + 2 AS integer) i4(i4),         +
+-     CAST((1 + 2)::bigint AS bigint) i8(i8);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- reverse-listing of various special function syntaxes required by SQL
+ create view tt201v as
+ select
+@@ -1974,136 +1342,41 @@
+   (select * from SESSION_USER) as seu2,
+   SYSTEM_USER as su,
+   (select * from SYSTEM_USER) as su2;
++ERROR:  at or near "normalized": syntax error
++DETAIL:  source SQL:
++create view tt201v as
++select
++  ('2022-12-01'::date + '1 day'::interval) at time zone 'UTC' as atz,
++  extract(day from now()) as extr,
++  (now(), '1 day'::interval) overlaps
++    (current_timestamp(2), '1 day'::interval) as o,
++  'foo' is normalized isn,
++           ^
+ select pg_get_viewdef('tt201v', true);
+-                                        pg_get_viewdef                                         
+------------------------------------------------------------------------------------------------
+-  SELECT (('12-01-2022'::date + '@ 1 day'::interval) AT TIME ZONE 'UTC'::text) AS atz,        +
+-     EXTRACT(day FROM now()) AS extr,                                                         +
+-     ((now(), '@ 1 day'::interval) OVERLAPS (CURRENT_TIMESTAMP(2), '@ 1 day'::interval)) AS o,+
+-     ('foo'::text IS NORMALIZED) AS isn,                                                      +
+-     ('foo'::text IS NFKC NORMALIZED) AS isnn,                                                +
+-     NORMALIZE('foo'::text) AS n,                                                             +
+-     NORMALIZE('foo'::text, NFKD) AS nfkd,                                                    +
+-     OVERLAY('foo'::text PLACING 'bar'::text FROM 2) AS ovl,                                  +
+-     OVERLAY('foo'::text PLACING 'bar'::text FROM 2 FOR 3) AS ovl2,                           +
+-     POSITION(('foo'::text) IN ('foobar'::text)) AS p,                                        +
+-     SUBSTRING('foo'::text FROM 2 FOR 3) AS s,                                                +
+-     SUBSTRING('foo'::text SIMILAR 'f'::text ESCAPE '#'::text) AS ss,                         +
+-     "substring"('foo'::text, 'oo'::text) AS ssf,                                             +
+-     TRIM(BOTH ' '::text FROM ' foo '::text) AS bt,                                           +
+-     TRIM(LEADING ' '::text FROM ' foo '::text) AS lt,                                        +
+-     TRIM(TRAILING FROM ' foo '::text) AS rt,                                                 +
+-     TRIM(BOTH '\x00'::bytea FROM '\x00546f6d00'::bytea) AS btb,                              +
+-     TRIM(LEADING '\x00'::bytea FROM '\x00546f6d00'::bytea) AS ltb,                           +
+-     TRIM(TRAILING '\x00'::bytea FROM '\x00546f6d00'::bytea) AS rtb,                          +
+-     CURRENT_DATE AS cd,                                                                      +
+-     ( SELECT "current_date"."current_date"                                                   +
+-            FROM CURRENT_DATE "current_date"("current_date")) AS cd2,                         +
+-     CURRENT_TIME AS ct,                                                                      +
+-     ( SELECT "current_time"."current_time"                                                   +
+-            FROM CURRENT_TIME "current_time"("current_time")) AS ct2,                         +
+-     CURRENT_TIME(1) AS ct3,                                                                  +
+-     ( SELECT "current_time"."current_time"                                                   +
+-            FROM CURRENT_TIME(1) "current_time"("current_time")) AS ct4,                      +
+-     CURRENT_TIMESTAMP AS ct5,                                                                +
+-     ( SELECT "current_timestamp"."current_timestamp"                                         +
+-            FROM CURRENT_TIMESTAMP "current_timestamp"("current_timestamp")) AS ct6,          +
+-     CURRENT_TIMESTAMP(1) AS ct7,                                                             +
+-     ( SELECT "current_timestamp"."current_timestamp"                                         +
+-            FROM CURRENT_TIMESTAMP(1) "current_timestamp"("current_timestamp")) AS ct8,       +
+-     LOCALTIME AS lt1,                                                                        +
+-     ( SELECT "localtime"."localtime"                                                         +
+-            FROM LOCALTIME "localtime"("localtime")) AS lt2,                                  +
+-     LOCALTIME(1) AS lt3,                                                                     +
+-     ( SELECT "localtime"."localtime"                                                         +
+-            FROM LOCALTIME(1) "localtime"("localtime")) AS lt4,                               +
+-     LOCALTIMESTAMP AS lt5,                                                                   +
+-     ( SELECT "localtimestamp"."localtimestamp"                                               +
+-            FROM LOCALTIMESTAMP "localtimestamp"("localtimestamp")) AS lt6,                   +
+-     LOCALTIMESTAMP(1) AS lt7,                                                                +
+-     ( SELECT "localtimestamp"."localtimestamp"                                               +
+-            FROM LOCALTIMESTAMP(1) "localtimestamp"("localtimestamp")) AS lt8,                +
+-     CURRENT_CATALOG AS ca,                                                                   +
+-     ( SELECT "current_catalog"."current_catalog"                                             +
+-            FROM CURRENT_CATALOG "current_catalog"("current_catalog")) AS ca2,                +
+-     CURRENT_ROLE AS cr,                                                                      +
+-     ( SELECT "current_role"."current_role"                                                   +
+-            FROM CURRENT_ROLE "current_role"("current_role")) AS cr2,                         +
+-     CURRENT_SCHEMA AS cs,                                                                    +
+-     ( SELECT "current_schema"."current_schema"                                               +
+-            FROM CURRENT_SCHEMA "current_schema"("current_schema")) AS cs2,                   +
+-     CURRENT_USER AS cu,                                                                      +
+-     ( SELECT "current_user"."current_user"                                                   +
+-            FROM CURRENT_USER "current_user"("current_user")) AS cu2,                         +
+-     USER AS us,                                                                              +
+-     ( SELECT "user"."user"                                                                   +
+-            FROM USER "user"("user")) AS us2,                                                 +
+-     SESSION_USER AS seu,                                                                     +
+-     ( SELECT "session_user"."session_user"                                                   +
+-            FROM SESSION_USER "session_user"("session_user")) AS seu2,                        +
+-     SYSTEM_USER AS su,                                                                       +
+-     ( SELECT "system_user"."system_user"                                                     +
+-            FROM SYSTEM_USER "system_user"("system_user")) AS su2;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- corner cases with empty join conditions
+ create view tt21v as
+ select * from tt5 natural inner join tt6;
+ select pg_get_viewdef('tt21v', true);
+-    pg_get_viewdef    
+-----------------------
+-  SELECT tt5.a,      +
+-     tt5.b,          +
+-     tt5.cc,         +
+-     tt6.c,          +
+-     tt6.d           +
+-    FROM tt5         +
+-      CROSS JOIN tt6;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create view tt22v as
+ select * from tt5 natural left join tt6;
+ select pg_get_viewdef('tt22v', true);
+-       pg_get_viewdef        
+------------------------------
+-  SELECT tt5.a,             +
+-     tt5.b,                 +
+-     tt5.cc,                +
+-     tt6.c,                 +
+-     tt6.d                  +
+-    FROM tt5                +
+-      LEFT JOIN tt6 ON TRUE;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- check handling of views with immediately-renamed columns
+ create view tt23v (col_a, col_b) as
+ select q1 as other_name1, q2 as other_name2 from int8_tbl
+ union
+ select 42, 43;
+ select pg_get_viewdef('tt23v', true);
+-        pg_get_viewdef         
+--------------------------------
+-  SELECT int8_tbl.q1 AS col_a,+
+-     int8_tbl.q2 AS col_b     +
+-    FROM int8_tbl             +
+- UNION                        +
+-  SELECT 42 AS col_a,         +
+-     43 AS col_b;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select pg_get_ruledef(oid, true) from pg_rewrite
+   where ev_class = 'tt23v'::regclass and ev_type = '1';
+-                         pg_get_ruledef                          
+------------------------------------------------------------------
+- CREATE RULE "_RETURN" AS                                       +
+-     ON SELECT TO tt23v DO INSTEAD  SELECT int8_tbl.q1 AS col_a,+
+-     int8_tbl.q2 AS col_b                                       +
+-    FROM int8_tbl                                               +
+- UNION                                                          +
+-  SELECT 42 AS col_a,                                           +
+-     43 AS col_b;
+-(1 row)
+-
++ERROR:  unknown function: pg_get_ruledef()
+ -- test extraction of FieldSelect field names (get_name_for_var_field)
+ create view tt24v as
+ with cte as materialized (select r from (values(1,2),(3,4)) r)
+@@ -2111,66 +1384,29 @@
+   cte join (select rr from (values(1,7),(3,8)) rr limit 2) ss
+   on (r).column1 = (rr).column1;
+ select pg_get_viewdef('tt24v', true);
+-                       pg_get_viewdef                       
+-------------------------------------------------------------
+-  WITH cte AS MATERIALIZED (                               +
+-          SELECT r.*::record AS r                          +
+-            FROM ( VALUES (1,2), (3,4)) r                  +
+-         )                                                 +
+-  SELECT (cte.r).column2 AS col_a,                         +
+-     (ss.rr).column2 AS col_b                              +
+-    FROM cte                                               +
+-      JOIN ( SELECT rr.*::record AS rr                     +
+-            FROM ( VALUES (1,7), (3,8)) rr                 +
+-          LIMIT 2) ss ON (cte.r).column1 = (ss.rr).column1;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ create view tt25v as
+ with cte as materialized (select pg_get_keywords() k)
+ select (k).word from cte;
+ select pg_get_viewdef('tt25v', true);
+-             pg_get_viewdef             
+-----------------------------------------
+-  WITH cte AS MATERIALIZED (           +
+-          SELECT pg_get_keywords() AS k+
+-         )                             +
+-  SELECT (k).word AS word              +
+-    FROM cte;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- also check cases seen only in EXPLAIN
+ explain (verbose, costs off)
+ select * from tt24v;
+-                                        QUERY PLAN                                        
+-------------------------------------------------------------------------------------------
+- Hash Join
+-   Output: (cte.r).column2, ((ROW("*VALUES*".column1, "*VALUES*".column2))).column2
+-   Hash Cond: ((cte.r).column1 = ((ROW("*VALUES*".column1, "*VALUES*".column2))).column1)
+-   CTE cte
+-     ->  Values Scan on "*VALUES*_1"
+-           Output: ROW("*VALUES*_1".column1, "*VALUES*_1".column2)
+-   ->  CTE Scan on cte
+-         Output: cte.r
+-   ->  Hash
+-         Output: (ROW("*VALUES*".column1, "*VALUES*".column2))
+-         ->  Limit
+-               Output: (ROW("*VALUES*".column1, "*VALUES*".column2))
+-               ->  Values Scan on "*VALUES*"
+-                     Output: ROW("*VALUES*".column1, "*VALUES*".column2)
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+ select (r).column2 from (select r from (values(1,2),(3,4)) r limit 1) ss;
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Subquery Scan on ss
+-   Output: (ss.r).column2
+-   ->  Limit
+-         Output: (ROW("*VALUES*".column1, "*VALUES*".column2))
+-         ->  Values Scan on "*VALUES*"
+-               Output: ROW("*VALUES*".column1, "*VALUES*".column2)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- test pretty-print parenthesization rules, and SubLink deparsing
+ create view tt26v as
+ select x + y + z as c1,
+@@ -2186,128 +1422,9 @@
+        (x,y) <= ANY (values(1,2),(3,4)) as c11
+ from (values(1,2,3)) v(x,y,z);
+ select pg_get_viewdef('tt26v', true);
+-                   pg_get_viewdef                   
+-----------------------------------------------------
+-  SELECT x + y + z AS c1,                          +
+-     x * y + z AS c2,                              +
+-     x + y * z AS c3,                              +
+-     (x + y) * z AS c4,                            +
+-     x * (y + z) AS c5,                            +
+-     x + (y + z) AS c6,                            +
+-     x + (y # z) AS c7,                            +
+-     x > y AND (y > z OR x > z) AS c8,             +
+-     x > y OR y > z AND NOT x > z AS c9,           +
+-     ((x, y) <> ALL ( VALUES (1,2), (3,4))) AS c10,+
+-     ((x, y) <= ANY ( VALUES (1,2), (3,4))) AS c11 +
+-    FROM ( VALUES (1,2,3)) v(x, y, z);
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string, bool)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- clean up all the random objects we made above
+ DROP SCHEMA temp_view_test CASCADE;
+-NOTICE:  drop cascades to 27 other objects
+-DETAIL:  drop cascades to table temp_view_test.base_table
+-drop cascades to view v2_temp
+-drop cascades to view v4_temp
+-drop cascades to view v6_temp
+-drop cascades to view v7_temp
+-drop cascades to view v10_temp
+-drop cascades to view v8_temp
+-drop cascades to view v9_temp
+-drop cascades to view v11_temp
+-drop cascades to view v12_temp
+-drop cascades to table temp_view_test.base_table2
+-drop cascades to view v5_temp
+-drop cascades to view temp_view_test.v1
+-drop cascades to view temp_view_test.v2
+-drop cascades to view temp_view_test.v3
+-drop cascades to view temp_view_test.v4
+-drop cascades to view temp_view_test.v5
+-drop cascades to view temp_view_test.v6
+-drop cascades to view temp_view_test.v7
+-drop cascades to view temp_view_test.v8
+-drop cascades to sequence temp_view_test.seq1
+-drop cascades to view temp_view_test.v9
+-drop cascades to table temp_view_test.tx1
+-drop cascades to view aliased_view_1
+-drop cascades to view aliased_view_2
+-drop cascades to view aliased_view_3
+-drop cascades to view aliased_view_4
++ERROR:  unknown schema "temp_view_test"
+ DROP SCHEMA testviewschm2 CASCADE;
+-NOTICE:  drop cascades to 77 other objects
+-DETAIL:  drop cascades to table t1
+-drop cascades to view temporal1
+-drop cascades to view temporal2
+-drop cascades to view temporal3
+-drop cascades to view temporal4
+-drop cascades to table t2
+-drop cascades to view nontemp1
+-drop cascades to view nontemp2
+-drop cascades to view nontemp3
+-drop cascades to view nontemp4
+-drop cascades to table tbl1
+-drop cascades to table tbl2
+-drop cascades to table tbl3
+-drop cascades to table tbl4
+-drop cascades to view mytempview
+-drop cascades to view pubview
+-drop cascades to view mysecview1
+-drop cascades to view mysecview2
+-drop cascades to view mysecview3
+-drop cascades to view mysecview4
+-drop cascades to view mysecview7
+-drop cascades to view mysecview8
+-drop cascades to view mysecview9
+-drop cascades to view unspecified_types
+-drop cascades to table tt1
+-drop cascades to table tx1
+-drop cascades to view view_of_joins
+-drop cascades to table tbl1a
+-drop cascades to view view_of_joins_2a
+-drop cascades to view view_of_joins_2b
+-drop cascades to view view_of_joins_2c
+-drop cascades to view view_of_joins_2d
+-drop cascades to table tt2
+-drop cascades to table tt3
+-drop cascades to table tt4
+-drop cascades to view v1
+-drop cascades to view v1a
+-drop cascades to view v2
+-drop cascades to view v2a
+-drop cascades to view v3
+-drop cascades to table tt5
+-drop cascades to table tt6
+-drop cascades to view vv1
+-drop cascades to view v4
+-drop cascades to table tt7
+-drop cascades to table tt8
+-drop cascades to view vv2
+-drop cascades to view vv3
+-drop cascades to view vv4
+-drop cascades to table tt7a
+-drop cascades to table tt8a
+-drop cascades to view vv2a
+-drop cascades to table tt9
+-drop cascades to table tt10
+-drop cascades to view vv5
+-drop cascades to table tt11
+-drop cascades to table tt12
+-drop cascades to table tt13
+-drop cascades to view vv6
+-drop cascades to table tt14t
+-drop cascades to function tt14f()
+-drop cascades to view tt14v
+-drop cascades to type nestedcomposite
+-drop cascades to view tt15v
+-drop cascades to view tt16v
+-drop cascades to view tt17v
+-drop cascades to table tt15v_log
+-drop cascades to view tt18v
+-drop cascades to view tt19v
+-drop cascades to view tt20v
+-drop cascades to view tt201v
+-drop cascades to view tt21v
+-drop cascades to view tt22v
+-drop cascades to view tt23v
+-drop cascades to view tt24v
+-drop cascades to view tt25v
+-drop cascades to view tt26v

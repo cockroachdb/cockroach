@@ -287,7 +287,7 @@ func startConnExecutor(
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	pool := mon.NewUnlimitedMonitor(ctx, mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		Settings: st,
 	})
 	// This pool should never be Stop()ed because, if the test is failing, memory

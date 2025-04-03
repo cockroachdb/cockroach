@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "avro.go",
         "errors.go",
+        "name.go",
         "options.go",
         "settings.go",
         "sink_url.go",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/iterutil",
         "//pkg/util/metamorphic",
@@ -33,6 +35,7 @@ go_test(
     srcs = [
         "errors_test.go",
         "main_test.go",
+        "name_test.go",
         "options_test.go",
     ],
     embed = [":changefeedbase"],

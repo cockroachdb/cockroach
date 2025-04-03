@@ -138,7 +138,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the various Admission Control CPU queues.`}
     >
-      <Axis units={AxisUnits.Duration} label="Delay Duration">
+      <Axis units={AxisUnits.DurationMillis} label="Delay Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
@@ -174,7 +174,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
     >
-      <Axis units={AxisUnits.Duration} label="Write Delay Duration">
+      <Axis units={AxisUnits.DurationMillis} label="Write Delay Duration">
         {storeMetrics(
           {
             name: "cr.store.admission.wait_durations.kv-stores-p99",
@@ -203,7 +203,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control elastic CPU queue.`}
     >
-      <Axis units={AxisUnits.Duration} label="Delay Duration">
+      <Axis units={AxisUnits.DurationMillis} label="Delay Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric
@@ -225,7 +225,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
     >
-      <Axis units={AxisUnits.Duration} label="Flow Token Wait Duration">
+      <Axis units={AxisUnits.DurationMillis} label="Flow Token Wait Duration">
         {nodeIDs.map(nid => (
           <>
             <Metric

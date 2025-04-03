@@ -6,7 +6,7 @@
 import { util, Loading } from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { deviation as d3Deviation, mean as d3Mean } from "d3";
+import { deviation as d3Deviation, mean as d3Mean } from "d3-array";
 import capitalize from "lodash/capitalize";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
@@ -444,8 +444,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       values,
       (vals: IConnectivity[]) => flatMap(vals, v => Object.values(v.peers)),
       (vals: IPeer[]) => flatMap(vals, v => v.latency),
-      (vals: IDuration[]) =>
-        filter(vals, v => v !== undefined && v.nanos !== undefined),
+      (vals: IDuration[]) => filter(vals, v => v && v.nanos),
       (vals: IDuration[]) => map(vals, v => util.NanoToMilli(v.nanos)),
     ])(connections);
 

@@ -9,7 +9,6 @@ protobufjs_library(
     name = "crdb-protobuf-client-ccl__proto",
     out_name = "protos",
     protos = [
-        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_proto",
         "//pkg/server/serverpb:serverpb_proto",
         "//pkg/ts/tspb:tspb_proto",
     ],

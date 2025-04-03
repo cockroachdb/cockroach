@@ -15,10 +15,10 @@ fi
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
-version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+source "$dir/teamcity-bazel-support.sh"
 
-google_credentials="$GCS_CREDENTIALS_PROD" log_into_gcloud
-gsutil cp "gs://cockroach-release-artifacts-staged-prod/cockroach-$version.linux-amd64.tgz" ./
-tar xf "cockroach-$version.linux-amd64.tgz"
-echo "select crdb_internal.force_panic('testing');" | "./cockroach-${version}.linux-amd64/cockroach" demo --insecure || true
-rm -rf "cockroach-$version.linux-amd64.tgz" "cockroach-${version}.linux-amd64"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e VERSION -e GOOGLE_CREDENTIALS -e SENTRY_AUTH_TOKEN -e GITHUB_TOKEN" run_bazel << 'EOF'
+bazel build //pkg/cmd/release/sentry
+BAZEL_BIN=$(bazel info bazel-bin)
+$BAZEL_BIN/pkg/cmd/release/sentry/sentry_/sentry
+EOF

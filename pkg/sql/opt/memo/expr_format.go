@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -151,7 +152,9 @@ type ExprFmtCtx struct {
 	// data from the formatted expression with redaction markers, including spans.
 	RedactableValues bool
 
-	// Memo must contain any expression that is formatted.
+	// Memo must contain any expression that is formatted. It is not used for
+	// scalar expressions. If it is nil for relational expressions, formatting may
+	// result in a nil-pointer panic.
 	Memo *Memo
 
 	// Catalog must be set unless the ExprFmtHideQualifications flag is set.
@@ -274,7 +277,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
-		*WindowExpr, *VectorSearchExpr, *VectorPartitionSearchExpr, *OpaqueRelExpr,
+		*WindowExpr, *VectorSearchExpr, *VectorMutationSearchExpr, *OpaqueRelExpr,
 		*OpaqueMutationExpr, *OpaqueDDLExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
 		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *AlterRangeRelocateExpr,
 		*ControlJobsExpr, *CancelQueriesExpr, *CancelSessionsExpr, *CreateViewExpr,
@@ -450,7 +453,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			partialIndexPredicates := tab.PartialIndexPredicatesUnsafe()
 			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
-				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))
+				indexOrds := make(cat.IndexOrdinals, 0, len(partialIndexPredicates))
 				for ord := range partialIndexPredicates {
 					indexOrds = append(indexOrds, ord)
 				}
@@ -650,7 +653,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -670,7 +673,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -697,7 +700,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
-			f.formatOptionalColList(e, tp, "vector index put centroid columns:", t.VectorIndexPutCentroidCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -743,34 +746,31 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *VectorSearchExpr:
-		if c := t.PrefixConstraint; c != nil {
-			if c.IsContradiction() {
-				tp.Childf("prefix constraint: contradiction")
-			} else if c.Spans.Count() == 1 {
-				tp.Childf(
-					"prefix constraint: %s: %s", c.Columns.String(),
-					cat.MaybeMarkRedactable(c.Spans.Get(0).String(), f.RedactableValues),
-				)
-			} else {
-				n := tp.Childf("prefix constraint: %s", c.Columns.String())
-				for i := 0; i < c.Spans.Count(); i++ {
-					n.Child(cat.MaybeMarkRedactable(c.Spans.Get(i).String(), f.RedactableValues))
-				}
+		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
+		if t.PrefixConstraint != nil {
+			n := tp.Childf("prefix constraint: %s", t.PrefixConstraint.Columns.String())
+			for i := 0; i < t.PrefixConstraint.Spans.Count(); i++ {
+				spanString := t.PrefixConstraint.Spans.Get(i).String()
+				n.Child(cat.MaybeMarkRedactable(spanString, f.RedactableValues))
 			}
 		}
-		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
 
-	case *VectorPartitionSearchExpr:
+	case *VectorMutationSearchExpr:
+		if t.IsIndexPut {
+			tp.Childf("index put")
+		} else {
+			tp.Childf("index del")
+		}
 		if len(t.PrefixKeyCols) > 0 {
 			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
 		}
 		tp.Childf("query vector column: %s", f.ColumnString(t.QueryVectorCol))
-		if !t.PrimaryKeyCols.Empty() {
-			tp.Childf("primary key columns: %v", t.PrimaryKeyCols)
+		if len(t.SuffixKeyCols) > 0 {
+			tp.Childf("suffix key columns: %v", t.SuffixKeyCols)
 		}
 		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
-		if t.CentroidCol != 0 {
-			tp.Childf("centroid col: %s", f.ColumnString(t.CentroidCol))
+		if t.QuantizedVectorCol != 0 {
+			tp.Childf("quantized vector col: %s", f.ColumnString(t.QuantizedVectorCol))
 		}
 
 	case *CreateTableExpr:
@@ -885,6 +885,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if relational.HasPlaceholder {
 			writeFlag("has-placeholder")
 		}
+		if lookupJoin, ok := e.(*LookupJoinExpr); ok {
+			// For lookup joins, indicate whether reverse scans are required to
+			// satisfy the ordering.
+			if lookupJoinMustUseReverseScans(md, lookupJoin, &required.Ordering) {
+				writeFlag("reverse-scans")
+			}
+		}
 
 		if f.Buffer.Len() != 0 {
 			tp.Child(f.Buffer.String())
@@ -912,6 +919,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			if cost.Flags.HugeCostPenalty {
 				b.WriteString(" huge-cost-penalty")
+			}
+			if cost.Flags.UnboundedCardinality {
+				b.WriteString(" unbounded-cardinality")
 			}
 			tp.Child(b.String())
 		}
@@ -1018,6 +1028,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	for i, n := 0, e.ChildCount(); i < n; i++ {
 		f.formatExpr(e.Child(i), tp)
 	}
+}
+
+// lookupJoinMustUseReverseScans returns true if the given lookup join must use
+// reverse scans in its lookups in order to satisfy the required ordering.
+// It assumes that the required ordering *can* be satisfied by the lookup join.
+func lookupJoinMustUseReverseScans(
+	md *opt.Metadata, lookupJoin *LookupJoinExpr, requiredOrdering *props.OrderingChoice,
+) bool {
+	inputCols := lookupJoin.Input.Relational().OutputCols
+	for _, ordColChoice := range requiredOrdering.Columns {
+		if ordColChoice.Group.Intersects(inputCols) {
+			// This is part of the prefix that can be satisfied by the input.
+			continue
+		}
+		// Forward scans if the index is ordered in the same direction as the
+		// required ordering, reverse scans otherwise.
+		idx := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
+		return ordColChoice.Descending != idx.Column(0).Descending
+	}
+	return false
 }
 
 func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
@@ -1473,10 +1503,10 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	if reverse {
 		f.Buffer.WriteString(",rev")
 	}
-	if index.IsInverted() {
+	switch index.Type() {
+	case idxtype.INVERTED:
 		f.Buffer.WriteString(",inverted")
-	}
-	if index.IsVector() {
+	case idxtype.VECTOR:
 		f.Buffer.WriteString(",vector")
 	}
 	if _, isPartial := index.Predicate(); isPartial {
@@ -1922,7 +1952,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *VectorSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
-	case *VectorPartitionSearchPrivate:
+	case *VectorMutationSearchPrivate:
 		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *props.OrderingChoice:

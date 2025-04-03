@@ -1,0 +1,41 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.cspann.memstore;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore";
+
+import "sql/vecindex/cspann/cspann.proto";
+import "sql/vecindex/cspann/quantize/quantize.proto";
+import "sql/vecindex/vecpb/vec.proto";
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// StoreProto serializes the fields of the in-memory store.
+message StoreProto {
+  vecpb.Config config = 1 [(gogoproto.nullable) = false];
+  repeated PartitionProto partitions = 2 [(gogoproto.nullable) = false];
+  uint64 next_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
+  repeated VectorProto vectors = 4 [(gogoproto.nullable) = false];
+  cspann.IndexStats stats = 5 [(gogoproto.nullable) = false];
+}
+
+// PartitionProto serializes the fields of a partition.
+message PartitionProto {
+  uint64 tree_id = 1 [(gogoproto.casttype) = "TreeID"];
+  uint64 partition_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.PartitionKey"];
+  quantize.RaBitQuantizedVectorSet ra_bit_q = 3;
+  quantize.UnQuantizedVectorSet un_quantized = 4;
+  repeated cspann.ChildKey child_keys = 5 [(gogoproto.nullable) = false];
+  repeated bytes value_bytes = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.ValueBytes"];
+  uint64 level = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.Level"];
+}
+
+// Vector serializes an original, full-size vector and its key bytes.
+message VectorProto {
+  bytes key_bytes = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann.KeyBytes"];
+  repeated float vector = 2;
+}

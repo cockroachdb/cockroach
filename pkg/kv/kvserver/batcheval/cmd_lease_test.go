@@ -12,8 +12,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -38,12 +40,21 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
+	st := cluster.MakeTestingClusterSettings()
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
-			ClusterSettings: cluster.MakeTestingClusterSettings(),
+			ClusterSettings: st,
 			StoreID:         voterStoreID,
 			Desc:            &desc,
 			Clock:           clock,
+			ConcurrencyManager: concurrency.NewManager(concurrency.Config{
+				NodeDesc:       &roachpb.NodeDescriptor{NodeID: 1},
+				RangeDesc:      &desc,
+				Settings:       st,
+				Clock:          clock,
+				IntentResolver: &noopIntentResolver{},
+				TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+			}),
 		}).EvalContext(),
 		Args: &kvpb.TransferLeaseRequest{
 			Lease: roachpb.Lease{
@@ -140,13 +151,21 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				Key:       roachpb.Key("a"),
 				Timestamp: maxPriorReadTS,
 			})
-
+			st := cluster.MakeTestingClusterSettings()
 			evalCtx := &MockEvalCtx{
-				ClusterSettings:    cluster.MakeTestingClusterSettings(),
+				ClusterSettings:    st,
 				StoreID:            1,
 				Desc:               &desc,
 				Clock:              clock,
 				CurrentReadSummary: currentReadSummary,
+				ConcurrencyManager: concurrency.NewManager(concurrency.Config{
+					NodeDesc:       &roachpb.NodeDescriptor{NodeID: 1},
+					RangeDesc:      &desc,
+					Settings:       st,
+					Clock:          clock,
+					IntentResolver: &noopIntentResolver{},
+					TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+				}),
 			}
 			cArgs := CommandArgs{
 				EvalCtx: evalCtx.EvalContext(),
@@ -239,12 +258,21 @@ func TestLeaseRequestTypeSwitchForwardsExpiration(t *testing.T) {
 				t.Fatalf("unexpected lease type: %s", leaseType)
 			}
 
+			st := cluster.MakeTestingClusterSettings()
 			evalCtx := &MockEvalCtx{
-				ClusterSettings:    cluster.MakeTestingClusterSettings(),
+				ClusterSettings:    st,
 				StoreID:            1,
 				Desc:               &desc,
 				Clock:              clock,
 				RangeLeaseDuration: rangeLeaseDuration,
+				ConcurrencyManager: concurrency.NewManager(concurrency.Config{
+					NodeDesc:       &roachpb.NodeDescriptor{NodeID: 1},
+					RangeDesc:      &desc,
+					Settings:       st,
+					Clock:          clock,
+					IntentResolver: &noopIntentResolver{},
+					TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+				}),
 			}
 			cArgs := CommandArgs{
 				EvalCtx: evalCtx.EvalContext(),

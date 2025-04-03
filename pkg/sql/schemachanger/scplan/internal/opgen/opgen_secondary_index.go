@@ -125,6 +125,19 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.SecondaryIndex) *scop.MarkRecreatedIndexAsInvisible {
+					// Recreated indexes are not visible until their final primary index
+					// is usable. While they maybe made public we need to make sure they
+					// are not accidentally used.
+					if this.RecreateTargetIndexID == 0 {
+						return nil
+					}
+					return &scop.MarkRecreatedIndexAsInvisible{
+						TableID:              this.TableID,
+						IndexID:              this.IndexID,
+						TargetPrimaryIndexID: this.RecreateTargetIndexID,
+					}
+				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeValidatedSecondaryIndexPublic {
 					return &scop.MakeValidatedSecondaryIndexPublic{
 						TableID: this.TableID,

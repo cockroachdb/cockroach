@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,9 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -108,10 +112,6 @@ func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration,
 		return 0, false
 	}
 	return *r.expirationWindow, true
-}
-
-func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
-	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
 }
 
 func (r *resolvedTenantReplicationOptions) ReaderTenantEnabled() bool {
@@ -226,7 +226,24 @@ func alterReplicationJobHook(
 		if err != nil {
 			return err
 		}
-
+		jobRegistry := p.ExecCfg().JobRegistry
+		if alterTenantStmt.Producer {
+			if err := p.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONSOURCE,
+			); err != nil {
+				return err
+			}
+			return alterTenantSetReplicationSource(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
+		}
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
+		); err != nil {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("this command will require the REPLICATIONDEST privilege on a fully upgraded 25.2+ cluster"))
+			} else {
+				return err
+			}
+		}
 		// If a source uri is being provided, we're enabling replication into an
 		// existing virtual cluster. It must be inactive, and we'll verify that it
 		// was the cluster from which the one it will replicate was replicated, i.e.
@@ -244,11 +261,11 @@ func alterReplicationJobHook(
 				options,
 			)
 		}
-		jobRegistry := p.ExecCfg().JobRegistry
+
 		if !alterTenantStmt.Options.IsDefault() {
 			// If the statement contains options, then the user provided the ALTER
 			// TENANT ... SET REPLICATION [options] form of the command.
-			return alterTenantSetReplication(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
+			return alterTenantSetReplication(ctx, p, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
 		}
 		if err := checkForActiveIngestionJob(tenInfo); err != nil {
 			return err
@@ -284,26 +301,34 @@ func alterReplicationJobHook(
 	return fn, nil, false, nil
 }
 
-func alterTenantSetReplication(
+func alterTenantSetReplicationSource(
 	ctx context.Context,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
-
 	if expirationWindow, ok := options.GetExpirationWindow(); ok {
 		if err := alterTenantExpirationWindow(ctx, txn, jobRegistry, expirationWindow, tenInfo); err != nil {
 			return err
 		}
 	}
-	if options.DestinationOptionsSet() {
-		if err := checkForActiveIngestionJob(tenInfo); err != nil {
-			return err
-		}
-		if err := alterTenantConsumerOptions(ctx, txn, jobRegistry, options, tenInfo); err != nil {
-			return err
-		}
+	return nil
+}
+
+func alterTenantSetReplication(
+	ctx context.Context,
+	p sql.PlanHookState,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	options *resolvedTenantReplicationOptions,
+	tenInfo *mtinfopb.TenantInfo,
+) error {
+	if err := checkForActiveIngestionJob(tenInfo); err != nil {
+		return err
+	}
+	if err := alterTenantConsumerOptions(ctx, p, txn, jobRegistry, options, tenInfo); err != nil {
+		return err
 	}
 	return nil
 }
@@ -350,10 +375,6 @@ func alterTenantRestartReplication(
 			dstTenantID,
 			tenInfo.DataState,
 		)
-	}
-
-	if alterTenantStmt.Options.ExpirationWindowSet() {
-		return CannotSetExpirationWindowErr
 	}
 
 	configUri, err := streamclient.ParseConfigUri(srcUri)
@@ -406,7 +427,7 @@ func alterTenantRestartReplication(
 		revertTo = tenInfo.PreviousSourceTenant.CutoverAsOf
 	}
 
-	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options)
+	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options, false)
 	if err != nil {
 		return err
 	}
@@ -491,14 +512,6 @@ func pickReplicationResume(
 func checkReplicationStartTime(
 	ctx context.Context, p sql.PlanHookState, tenInfo *mtinfopb.TenantInfo, ts hlc.Timestamp,
 ) error {
-	// TODO(az): remove the conditional once we figure out how to validate PTS on the
-	// source cluster when it has no producer jobs.
-	// When starting a replication job for a tenant with BACKUP and RESTORE instead
-	// of an initial scan, the source will not have producer jobs associated with
-	// the tenant, thus no PTS to validate.
-	if tenInfo.PreviousSourceTenant != nil && tenInfo.PreviousSourceTenant.CutoverTimestamp.Equal(ts) {
-		return nil
-	}
 
 	pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 
@@ -660,16 +673,38 @@ func alterTenantExpirationWindow(
 
 func alterTenantConsumerOptions(
 	ctx context.Context,
+	p sql.PlanHookState,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
+
 	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			var readerID roachpb.TenantID
+			if options.enableReaderTenant {
+				// If the replicating tenant already has a resolved tiemstamp, we can
+				// create the reader tenant directly to its ready state rather than in
+				// the add state that replies on the replication job to activate it when
+				// its frontier advances for the first time. If we don't have a resolved
+				// timestamp, we'll fallback to creating it inactive and just let the
+				// job do it later, which it does since we record the reader's ID below.
+				ready := md.Progress.GetStreamIngest().ReplicatedTime.IsSet()
+				var err error
+				if readerID, err = createReaderTenant(ctx, p, tenInfo.Name, roachpb.MustMakeTenantID(tenInfo.ID), options, ready); err != nil {
+					return err
+				}
+			}
+
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if ret, ok := options.GetRetention(); ok {
 				streamIngestionDetails.ReplicationTTLSeconds = ret
+			}
+			// Record the reader ID; this is used in the job to start the reader if
+			// needed when the first frontier advance is recorded.
+			if readerID != (roachpb.TenantID{}) {
+				streamIngestionDetails.ReadTenantID = readerID
 			}
 			ju.UpdatePayload(md.Payload)
 			return nil

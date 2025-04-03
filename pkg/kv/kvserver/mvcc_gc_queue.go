@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -122,6 +121,16 @@ var EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSetting
 	"controls whether replicas are enqueued into the mvcc gc queue for "+
 		"processing, when a span config update occurs which affects the replica",
 	false,
+)
+
+// See https://github.com/cockroachdb/cockroach/pull/143122.
+var mvccGCQueueFullyEnableAC = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_kv_admission_control.enabled",
+	"when true, MVCC GC queue operations are subject to store admission control. If set to false, "+
+		"since store admission control will be disabled, replication flow control will also be effectively disabled. "+
+		"This setting does not affect CPU admission control.",
+	true,
 )
 
 func largeAbortSpan(ms enginepb.MVCCStats) bool {
@@ -610,6 +619,9 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 		if err != nil {
 			return err
 		}
+		if mvccGCQueueFullyEnableAC.Get(&r.repl.ClusterSettings().SV) {
+			ctx = admissionHandle.AnnotateCtx(ctx)
+		}
 	}
 	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
 	defer writeBytes.Release()
@@ -715,18 +727,11 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	var snap storage.Reader
-	if repl.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&repl.ClusterSettings().SV) {
-		efos := repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
-		if util.RaceEnabled {
-			ss := rditer.MakeReplicatedKeySpanSet(desc)
-			defer ss.Release()
-			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
-		} else {
-			snap = efos
-		}
-	} else {
-		snap = repl.store.TODOEngine().NewSnapshot()
+	snap := repl.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
+	if util.RaceEnabled {
+		ss := rditer.MakeReplicatedKeySpanSet(desc)
+		defer ss.Release()
+		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	defer snap.Close()
 

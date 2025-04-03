@@ -174,8 +174,6 @@ func (c *awsConfigValue) Set(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	// Update the provider's config with the user-specified config.
-	providerInstance.Config = &c.awsConfig
 	return nil
 }
 

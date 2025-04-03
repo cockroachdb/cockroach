@@ -82,6 +82,18 @@ func (node *Insert) DefaultValues() bool {
 	return node.Rows.Select == nil
 }
 
+// VectorInsert returns true iff the input for the insert operation is a
+// materialized columnar batch, in which case the Insert operator will use a
+// vectorized implementation. This should only be true for the Copy fast path.
+func (node *Insert) VectorInsert() bool {
+	literalValues, ok := node.Rows.Select.(*LiteralValuesClause)
+	if !ok {
+		return false
+	}
+	_, vectorRows := literalValues.Rows.(VectorRows)
+	return vectorRows
+}
+
 // OnConflict represents an `ON CONFLICT (columns) WHERE arbiter DO UPDATE SET
 // exprs WHERE where` clause.
 //

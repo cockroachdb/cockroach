@@ -1548,3 +1548,17 @@ SELECT f::INT FROM t112515
 0
 2
 2
+
+statement ok
+CREATE TABLE t128294 (r REGCLASS);
+
+let $table_id
+SELECT 't128294'::REGCLASS::OID;
+
+statement ok
+INSERT INTO t128294 (r) VALUES ($table_id);
+
+query T
+SELECT (SELECT r FROM t128294) FROM t128294;
+----
+t128294

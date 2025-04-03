@@ -23,13 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -472,18 +470,8 @@ func (sr *schemaResolver) ResolveFunction(
 	case builtinDef != nil && routine != nil:
 		return builtinDef.MergeWith(routine, path)
 	case builtinDef != nil:
-		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
-		if props.UnsupportedWithIssue != 0 {
-			// Note: no need to embed the function name in the message; the
-			// caller will add the function name as prefix.
-			const msg = "this function is not yet supported"
-			var unImplErr error
-			if props.UnsupportedWithIssue < 0 {
-				unImplErr = unimplemented.New(builtinDef.Name+"()", msg)
-			} else {
-				unImplErr = unimplemented.NewWithIssueDetail(props.UnsupportedWithIssue, builtinDef.Name, msg)
-			}
-			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
+		if builtinDef.UnsupportedWithIssue != 0 {
+			return nil, builtinDef.MakeUnsupportedError()
 		}
 		return builtinDef, nil
 	case routine != nil:

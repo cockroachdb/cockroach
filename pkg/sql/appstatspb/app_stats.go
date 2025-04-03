@@ -188,7 +188,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
 	s.ExecStats.Add(other.ExecStats)
-	s.LatencyInfo.Add(other.LatencyInfo)
+	s.LatencyInfo.MergeMaxMin(other.LatencyInfo)
 
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
@@ -270,39 +270,12 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.Count += other.Count
 }
 
-// Add combines other into this LatencyInfo.
-func (s *LatencyInfo) Add(other LatencyInfo) {
-	// Use the latest non-zero value.
-	if other.P50 != 0 {
-		s.P50 = other.P50
-		s.P90 = other.P90
-		s.P99 = other.P99
-	}
-
+// MergeMaxMin combines the max and min only into this LatencyInfo.
+func (s *LatencyInfo) MergeMaxMin(other LatencyInfo) {
 	if s.Min == 0 || other.Min < s.Min {
 		s.Min = other.Min
 	}
 	if other.Max > s.Max {
 		s.Max = other.Max
-	}
-	s.checkPercentiles()
-}
-
-// checkPercentiles is a patchy solution and not ideal.
-// When the execution count for a period is smaller than 500,
-// the percentiles sample is including previous aggregation periods,
-// making the p99 possible be greater than the max.
-// For now, we just do a check and update the percentiles to the max
-// possible size.
-// TODO(maryliag): use a proper sample size (#99070)
-func (s *LatencyInfo) checkPercentiles() {
-	if s.P99 > s.Max {
-		s.P99 = s.Max
-	}
-	if s.P90 > s.Max {
-		s.P90 = s.Max
-	}
-	if s.P50 > s.Max {
-		s.P50 = s.Max
 	}
 }

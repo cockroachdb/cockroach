@@ -12,15 +12,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -75,7 +72,11 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 
 	var emptyCutoverTime time.Time
-	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, false)
+	// Set Async validation to true, so the post cutover retention job has a long
+	// expiration time.
+	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, true)
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
 	require.GreaterOrEqual(t, cutoverOutput.GoTime(), targetReplicatedTime.GoTime())
 	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -111,6 +112,30 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	// now updated src tenant.
 	defer c.StartDestTenant(ctx, nil, 0)()
 	c.CompareResult(`SELECT * FROM d.t2`)
+}
+
+func TestAlterTenantAddReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+	c.DestSysSQL.CheckQueryResults(t, "SELECT name FROM [SHOW TENANTS] ORDER BY name",
+		[][]string{{"destination"}, {"system"}},
+	)
+	c.DestSysSQL.Exec(t, "ALTER TENANT $1 SET REPLICATION READ VIRTUAL CLUSTER", args.DestTenantName)
+	c.DestSysSQL.CheckQueryResults(t, "SELECT name, data_state FROM [SHOW TENANTS] ORDER BY name",
+		[][]string{{"destination", "replicating"}, {"destination-readonly", "ready"}, {"system", "ready"}},
+	)
 }
 
 func TestAlterTenantPauseResume(t *testing.T) {
@@ -535,67 +560,6 @@ func TestAlterTenantHandleFutureProtectedTimestamp(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
 }
 
-func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	var enforcedGC struct {
-		syncutil.Mutex
-		ts hlc.Timestamp
-	}
-
-	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-		for _, req := range ba.Requests {
-			if revReq := req.GetRevertRange(); revReq != nil {
-				enforcedGC.Lock()
-				defer enforcedGC.Unlock()
-				if enforcedGC.ts.IsSet() && revReq.TargetTime.Less(enforcedGC.ts) {
-					return kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
-						Timestamp: revReq.TargetTime,
-						Threshold: enforcedGC.ts,
-					})
-				}
-			}
-		}
-		return nil
-	}
-
-	nodelocalCleanup := nodelocal.ReplaceNodeLocalForTesting(t.TempDir())
-	defer nodelocalCleanup()
-
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: testingRequestFilter,
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-
-	db.Exec(t, "CREATE TENANT t1")
-	db.Exec(t, "BACKUP TENANT 3 INTO 'nodelocal://1/t'")
-
-	afterBackup := srv.Clock().Now()
-	enforcedGC.Lock()
-	enforcedGC.ts = afterBackup
-	enforcedGC.Unlock()
-
-	u := replicationtestutils.GetReplicationURI(t, srv, srv, serverutils.User(username.RootUser))
-
-	db.Exec(t, "RESTORE TENANT 3 FROM LATEST IN 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
-	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())
-	srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-
-	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, db, "t2")
-	srcTime := srv.Clock().Now()
-	replicationtestutils.WaitUntilReplicatedTime(t, srcTime, db, catpb.JobID(ingestionJobID))
-}
-
 func TestAlterReplicationJobErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -607,10 +571,51 @@ func TestAlterReplicationJobErrors(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE TENANT t1")
+
+	db.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	testuser := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
 
 	t.Run("alter tenant subqueries", func(t *testing.T) {
 		// Regression test for #136339
 		db.ExpectErr(t, "subqueries are not allowed", "ALTER TENANT (select 't2') START REPLICATION OF t1 ON 'foo'")
 	})
+	t.Run("alter replication dest privs", func(t *testing.T) {
+		cmd := "ALTER TENANT t1 SET REPLICATION RETENTION ='100ms'"
+		testuser.ExpectErr(t, "user testuser does not have MANAGEVIRTUALCLUSTER system privilege", cmd)
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
+		testuser.ExpectErr(t, "user testuser does not have REPLICATIONDEST system privilege", cmd)
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+		// Implies we got past the priv checks.
+		testuser.ExpectErr(t, `does not have an active replication consumer job`, cmd)
+		db.Exec(t, fmt.Sprintf("REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM %s", username.TestUser))
+	})
+	t.Run("alter replication source privs", func(t *testing.T) {
+		cmd := "ALTER TENANT t1 SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'"
+		testuser.ExpectErr(t, "user testuser does not have MANAGEVIRTUALCLUSTER system privilege", cmd)
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
+		testuser.ExpectErr(t, "user testuser does not have REPLICATIONSOURCE system privilege", cmd)
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONSOURCE TO %s", username.TestUser))
+		testuser.Exec(t, cmd)
+	})
+	t.Run("alter replication dest priv 24.3", func(t *testing.T) {
+		params := base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		}
+		params.Knobs.Server = &server.TestingKnobs{
+			ClusterVersionOverride:         clusterversion.V24_3.Version(),
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+		}
 
+		srv, sqlDB, _ := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
+		db := sqlutils.MakeSQLRunner(sqlDB)
+		db.Exec(t, "CREATE TENANT t1")
+		db.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+		testuser := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
+		// Implies we got past the priv checks, without REPLICATIONDEST.
+		cmd := "ALTER TENANT t1 SET REPLICATION RETENTION ='100ms'"
+		testuser.ExpectErr(t, `does not have an active replication consumer job`, cmd)
+	})
 }

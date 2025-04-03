@@ -1,0 +1,76 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/indirect_toast.out --label=/mnt/data1/postgres/src/test/regress/results/indirect_toast.out /mnt/data1/postgres/src/test/regress/expected/indirect_toast.out /mnt/data1/postgres/src/test/regress/results/indirect_toast.out
+--- /mnt/data1/postgres/src/test/regress/expected/indirect_toast.out
++++ /mnt/data1/postgres/src/test/regress/results/indirect_toast.out
+@@ -3,15 +3,21 @@
+ --
+ -- directory paths and dlsuffix are passed to us in environment variables
+ \getenv libdir PG_LIBDIR
++invalid command \getenv
+ \getenv dlsuffix PG_DLSUFFIX
++invalid command \getenv
+ \set regresslib :libdir '/regress' :dlsuffix
+ CREATE FUNCTION make_tuple_indirect (record)
+         RETURNS record
+         AS :'regresslib'
+         LANGUAGE C STRICT;
++ERROR:  unimplemented: C is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/102201/_version_
+ -- Other compression algorithms may cause the compressed data to be stored
+ -- inline.  pglz guarantees that the data is externalized, so stick to it.
+ SET default_toast_compression = 'pglz';
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ CREATE TABLE indtoasttest(descr text, cnt int DEFAULT 0, f1 text, f2 text);
+ INSERT INTO indtoasttest(descr, f1, f2) VALUES('two-compressed', repeat('1234567890',1000), repeat('1234567890',1000));
+ INSERT INTO indtoasttest(descr, f1, f2) VALUES('two-toasted', repeat('1234567890',30000), repeat('1234567890',50000));
+@@ -19,14 +25,7 @@
+ INSERT INTO indtoasttest(descr, f1, f2) VALUES('one-toasted,one-null', NULL, repeat('1234567890',50000));
+ -- check whether indirect tuples works on the most basic level
+ SELECT descr, substring(make_tuple_indirect(indtoasttest)::text, 1, 200) FROM indtoasttest;
+-          descr          |                                                                                                substring                                                                                                 
+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- two-compressed          | (two-compressed,0,12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012
+- two-toasted             | (two-toasted,0,12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345
+- one-compressed,one-null | ("one-compressed,one-null",0,,12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+- one-toasted,one-null    | ("one-toasted,one-null",0,,12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123
+-(4 rows)
+-
++ERROR:  unknown function: make_tuple_indirect()
+ -- modification without changing varlenas
+ UPDATE indtoasttest SET cnt = cnt +1 RETURNING substring(indtoasttest::text, 1, 200);
+                                                                                                 substring                                                                                                 
+@@ -77,6 +76,10 @@
+ 
+ -- check we didn't screw with main/toast tuple visibility
+ VACUUM FREEZE indtoasttest;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM FREEZE indtoasttest
++^
+ SELECT substring(indtoasttest::text, 1, 200) FROM indtoasttest;
+                                                                                                 substring                                                                                                 
+ ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+@@ -99,6 +102,7 @@
+         ON indtoasttest
+         FOR EACH ROW
+         EXECUTE PROCEDURE update_using_indirect();
++ERROR:  unknown function: make_tuple_indirect()
+ -- modification without changing varlenas
+ UPDATE indtoasttest SET cnt = cnt +1 RETURNING substring(indtoasttest::text, 1, 200);
+                                                                                                 substring                                                                                                 
+@@ -151,6 +155,10 @@
+ 
+ -- check we didn't screw with main/toast tuple visibility
+ VACUUM FREEZE indtoasttest;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM FREEZE indtoasttest
++^
+ SELECT substring(indtoasttest::text, 1, 200) FROM indtoasttest;
+                                                                                                 substring                                                                                                 
+ ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+@@ -164,3 +172,4 @@
+ DROP TABLE indtoasttest;
+ DROP FUNCTION update_using_indirect();
+ RESET default_toast_compression;
++ERROR:  unrecognized configuration parameter "default_toast_compression"

@@ -136,8 +136,8 @@ any mixed-cluster or upgrade tests with the forked release.
 
 **When**: Around the time we are cutting the first beta of the forked release.
 Technically this step can happen right after forking, but if there are changes
-to the gates or upgrades in the forked release it might cause master-to-master
-upgrades to cause opaque issues.
+to the gates or upgrades in the forked release it might cause issues with
+master-to-master upgrades.
 
 **Checklist**:
 
@@ -148,12 +148,11 @@ upgrades to cause opaque issues.
 
 - [ ] Add final version for the previous release (e.g. `V24_1`).
 
-- [ ] Add start version (e.g. `V24_2Start` with version `24.1-2`) and add a new
+- [ ] Add start version (e.g. `V24_2_Start` with version `24.1-2`) and add a new
   first upgrade for it (in `upgrades/upgrades.go`).
-
-- [ ] Do not update `PreviousRelease` constant. We can only update the
-  `PreviousRelease` when an RC is published, which is needed for upgrade
-  roachtests.
+ 
+- [ ] Update `SystemDatabaseSchemaBootstrapVersion` in
+  `pkg/sql/catalog/systemschema/system.go` to the start version just created.
 
 - [ ] Update `roachpb.successorSeries` map and update `TestReleaseSeriesSuccessor`
 
@@ -179,7 +178,7 @@ upgrades to cause opaque issues.
 - [ ] Regenerate expected test data as needed (usually
   `pkg/sql/catalog/systemschema_test` and some logictests).
 
-**Sample PR:** [#134750](https://github.com/cockroachdb/cockroach/pull/134750)
+**Sample PR:** [#139387](https://github.com/cockroachdb/cockroach/pull/139387)
 
 ### M.2: Enable mixed-cluster logic tests
 
@@ -239,8 +238,9 @@ generate the necessary fixtures.
  
 - [ ] Add `cockroach-go-testserver-...` logictest config for the forked version
   (e.g. `cockroach-go-testserver-24.1`) and add it to
-  `cockroach-go-testserver-configs`. Run `./dev gen` and fix up any tests that
-  need changing.
+  `cockroach-go-testserver-configs`. Update the visibility for
+  `cockroach_predecessor_version` in `pkg/sql/logictest/BUILD.bazel`. Run
+  `./dev gen` and fix up any tests that fail (using a draft PR helps).
 
 - [ ] Update releases file:
   ```
@@ -253,7 +253,7 @@ generate the necessary fixtures.
 - [ ] Check that all gates for the previous release are identical on the
   `master` and release branch.
 
-**Sample PR:** TODO
+**Sample PR:** [#141765](https://github.com/cockroachdb/cockroach/pull/141765)
 
 ### M.4: Bump min supported
 

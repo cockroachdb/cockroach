@@ -1,0 +1,30 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_having.out --label=/mnt/data1/postgres/src/test/regress/results/select_having.out /mnt/data1/postgres/src/test/regress/expected/select_having.out /mnt/data1/postgres/src/test/regress/results/select_having.out
+--- /mnt/data1/postgres/src/test/regress/expected/select_having.out
++++ /mnt/data1/postgres/src/test/regress/results/select_having.out
+@@ -64,13 +64,9 @@
+ 
+ -- errors: ungrouped column references
+ SELECT a FROM test_having HAVING min(a) < max(a);
+-ERROR:  column "test_having.a" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT a FROM test_having HAVING min(a) < max(a);
+-               ^
++ERROR:  column "a" must appear in the GROUP BY clause or be used in an aggregate function
+ SELECT 1 AS one FROM test_having HAVING a > 1;
+-ERROR:  column "test_having.a" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT 1 AS one FROM test_having HAVING a > 1;
+-                                                ^
++ERROR:  column "a" must appear in the GROUP BY clause or be used in an aggregate function
+ -- the really degenerate case: need not scan table at all
+ SELECT 1 AS one FROM test_having HAVING 1 > 2;
+  one 
+@@ -85,9 +81,5 @@
+ 
+ -- and just to prove that we aren't scanning the table:
+ SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2;
+- one 
+------
+-   1
+-(1 row)
+-
++ERROR:  division by zero
+ DROP TABLE test_having;

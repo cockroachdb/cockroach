@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -347,12 +349,8 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		columnType := mustRetrieveColumnTypeElem(b, tbl.TableID, colElem.ColumnID)
 		// Check if the column type is indexable.
 		if !colinfo.ColumnTypeIsIndexable(columnType.Type) {
-			panic(unimplemented.NewWithIssueDetailf(35730,
-				columnType.Type.DebugString(),
-				"column %s is of type %s and thus is not indexable",
-				col.Column,
-				columnType.Type),
-			)
+			panic(sqlerrors.NewColumnNotIndexableError(
+				col.Column.String(), columnType.Type.Name(), columnType.Type.DebugString()))
 		}
 	}
 }
@@ -694,7 +692,7 @@ func recreateAllSecondaryIndexes(
 						kind:      scpb.IndexColumn_KEY,
 						direction: ic.Direction,
 					})
-					if idx.IsInverted && ic.OrdinalInKind >= largestKeyOrdinal {
+					if idx.Type == idxtype.INVERTED && ic.OrdinalInKind >= largestKeyOrdinal {
 						largestKeyOrdinal = ic.OrdinalInKind
 						invertedColumnID = ic.ColumnID
 					}
@@ -706,7 +704,7 @@ func recreateAllSecondaryIndexes(
 				if !idxColIDs.Contains(ics.columnID) {
 					idxColIDs.Add(ics.columnID)
 					inColumns = append(inColumns, ics)
-				} else if idx.IsInverted && invertedColumnID == ics.columnID {
+				} else if idx.Type == idxtype.INVERTED && invertedColumnID == ics.columnID {
 					// In an inverted index, the inverted column's value is not equal to
 					// the actual data in the row for that column. As a result, if the
 					// inverted column happens to also be in the primary key, it's crucial
@@ -740,6 +738,7 @@ func recreateAllSecondaryIndexes(
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
 		in.secondary.RecreateSourceIndexID = out.indexID()
+		in.secondary.RecreateTargetIndexID = newPrimaryIndex.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
@@ -792,6 +791,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		IndexID:             nextRelationIndexID(b, tbl),
 		IsUnique:            true,
 		IsInverted:          oldPrimaryIndexElem.IsInverted,
+		Type:                oldPrimaryIndexElem.Type,
 		Sharding:            oldPrimaryIndexElem.Sharding,
 		IsCreatedExplicitly: false,
 		ConstraintID:        b.NextTableConstraintID(tbl.TableID),

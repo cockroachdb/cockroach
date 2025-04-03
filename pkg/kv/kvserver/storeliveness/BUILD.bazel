@@ -4,8 +4,10 @@ go_library(
     name = "storeliveness",
     srcs = [
         "config.go",
+        "doc.go",
         "fabric.go",
         "metrics.go",
+        "node_manager.go",
         "persist.go",
         "requester_state.go",
         "support_manager.go",
@@ -16,6 +18,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
@@ -24,6 +27,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",

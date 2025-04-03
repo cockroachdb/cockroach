@@ -307,6 +307,8 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 104
@@ -892,6 +894,8 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 105
@@ -909,15 +913,18 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
+    recreateTargetId: 0
     referencedColumnIds:
     - 1
     sharding: null
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    type: FORWARD
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
+    vecConfig: null
   Status: PUBLIC
 - Table:
     isTemporary: false
@@ -1327,6 +1334,8 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+    type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 104
@@ -1717,6 +1726,8 @@ ElementState:
     sourceIndexId: 0
     tableId: 109
     temporaryIndexId: 0
+    type: FORWARD
+    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 109

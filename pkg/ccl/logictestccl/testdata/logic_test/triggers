@@ -804,9 +804,15 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION g
 # Make sure the legacy schema-changer correctly removes the backreference from
 # t2 to t1.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 DROP TABLE t1;
 DROP TABLE t2;
 DROP FUNCTION g;
+
+statement ok
+RESET autocommit_before_ddl
 
 # ==============================================================================
 # Test dependency tracking for a user-defined type reference.
@@ -1027,6 +1033,9 @@ statement ok
 USE db;
 
 statement ok
+CREATE FUNCTION i() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+
+statement ok
 CREATE TABLE t (a INT, b INT);
 
 statement ok
@@ -1034,6 +1043,9 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; EN
 
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION i();
 
 statement ok
 USE test;
@@ -4002,14 +4014,139 @@ CREATE TRIGGER foo AFTER UPDATE OF y ON xy FOR EACH ROW EXECUTE FUNCTION f();
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
+# Verify we log to the event log.
+query T retry
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+create_trigger
+
 statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 statement ok
 DROP TRIGGER foo ON xy;
 
+# Verify we log to the event log.
+query T retry
+select "eventType" from system.eventlog order by timestamp desc limit 1;
+----
+drop_trigger
+
 # CREATE OR REPLACE still works if there are no referencing triggers.
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
+# ==============================================================================
+# Test that descriptor backreferences are cleaned up
+# ==============================================================================
+
+subtest ensure_back_ref_cleanup
+
+statement ok
+create table listings_balance (c1 int);
+
+# Create a function that references listings_balance
+statement ok
+create or replace function update_listing_balance()
+returns TRIGGER language PLpgSQL AS
+$$
+BEGIN
+  INSERT INTO listings_balance VALUES (1);
+  RETURN NEW;
+END
+$$;
+
+statement ok
+CREATE TABLE transaction_entries (c1 int);
+
+# Create a trigger that references listings_balance through the trigger function.
+statement ok
+create trigger tr AFTER INSERT OR UPDATE ON transaction_entries FOR EACH ROW execute function update_listing_balance();
+
+# Force the legacy schema change for the drop table. We will save the original
+# DSC setting so that it be reset properly.
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = off;
+
+# This should cleanup the dependency in listings_balance.
+statement ok
+DROP TABLE transaction_entries;
+
+# Reinstate original DSC setting
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+statement ok
+DROP FUNCTION update_listing_balance ;
+
+# Sanity to verify the dependency no longer exists.
+statement ok
+drop table listings_balance cascade;
+
+# Test that CREATE and DROP TRIGGER work when sent in a statement batch.
+
+subtest create_drop_in_batch_statement
+
+statement ok
+CREATE TABLE tab_141810 (
+  id  INT PRIMARY KEY,
+  a   INT,
+  b   INT
+);
+CREATE OR REPLACE FUNCTION func_141810() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF TG_OP = 'INSERT' THEN
+      NEW.a := 1;
+    END IF;
+    NEW.b := 2;
+    RETURN NEW;
+  END;
+$$;
+CREATE TRIGGER trg_141810
+  BEFORE INSERT OR UPDATE ON tab_141810
+  FOR EACH ROW
+  EXECUTE FUNCTION func_141810();
+INSERT INTO tab_141810 (id) VALUES (1);
+DROP TRIGGER trg_141810 ON tab_141810;
+INSERT INTO tab_141810 (id) VALUES (2);
+
+query III
+SELECT id, a, b FROM tab_141810 ORDER BY id
+----
+1  1     2
+2  NULL  NULL
+
+# Test that CREATE and DROP TRIGGER work in a prepared statement.
+
+subtest create_drop_prepared
+
+statement ok
+PREPARE foo AS CREATE TRIGGER trg_141810 BEFORE INSERT ON tab_141810 FOR EACH ROW EXECUTE FUNCTION func_141810();
+
+statement ok
+EXECUTE foo;
+
+statement ok
+INSERT INTO tab_141810 VALUES (3);
+
+statement ok
+PREPARE bar AS DROP TRIGGER trg_141810 ON tab_141810;
+
+statement ok
+EXECUTE bar;
+
+statement ok
+INSERT INTO tab_141810 VALUES (4);
+
+query III
+SELECT id, a, b FROM tab_141810 ORDER BY id
+----
+1  1     2
+2  NULL  NULL
+3  1     2
+4  NULL  NULL
 
 subtest end

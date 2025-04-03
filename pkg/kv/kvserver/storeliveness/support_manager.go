@@ -10,6 +10,7 @@ import (
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
@@ -43,10 +45,12 @@ type SupportManager struct {
 	settings              *clustersettings.Settings
 	stopper               *stop.Stopper
 	clock                 *hlc.Clock
+	heartbeatTicker       *timeutil.BroadcastTicker // optional
 	sender                MessageSender
 	receiveQueue          receiveQueue
 	storesToAdd           storesToAdd
 	minWithdrawalTS       hlc.Timestamp
+	withdrawalCallback    func(map[roachpb.StoreID]struct{})
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
 	metrics               *SupportManagerMetrics
@@ -65,6 +69,7 @@ func NewSupportManager(
 	settings *clustersettings.Settings,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
+	heartbeatTicker *timeutil.BroadcastTicker,
 	sender MessageSender,
 	knobs *SupportManagerKnobs,
 ) *SupportManager {
@@ -78,6 +83,7 @@ func NewSupportManager(
 		settings:              settings,
 		stopper:               stopper,
 		clock:                 clock,
+		heartbeatTicker:       heartbeatTicker,
 		sender:                sender,
 		knobs:                 knobs,
 		receiveQueue:          newReceiveQueue(),
@@ -150,6 +156,12 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 	return ss.Epoch, ss.Expiration
 }
 
+// RegisterSupportWithdrawalCallback implements the Fabric interface and
+// registers a callback to be invoked on each support withdrawal.
+func (sm *SupportManager) RegisterSupportWithdrawalCallback(cb func(map[roachpb.StoreID]struct{})) {
+	sm.withdrawalCallback = cb
+}
+
 // SupportFromEnabled implements the Fabric interface and determines if Store
 // Liveness sends heartbeats. It returns true if the cluster setting is on.
 func (sm *SupportManager) SupportFromEnabled(ctx context.Context) bool {
@@ -213,7 +225,12 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 // stores. Doing so in a single goroutine serializes these actions and
 // simplifies the concurrency model.
 func (sm *SupportManager) startLoop(ctx context.Context) {
-	heartbeatTicker := time.NewTicker(sm.options.HeartbeatInterval)
+	if sm.heartbeatTicker == nil {
+		// Tests may not supply a node-wide broadcast ticker. Create one on the fly.
+		sm.heartbeatTicker = timeutil.NewBroadcastTicker(sm.options.HeartbeatInterval)
+		defer sm.heartbeatTicker.Stop()
+	}
+	heartbeatTicker := sm.heartbeatTicker.NewTicker()
 	defer heartbeatTicker.Stop()
 
 	supportExpiryTicker := time.NewTicker(sm.options.SupportExpiryInterval)
@@ -318,7 +335,8 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
 	defer sm.supporterStateHandler.finishUpdate(ssfu)
-	numWithdrawn := ssfu.withdrawSupport(ctx, now)
+	supportWithdrawnForStoreIDs := ssfu.withdrawSupport(ctx, now)
+	numWithdrawn := len(supportWithdrawnForStoreIDs)
 	if numWithdrawn == 0 {
 		// No support to withdraw.
 		return
@@ -339,6 +357,16 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	log.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
+	if sm.withdrawalCallback != nil {
+		beforeProcess := timeutil.Now()
+		sm.withdrawalCallback(supportWithdrawnForStoreIDs)
+		afterProcess := timeutil.Now()
+		processDur := afterProcess.Sub(beforeProcess)
+		if processDur > minCallbackDurationToRecord {
+			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
+		}
+		log.Infof(ctx, "invoked callback for %d stores", numWithdrawn)
+	}
 }
 
 // handleMessages iterates over the given messages and delegates their handling

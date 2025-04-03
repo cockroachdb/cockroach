@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -58,8 +59,7 @@ type Config struct {
 	Codec               keys.SQLCodec
 	Clock               *hlc.Clock
 	Spans               []roachpb.Span
-	CheckpointSpans     []roachpb.Span
-	CheckpointTimestamp hlc.Timestamp
+	SpanLevelCheckpoint *jobspb.TimestampSpansMap
 	Targets             changefeedbase.Targets
 	Writer              kvevent.Writer
 	Metrics             *kvevent.Metrics
@@ -129,7 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
-		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
+		cfg.Writer, cfg.Spans, cfg.SpanLevelCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.WithFrontierQuantize,
@@ -172,18 +172,18 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	err = errors.CombineErrors(
-		f.writer.Drain(ctx),
-		f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason),
-	)
-
-	if err == nil {
-		// This context is canceled by the change aggregator when it receives
-		// an error reading from the Writer that was closed above.
-		<-ctx.Done()
+	if err := f.writer.Drain(ctx); err != nil {
+		err := errors.Wrap(err, "failed to drain kv feed writer")
+		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
+	}
+	if err := f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason); err != nil {
+		return err
 	}
 
-	return err
+	// This context is canceled by the change aggregator when it receives
+	// an error reading from the Writer that was closed above.
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func startLaggingRangesObserver(
@@ -254,8 +254,7 @@ func (e schemaChangeDetectedError) Error() string {
 
 type kvFeed struct {
 	spans                []roachpb.Span
-	checkpoint           []roachpb.Span
-	checkpointTimestamp  hlc.Timestamp
+	spanLevelCheckpoint  *jobspb.TimestampSpansMap
 	withFrontierQuantize time.Duration
 	withDiff             bool
 	withFiltering        bool
@@ -286,8 +285,7 @@ type kvFeed struct {
 func newKVFeed(
 	writer kvevent.Writer,
 	spans []roachpb.Span,
-	checkpoint []roachpb.Span,
-	checkpointTimestamp hlc.Timestamp,
+	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff, withFiltering bool,
@@ -307,8 +305,7 @@ func newKVFeed(
 	return &kvFeed{
 		writer:               writer,
 		spans:                spans,
-		checkpoint:           checkpoint,
-		checkpointTimestamp:  checkpointTimestamp,
+		spanLevelCheckpoint:  spanLevelCheckpoint,
 		withInitialBackfill:  withInitialBackfill,
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
@@ -391,8 +388,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Clear out checkpoint after the initial scan or rangefeed.
 		if initialScan {
-			f.checkpoint = nil
-			f.checkpointTimestamp = hlc.Timestamp{}
+			f.spanLevelCheckpoint = nil
 		}
 
 		boundaryTS := rangeFeedResumeFrontier.Frontier()
@@ -465,10 +461,14 @@ func isPrimaryKeyChange(
 
 // filterCheckpointSpans filters spans which have already been completed,
 // and returns the list of spans that still need to be done.
-func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roachpb.Span {
+func filterCheckpointSpans(
+	spans []roachpb.Span, checkpoint *jobspb.TimestampSpansMap,
+) []roachpb.Span {
 	var sg roachpb.SpanGroup
 	sg.Add(spans...)
-	sg.Sub(completed...)
+	for _, sp := range checkpoint.All() {
+		sg.Sub(sp...)
+	}
 	return sg.Slice()
 }
 
@@ -544,7 +544,7 @@ func (f *kvFeed) scanIfShould(
 
 	// If we have initial checkpoint information specified, filter out
 	// spans which we no longer need to scan.
-	spansToBackfill := filterCheckpointSpans(spansToScan, f.checkpoint)
+	spansToBackfill := filterCheckpointSpans(spansToScan, f.spanLevelCheckpoint)
 	if len(spansToBackfill) == 0 {
 		return spansToScan, scanTime, nil
 	}
@@ -592,19 +592,16 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	}()
 
 	// We have catchup scan checkpoint.  Advance frontier.
-	if startFrom.Less(f.checkpointTimestamp) {
-		for _, s := range f.checkpoint {
-			if _, err := resumeFrontier.Forward(s, f.checkpointTimestamp); err != nil {
-				return err
-			}
+	if f.spanLevelCheckpoint != nil {
+		if err := checkpoint.Restore(resumeFrontier, f.spanLevelCheckpoint); err != nil {
+			return err
 		}
 	}
 
 	var stps []kvcoord.SpanTimePair
-	resumeFrontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for s, ts := range resumeFrontier.Entries() {
 		stps = append(stps, kvcoord.SpanTimePair{Span: s, StartAfter: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
@@ -748,14 +745,17 @@ func copyFromSourceToDestUntilTableEvent(
 
 		// spanFrontier returns the frontier timestamp for the specified span by
 		// finding the minimum timestamp of its subspans in the frontier.
-		spanFrontier = func(sp roachpb.Span) (sf hlc.Timestamp) {
-			frontier.SpanEntries(sp, func(_ roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-				if sf.IsEmpty() || ts.Less(sf) {
-					sf = ts
+		spanFrontier = func(sp roachpb.Span) hlc.Timestamp {
+			minTs := hlc.MaxTimestamp
+			for _, ts := range frontier.SpanEntries(sp) {
+				if ts.Less(minTs) {
+					minTs = ts
 				}
-				return span.ContinueMatch
-			})
-			return sf
+			}
+			if minTs == hlc.MaxTimestamp {
+				return hlc.Timestamp{}
+			}
+			return minTs
 		}
 
 		// checkCopyBoundary checks the event against the current copy boundary

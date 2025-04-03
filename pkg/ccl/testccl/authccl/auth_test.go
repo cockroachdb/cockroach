@@ -45,8 +45,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -406,6 +406,14 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 						defer func() { _ = dbSQL.Close(ctx) }()
 					}
 					if err != nil {
+						// If the error is a PgError, return that directly instead of the
+						// wrapped error. The wrapped error includes additional contextual
+						// information that complicates checking for the expected error
+						// string in tests.
+						pgErr := new(pgconn.PgError)
+						if errors.As(err, &pgErr) {
+							return "", pgErr
+						}
 						return "", err
 					}
 					row := dbSQL.QueryRow(ctx, "SELECT current_catalog")

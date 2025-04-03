@@ -665,6 +665,17 @@ var specs = []stmtSpec{
 		inline: []string{"col_qual_list"},
 	},
 	{
+		name:   "do",
+		stmt:   "do_stmt",
+		inline: []string{"do_stmt_opt_list", "do_stmt_opt_item"},
+		replace: map[string]string{
+			"'SCONST' | ":                 "",
+			"non_reserved_word_or_sconst": "'PLPGSQL'  | routine_body_str",
+		},
+		unlink:  []string{"routine_body_str"},
+		nosplit: true,
+	},
+	{
 		name:   "for_locking",
 		stmt:   "for_locking_item",
 		inline: []string{"for_locking_strength", "opt_locked_rels", "opt_nowait_or_skip"},
@@ -690,8 +701,12 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
 	{
-		name:    "copy_stmt",
-		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		name:   "copy_stmt",
+		inline: []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		replace: map[string]string{
+			"copy_to_stmt":                      "query",
+			"'(' copy_generic_options_list ')'": "",
+		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
@@ -1283,9 +1298,8 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"backup_targets":                         "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
-			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
+			"backup_targets": "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder IN string_or_placeholder_opt_list": "( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
 		unlink: []string{"subdirectory", "timestamp", "collectionURI", "localityURI"},
 		exclude: []*regexp.Regexp{

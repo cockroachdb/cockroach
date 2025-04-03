@@ -153,11 +153,11 @@ func TestEntryCache(t *testing.T) {
 	verify(rangeID, 1, 11, ents[:], 11)
 	verify(otherRangeID, 1, 11, []raftpb.Entry{}, 1)
 	// Clear and show that it makes space.
-	c.Clear(rangeID, 10)
+	c.Clear(rangeID, 9)
 	verify(rangeID, 10, 11, ents[9:], 11)
 	verifyMetrics(t, c, 1, 9+int64(partitionSize))
 	// Clear again and show that it still works.
-	c.Clear(rangeID, 10)
+	c.Clear(rangeID, 9)
 	verify(rangeID, 10, 11, ents[9:], 11)
 	verifyMetrics(t, c, 1, 9+int64(partitionSize))
 	// Add entries from before and show that they get cached.
@@ -281,7 +281,7 @@ func TestRingBuffer_clearTo(t *testing.T) {
 	require.Len(t, ents, 1)
 	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
 	require.NotNil(t, p)
-	_, numRemovedEntries := p.clearTo(101)
+	_, numRemovedEntries := p.clearTo(100)
 	require.EqualValues(t, 1, numRemovedEntries)
 	require.Zero(t, p.len)
 	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
@@ -361,15 +361,15 @@ func TestEntryCacheClearTo(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100)
 	c.Add(rangeID, []raftpb.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
-	c.Clear(rangeID, 21)
-	c.Clear(rangeID, 18)
+	c.Clear(rangeID, 20)
+	c.Clear(rangeID, 17)
 	if ents, _, _, _ := c.Scan(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
 		t.Errorf("expected no entries after clearTo")
 	}
 	if ents, _, _, _ := c.Scan(nil, rangeID, 21, 22, noLimit); len(ents) != 1 {
 		t.Errorf("expected entry 22 to remain in the cache clearTo")
 	}
-	c.Clear(rangeID, 23) // past the end
+	c.Clear(rangeID, 22) // past the end
 	if ents, _, _, _ := c.Scan(nil, rangeID, 21, 22, noLimit); len(ents) != 0 {
 		t.Errorf("expected e//ntry 22 to be cleared")
 	}
@@ -377,7 +377,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 		t.Errorf("didn't expect to get any entry")
 	}
 	verifyMetrics(t, c, 0, int64(partitionSize))
-	c.Clear(rangeID, 22)
+	c.Clear(rangeID, 21)
 }
 
 func TestMaxBytesLimit(t *testing.T) {
@@ -472,7 +472,7 @@ func TestConcurrentEvictions(t *testing.T) {
 		if len(data) == 0 {
 			continue
 		}
-		c.Clear(r, kvpb.RaftIndex(data[len(data)-1].Index+1))
+		c.Clear(r, kvpb.RaftIndex(data[len(data)-1].Index))
 	}
 	verifyMetrics(t, c, 0, int64(len(c.parts))*int64(partitionSize))
 }
@@ -483,7 +483,7 @@ func TestHeadWrappingForward(t *testing.T) {
 	c := NewCache(200 + uint64(partitionSize))
 	ents := addEntries(c, rangeID, 1, 8)
 	// Clear some space at the front of the ringBuf.
-	c.Clear(rangeID, 4)
+	c.Clear(rangeID, 3)
 	verifyMetrics(t, c, 4, 36+int64(partitionSize))
 	// Fill in space at the front of the ringBuf.
 	ents = append(ents[3:4], addEntries(c, rangeID, 5, 20)...)
@@ -499,7 +499,7 @@ func TestHeadWrappingBackwards(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100 + uint64(partitionSize))
 	ents := addEntries(c, rangeID, 3, 5)
-	c.Clear(rangeID, 4)
+	c.Clear(rangeID, 3)
 	ents = append(addEntries(c, rangeID, 1, 4), ents[1:]...)
 	verifyGet(t, c, rangeID, 1, 5, ents, 5, false)
 }
@@ -572,7 +572,7 @@ func TestConcurrentUpdates(t *testing.T) {
 		clear func()
 	}{
 		{"drop", func() { c.Drop(r1) }},
-		{"clear", func() { c.Clear(r1, kvpb.RaftIndex(ents[len(ents)-1].Index+1)) }},
+		{"clear", func() { c.Clear(r1, kvpb.RaftIndex(ents[len(ents)-1].Index)) }},
 	} {
 		t.Run(clearMethod.name, func(t *testing.T) {
 			// NB: N is chosen based on the race detector's limit of 8128 goroutines.
@@ -672,7 +672,7 @@ func BenchmarkEntryCache(b *testing.B) {
 		b.StartTimer()
 		c.Add(rangeID, ents, true)
 		_, _, _, _ = c.Scan(nil, rangeID, 0, kvpb.RaftIndex(len(ents)-10), noLimit)
-		c.Clear(rangeID, kvpb.RaftIndex(len(ents)-10))
+		c.Clear(rangeID, kvpb.RaftIndex(len(ents)-11))
 	}
 }
 
@@ -688,6 +688,6 @@ func BenchmarkEntryCacheClearTo(b *testing.B) {
 		c := NewCache(uint64(10 * len(ents) * len(ents[0].Data)))
 		c.Add(rangeID, ents, true)
 		b.StartTimer()
-		c.Clear(rangeID, kvpb.RaftIndex(len(ents)-10))
+		c.Clear(rangeID, kvpb.RaftIndex(len(ents)-11))
 	}
 }

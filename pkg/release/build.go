@@ -176,7 +176,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
 	}
 	buildArgs = append(buildArgs, stampCommand)
-	configs := []string{"-c", "opt", "--config=force_build_cdeps", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=force_build_cdeps", "--config=pgo", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	buildArgs = append(buildArgs, "--norun_validations")
 	cmd := exec.Command("bazel", buildArgs...)
@@ -389,12 +389,14 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer closeFileOrPanic(srcF)
 		dst := filepath.Join(dir, filepath.Base(src))
 		dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
+		//nolint:deferloop TODO(#137605)
 		defer closeFileOrPanic(dstF)
 		_, err = io.Copy(dstF, srcF)
 		if err != nil {

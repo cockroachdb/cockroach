@@ -234,7 +234,7 @@ inner-join (cross)
  ├── columns: k:1!null geom:2 k:6!null geom:7
  ├── flags: force inverted join (into right side)
  ├── immutable
- ├── stats: [rows=333333.3]
+ ├── stats: [rows=333333]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1,6)
@@ -566,13 +566,13 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
 ----
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
- ├── stats: [rows=500.4888]
+ ├── stats: [rows=500.489]
  ├── cost: 3193.02489
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null a:8!null b:9!null c:10!null
       ├── key columns: [1 2 3] = [8 9 10]
-      ├── stats: [rows=500.4888, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=25, null(10)=0]
+      ├── stats: [rows=500.489, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=25, null(10)=0]
       ├── cost: 3188
       ├── fd: ()-->(1,2,8,9), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
       ├── select
@@ -817,7 +817,7 @@ project
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null a:7!null b:8!null c:9!null d:10!null
       │    ├── key columns: [7 8 9] = [1 2 3]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=50048.88, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=2500, null(9)=0]
+      │    ├── stats: [rows=50048.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=2500, null(9)=0]
       │    ├── cost: 613.74172
       │    ├── key: (9)
       │    ├── fd: ()-->(1,2,7,8), (3)-->(4), (9)-->(10), (10)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)

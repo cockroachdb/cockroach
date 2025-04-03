@@ -1,0 +1,21 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT PRIMARY KEY,
+  V STRING
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN w TEXT NOT NULL DEFAULT 's';
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹w› STRING NOT NULL DEFAULT ‹'s'›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey- in relation table_regional_by_row
+ │    └── into table_regional_by_row_pkey+ (crdb_region, k; v, w+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[3] into table_regional_by_row_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey+ in relation table_regional_by_row
+ ├── validate NOT NULL constraint on column w+ in index table_regional_by_row_pkey+ in relation table_regional_by_row
+ └── execute 3 system table mutations transactions

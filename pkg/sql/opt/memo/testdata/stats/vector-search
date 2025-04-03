@@ -6,7 +6,7 @@ exec-ddl
 CREATE VECTOR INDEX ON t (v);
 ----
 
-# VectorPartitionSearch produces one output row for each input row.
+# VectorMutationSearch produces one output row for each input row.
 build
 INSERT INTO t VALUES (1, '[1, 2, 3]');
 ----
@@ -16,15 +16,16 @@ insert t
  │    ├── column1:5 => x:1
  │    └── v_cast:7 => v:2
  ├── vector index put partition columns: vector_index_put_partition1:8(int)
- ├── vector index put centroid columns: vector_index_put_centroid1:9(vector)
+ ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:9(bytes)
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- └── vector-partition-search t@t_v_idx,vector
-      ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_centroid1:9(vector)
+ └── vector-mutation-search t@t_v_idx,vector
+      ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_quantized_vec1:9(bytes)
+      ├── index put
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
-      ├── centroid col: vector_index_put_centroid1:9
+      ├── quantized vector col: vector_index_put_quantized_vec1:9
       ├── cardinality: [1 - 1]
       ├── immutable
       ├── stats: [rows=1]
@@ -57,15 +58,16 @@ insert t
  │    ├── column1:5 => x:1
  │    └── v_cast:7 => v:2
  ├── vector index put partition columns: vector_index_put_partition1:8(int)
- ├── vector index put centroid columns: vector_index_put_centroid1:9(vector)
+ ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:9(bytes)
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- └── vector-partition-search t@t_v_idx,vector
-      ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_centroid1:9(vector)
+ └── vector-mutation-search t@t_v_idx,vector
+      ├── columns: column1:5(int!null) v_cast:7(vector!null) vector_index_put_partition1:8(int) vector_index_put_quantized_vec1:9(bytes)
+      ├── index put
       ├── query vector column: v_cast:7
       ├── partition col: vector_index_put_partition1:8
-      ├── centroid col: vector_index_put_centroid1:9
+      ├── quantized vector col: vector_index_put_quantized_vec1:9
       ├── cardinality: [3 - 3]
       ├── immutable
       ├── stats: [rows=3]
@@ -105,17 +107,20 @@ top-k
       ├── stats: [rows=2]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=2]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 1
-      │         ├── stats: [rows=2]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 1
+      │    │    ├── stats: [rows=2]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
 
@@ -138,17 +143,20 @@ top-k
       ├── stats: [rows=10]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=10]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 5
-      │         ├── stats: [rows=10]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── stats: [rows=10]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
 
@@ -172,16 +180,19 @@ top-k
       ├── stats: [rows=1000]
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(5)
-      ├── index-join t
+      ├── inner-join (lookup t)
       │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── stats: [rows=1000]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
-      │    └── vector-search t@t_v_idx,vector
-      │         ├── columns: x:1(int!null)
-      │         ├── target nearest neighbors: 10000
-      │         ├── stats: [rows=1000]
-      │         ├── key: (1)
-      │         └── '[1,2,3]' [type=vector]
+      │    ├── vector-search t@t_v_idx,vector
+      │    │    ├── columns: x:1(int!null)
+      │    │    ├── target nearest neighbors: 10000
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── key: (1)
+      │    │    └── '[1,2,3]' [type=vector]
+      │    └── filters (true)
       └── projections
            └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]

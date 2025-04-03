@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -61,7 +62,7 @@ func runNodeKill(
 	node := c.All().SeededRandNode(rng)
 
 	if drain {
-		drainNode(ctx, o, c, node)
+		helpers.DrainNode(ctx, o, c, node)
 	}
 
 	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))

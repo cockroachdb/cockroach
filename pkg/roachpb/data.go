@@ -517,6 +517,15 @@ func (v *Value) SetBytes(b []byte) {
 	v.setTag(ValueType_BYTES)
 }
 
+// AllocBytes allocates space for a BYTES value of the given size and clears the
+// checksum. The caller must populate the returned slice with exactly the same
+// number of bytes.
+func (v *Value) AllocBytes(size int) []byte {
+	v.ensureRawBytes(headerSize + size)
+	v.setTag(ValueType_BYTES)
+	return v.RawBytes[headerSize:]
+}
+
 // SetTagAndData copies the bytes and tag field to the receiver and clears the
 // checksum. As opposed to SetBytes, b is assumed to contain the tag too, not
 // just the data.
@@ -945,17 +954,17 @@ func (v Value) PrettyPrint() (ret string) {
 			if i != 0 {
 				buf.WriteRune('/')
 			}
-			_, _, colIDDiff, typ, err := encoding.DecodeValueTag(b)
+			_, _, colIDDelta, typ, err := encoding.DecodeValueTag(b)
 			if err != nil {
 				break
 			}
-			colID += colIDDiff
+			colID += colIDDelta
 			var s string
 			b, s, err = encoding.PrettyPrintValueEncoded(b)
 			if err != nil {
 				break
 			}
-			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDiff, colID, typ, s)
+			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDelta, colID, typ, s)
 		}
 	case ValueType_INT:
 		var i int64
@@ -991,6 +1000,18 @@ func (v Value) PrettyPrint() (ret string) {
 		var d duration.Duration
 		d, err = v.GetDuration()
 		buf.WriteString(d.StringNanos())
+	case ValueType_TIMETZ:
+		var tz timetz.TimeTZ
+		tz, err = v.GetTimeTZ()
+		buf.WriteString(tz.String())
+	case ValueType_GEO:
+		var g geopb.SpatialObject
+		g, err = v.GetGeo()
+		buf.WriteString(g.String())
+	case ValueType_BOX2D:
+		var g geopb.BoundingBox
+		g, err = v.GetBox2D()
+		buf.WriteString(g.String())
 	default:
 		err = errors.Errorf("unknown tag: %s", t)
 	}
@@ -1533,6 +1554,29 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
 		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+
+	// Print observed timestamps (limited to 5 for readability).
+	if obsCount := len(t.ObservedTimestamps); obsCount > 0 {
+		w.Printf(" obs={")
+		limit := obsCount
+		if limit > 5 {
+			limit = 5
+		}
+
+		for i := 0; i < limit; i++ {
+			if i > 0 {
+				w.Printf(" ")
+			}
+			obs := t.ObservedTimestamps[i]
+			w.Printf("n%d@%s", obs.NodeID, obs.Timestamp)
+		}
+
+		if obsCount > 5 {
+			w.Printf(", ...")
+		}
+		w.Printf("}")
+	}
+
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		w.Printf(" int=%d", ni)
 	}
@@ -1584,48 +1628,9 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, b
 // allow interior mutations, the existing list is copied instead of being
 // mutated in place.
 //
-// The following invariants are assumed to hold and are preserved:
-// - the list contains no overlapping ranges
-// - the list contains no contiguous ranges
-// - the list is sorted, with larger seqnums at the end
-//
-// Additionally, the caller must ensure:
-//
-//  1. if the new range overlaps with some range in the list, then it
-//     also overlaps with every subsequent range in the list.
-//
-//  2. the new range's "end" seqnum is larger or equal to the "end"
-//     seqnum of the last element in the list.
-//
-// For example:
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [8 26]
-//	final list:  [3 5] [8 26]
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [28 32]
-//	final list:  [3 5] [10 20] [22 24] [28 32]
-//
-// This corresponds to savepoints semantics:
-//
-//   - Property 1 says that a rollback to an earlier savepoint
-//     rolls back over all writes following that savepoint.
-//   - Property 2 comes from that the new range's 'end' seqnum is the
-//     current write seqnum and thus larger than or equal to every
-//     previously seen value.
+// See enginepb.TxnSeqListAppend for more details.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
-	// Truncate the list at the last element not included in the new range.
-
-	list := t.IgnoredSeqNums
-	i := sort.Search(len(list), func(i int) bool {
-		return list[i].End >= newRange.Start
-	})
-
-	cpy := make([]enginepb.IgnoredSeqNumRange, i+1)
-	copy(cpy[:i], list[:i])
-	cpy[i] = newRange
-	t.IgnoredSeqNums = cpy
+	t.IgnoredSeqNums = enginepb.TxnSeqListAppend(t.IgnoredSeqNums, newRange)
 }
 
 // AsRecord returns a TransactionRecord object containing only the subset of
@@ -1976,7 +1981,7 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 // LeaseType describes the type of lease.
 //
 //go:generate stringer -type=LeaseType
-type LeaseType int
+type LeaseType int32
 
 const (
 	// LeaseNone specifies no lease, to be used as a default value.
@@ -2034,12 +2039,27 @@ func (l Lease) SupportsQuiescence() bool {
 		// Expiration based leases do not support quiescence because they'll likely
 		// be renewed soon, so there's not much point to it.
 		//
-		// Leader leases do not support quiescence because a fortified raft leader
-		// will not send raft heartbeats, so quiescence is not needed. All liveness
-		// decisions are based on store liveness communication, which is cheap
-		// enough to not need a notion of quiescence.
+		// Leader leases use the similar but separate concept of sleep to indicate
+		// that followers should stop ticking.
 		return false
 	case LeaseEpoch:
+		return true
+	default:
+		panic("unexpected lease type")
+	}
+}
+
+// SupportsSleep returns whether the lease supports replica sleep or not.
+func (l Lease) SupportsSleep() bool {
+	switch l.Type() {
+	case LeaseExpiration, LeaseEpoch:
+		// Expiration based leases do not support sleep because they'll likely be
+		// renewed soon, so there's not much point to it.
+		//
+		// Epoch leases use the similar but separate concept of quiescence to
+		// indicate that replicas should stop ticking.
+		return false
+	case LeaseLeader:
 		return true
 	default:
 		panic("unexpected lease type")

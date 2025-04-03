@@ -13,8 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+// defaultFlushInterval specifies a default for the amount of time an ingester
+// will go before flushing its contents to the registry.
+const defaultFlushInterval = time.Millisecond * 500
 
 // ConcurrentBufferIngester amortizes the locking cost of writing to an
 // insights registry concurrently from multiple goroutines. To that end, it
@@ -29,6 +34,9 @@ type ConcurrentBufferIngester struct {
 	opts struct {
 		// noTimedFlush prevents time-triggered flushes from being scheduled.
 		noTimedFlush bool
+		// flushInterval is an optional override flush interval
+		// a value of zero will be set to the 500ms default.
+		flushInterval time.Duration
 	}
 
 	eventBufferCh chan eventBufChPayload
@@ -44,8 +52,8 @@ type eventBufChPayload struct {
 	events        *eventBuffer
 }
 
-// ConcurrentBufferIngester buffers the "events" it sees (via ObserveStatement
-// and ObserveTransaction) and passes them along to the underlying registry
+// ConcurrentBufferIngester buffers the "events" it sees (via observeStatement
+// and observeTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
 //
@@ -60,10 +68,12 @@ var eventBufferPool = sync.Pool{
 	New: func() interface{} { return new(eventBuffer) },
 }
 
+// event is a single event that can be observed by the ingester.
+// At most one of transaction or statement will be non-nil.
 type event struct {
 	sessionID   clusterunique.ID
-	transaction *Transaction
-	statement   *Statement
+	transaction *sqlstats.RecordedTxnStats
+	statement   *sqlstats.RecordedStmtStats
 }
 
 type BufferOpt func(i *ConcurrentBufferIngester)
@@ -74,6 +84,13 @@ type BufferOpt func(i *ConcurrentBufferIngester)
 func WithoutTimedFlush() BufferOpt {
 	return func(i *ConcurrentBufferIngester) {
 		i.opts.noTimedFlush = true
+	}
+}
+
+// WithFlushInterval allows for the override of the default flush interval
+func WithFlushInterval(intervalMS int) BufferOpt {
+	return func(i *ConcurrentBufferIngester) {
+		i.opts.flushInterval = time.Millisecond * time.Duration(intervalMS)
 	}
 }
 
@@ -103,10 +120,14 @@ func (i *ConcurrentBufferIngester) Start(
 	})
 
 	if !i.opts.noTimedFlush {
+		flushInterval := i.opts.flushInterval
+		if flushInterval == 0 {
+			flushInterval = defaultFlushInterval
+		}
 		// This task eagerly flushes partial buffers into the channel, to avoid
 		// delays identifying insights in low-traffic clusters and tests.
 		_ = stopper.RunAsyncTask(ctx, "insights-ingester-flush", func(ctx context.Context) {
-			ticker := time.NewTicker(500 * time.Millisecond)
+			ticker := time.NewTicker(flushInterval)
 
 			for {
 				select {
@@ -138,7 +159,7 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.registry.ObserveStatement(e.sessionID, e.statement)
+			i.registry.ObserveStatement(e.statement)
 		} else if e.transaction != nil {
 			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		} else if e.sessionID != (clusterunique.ID{}) {
@@ -148,41 +169,36 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
-func (i *ConcurrentBufferIngester) ObserveStatement(
-	sessionID clusterunique.ID, statement *Statement,
-) {
+func (i *ConcurrentBufferIngester) ObserveStatement(statement *sqlstats.RecordedStmtStats) {
 	if !i.registry.enabled() {
 		return
 	}
 
 	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterStmtInterceptor != nil {
-		i.testingKnobs.InsightsWriterStmtInterceptor(sessionID, statement)
+		i.testingKnobs.InsightsWriterStmtInterceptor(statement.SessionID, statement)
 		return
 	}
 
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
-			sessionID: sessionID,
 			statement: statement,
 		}
 	})
 }
 
-func (i *ConcurrentBufferIngester) ObserveTransaction(
-	sessionID clusterunique.ID, transaction *Transaction,
-) {
+func (i *ConcurrentBufferIngester) ObserveTransaction(transaction *sqlstats.RecordedTxnStats) {
 	if !i.registry.enabled() {
 		return
 	}
 
 	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterTxnInterceptor != nil {
-		i.testingKnobs.InsightsWriterTxnInterceptor(sessionID, transaction)
+		i.testingKnobs.InsightsWriterTxnInterceptor(transaction.SessionID, transaction)
 		return
 	}
 
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
-			sessionID:   sessionID,
+			sessionID:   transaction.SessionID,
 			transaction: transaction,
 		}
 	})

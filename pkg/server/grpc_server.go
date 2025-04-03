@@ -7,10 +7,14 @@ package server
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -27,13 +31,21 @@ type grpcServer struct {
 	mode                   serveMode
 }
 
-func newGRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*grpcServer, error) {
+func newGRPCServer(
+	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
+) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
+	requestMetrics := rpc.NewRequestMetrics()
+	metricsRegistry.AddMetricStruct(requestMetrics)
 	srv, dsrv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
-		}))
+		}), rpc.WithMetricsServerInterceptor(
+			rpc.NewRequestMetricsInterceptor(requestMetrics, func(method string) bool {
+				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+			},
+			)))
 	if err != nil {
 		return nil, err
 	}
@@ -115,4 +127,26 @@ func (s *serveMode) get() serveMode {
 func NewWaitingForInitError(methodName string) error {
 	// NB: this error string is sadly matched in grpcutil.IsWaitingForInit().
 	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
+}
+
+const (
+	serverPrefix = "/cockroach.server"
+	tsdbPrefix   = "/cockroach.ts"
+)
+
+// serverGRPCRequestMetricsEnabled is a cluster setting that enables the
+// collection of gRPC request duration metrics. This uses export only
+// metrics so the metrics are only exported to external sources such as
+// /_status/vars and DataDog.
+var serverGRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.grpc.request_metrics.enabled",
+	"enables the collection of grpc metrics",
+	false,
+)
+
+func shouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
+	return serverGRPCRequestMetricsEnabled.Get(&settings.SV) &&
+		(strings.HasPrefix(method, serverPrefix) ||
+			strings.HasPrefix(method, tsdbPrefix))
 }

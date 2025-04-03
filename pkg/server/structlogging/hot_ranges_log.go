@@ -84,7 +84,6 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 		})
 
 		ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
-		defer ticker.Stop()
 
 		for {
 			select {
@@ -93,43 +92,60 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if !TelemetryHotRangesStatsEnabled.Get(&s.st.SV) {
-					continue
-				}
-				resp, err := s.sServer.HotRangesV2(ctx,
-					&serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges})
-				if err != nil {
-					log.Warningf(ctx, "failed to get hot ranges: %s", err)
-					continue
-				}
-				var events []logpb.EventPayload
-				ts := timeutil.Now().UnixNano()
-
-				for _, r := range resp.Ranges {
-					hrEvent := &eventpb.HotRangesStats{
-						RangeID:             int64(r.RangeID),
-						Qps:                 r.QPS,
-						Databases:           r.Databases,
-						Tables:              r.Tables,
-						Indexes:             r.Indexes,
-						SchemaName:          r.SchemaName,
-						CPUTimePerSecond:    r.CPUTimePerSecond,
-						ReadBytesPerSecond:  r.ReadBytesPerSecond,
-						WriteBytesPerSecond: r.WriteBytesPerSecond,
-						ReadsPerSecond:      r.ReadsPerSecond,
-						WritesPerSecond:     r.WritesPerSecond,
-						LeaseholderNodeID:   int32(r.LeaseholderNodeID),
-						CommonEventDetails: logpb.CommonEventDetails{
-							Timestamp: ts,
-						},
-					}
-					events = append(events, hrEvent)
-				}
-				logutil.LogEventsWithDelay(ctx, events, stopper, TelemetryHotRangesStatsLoggingDelay.Get(&s.st.SV))
-
+				s.maybeLogHotRanges(ctx, stopper)
 			case <-intervalChangedChan:
 				ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
 			}
 		}
 	})
+}
+
+// maybeLogHotRanges is a small helper function which couples the
+// functionality of checking whether to log and logging.
+func (s *hotRangesLoggingScheduler) maybeLogHotRanges(ctx context.Context, stopper *stop.Stopper) {
+	if s.shouldLog() {
+		s.logHotRanges(ctx, stopper)
+	}
+}
+
+// shouldLog checks the below conditions to see whether it should emit logs.
+//   - Is the cluster setting server.telemetry.hot_ranges_stats.enabled true?
+func (s *hotRangesLoggingScheduler) shouldLog() bool {
+	return TelemetryHotRangesStatsEnabled.Get(&s.st.SV)
+}
+
+// logHotRanges collects the hot ranges from this node's status server and
+// sends them to the TELEMETRY log channel.
+func (s *hotRangesLoggingScheduler) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
+	resp, err := s.sServer.HotRangesV2(ctx,
+		&serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges})
+	if err != nil {
+		log.Warningf(ctx, "failed to get hot ranges: %s", err)
+		return
+	}
+
+	var events []logpb.EventPayload
+	ts := timeutil.Now().UnixNano()
+
+	for _, r := range resp.Ranges {
+		hrEvent := &eventpb.HotRangesStats{
+			RangeID:             int64(r.RangeID),
+			Qps:                 r.QPS,
+			Databases:           r.Databases,
+			Tables:              r.Tables,
+			Indexes:             r.Indexes,
+			SchemaName:          r.SchemaName,
+			CPUTimePerSecond:    r.CPUTimePerSecond,
+			ReadBytesPerSecond:  r.ReadBytesPerSecond,
+			WriteBytesPerSecond: r.WriteBytesPerSecond,
+			ReadsPerSecond:      r.ReadsPerSecond,
+			WritesPerSecond:     r.WritesPerSecond,
+			LeaseholderNodeID:   int32(r.LeaseholderNodeID),
+			CommonEventDetails: logpb.CommonEventDetails{
+				Timestamp: ts,
+			},
+		}
+		events = append(events, hrEvent)
+	}
+	logutil.LogEventsWithDelay(ctx, events, stopper, TelemetryHotRangesStatsLoggingDelay.Get(&s.st.SV))
 }

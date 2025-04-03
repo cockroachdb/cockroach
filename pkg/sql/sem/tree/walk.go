@@ -770,6 +770,9 @@ func (expr *DGeometry) Walk(_ Visitor) Expr { return expr }
 func (expr *DJSON) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DJsonpath) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DTSQuery) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

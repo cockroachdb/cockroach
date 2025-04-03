@@ -514,7 +514,8 @@ func newJoinReader(
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
-			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.Mon, false, /* longLiving */
+			mon.MakeName("joinreader-streamer").Unlimited(), math.MaxInt64, flowCtx.Mon,
+			false, /* longLiving */
 		)
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
@@ -548,10 +549,10 @@ func newJoinReader(
 		if jr.streamerInfo.maintainOrdering {
 			diskBufferMemAcc := jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
-				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+				ctx, jr.FlowCtx.DiskMonitor, mon.MakeName("streamer-disk"),
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
-				jr.FlowCtx.Cfg.TempStorage, diskBufferMemAcc, jr.streamerInfo.diskMonitor,
+				jr.FlowCtx.Cfg.TempStorage, diskBufferMemAcc, jr.streamerInfo.diskMonitor, spec.ReverseScans,
 			)
 		}
 		singleRowLookup := readerType == indexJoinReaderType || spec.LookupColumnsAreKey
@@ -570,6 +571,7 @@ func newJoinReader(
 			jr.streamerInfo.maintainOrdering,
 			singleRowLookup,
 			int(spec.FetchSpec.MaxKeysPerRow),
+			spec.ReverseScans,
 			diskBuffer,
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
@@ -591,6 +593,7 @@ func newJoinReader(
 		row.FetcherInitArgs{
 			StreamingKVFetcher:         streamingKVFetcher,
 			Txn:                        jr.txn,
+			Reverse:                    spec.ReverseScans,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockDurability:             spec.LockingDurability,
@@ -608,6 +611,9 @@ func newJoinReader(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			jr.contentionEventsListener.Init(flowTxn.ID())
+		}
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -724,13 +730,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
-	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, "joinreader-limited")
+	mn := mon.MakeName("joinreader")
+	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, mn.Limited())
 	// We want to make sure that if the disk-backed container is spilled to
 	// disk, it releases all of the memory reservations, so we make the
 	// corresponding memory monitor not hold on to any bytes.
 	jr.limitedMemMonitor.RelinquishAllOnReleaseBytes()
-	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "joinreader-unlimited")
-	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
+	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
+	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,
@@ -1259,6 +1266,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:        optional.MakeTimeValue(jr.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:       optional.MakeTimeValue(jr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 			UsedStreamer:        jr.usesStreamer,

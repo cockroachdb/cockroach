@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -141,6 +142,12 @@ func NewServerEx(
 			return handler(srv, ss)
 		})
 	})
+
+	// If the metrics interceptor is set, it should be registered second so
+	// that all other interceptors are included in the response time durations.
+	if o.metricsInterceptor != nil {
+		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
+	}
 
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
@@ -301,7 +308,8 @@ func (c *Context) StoreLivenessWithdrawalGracePeriod() time.Duration {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID roachpb.TenantID
+	TenantID   roachpb.TenantID
+	TenantName roachpb.TenantName
 
 	Clock                  hlc.WallClock
 	ToleratedOffset        time.Duration
@@ -782,7 +790,7 @@ func makeInternalClientAdapter(
 			// look closer to a remote call from the tracing point of view.
 			if separateTracers {
 				sp := tracing.SpanFromContext(ctx)
-				if sp != nil && !sp.IsNoop() {
+				if sp != nil {
 					// Fill in ba.TraceInfo. For remote RPCs (not done throught the
 					// internalClientAdapter), this is done by the TracingInternalClient
 					ba = ba.ShallowCopy()
@@ -977,13 +985,15 @@ func (a internalClientAdapter) MuxRangeFeed(
 		receiver: eventReader,
 		sender:   requestWriter,
 	}
-	serverCtx := ctx
+
+	serverCtx, serverCancel := context.WithCancel(ctx)
+
 	if a.separateTracers {
 		// Wipe the span from context. The server will create a root span with a
 		// different Tracer, based on remote parent information provided by the
 		// TraceInfo above. If we didn't do this, the server would attempt to
 		// create a child span with its different Tracer, which is not allowed.
-		serverCtx = tracing.ContextWithSpan(ctx, nil)
+		serverCtx = tracing.ContextWithSpan(serverCtx, nil)
 	}
 	// Create a new context from the existing one with the "local request"
 	// field set. This tells the handler that this is an in-process request,
@@ -1013,7 +1023,8 @@ func (a internalClientAdapter) MuxRangeFeed(
 		sender:   eventWriter,
 	}
 
-	go func() {
+	wg := ctxgroup.WithContext(serverCtx)
+	wg.Go(func() error {
 		// Handler adapts the ServerStream to the typed interface expected by the
 		// RPC handler (Node.MuxRangeFeed). `stream` might be `rawServerStream` which we
 		// pass to the interceptor chain below, or it might be another
@@ -1034,7 +1045,8 @@ func (a internalClientAdapter) MuxRangeFeed(
 		}
 		// Notify client side that server exited.
 		rawServerStream.sendError(err)
-	}()
+		return nil
+	})
 
 	// Run the client-side interceptors, which produce a gprc.ClientStream.
 	// clientSide might end up being rfPipe, or it might end up being another
@@ -1056,19 +1068,31 @@ func (a internalClientAdapter) MuxRangeFeed(
 		},
 		opts...)
 	if err != nil {
-		return nil, err
+		serverCancel()
+		return nil, errors.CombineErrors(err, wg.Wait())
 	}
 
+	// Server cancelation handled by the caller for non-error
+	// response.
 	return muxRangeFeedClientAdapter{
 		ClientStream: clientStream,
+		serverCancel: serverCancel,
+		serverWg:     &wg,
 	}, nil
 }
 
 type muxRangeFeedClientAdapter struct {
 	grpc.ClientStream
+	serverCancel context.CancelFunc
+	serverWg     *ctxgroup.Group
 }
 
 var _ kvpb.Internal_MuxRangeFeedClient = muxRangeFeedClientAdapter{}
+
+func (a muxRangeFeedClientAdapter) Close() error {
+	a.serverCancel()
+	return a.serverWg.Wait()
+}
 
 func (a muxRangeFeedClientAdapter) Send(request *kvpb.RangeFeedRequest) error {
 	// Mark this request as originating locally.

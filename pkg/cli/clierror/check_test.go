@@ -8,6 +8,7 @@ package clierror
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -25,6 +26,7 @@ type logger struct {
 	Severity log.Severity
 	Channel  log.Channel
 	Err      error
+	Stack    bool
 }
 
 func (l *logger) Log(_ context.Context, sev log.Severity, msg string, args ...interface{}) {
@@ -34,6 +36,7 @@ func (l *logger) Log(_ context.Context, sev log.Severity, msg string, args ...in
 	l.Severity = sev
 	l.Channel = channel.SESSIONS
 	l.Err = err
+	l.Stack = strings.Contains(fmt.Sprintf(msg, args...), "attached stack trace")
 }
 
 func TestErrorReporting(t *testing.T) {
@@ -45,12 +48,14 @@ func TestErrorReporting(t *testing.T) {
 		err          error
 		wantSeverity log.Severity
 		wantCLICause bool // should the cause be an *Error?
+		wantStack    bool // should the stack be included?
 	}{
 		{
 			desc:         "plain",
 			err:          errors.New("boom"),
 			wantSeverity: severity.ERROR,
 			wantCLICause: false,
+			wantStack:    false,
 		},
 		{
 			desc: "single cliError",
@@ -61,6 +66,7 @@ func TestErrorReporting(t *testing.T) {
 			),
 			wantSeverity: severity.INFO,
 			wantCLICause: false,
+			wantStack:    false,
 		},
 		{
 			desc: "double cliError",
@@ -75,6 +81,7 @@ func TestErrorReporting(t *testing.T) {
 			),
 			wantSeverity: severity.INFO, // should only unwrap one layer
 			wantCLICause: true,
+			wantStack:    false,
 		},
 		{
 			desc: "wrapped cliError",
@@ -85,6 +92,14 @@ func TestErrorReporting(t *testing.T) {
 			)),
 			wantSeverity: severity.INFO,
 			wantCLICause: false,
+			wantStack:    false,
+		},
+		{
+			desc:         "assertion failure",
+			err:          errors.Wrapf(errors.AssertionFailedf("assertion was hit"), "expected test case failure"),
+			wantSeverity: severity.ERROR,
+			wantCLICause: false,
+			wantStack:    true,
 		},
 	}
 
@@ -101,6 +116,7 @@ func TestErrorReporting(t *testing.T) {
 			} else {
 				assert.False(t, gotCLI, "logged cause shouldn't be *Error, got %T", got.Err)
 			}
+			assert.Equal(t, tt.wantStack, got.Stack)
 		})
 	}
 }

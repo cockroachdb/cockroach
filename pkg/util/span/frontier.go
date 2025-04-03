@@ -8,6 +8,7 @@ package span
 import (
 	"container/heap"
 	"fmt"
+	"iter"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,10 +17,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -51,13 +50,12 @@ type Frontier interface {
 	// but it will prevent frontier nodes from being efficiently re-used.
 	Release()
 
-	// Entries invokes the given callback with the current timestamp for each
-	// component span in the tracked span set.
-	// The fn may not mutate this frontier while iterating.
-	Entries(fn Operation)
+	// Entries returns an iterator over the entries in the frontier.
+	// Updates to the frontier are restricted until iteration is stopped.
+	Entries() iter.Seq2[roachpb.Span, hlc.Timestamp]
 
-	// SpanEntries invokes op for each sub-span of the specified span with the
-	// timestamp as observed by this frontier.
+	// SpanEntries returns an iterator over the entries in the frontier that are
+	// sub-spans of the specified span.
 	//
 	// Time
 	// 5|      .b__c               .
@@ -74,8 +72,8 @@ type Frontier interface {
 	//
 	// Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
 	// tracked by this frontier.
-	// The fn may not mutate this frontier while iterating.
-	SpanEntries(span roachpb.Span, op Operation)
+	// Updates to the frontier are restricted until iteration is stopped.
+	SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp]
 
 	// Len returns the number of spans tracked by the frontier.
 	Len() int
@@ -84,49 +82,12 @@ type Frontier interface {
 	String() string
 }
 
-// OpResult is the result of the Operation callback.
-type OpResult bool
-
-const (
-	// ContinueMatch signals DoMatching should continue.
-	ContinueMatch OpResult = false
-	// StopMatch signals DoMatching should stop.
-	StopMatch OpResult = true
-)
-
-func (r OpResult) asBool() bool {
-	return bool(r)
-}
-
-// An Operation is a function that operates on a frontier spans. If done is returned true, the
-// Operation is indicating that no further work needs to be done and so the DoMatching function
-// should traverse no further.
-type Operation func(roachpb.Span, hlc.Timestamp) (done OpResult)
-
-var useBtreeFrontier = envutil.EnvOrDefaultBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED",
-	metamorphic.ConstantWithTestBool("COCKROACH_BTREE_SPAN_FRONTIER_ENABLED", true))
-
-func enableBtreeFrontier(enabled bool) func() {
-	old := useBtreeFrontier
-	useBtreeFrontier = enabled
-	return func() {
-		useBtreeFrontier = old
-	}
-}
-
-func newBTreeFrontier() Frontier {
+func newBtreeFrontier() Frontier {
 	return &btreeFrontier{}
 }
 
-func newLLBRFrontier() Frontier {
-	return &llrbFrontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
-}
-
 func newFrontier() Frontier {
-	if useBtreeFrontier {
-		return newBTreeFrontier()
-	}
-	return newLLBRFrontier()
+	return newBtreeFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
@@ -581,61 +542,47 @@ func (f *btreeFrontier) disallowMutations() func() {
 	}
 }
 
-// Entries invokes the given callback with the current timestamp for each
-// component span in the tracked span set.
-func (f *btreeFrontier) Entries(fn Operation) {
-	defer f.disallowMutations()()
+// Entries implements Frontier.
+func (f *btreeFrontier) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.disallowMutations()()
 
-	it := f.tree.MakeIter()
-	for it.First(); it.Valid(); it.Next() {
-		if fn(it.Cur().span(), it.Cur().ts) == StopMatch {
-			break
+		it := f.tree.MakeIter()
+		for it.First(); it.Valid(); it.Next() {
+			if !yield(it.Cur().span(), it.Cur().ts) {
+				return
+			}
 		}
 	}
 }
 
-// SpanEntries invokes op for each sub-span of the specified span with the
-// timestamp as observed by this frontier.
-//
-// Time
-// 5|      .b__c               .
-// 4|      .             h__k  .
-// 3|      .      e__f         .
-// 1 ---a----------------------m---q-- Frontier
-//
-//	|___________span___________|
-//
-// In the above example, frontier tracks [b, m) and the current frontier
-// timestamp is 1.  SpanEntries for span [a-q) will invoke op with:
-//
-//	([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
-//
-// Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
-// tracked by this frontier.
-func (f *btreeFrontier) SpanEntries(span roachpb.Span, op Operation) {
-	defer f.disallowMutations()()
+// SpanEntries implements Frontier.
+func (f *btreeFrontier) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.disallowMutations()()
 
-	todoRange := newSearchKey(span.Key, span.EndKey)
-	defer putFrontierEntry(todoRange)
+		todoRange := newSearchKey(span.Key, span.EndKey)
+		defer putFrontierEntry(todoRange)
 
-	it := f.tree.MakeIter()
-	for it.FirstOverlap(todoRange); it.Valid(); it.NextOverlap(todoRange) {
-		e := it.Cur()
+		it := f.tree.MakeIter()
+		for it.FirstOverlap(todoRange); it.Valid(); it.NextOverlap(todoRange) {
+			e := it.Cur()
 
-		// Skip untracked portion.
-		if todoRange.Start.Compare(e.Start) < 0 {
-			todoRange.Start = e.Start
+			// Skip untracked portion.
+			if todoRange.Start.Compare(e.Start) < 0 {
+				todoRange.Start = e.Start
+			}
+
+			end := e.End
+			if e.End.Compare(todoRange.End) > 0 {
+				end = todoRange.End
+			}
+
+			if !yield(roachpb.Span{Key: todoRange.Start, EndKey: end}, e.ts) {
+				return
+			}
+			todoRange.Start = end
 		}
-
-		end := e.End
-		if e.End.Compare(todoRange.End) > 0 {
-			end = todoRange.End
-		}
-
-		if op(roachpb.Span{Key: todoRange.Start, EndKey: end}, e.ts) == StopMatch {
-			return
-		}
-		todoRange.Start = end
 	}
 }
 
@@ -837,10 +784,9 @@ func spanDifference(s roachpb.Span, f Frontier) []roachpb.Span {
 	var sg roachpb.SpanGroup
 	sg.Add(s)
 
-	f.SpanEntries(s, func(overlap roachpb.Span, ts hlc.Timestamp) (done OpResult) {
+	for overlap := range f.SpanEntries(s) {
 		sg.Sub(overlap)
-		return false
-	})
+	}
 
 	return sg.Slice()
 }
@@ -888,17 +834,29 @@ func (f *concurrentFrontier) Release() {
 }
 
 // Entries implements Frontier.
-func (f *concurrentFrontier) Entries(fn Operation) {
+func (f *concurrentFrontier) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	f.Lock()
-	defer f.Unlock()
-	f.f.Entries(fn)
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.Unlock()
+		for sp, ts := range f.f.Entries() {
+			if !yield(sp, ts) {
+				return
+			}
+		}
+	}
 }
 
 // SpanEntries implements Frontier.
-func (f *concurrentFrontier) SpanEntries(span roachpb.Span, op Operation) {
+func (f *concurrentFrontier) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	f.Lock()
-	defer f.Unlock()
-	f.f.SpanEntries(span, op)
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.Unlock()
+		for sp, ts := range f.f.SpanEntries(span) {
+			if !yield(sp, ts) {
+				return
+			}
+		}
+	}
 }
 
 // Len implements Frontier.

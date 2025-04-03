@@ -1944,6 +1944,7 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 2210    _regclass              4294967095    NULL        -1      false     b
 2211    _regtype               4294967095    NULL        -1      false     b
 2249    record                 4294967095    NULL        0       true      p
+2276    any                    4294967095    NULL        -1      false     p
 2277    anyarray               4294967095    NULL        -1      false     p
 2278    void                   4294967095    NULL        0       true      p
 2279    trigger                4294967095    NULL        4       true      p
@@ -1959,6 +1960,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 3645    _tsquery               4294967095    NULL        -1      false     b
 3802    jsonb                  4294967095    NULL        -1      false     b
 3807    _jsonb                 4294967095    NULL        -1      false     b
+4072    jsonpath               4294967095    NULL        -1      false     b
+4073    _jsonpath              4294967095    NULL        -1      false     b
 4089    regnamespace           4294967095    NULL        4       true      b
 4090    _regnamespace          4294967095    NULL        -1      false     b
 4096    regrole                4294967095    NULL        4       true      b
@@ -2062,6 +2065,7 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 2210    _regclass              A            false           true          ,         0         2205     0
 2211    _regtype               A            false           true          ,         0         2206     0
 2249    record                 P            false           true          ,         0         0        2287
+2276    any                    P            false           true          ,         0         0        0
 2277    anyarray               P            false           true          ,         0         0        0
 2278    void                   P            false           true          ,         0         0        0
 2279    trigger                P            false           true          ,         0         0        0
@@ -2077,6 +2081,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 3645    _tsquery               A            false           true          ,         0         3615     0
 3802    jsonb                  U            false           true          ,         0         0        3807
 3807    _jsonb                 A            false           true          ,         0         3802     0
+4072    jsonpath               U            false           true          ,         0         0        4073
+4073    _jsonpath              A            false           true          ,         0         4072     0
 4089    regnamespace           N            false           true          ,         0         0        4090
 4090    _regnamespace          A            false           true          ,         0         4089     0
 4096    regrole                N            false           true          ,         0         0        4097
@@ -2180,6 +2186,7 @@ oid     typname                typinput        typoutput        typreceive      
 2210    _regclass              array_in        array_out        array_recv        array_send        0         0          0
 2211    _regtype               array_in        array_out        array_recv        array_send        0         0          0
 2249    record                 record_in       record_out       record_recv       record_send       0         0          0
+2276    any                    -               -                -                 -                 0         0          0
 2277    anyarray               anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
 2278    void                   voidin          voidout          voidrecv          voidsend          0         0          0
 2279    trigger                -               -                -                 -                 0         0          0
@@ -2195,6 +2202,8 @@ oid     typname                typinput        typoutput        typreceive      
 3645    _tsquery               array_in        array_out        array_recv        array_send        0         0          0
 3802    jsonb                  jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
 3807    _jsonb                 array_in        array_out        array_recv        array_send        0         0          0
+4072    jsonpath               jsonpathin      jsonpathout      jsonpathrecv      jsonpathsend      0         0          0
+4073    _jsonpath              array_in        array_out        array_recv        array_send        0         0          0
 4089    regnamespace           regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 4090    _regnamespace          array_in        array_out        array_recv        array_send        0         0          0
 4096    regrole                regrolein       regroleout       regrolerecv       regrolesend       0         0          0
@@ -2298,6 +2307,7 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 2210    _regclass              NULL      NULL        false       0            -1
 2211    _regtype               NULL      NULL        false       0            -1
 2249    record                 NULL      NULL        false       0            -1
+2276    any                    NULL      NULL        false       0            -1
 2277    anyarray               NULL      NULL        false       0            -1
 2278    void                   NULL      NULL        false       0            -1
 2279    trigger                NULL      NULL        false       0            -1
@@ -2313,6 +2323,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 3645    _tsquery               NULL      NULL        false       0            -1
 3802    jsonb                  NULL      NULL        false       0            -1
 3807    _jsonb                 NULL      NULL        false       0            -1
+4072    jsonpath               NULL      NULL        false       0            -1
+4073    _jsonpath              NULL      NULL        false       0            -1
 4089    regnamespace           NULL      NULL        false       0            -1
 4090    _regnamespace          NULL      NULL        false       0            -1
 4096    regrole                NULL      NULL        false       0            -1
@@ -2416,6 +2428,7 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 2210    _regclass              0         0             NULL           NULL        NULL
 2211    _regtype               0         0             NULL           NULL        NULL
 2249    record                 0         0             NULL           NULL        NULL
+2276    any                    0         0             NULL           NULL        NULL
 2277    anyarray               0         3403232968    NULL           NULL        NULL
 2278    void                   0         0             NULL           NULL        NULL
 2279    trigger                0         0             NULL           NULL        NULL
@@ -2431,6 +2444,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 3645    _tsquery               0         0             NULL           NULL        NULL
 3802    jsonb                  0         0             NULL           NULL        NULL
 3807    _jsonb                 0         0             NULL           NULL        NULL
+4072    jsonpath               0         0             NULL           NULL        NULL
+4073    _jsonpath              0         0             NULL           NULL        NULL
 4089    regnamespace           0         0             NULL           NULL        NULL
 4090    _regnamespace          0         0             NULL           NULL        NULL
 4096    regrole                0         0             NULL           NULL        NULL
@@ -2902,10 +2917,11 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
 authentication_method                                      cert-password       NULL      NULL        NULL        string
-autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
+autocommit_before_ddl                                      on                  NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 avoid_full_table_scans_in_mutations                        on                  NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
+buffered_writes_use_locking_on_non_unique_indexes          off                 NULL      NULL        NULL        string
 bypass_pcr_reader_catalog_aost                             off                 NULL      NULL        NULL        string
 bytea_output                                               hex                 NULL      NULL        NULL        string
 check_function_bodies                                      on                  NULL      NULL        NULL        string
@@ -2983,6 +2999,7 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL      NULL        NULL        string
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL      NULL        NULL        string
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL      NULL        NULL        string
+kv_transaction_buffered_writes_enabled                     off                 NULL      NULL        NULL        string
 large_full_scan_rows                                       0                   NULL      NULL        NULL        string
 lc_collate                                                 C.UTF-8             NULL      NULL        NULL        string
 lc_ctype                                                   C.UTF-8             NULL      NULL        NULL        string
@@ -3005,12 +3022,18 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
+optimizer_check_input_min_row_count                        1                   NULL      NULL        NULL        string
+optimizer_enable_lock_elision                              on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
+optimizer_min_row_count                                    0                   NULL      NULL        NULL        string
+optimizer_plan_lookup_joins_with_reverse_scans             on                  NULL      NULL        NULL        string
+optimizer_prefer_bounded_cardinality                       off                 NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
 optimizer_push_limit_into_project_filtered_scan            on                  NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
 optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
+optimizer_use_delete_range_fast_path                       on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
@@ -3022,8 +3045,9 @@ optimizer_use_improved_split_disjunction_for_joins         on                  N
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL      NULL        NULL        string
 optimizer_use_improved_zigzag_join_costing                 on                  NULL      NULL        NULL        string
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
+optimizer_use_lock_elision_multiple_families               off                 NULL      NULL        NULL        string
 optimizer_use_lock_op_for_serializable                     off                 NULL      NULL        NULL        string
-optimizer_use_merged_partial_statistics                    off                 NULL      NULL        NULL        string
+optimizer_use_merged_partial_statistics                    on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                          off                 NULL      NULL        NULL        string
 optimizer_use_polymorphic_parameter_fix                    on                  NULL      NULL        NULL        string
@@ -3040,6 +3064,7 @@ prefer_lookup_joins_for_fks                                off                 N
 prepared_statements_cache_size                             0 B                 NULL      NULL        NULL        string
 propagate_input_ordering                                   off                 NULL      NULL        NULL        string
 recursion_depth_limit                                      1000                NULL      NULL        NULL        string
+register_latch_wait_contention_events                      off                 NULL      NULL        NULL        string
 reorder_joins_limit                                        8                   NULL      NULL        NULL        string
 require_explicit_primary_keys                              off                 NULL      NULL        NULL        string
 results_buffer_size                                        524288              NULL      NULL        NULL        string
@@ -3085,6 +3110,7 @@ troubleshooting_mode                                       off                 N
 unbounded_parallel_scans                                   off                 NULL      NULL        NULL        string
 unconstrained_non_covering_index_scan_enabled              off                 NULL      NULL        NULL        string
 unsafe_allow_triggers_modifying_cascades                   off                 NULL      NULL        NULL        string
+use_cputs_on_non_unique_indexes                            off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
 vectorize                                                  on                  NULL      NULL        NULL        string
@@ -3107,10 +3133,11 @@ alter_primary_region_super_region_override                 off                 N
 always_distribute_full_scans                               off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
 authentication_method                                      cert-password       NULL  user     NULL      cert-password       cert-password
-autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
+autocommit_before_ddl                                      on                  NULL  user     NULL      on                  on
 avoid_buffering                                            off                 NULL  user     NULL      off                 off
 avoid_full_table_scans_in_mutations                        on                  NULL  user     NULL      on                  on
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
+buffered_writes_use_locking_on_non_unique_indexes          off                 NULL  user     NULL      off                 off
 bypass_pcr_reader_catalog_aost                             off                 NULL  user     NULL      off                 off
 bytea_output                                               hex                 NULL  user     NULL      hex                 hex
 check_function_bodies                                      on                  NULL  user     NULL      on                  on
@@ -3188,6 +3215,7 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL  user     NULL      4.0 MiB             4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL  user     NULL      2.0 MiB             2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL  user     NULL      100 KiB             100 KiB
+kv_transaction_buffered_writes_enabled                     off                 NULL  user     NULL      off                 off
 large_full_scan_rows                                       0                   NULL  user     NULL      0                   0
 lc_collate                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_ctype                                                   C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
@@ -3210,12 +3238,18 @@ null_ordered_last                                          off                 N
 on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
+optimizer_check_input_min_row_count                        1                   NULL  user     NULL      1                   1
+optimizer_enable_lock_elision                              on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
+optimizer_min_row_count                                    0                   NULL  user     NULL      0                   0
+optimizer_plan_lookup_joins_with_reverse_scans             on                  NULL  user     NULL      on                  on
+optimizer_prefer_bounded_cardinality                       off                 NULL  user     NULL      off                 off
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
 optimizer_push_limit_into_project_filtered_scan            on                  NULL  user     NULL      on                  on
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
 optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
+optimizer_use_delete_range_fast_path                       on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
@@ -3227,8 +3261,9 @@ optimizer_use_improved_split_disjunction_for_joins         on                  N
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL  user     NULL      on                  on
 optimizer_use_improved_zigzag_join_costing                 on                  NULL  user     NULL      on                  on
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
+optimizer_use_lock_elision_multiple_families               off                 NULL  user     NULL      off                 off
 optimizer_use_lock_op_for_serializable                     off                 NULL  user     NULL      off                 off
-optimizer_use_merged_partial_statistics                    off                 NULL  user     NULL      off                 off
+optimizer_use_merged_partial_statistics                    on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                          off                 NULL  user     NULL      off                 off
 optimizer_use_polymorphic_parameter_fix                    on                  NULL  user     NULL      on                  on
@@ -3245,6 +3280,7 @@ prefer_lookup_joins_for_fks                                off                 N
 prepared_statements_cache_size                             0 B                 NULL  user     NULL      0 B                 0 B
 propagate_input_ordering                                   off                 NULL  user     NULL      off                 off
 recursion_depth_limit                                      1000                NULL  user     NULL      1000                1000
+register_latch_wait_contention_events                      off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                        8                   NULL  user     NULL      8                   8
 require_explicit_primary_keys                              off                 NULL  user     NULL      off                 off
 results_buffer_size                                        524288              NULL  user     NULL      524288              524288
@@ -3290,6 +3326,7 @@ troubleshooting_mode                                       off                 N
 unbounded_parallel_scans                                   off                 NULL  user     NULL      off                 off
 unconstrained_non_covering_index_scan_enabled              off                 NULL  user     NULL      off                 off
 unsafe_allow_triggers_modifying_cascades                   off                 NULL  user     NULL      off                 off
+use_cputs_on_non_unique_indexes                            off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
 vectorize                                                  on                  NULL  user     NULL      on                  on
@@ -3309,6 +3346,7 @@ autocommit_before_ddl                                      NULL    NULL     NULL
 avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
 avoid_full_table_scans_in_mutations                        NULL    NULL     NULL     NULL        NULL
 backslash_quote                                            NULL    NULL     NULL     NULL        NULL
+buffered_writes_use_locking_on_non_unique_indexes          NULL    NULL     NULL     NULL        NULL
 bypass_pcr_reader_catalog_aost                             NULL    NULL     NULL     NULL        NULL
 bytea_output                                               NULL    NULL     NULL     NULL        NULL
 check_function_bodies                                      NULL    NULL     NULL     NULL        NULL
@@ -3390,6 +3428,7 @@ is_superuser                                               NULL    NULL     NULL
 join_reader_index_join_strategy_batch_size                 NULL    NULL     NULL     NULL        NULL
 join_reader_no_ordering_strategy_batch_size                NULL    NULL     NULL     NULL        NULL
 join_reader_ordering_strategy_batch_size                   NULL    NULL     NULL     NULL        NULL
+kv_transaction_buffered_writes_enabled                     NULL    NULL     NULL     NULL        NULL
 large_full_scan_rows                                       NULL    NULL     NULL     NULL        NULL
 lc_collate                                                 NULL    NULL     NULL     NULL        NULL
 lc_ctype                                                   NULL    NULL     NULL     NULL        NULL
@@ -3414,12 +3453,18 @@ on_update_rehome_row_enabled                               NULL    NULL     NULL
 opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
+optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
+optimizer_enable_lock_elision                              NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
+optimizer_min_row_count                                    NULL    NULL     NULL     NULL        NULL
+optimizer_plan_lookup_joins_with_reverse_scans             NULL    NULL     NULL     NULL        NULL
+optimizer_prefer_bounded_cardinality                       NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
 optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL     NULL        NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
 optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
+optimizer_use_delete_range_fast_path                       NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
@@ -3431,6 +3476,7 @@ optimizer_use_improved_split_disjunction_for_joins         NULL    NULL     NULL
 optimizer_use_improved_trigram_similarity_selectivity      NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_zigzag_join_costing                 NULL    NULL     NULL     NULL        NULL
 optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
+optimizer_use_lock_elision_multiple_families               NULL    NULL     NULL     NULL        NULL
 optimizer_use_lock_op_for_serializable                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_merged_partial_statistics                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL
@@ -3449,6 +3495,7 @@ prefer_lookup_joins_for_fks                                NULL    NULL     NULL
 prepared_statements_cache_size                             NULL    NULL     NULL     NULL        NULL
 propagate_input_ordering                                   NULL    NULL     NULL     NULL        NULL
 recursion_depth_limit                                      NULL    NULL     NULL     NULL        NULL
+register_latch_wait_contention_events                      NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                                        NULL    NULL     NULL     NULL        NULL
 require_explicit_primary_keys                              NULL    NULL     NULL     NULL        NULL
 results_buffer_size                                        NULL    NULL     NULL     NULL        NULL
@@ -3495,6 +3542,7 @@ troubleshooting_mode                                       NULL    NULL     NULL
 unbounded_parallel_scans                                   NULL    NULL     NULL     NULL        NULL
 unconstrained_non_covering_index_scan_enabled              NULL    NULL     NULL     NULL        NULL
 unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL     NULL        NULL
+use_cputs_on_non_unique_indexes                            NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
 vectorize                                                  NULL    NULL     NULL     NULL        NULL
@@ -4053,6 +4101,32 @@ geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.
 idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a)
 idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b)
 
+subtest vector
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TABLE vector_table (
+  id UUID PRIMARY KEY,
+  a vector(3),
+  VECTOR INDEX idxa (a)
+)
+
+statement ok
+CREATE VECTOR INDEX idxb ON vector_table (a)
+
+query TT colnames
+SELECT indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'vector_table'
+ORDER BY indexname
+----
+indexname          indexdef
+idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a)
+idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a)
+vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON test.public.vector_table USING btree (id ASC)
+
 subtest partial_index
 
 statement ok
@@ -4126,13 +4200,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-173  173  jt
+174  174  jt
 
 query ITT rowsort
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-173  173   jt
+174  174   jt
 
 subtest regression_49207
 statement ok
@@ -4678,7 +4752,7 @@ WHERE usename IN ('testuser1', 'testuser2')
 ORDER BY usename
 ----
 usename    usecreatedb  useconfig
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}
+testuser1  false        NULL
 testuser2  false        NULL
 
 query TBTBBT colnames
@@ -4687,10 +4761,10 @@ FROM pg_roles
 WHERE rolname IN ('testuser1', 'testuser2', 'testrole1')
 ORDER BY rolname
 ----
-rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
-testrole1  false        NULL                                               true        false        NULL
-testuser1  true         {timezone=America/Los_Angeles,application_name=a}  true        true         NULL
-testuser2  false        NULL                                               true        true         3022-01-01 00:00:00 +0000 UTC
+rolname    rolcreatedb  rolconfig  rolinherit  rolcanlogin  rolvaliduntil
+testrole1  false        NULL       true        false        NULL
+testuser1  false        NULL       true        true         NULL
+testuser2  false        NULL       true        true         NULL
 
 query TBBBBT colnames
 SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
@@ -4701,8 +4775,8 @@ ORDER BY rolname
 rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
 root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
-testuser1  true         false          true        true         NULL
-testuser2  false        true           true        true         3022-01-01 00:00:00 +0000 UTC
+testuser1  false        false          true        true         NULL
+testuser2  false        false          true        true         NULL
 
 # Testing users that have admin role
 
@@ -4791,7 +4865,7 @@ JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
 stxtbl   stxobj   105           NULL      -1             {2,3}    {d}
-stxtbl2  stxobj2  195           NULL      -1             {1,3}    {d}
+stxtbl2  stxobj2  196           NULL      -1             {1,3}    {d}
 stx      NULL     105           NULL      -1             {2}      {d}
 stx      NULL     105           NULL      -1             {1}      {d}
 
@@ -5307,7 +5381,7 @@ query TO colnames,rowsort
 SELECT typname, typrelid FROM pg_catalog.pg_type WHERE typrelid = 'u'::regtype::oid;
 ----
 typname  typrelid
-u        100207
+u        100208
 
 query TOO colnames,rowsort
 SELECT typname, typrelid, typarray FROM pg_catalog.pg_type WHERE oid = 'u[]'::regtype::oid;

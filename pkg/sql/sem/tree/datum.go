@@ -93,6 +93,12 @@ var (
 	// deriving the arguments to construct a specific time.Time.
 	MinSupportedTime    = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
+
+	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
+	ValidateJSONPath func(string) (string, error)
+
+	// EmptyDJSON is an empty JSON object.
+	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons
@@ -3870,6 +3876,128 @@ func (d *DBox2D) Size() uintptr {
 	return unsafe.Sizeof(*d) + unsafe.Sizeof(d.CartesianBoundingBox)
 }
 
+// DJsonpath is the Datum representation of the Jsonpath type.
+type DJsonpath string
+
+func NewDJsonpath(d string) *DJsonpath {
+	jsonpath := DJsonpath(d)
+	return &jsonpath
+}
+
+// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
+// the contract is that callers must not to mutate the bytes but there is
+// nothing stopping that from happening.
+func (d *DJsonpath) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(*d))
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DJsonpath) ResolvedType() *types.T {
+	return types.Jsonpath
+}
+
+// Compare implements the Datum interface. While we don't support external
+// comparisons between Jsonpath types, we still need to implement Compare
+// because many internal tests rely on it.
+func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DJsonpath)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	dParsed, err := ValidateJSONPath(string(*d))
+	if err != nil {
+		return 0, err
+	}
+	vParsed, err := ValidateJSONPath(string(*v))
+	if err != nil {
+		return 0, err
+	}
+	return strings.Compare(dParsed, vParsed), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DJsonpath) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DJsonpath) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DJsonpath) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DJsonpath) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DJsonpath) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DJsonpath) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DJsonpath) AmbiguousFormat() bool { return true }
+
+// Size implements the Datum interface.
+func (d *DJsonpath) Size() uintptr {
+	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DJsonpath) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
+		buf.WriteString(string(*d))
+	} else {
+		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+	}
+}
+
+func ParseDJsonpath(s string) (Datum, error) {
+	jp, err := ValidateJSONPath(s)
+	if err != nil {
+		return nil, MakeParseError(s, types.Jsonpath, err)
+	}
+	return NewDJsonpath(jp), nil
+}
+
+// AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DJsonpath wrapped by a
+// *DOidWrapper is possible.
+func AsDJsonpath(e Expr) (*DJsonpath, bool) {
+	switch t := e.(type) {
+	case *DJsonpath:
+		return t, true
+	case *DOidWrapper:
+		return AsDJsonpath(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDJsonpath attempts to retrieve a DJsonpath from an Expr, panicking if the
+// assertion fails.
+func MustBeDJsonpath(e Expr) DJsonpath {
+	i, ok := AsDJsonpath(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DJsonpath, found %T", e))
+	}
+	return *i
+}
+
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
@@ -3990,6 +4118,8 @@ func AsJSON(
 		return json.FromString(t.LogicalRep), nil
 	case *DJSON:
 		return t.JSON, nil
+	case *DJsonpath:
+		return json.FromString(string(*t)), nil
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
@@ -5344,6 +5474,10 @@ func (d *DEnum) ResolvedType() *types.T {
 	return d.EnumTyp
 }
 
+// PlanCistFromCtx returns the plan gist if it is stored in the context. It is
+// injected from the sql package to avoid import cycle.
+var PlanGistFromCtx func(context.Context) string
+
 // Compare implements the Datum interface.
 func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
@@ -5361,10 +5495,16 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 
 	// We should never be comparing two different versions of the same enum.
 	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
+		var gist redact.SafeString
+		if PlanGistFromCtx != nil {
+			// Plan gist, by construction, doesn't contain any PII, so it's a
+			// safe string.
+			gist = redact.SafeString(PlanGistFromCtx(ctx))
+		}
 		panic(errors.AssertionFailedf(
-			"comparison of two different versions of enum %s oid %d: versions %d and %d",
+			"comparison of two different versions of enum %s oid %d: versions %d and %d, gist %q",
 			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()), d.EnumTyp.TypeMeta.Version,
-			v.EnumTyp.TypeMeta.Version,
+			v.EnumTyp.TypeMeta.Version, gist,
 		))
 	}
 
@@ -5989,6 +6129,9 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		}
 		return NewDEnum(e), nil
 	default:
+		// TODO(yuzefovich): think through whether we want to explicitly return
+		// FeatureNotSupported error for types like TSQuery, TSVector, PGVector,
+		// Jsonpath, etc that don't have a minimum value.
 		return nil, errors.AssertionFailedf("unhandled type %s", t.SQLStringForError())
 	}
 }
@@ -6092,6 +6235,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
+	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath("")), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},

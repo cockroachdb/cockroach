@@ -44,6 +44,7 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
 )
 
 type projBitandInt16Int16ConstOp struct {
@@ -17523,7 +17524,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17543,7 +17544,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17562,7 +17563,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17579,7 +17580,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17625,7 +17626,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17645,7 +17646,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17664,7 +17665,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17681,7 +17682,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17727,7 +17728,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17747,7 +17748,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17766,7 +17767,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17783,7 +17784,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(p.constArg))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &tmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17827,7 +17828,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17847,7 +17848,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17866,7 +17867,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -17883,7 +17884,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &arg, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &arg, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -17931,7 +17932,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -17956,7 +17957,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -17980,7 +17981,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18002,7 +18003,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18053,7 +18054,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18078,7 +18079,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18102,7 +18103,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18124,7 +18125,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18175,7 +18176,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18200,7 +18201,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18224,7 +18225,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18246,7 +18247,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18297,7 +18298,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18319,7 +18320,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18340,7 +18341,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -18359,7 +18360,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -18407,7 +18408,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18432,7 +18433,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18456,7 +18457,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18478,7 +18479,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18529,7 +18530,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18554,7 +18555,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18578,7 +18579,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18600,7 +18601,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18651,7 +18652,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18676,7 +18677,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18700,7 +18701,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18722,7 +18723,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18773,7 +18774,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18795,7 +18796,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -18816,7 +18817,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -18835,7 +18836,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -18883,7 +18884,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18908,7 +18909,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -18932,7 +18933,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -18954,7 +18955,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -19005,7 +19006,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -19030,7 +19031,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -19054,7 +19055,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -19076,7 +19077,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -19127,7 +19128,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -19152,7 +19153,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg)))
 							rightTmpDec.SetInt64(int64(int64(p.constArg)))
-							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+							if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -19176,7 +19177,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -19198,7 +19199,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg)))
 						rightTmpDec.SetInt64(int64(int64(p.constArg)))
-						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+						if err := eval.DecimalPow(tree.DecimalCtx, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -19249,7 +19250,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -19271,7 +19272,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 
 							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+							err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -19292,7 +19293,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -19311,7 +19312,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 
 						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &p.constArg)
+						err := eval.DecimalPow(tree.DecimalCtx, &projCol[i], &tmpDec, &p.constArg)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}

@@ -151,7 +151,7 @@ func (b *Builder) resolveProcedureDefinition(
 ) (f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition) {
 	// Type-check the procedure and its arguments. Subqueries are disallowed in
 	// arguments.
-	typedExpr := inScope.resolveTypeAndReject(proc, types.Any,
+	typedExpr := inScope.resolveTypeAndReject(proc, types.AnyElement,
 		"CALL argument", tree.RejectSubqueries)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {

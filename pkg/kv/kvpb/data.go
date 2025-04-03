@@ -7,6 +7,7 @@
 package kvpb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -183,20 +184,6 @@ type LeaseAppliedIndex uint64
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseAppliedIndex) SafeValue() {}
 
-// RaftTerm represents the term of a raft message. This corresponds to Term in
-// HardState.Term in the Raft library. That type is a uint64, so it is necessary
-// to cast to/from that type when dealing with the Raft library, however
-// internally RaftTerm is used for all fields in CRDB.
-type RaftTerm uint64
-
-// SafeValue implements the redact.SafeValue interface.
-func (s RaftTerm) SafeValue() {}
-
-// RaftIndex represents the term of a raft message. This corresponds to Index in
-// HardState.Index in the Raft library. That type is a uint64, so it is
-// necessary to cast to/from that type when dealing with the Raft library,
-// however internally RaftIndex is used for all fields in CRDB.
-type RaftIndex uint64
-
-// SafeValue implements the redact.SafeValue interface.
-func (s RaftIndex) SafeValue() {}
+type RaftTerm = raftpb.Term
+type RaftIndex = raftpb.Index
+type RaftSpan = raftpb.LogSpan

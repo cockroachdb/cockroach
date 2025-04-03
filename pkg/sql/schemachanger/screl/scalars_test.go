@@ -75,7 +75,7 @@ func TestAllDescIDsAndContainsDescID(t *testing.T) {
 				TableID:  1,
 				ColumnID: 10,
 				TypeT: scpb.TypeT{
-					Type:          types.Any,
+					Type:          types.AnyElement,
 					ClosedTypeIDs: []catid.DescID{2, 3},
 				},
 			},
@@ -87,7 +87,7 @@ func TestAllDescIDsAndContainsDescID(t *testing.T) {
 				TableID:  1,
 				ColumnID: 10,
 				TypeT: scpb.TypeT{
-					Type:          types.Any,
+					Type:          types.AnyElement,
 					ClosedTypeIDs: []catid.DescID{2, 3},
 				},
 				ComputeExpr: &scpb.Expression{

@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build execgen_template
-// +build execgen_template
 
 package colexecjoin
 

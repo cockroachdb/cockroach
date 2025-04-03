@@ -41,7 +41,7 @@ WHERE x > 'foo'
 with &1
  ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.333333, distinct(11)=3.33333, null(11)=0]
+ ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
  ├── key: (11)
  ├── fd: ()-->(13), (11)-->(12)
  ├── delete xyz
@@ -70,7 +70,7 @@ with &1
  │              └── xyz.z:8 = 5.5 [type=bool, outer=(8), constraints=(/8: [/5.5 - /5.5]; tight), fd=()-->(8)]
  └── select
       ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
-      ├── stats: [rows=3.333333, distinct(11)=3.33333, null(11)=0]
+      ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
       ├── key: (11)
       ├── fd: ()-->(13), (11)-->(12)
       ├── with-scan &1

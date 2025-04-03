@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -196,17 +197,15 @@ func EvalAddSSTable(
 	var statsDelta enginepb.MVCCStats
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	checkConflicts := args.DisallowConflicts || args.DisallowShadowing ||
-		!args.DisallowShadowingBelow.IsEmpty()
+	checkConflicts := args.DisallowConflicts || !args.DisallowShadowingBelow.IsEmpty()
 	if checkConflicts {
 		// If requested, check for MVCC conflicts with existing keys. This enforces
 		// all MVCC invariants by returning WriteTooOldError for any existing
 		// values at or above the SST timestamp, returning LockConflictError to
 		// resolve any encountered intents, and accurately updating MVCC stats.
 		//
-		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
-		// will not write above existing/visible values (but will write above
-		// tombstones).
+		// Additionally, if DisallowShadowingBelow is set, it will not write
+		// above existing/visible values (but will write above tombstones).
 		//
 		// If the overlap between the ingested SST and the engine is large (i.e.
 		// the SST is wide in keyspace), or if the ingested SST is very small,
@@ -231,7 +230,7 @@ func EvalAddSSTable(
 
 		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
-			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxLockConflicts, targetLockConflictBytes, usePrefixSeek)
+			args.DisallowShadowingBelow, sstTimestamp, maxLockConflicts, targetLockConflictBytes, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
@@ -587,6 +586,11 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			if !value.IsTombstone() {
 				return errors.AssertionFailedf("SST contains non-tombstone range key %s", rangeKey)
 			}
+
+			// Set the KVNemesisSeq to its zero value so that we can run KVNemesis
+			// under the race detector.
+			var emptyContainer kvnemesisutil.Container
+			value.MVCCValueHeader.KVNemesisSeq = emptyContainer
 			if value.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
 				return errors.AssertionFailedf("SST contains non-empty MVCC value header for range key %s",
 					rangeKey)

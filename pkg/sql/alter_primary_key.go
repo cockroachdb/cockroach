@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -178,7 +179,7 @@ func (p *planner) AlterPrimaryKey(
 		Unique:            true,
 		CreatedExplicitly: true,
 		EncodingType:      catenumpb.PrimaryIndexEncoding,
-		Type:              descpb.IndexDescriptor_FORWARD,
+		Type:              idxtype.FORWARD,
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
@@ -369,7 +370,8 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	// We have to rewrite all indexes that either:
-	// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
+	// * depend on uniqueness from the old primary key (inverted, vector,
+	//   non-unique, or unique with nulls).
 	// * don't store or index all columns in the new primary key.
 	// * is affected by a locality config swap.
 	shouldRewriteIndex := func(idx catalog.Index) (bool, error) {
@@ -433,7 +435,9 @@ func (p *planner) AlterPrimaryKey(
 			return true, nil
 		}
 
-		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
+		return !idx.IsUnique() ||
+			idx.GetType() == idxtype.INVERTED ||
+			idx.GetType() == idxtype.VECTOR, nil
 	}
 	var indexesToRewrite []catalog.Index
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
@@ -809,7 +813,8 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 	// Second, determine the key suffix columns: add all primary key columns
 	// which have not already been in the key columns in the secondary index.
 	toAdd.KeySuffixColumnIDs = nil
-	invIdx := toAdd.Type == descpb.IndexDescriptor_INVERTED
+	invIdx := toAdd.Type == idxtype.INVERTED
+	vecIdx := toAdd.Type == idxtype.VECTOR
 	for _, colID := range primary.KeyColumnIDs {
 		if !idxColIDs.Contains(colID) {
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
@@ -831,6 +836,10 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 				"primary key column %s cannot be present in an inverted index",
 				col.GetName(),
 			)
+		} else if vecIdx && colID == toAdd.VectorColumnID() {
+			// VECTOR columns are not allowed in the primary key.
+			return errors.AssertionFailedf(
+				"indexed vector column cannot be part of the primary key")
 		}
 	}
 	// Finally, add all the stored columns if it is not already a key or key suffix column.

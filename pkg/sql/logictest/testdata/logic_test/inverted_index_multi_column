@@ -1,11 +1,11 @@
 # Tests for multi-column inverted indexes.
 
 # Err if the last column is not an invertable type.
-statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column b has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE m_err (k INT PRIMARY KEY, a INT, b INT, geom GEOMETRY, INVERTED INDEX (a, b))
 
 # Err if a non-last column is not a non-invertable type.
-statement error column geom1 of type geometry is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column geom1 has type geometry, which is only allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE m_err (k INT PRIMARY KEY, geom1 GEOMETRY , geom GEOMETRY, INVERTED INDEX (geom1, geom))
 
 
@@ -248,6 +248,9 @@ SELECT * FROM backfill_a@idx WHERE i IN (3, 4) AND s = 'baz' AND j @> '{"a": "b"
 # Backfill a partial index when a new table is created in the same transaction.
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN
 
 statement ok
@@ -264,6 +267,9 @@ CREATE INVERTED INDEX idx ON backfill_b (i, s, j)
 
 statement ok
 COMMIT
+
+statement ok
+RESET autocommit_before_ddl
 
 query ITT
 SELECT * FROM backfill_b@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7'::JSON

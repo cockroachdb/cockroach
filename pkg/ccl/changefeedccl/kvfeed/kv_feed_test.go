@@ -106,7 +106,7 @@ func TestKVFeed(t *testing.T) {
 		initialHighWater     hlc.Timestamp
 		endTime              hlc.Timestamp
 		spans                []roachpb.Span
-		checkpoint           []roachpb.Span
+		spanLevelCheckpoint  *jobspb.TimestampSpansMap
 		events               []kvpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
@@ -120,7 +120,7 @@ func TestKVFeed(t *testing.T) {
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		mm := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-			Name:     mon.MakeMonitorName("test"),
+			Name:     mon.MakeName("test"),
 			Settings: settings,
 		})
 		metrics := kvevent.MakeMetrics(time.Minute)
@@ -145,7 +145,7 @@ func TestKVFeed(t *testing.T) {
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
-		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
+		f := newKVFeed(buf, tc.spans, tc.spanLevelCheckpoint,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, tc.withFrontierQuantize,
 			0, /* consumerID */
@@ -162,7 +162,7 @@ func TestKVFeed(t *testing.T) {
 
 		// Assert that each scanConfig pushed to the channel `scans` by `f.run()`
 		// is what we expected (as specified in the test case).
-		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
+		spansToScan := filterCheckpointSpans(tc.spans, tc.spanLevelCheckpoint)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
@@ -247,9 +247,9 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			checkpoint: []roachpb.Span{
-				tableSpan(codec, 42),
-			},
+			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(2).Next(): {tableSpan(codec, 42)},
+			}),
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
@@ -265,9 +265,9 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			checkpoint: []roachpb.Span{
-				makeSpan(codec, 42, "a", "q"),
-			},
+			spanLevelCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
+				ts(2).Next(): {makeSpan(codec, 42, "a", "q")},
+			}),
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "val", ts(3)),
 				kvEvent(codec, 42, "d", "val", ts(3)),
@@ -782,10 +782,9 @@ func TestFrontierQuantization(t *testing.T) {
 				_, err := frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
 				require.NoError(t, err)
 			}
-			frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			for sp, ts := range frontier.Entries() {
 				t.Logf("span: %v, ts: %v\n", sp, ts)
-				return false
-			})
+			}
 			require.Equal(t, tc.expectedFrontierEntries, frontier.Len())
 			require.Equal(t, tc.expectedFrontier, frontier.Frontier())
 		})

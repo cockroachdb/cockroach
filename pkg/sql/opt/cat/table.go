@@ -46,6 +46,9 @@ type Table interface {
 	// that they cannot be mutated.
 	IsMaterializedView() bool
 
+	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
+	LookupColumnOrdinal(colID descpb.ColumnID) (int, error)
+
 	// ColumnCount returns the number of columns in the table. This includes
 	// public columns, write-only columns, etc.
 	ColumnCount() int
@@ -116,7 +119,7 @@ type Table interface {
 	// references (where this is the origin table).
 	OutboundForeignKeyCount() int
 
-	// OutboundForeignKeyCount returns the ith outbound foreign key reference.
+	// OutboundForeignKey returns the ith outbound foreign key reference.
 	OutboundForeignKey(i int) ForeignKeyConstraint
 
 	// InboundForeignKeyCount returns the number of inbound foreign key references
@@ -181,6 +184,16 @@ type Table interface {
 
 	// Trigger returns the ith trigger, where i < TriggerCount.
 	Trigger(i int) Trigger
+
+	// IsRowLevelSecurityEnabled is true if policies should be applied during the query.
+	IsRowLevelSecurityEnabled() bool
+
+	// IsRowLevelSecurityForced is true if row-level security policies should be
+	// applied to the table owner.
+	IsRowLevelSecurityForced() bool
+
+	// Policies returns all the policies defined for this table.
+	Policies() *Policies
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
@@ -202,6 +215,10 @@ type CheckConstraint interface {
 	// ColumnOrdinal returns the table column ordinal of the ith column in this
 	// constraint.
 	ColumnOrdinal(i int) int
+
+	// IsRLSConstraint is true if this is a constraint used to enforce
+	// row-level security policies.
+	IsRLSConstraint() bool
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is

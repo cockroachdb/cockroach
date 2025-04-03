@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -141,7 +143,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	if opt.IsMutationOp(e) {
-		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.setMutationFlags(e)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			switch tag := b.statementTag(e); tag {
@@ -267,9 +269,11 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	case *memo.LockExpr:
 		ep, outputCols, err = b.buildLock(t)
 
-	case *memo.VectorSearchExpr, *memo.VectorPartitionSearchExpr:
-		err = unimplemented.New("vector index search",
-			"execution planning for vector index search is not yet implemented")
+	case *memo.VectorSearchExpr:
+		ep, outputCols, err = b.buildVectorSearch(t)
+
+	case *memo.VectorMutationSearchExpr:
+		ep, outputCols, err = b.buildVectorMutationSearch(t)
 
 	case *memo.BarrierExpr:
 		ep, outputCols, err = b.buildBarrier(t)
@@ -377,6 +381,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	b.maybeAnnotateWithEstimates(ep.root, e)
+	b.maybeAnnotatePolicyInfo(ep.root, e)
 
 	if saveTableName != "" {
 		// The output columns do not change in applySaveTable.
@@ -438,6 +443,77 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
+	}
+}
+
+// maybeAnnotatePolicyInfo checks if we are building against an
+// ExplainFactory and annotates the node with row-level security policy
+// information.
+func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
+	if ef, ok := b.factory.(exec.ExplainFactory); ok {
+		rlsMeta := b.mem.Metadata().GetRLSMeta()
+		// RLS is lazily initialized, and only when it comes across a RLS enabled
+		// table.
+		if !rlsMeta.IsInitialized {
+			return
+		}
+		// Helper to annotate a node for the given table ID.
+		annotateNodeForTable := func(tabID opt.TableID, applyFilterExpr bool) {
+			// Pull out the policy information for the table the node was built for.
+			policiesApplied, found := rlsMeta.PoliciesApplied[tabID]
+			if found {
+				val := exec.RLSPoliciesApplied{
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt,
+				}
+				if applyFilterExpr {
+					val.Policies = policiesApplied.Filter
+				} else {
+					val.Policies = policiesApplied.Check
+				}
+				ef.AnnotateNode(node, exec.PolicyInfoID, &val)
+			}
+		}
+		switch e := e.(type) {
+		case *memo.ValuesExpr:
+			// Normally, since policies apply to specific tables, we annotate when we
+			// come across a scan of a single table. We need to annotate a "norows"
+			// value as this can be emitted when scanning a table and RLS forced all
+			// rows to be filtered out because none of the policies applied.
+			if len(e.Rows) == 0 && rlsMeta.NoPoliciesApplied {
+				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{})
+			}
+		case *memo.ScanExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.LookupJoinExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.ZigzagJoinExpr:
+			annotateNodeForTable(e.LeftTable, true /* applyFilterExpr */)
+			annotateNodeForTable(e.RightTable, true /* applyFilterExpr */)
+		case *memo.InvertedJoinExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.PlaceholderScanExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.IndexJoinExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.VectorSearchExpr:
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.DeleteExpr:
+			// Typically, policy information is displayed in the scan node. However,
+			// a `DeleteExpr` built for a delete range operation does not emit a scan node,
+			// as everything is included within the `deleteRangeOp` node.
+			// To ensure policy information is included, we handle that case here.
+			if b.canUseDeleteRange(e) {
+				if scan, ok := e.Input.(*memo.ScanExpr); ok {
+					annotateNodeForTable(scan.Table, true /* applyFilterExpr */)
+				}
+			}
+		case *memo.InsertExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
+		case *memo.UpdateExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
+		case *memo.UpsertExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
+		}
 	}
 }
 
@@ -584,7 +660,7 @@ func (b *Builder) scanParams(
 	// index in the memo.
 	if scan.Flags.ForceIndex && scan.Flags.Index != scan.Index {
 		idx := tab.Index(scan.Flags.Index)
-		isInverted := idx.IsInverted()
+		isInverted := idx.Type() == idxtype.INVERTED
 		_, isPartial := idx.Predicate()
 
 		var err error
@@ -613,9 +689,15 @@ func (b *Builder) scanParams(
 					b.flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan)) {
 				// TODO(#123783): this code might need an adjustment for virtual
 				// tables.
-				err = errors.WithHint(err,
-					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
-				)
+				var hint strings.Builder
+				hint.WriteString("to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold")
+				// If statistics are available, we can determine the appropriate
+				// `large_full_scan_rows` threshold to allow this scan.
+				stats := relProps.Statistics()
+				if stats.Available {
+					hint.WriteString(fmt.Sprintf(" to at least %0.0f", stats.RowCount+1))
+				}
+				err = errors.WithHint(err, hint.String())
 			}
 		}
 
@@ -756,11 +838,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 
 	idx := tab.Index(scan.Index)
-	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
-		return execPlan{}, colOrdMap{},
-			errors.AssertionFailedf("expected inverted index scan to have a constraint")
+	if idx.Type() == idxtype.INVERTED {
+		if len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
+			return execPlan{}, colOrdMap{},
+				errors.AssertionFailedf("expected inverted index scan to have a constraint")
+		}
 	}
-	if idx.IsVector() {
+	if idx.Type() == idxtype.VECTOR {
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"only VectorSearch operators can use vector indexes")
 	}
@@ -1166,6 +1250,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
+	fromMemo := b.mem
 	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1230,7 +1315,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
-		f.CopyAndReplace(rightExpr, &rightRequiredProps, replaceFn)
+		f.CopyAndReplace(fromMemo, rightExpr, &rightRequiredProps, replaceFn)
 
 		newRightSide, err := o.Optimize()
 		if err != nil {
@@ -2003,6 +2088,14 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 	for i, col := range private.OutCols {
 		outputCols.Set(col, i)
 	}
+	leftOrdering, err := sqlOrdering(leftExpr.ProvidedPhysical().Ordering, leftCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	rightOrdering, err := sqlOrdering(rightExpr.ProvidedPhysical().Ordering, rightCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
 	streamingOrdering, err := sqlOrdering(
 		ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering), outputCols,
 	)
@@ -2017,12 +2110,18 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 
 	var ep execPlan
 	if typ == tree.UnionOp && all {
-		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
+		ep.root, err = b.factory.ConstructUnionAll(
+			left.root, right.root, leftOrdering, rightOrdering, reqOrdering,
+			hardLimit, enforceHomeRegion,
+		)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.MergeJoin)
 		}
-		ep.root, err = b.factory.ConstructStreamingSetOp(typ, all, left.root, right.root, streamingOrdering, reqOrdering)
+		ep.root, err = b.factory.ConstructStreamingSetOp(
+			typ, all, left.root, right.root,
+			leftOrdering, rightOrdering, streamingOrdering, reqOrdering,
+		)
 	} else {
 		if len(reqOrdering) > 0 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")
@@ -2172,7 +2271,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		}
 	}
 	if len(moreThanOneRegionScans) > 0 {
-		md := moreThanOneRegionScans[0].Memo().Metadata()
+		md := b.mem.Metadata()
 		tabMeta := md.TableMeta(moreThanOneRegionScans[0].Table)
 		if len(moreThanOneRegionScans) == 1 {
 			return b.filterSuggestionError(tabMeta, moreThanOneRegionScans[0].Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
@@ -2191,7 +2290,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 			sqlerrors.EnforceHomeRegionFurtherInfo)
 	}
 	for i, scan := range b.builtScans {
-		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
+		inputTableMeta := b.mem.Metadata().TableMeta(scan.Table)
 		inputTable := inputTableMeta.Table
 		// Mutation DML errors out with additional information via a call to
 		// `filterSuggestionError`, handled by the caller, so skip the target of
@@ -2230,7 +2329,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 			var inputIndexOrdinal2 cat.IndexOrdinal
 			if len(b.builtScans) > 1 && i == 0 {
 				scan2 := b.builtScans[1]
-				inputTableMeta2 = scan2.Memo().Metadata().TableMeta(scan2.Table)
+				inputTableMeta2 = b.mem.Metadata().TableMeta(scan2.Table)
 				inputIndexOrdinal2 = scan2.Index
 			}
 			return b.filterSuggestionError(inputTableMeta, inputIndexOrdinal, inputTableMeta2, inputIndexOrdinal2)
@@ -2465,7 +2564,7 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 		// the query can't be answered by executing the first branch of the LOS.
 		return nil
 	}
-	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
+	lookupTableMeta := b.mem.Metadata().TableMeta(join.Table)
 	lookupTable := lookupTableMeta.Table
 
 	var input opt.Expr
@@ -2496,7 +2595,7 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	var inputIndexOrdinal cat.IndexOrdinal
 	switch t := input.(type) {
 	case *memo.ScanExpr:
-		inputTableMeta = join.Memo().Metadata().TableMeta(t.Table)
+		inputTableMeta = b.mem.Metadata().TableMeta(t.Table)
 		inputTable = inputTableMeta.Table
 		inputTableName = string(inputTable.Name())
 		inputIndexOrdinal = t.Index
@@ -2528,7 +2627,7 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 				}
 			} else if join.LookupColsAreTableKey &&
 				len(join.LookupExpr) > 0 {
-				if filterIdx, ok := join.GetConstPrefixFilter(join.Memo().Metadata()); ok {
+				if filterIdx, ok := join.GetConstPrefixFilter(b.mem.Metadata()); ok {
 					firstIndexColEqExpr := join.LookupJoinPrivate.LookupExpr[filterIdx].Condition
 					if firstIndexColEqExpr.Op() == opt.EqOp {
 						if regionName, ok := distribution.GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
@@ -2546,7 +2645,7 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	// more.
 	if homeRegion == "" && b.optimizer != nil && b.optimizer.Coster() != nil {
 		_, physicalDistribution := distribution.BuildLookupJoinLookupTableDistribution(
-			b.ctx, b.evalCtx, join, join.RequiredPhysical(), b.optimizer.MaybeGetBestCostRelation,
+			b.ctx, b.evalCtx, b.mem, join, join.RequiredPhysical(), b.optimizer.MaybeGetBestCostRelation,
 		)
 		if len(physicalDistribution.Regions) == 1 {
 			homeRegion = physicalDistribution.Regions[0]
@@ -2747,6 +2846,13 @@ func (b *Builder) buildLookupJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	ok, requiredDirection := ordering.LookupJoinCanProvideOrdering(
+		b.ctx, b.evalCtx, b.mem, join, &join.RequiredPhysical().Ordering,
+	)
+	if !ok {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
+	}
+	reverse := requiredDirection == ordering.ReverseDirection
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
@@ -2765,6 +2871,7 @@ func (b *Builder) buildLookupJoin(
 		locking,
 		join.RequiredPhysical().LimitHintInt64(),
 		join.RemoteOnlyLookups,
+		reverse,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -2789,7 +2896,7 @@ func (b *Builder) buildLookupJoin(
 }
 
 func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (err error) {
-	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
+	lookupTableMeta := b.mem.Metadata().TableMeta(join.Table)
 	lookupTable := lookupTableMeta.Table
 
 	var input opt.Expr
@@ -2807,7 +2914,7 @@ func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (er
 	var inputIndexOrdinal cat.IndexOrdinal
 	switch t := input.(type) {
 	case *memo.ScanExpr:
-		inputTableMeta = join.Memo().Metadata().TableMeta(t.Table)
+		inputTableMeta = b.mem.Metadata().TableMeta(t.Table)
 		inputTable = inputTableMeta.Table
 		inputTableName = string(inputTable.Name())
 		inputIndexOrdinal = t.Index
@@ -3161,7 +3268,7 @@ func (b *Builder) buildZigzagJoin(
 }
 
 func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
-	if b.forceForUpdateLocking.Contains(int(toLock)) {
+	if b.forceForUpdateLocking == toLock {
 		locking = locking.Max(forUpdateLocking)
 	}
 	if locking.IsLocking() {
@@ -3431,8 +3538,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.flags.Set(exec.PlanFlagContainsMutation)
-			break
+			b.setMutationFlags(s)
 		}
 	}
 
@@ -3787,7 +3893,7 @@ func (b *Builder) applySaveTable(
 	// opttester.
 	outputCols := e.Relational().OutputCols
 	colNames := make([]string, outputCols.Len())
-	colNameGen := memo.NewColumnNameGenerator(e)
+	colNameGen := memo.NewColumnNameGenerator(b.mem, e)
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
 		ord, _ := inputCols.Get(col)
 		colNames[ord] = colNameGen.GenerateName(col)
@@ -3824,6 +3930,95 @@ func (b *Builder) buildBarrier(
 	// BarrierExpr is only used as an optimization barrier. In the execution plan,
 	// it is replaced with its input.
 	return b.buildRelational(barrier.Input)
+}
+
+func (b *Builder) buildVectorSearch(
+	search *memo.VectorSearchExpr,
+) (_ execPlan, _ colOrdMap, _ error) {
+	md := b.mem.Metadata()
+	table := md.Table(search.Table)
+	index := table.Index(search.Index)
+	if index.Type() != idxtype.VECTOR {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"vector search is only supported on vector indexes")
+	}
+	primaryKeyCols := md.TableMeta(search.Table).IndexKeyColumns(cat.PrimaryIndex)
+	for col, ok := search.Cols.Next(0); ok; col, ok = search.Cols.Next(col + 1) {
+		if !primaryKeyCols.Contains(col) {
+			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+				"vector search output column %d is not a primary key column", col)
+		}
+	}
+	outColOrds, outColMap := b.getColumns(search.Cols, search.Table)
+	ctx := buildScalarCtx{}
+	queryVector, err := b.buildScalar(&ctx, search.QueryVector)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	targetNeighborCount := uint64(search.TargetNeighborCount)
+
+	var res execPlan
+	res.root, err = b.factory.ConstructVectorSearch(
+		table, index, outColOrds, search.PrefixConstraint, queryVector, targetNeighborCount,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	return res, outColMap, nil
+}
+
+func (b *Builder) buildVectorMutationSearch(
+	search *memo.VectorMutationSearchExpr,
+) (_ execPlan, outputCols colOrdMap, err error) {
+	md := b.mem.Metadata()
+	table := md.Table(search.Table)
+	index := table.Index(search.Index)
+	if index.Type() != idxtype.VECTOR {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"vector mutation search is only supported on vector indexes")
+	}
+
+	input, inputCols, err := b.buildRelational(search.Input)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	// Produce the output column map. All input columns are passed through.
+	// The operator will project a partition column and (optionally) a quantized
+	// vector column.
+	outputCols = inputCols
+	outputCols.Set(search.PartitionCol, inputCols.MaxOrd()+1)
+	if search.QuantizedVectorCol != 0 {
+		outputCols.Set(search.QuantizedVectorCol, inputCols.MaxOrd()+2)
+	}
+
+	// Resolve the column ordinals for the input columns.
+	prefixKeyCols := make([]exec.NodeColumnOrdinal, len(search.PrefixKeyCols))
+	for i, c := range search.PrefixKeyCols {
+		prefixKeyCols[i], err = getNodeColumnOrdinal(inputCols, c)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+	}
+	queryVectorCol, err := getNodeColumnOrdinal(inputCols, search.QueryVectorCol)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	suffixKeyCols := make([]exec.NodeColumnOrdinal, len(search.SuffixKeyCols))
+	for i, col := range search.SuffixKeyCols {
+		suffixKeyCols[i], err = getNodeColumnOrdinal(inputCols, col)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+	}
+
+	var res execPlan
+	res.root, err = b.factory.ConstructVectorMutationSearch(
+		input.root, table, index, prefixKeyCols, queryVectorCol, suffixKeyCols, search.IsIndexPut,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	return res, outputCols, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan
@@ -3924,15 +4119,68 @@ func (b *Builder) applyPresentation(
 // getEnvData consolidates the information that must be presented in
 // EXPLAIN (opt, env).
 func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
+	// Catalog objects can show up multiple times in our lists, so deduplicate
+	// them.
+	seen := make(map[tree.TableName]struct{})
+	getNames := func(count int, get func(int) cat.DataSource) ([]tree.TableName, error) {
+		result := make([]tree.TableName, 0, count)
+		for i := 0; i < count; i++ {
+			ds := get(i)
+			tn, err := b.catalog.FullyQualifiedName(b.ctx, ds)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := seen[tn]; !ok {
+				seen[tn] = struct{}{}
+				result = append(result, tn)
+			}
+		}
+		return result, nil
+	}
+
 	envOpts := exec.ExplainEnvData{ShowEnv: true}
-	var err error
-	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
-		b.ctx, b.catalog,
-		func(ds cat.DataSource) (cat.DataSourceName, error) {
-			return b.catalog.FullyQualifiedName(b.ctx, ds)
+	var refTables []cat.Table
+	var refTableIncluded intsets.Fast
+	opt.VisitFKReferenceTables(
+		b.ctx,
+		b.catalog,
+		b.mem.Metadata().AllTables(),
+		func(cat.Table, cat.ForeignKeyConstraint) (recurse bool) {
+			return true
 		},
-		true, /* includeVirtualTables */
+		func(table cat.Table, _ cat.ForeignKeyConstraint) {
+			if refTableIncluded.Contains(int(table.ID())) {
+				return
+			}
+			refTables = append(refTables, table)
+			refTableIncluded.Add(int(table.ID()))
+		},
 	)
+	envOpts.AddFKs = opt.GetAllFKsAmongTables(
+		refTables,
+		func(t cat.Table) (tree.TableName, error) {
+			return b.catalog.FullyQualifiedName(b.ctx, t)
+		},
+	)
+	var err error
+	envOpts.Tables, err = getNames(len(refTables), func(i int) cat.DataSource {
+		return refTables[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
+	envOpts.Sequences, err = getNames(len(b.mem.Metadata().AllSequences()), func(i int) cat.DataSource {
+		return b.mem.Metadata().AllSequences()[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
+	envOpts.Views, err = getNames(len(b.mem.Metadata().AllViews()), func(i int) cat.DataSource {
+		return b.mem.Metadata().AllViews()[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
 	return envOpts, err
 }
 

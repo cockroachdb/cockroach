@@ -926,11 +926,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
-		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, cdctest.ChangefeedOption{
-			FullTableName: false,
-			KeyInValue:    false,
-			Format:        "json",
-		})
+		baV, err := cdctest.NewBeforeAfterValidator(db, `bank.bank`, true)
 		if err != nil {
 			return err
 		}
@@ -1901,10 +1897,6 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			// The deprecated pubsub sink is unable to handle the throughput required for 100 warehouses
-			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true;"); err != nil {
-				ct.t.Fatal(err)
-			}
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
@@ -2020,11 +2012,6 @@ func registerCDC(r registry.Registry) {
 			}
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
-
-			// The deprecated webhook sink is unable to handle the throughput required for 100 warehouses
-			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true;"); err != nil {
-				ct.t.Fatal(err)
-			}
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: webhookSink,
@@ -2294,7 +2281,6 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
-		Skip:             "#139109",
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
@@ -3779,7 +3765,7 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.22.8.linux-amd64.tar.gz -O /tmp/go.tar.gz
+wget https://go.dev/dl/go1.23.7.linux-amd64.tar.gz -O /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile

@@ -210,7 +210,12 @@ func (s restartVirtualClusterStep) Run(
 	// Assume the binary already exists on the node as this step should
 	// only be scheduled after the storage cluster has already upgraded.
 	binaryPath := clusterupgrade.BinaryPathForVersion(s.rt, s.version, "cockroach")
-	startOpts := option.StartVirtualClusterOpts(s.virtualCluster, node, startStopOpts()...)
+	opts := startStopOpts()
+	// Specify the storage cluster if it's separate process.
+	if h.DeploymentMode() == SeparateProcessDeployment {
+		opts = append(opts, option.StorageCluster(h.System.Descriptor.Nodes))
+	}
+	startOpts := option.StartVirtualClusterOpts(s.virtualCluster, node, opts...)
 	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
 	return h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings)
 }

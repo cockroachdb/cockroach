@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -117,11 +118,59 @@ func optimizePuts(
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
-		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
+		log.Errorf(ctx, "Seek returned error; disabling blind-put optimization: %+v", err)
 		return origReqs, nil
 	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
 		iterKey = iter.UnsafeKey().Key.Clone()
 	}
+
+	if lock.LockNonExistentKeys {
+		ltStart, _ := keys.LockTableSingleKey(minKey, nil)
+
+		// If we already have an iterKey, we only need to know if there is an even
+		// earlier key that is locked,
+		var ltEnd roachpb.Key
+		if iterKey != nil {
+			ltEnd, _ = keys.LockTableSingleKey(iterKey.Next(), nil)
+		} else {
+			ltEnd, _ = keys.LockTableSingleKey(maxKey.Next(), nil)
+		}
+
+		ltIter, err := storage.NewLockTableIterator(ctx, reader,
+			storage.LockTableIteratorOptions{
+				LowerBound:  ltStart,
+				UpperBound:  ltEnd,
+				MatchMinStr: lock.Exclusive,
+			})
+		if err != nil {
+			return nil, err
+		}
+		defer ltIter.Close()
+
+		if valid, err := ltIter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); err != nil {
+			log.Errorf(ctx, "SeekEngineKeyGE error; disabling blind-put optimization: %+v", err)
+			return origReqs, nil
+		} else if valid {
+			engineKey, err := ltIter.EngineKey()
+			if err != nil {
+				log.Errorf(ctx, "EngineKey error; disabling blind-put optimization: %+v", err)
+				return origReqs, nil
+			}
+			ltKey, err := engineKey.ToLockTableKey()
+			if err != nil {
+				log.Errorf(ctx, "ToLockTableKey error; disabling blind-put optimization: %+v", err)
+				return origReqs, nil
+			}
+			if bytes.Compare(ltKey.Key, maxKey) <= 0 &&
+				(iterKey == nil || bytes.Compare(ltKey.Key, iterKey) < 0) {
+				iterKey = ltKey.Key.Clone()
+			}
+		}
+		// If !valid, we know there are existing locks in the lock table for iterKey
+		// (or any key before it), so it is still the correct key to stop blind
+		// writing at.
+	}
+
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
 	reqs := append([]kvpb.RequestUnion(nil), origReqs...)
@@ -142,7 +191,7 @@ func optimizePuts(
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
 			default:
-				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
+				log.Fatalf(ctx, "unexpected non-put request: %s", t)
 			}
 		}
 	}

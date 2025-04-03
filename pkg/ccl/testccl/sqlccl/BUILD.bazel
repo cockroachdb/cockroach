@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "sqlccl_test",
+    size = "large",
     srcs = [
         "explain_test.go",
         "gc_job_test.go",
@@ -42,7 +43,6 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/replication",
-        "//pkg/sql/colexecerror",
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
@@ -51,10 +51,12 @@ go_test(
         "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/testutils",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
@@ -70,7 +72,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
-        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_stretchr_testify//require",
     ],

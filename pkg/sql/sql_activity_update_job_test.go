@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -103,7 +103,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	db.Exec(t, "SET SESSION application_name=$1", appName)
 	db.Exec(t, "SELECT 1;")
 
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, srv.AppStopper())
+	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 
 	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
@@ -149,7 +149,7 @@ func TestMergeFunctionLogic(t *testing.T) {
 	db.Exec(t, "SELECT * FROM system.statement_statistics")
 	db.Exec(t, "SELECT count_rows() FROM system.transaction_statistics")
 
-	srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, srv.AppStopper())
+	srv.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 
 	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
@@ -314,7 +314,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = true;")
-		ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, srv.AppStopper())
+		ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = false;")
 
 		// Run the updater to add rows to the activity tables.
@@ -417,13 +417,13 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// the necessary information.
 		var stmtIDs [2]string
 		rows := db.Query(t, `SELECT json_array_elements_text(metadata->'stmtFingerprintIDs') FROM system.public.transaction_activity where app_name = 'topTransaction' AND json_array_length(metadata->'stmtFingerprintIDs') = 2`)
-		defer rows.Close()
 		stmtIdCnt := 0
 		for rows.Next() {
 			require.Less(t, stmtIdCnt, 2)
 			require.NoError(t, rows.Scan(&stmtIDs[stmtIdCnt]))
 			stmtIdCnt++
 		}
+		require.NoError(t, rows.Close())
 
 		require.Equal(t, 2, stmtIdCnt, "transaction_activity should have 2 stmts ids: actual:%d", stmtIdCnt)
 		// Don't check if the statements are on statements_activity
@@ -574,7 +574,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 
 	// Flush and transfer stats.
 	var metadataJSON string
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
 	var metadata struct {
@@ -591,7 +591,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	db.Exec(t, "SELECT 1")
 
 	// Flush and transfer top stats.
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 	require.NoError(t, updater.transferTopStats(ctx, stubTime, 100, 100, 100))
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
@@ -647,7 +647,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 
 	// Flush and transfer stats.
 	var metadataJSON string
-	ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+	ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
 	var metadata struct {
@@ -748,7 +748,7 @@ func (mu *timeMutex) setStubTime(time time.Time) {
 	mu.stubTime = time
 }
 
-func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
+func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -764,90 +764,154 @@ func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
 		return muStubTime.stubTime
 	}
 
-	// Start the cluster.
-	// Disable the job since it is called manually from a new instance to avoid
-	// any race conditions.
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: true,
-		Knobs: base.TestingKnobs{
-			SQLStatsKnobs: sqlStatsKnobs,
-			UpgradeManager: &upgradebase.TestingKnobs{
-				DontUseJobs:                       true,
-				SkipUpdateSQLActivityJobBootstrap: true,
-			}}})
-	defer srv.Stopper().Stop(context.Background())
-	defer sqlDB.Close()
-	ts := srv.ApplicationLayer()
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
-
-	// Start with empty activity tables.
-	execCfg := ts.ExecutorConfig().(ExecutorConfig)
-	st := cluster.MakeTestingClusterSettings()
-	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
-	require.NoError(t, updater.TransferStatsToActivity(ctx))
-	verifyActivityTablesAreEmpty(t, db)
-
 	// Use random name to keep isolated during stress tests.
 	rng, _ := randutil.NewTestRand()
 	appName := fmt.Sprintf("TestFlushToActivityWithDifferentAggTs-%d", rng.Int())
 
-	datadriven.RunTest(t, "testdata/sql_activity_update_job", func(t *testing.T, d *datadriven.TestData) string {
-		var buf bytes.Buffer
-		timeLayout := "2006-01-02 15:04:05"
-		switch d.Cmd {
-		case "update-time":
-			for _, arg := range d.CmdArgs {
-				switch arg.Key {
-				case "time":
-					time, err := time.Parse(timeLayout, arg.Vals[0])
-					require.NoError(t, err)
-					muStubTime.setStubTime(timeutil.FromUnixNanos(time.UnixNano()))
-				}
-			}
-		case "update-app":
-			for _, arg := range d.CmdArgs {
-				switch arg.Key {
-				case "ignore":
-					useIgnoreApp, err := strconv.ParseBool(arg.Vals[0])
-					require.NoError(t, err)
-					if useIgnoreApp {
-						db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
-					} else {
-						db.Exec(t, "SET SESSION application_name=$1", appName)
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "sql_activity"), func(t *testing.T, path string) {
+		// Start the cluster.
+		// Disable the job since it is called manually from a new instance to avoid
+		// any race conditions.
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &ExecutorTestingKnobs{
+					DeterministicExplain: true,
+				},
+				SQLStatsKnobs: sqlStatsKnobs,
+				UpgradeManager: &upgradebase.TestingKnobs{
+					DontUseJobs:                       true,
+					SkipUpdateSQLActivityJobBootstrap: true,
+				}}})
+		defer srv.Stopper().Stop(context.Background())
+		defer sqlDB.Close()
+		ts := srv.ApplicationLayer()
+
+		db := sqlutils.MakeSQLRunner(sqlDB)
+		// Give create privileges to root user.
+		db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+		db.Exec(t, "GRANT node TO root")
+		db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
+
+		// Start with empty activity tables.
+		execCfg := ts.ExecutorConfig().(ExecutorConfig)
+		st := cluster.MakeTestingClusterSettings()
+		updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+		require.NoError(t, updater.TransferStatsToActivity(ctx))
+		verifyActivityTablesAreEmpty(t, db)
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var buf bytes.Buffer
+			timeLayout := "2006-01-02 15:04:05"
+			switch d.Cmd {
+			case "update-time":
+				for _, arg := range d.CmdArgs {
+					switch arg.Key {
+					case "time":
+						time, err := time.Parse(timeLayout, arg.Vals[0])
+						require.NoError(t, err)
+						muStubTime.setStubTime(timeutil.FromUnixNanos(time.UnixNano()))
 					}
 				}
-			}
-		case "run-sql":
-			useAppName := false
-			var rows [][]string
-			var err error
-			for _, arg := range d.CmdArgs {
-				switch arg.Key {
-				case "useApp":
-					useAppName, err = strconv.ParseBool(arg.Vals[0])
+			case "update-app":
+				for _, arg := range d.CmdArgs {
+					switch arg.Key {
+					case "ignore":
+						useIgnoreApp, err := strconv.ParseBool(arg.Vals[0])
+						require.NoError(t, err)
+						if useIgnoreApp {
+							db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
+						} else {
+							db.Exec(t, "SET SESSION application_name=$1", appName)
+						}
+					}
+				}
+			case "run-sql":
+				useAppName := false
+				var rows [][]string
+				var err error
+				for _, arg := range d.CmdArgs {
+					switch arg.Key {
+					case "useApp":
+						useAppName, err = strconv.ParseBool(arg.Vals[0])
+						require.NoError(t, err)
+					}
+				}
+				if useAppName {
+					rows = db.QueryStr(t, d.Input, appName)
+				} else {
+					rows = db.QueryStr(t, d.Input)
+				}
+
+				for _, row := range rows {
+					fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+				}
+			case "flush-stats":
+				ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
+			case "update-top-activity":
+				// Populate the Top Activity. This will use the transfer all scenarios
+				// with there only being a few rows.
+				require.NoError(t, updater.TransferStatsToActivity(ctx))
+			case "explain-sql-activity-select-all-transactions":
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectAllTransactionsQuery()
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
 					require.NoError(t, err)
 				}
-			}
-			if useAppName {
-				rows = db.QueryStr(t, d.Input, appName)
-			} else {
-				rows = db.QueryStr(t, d.Input)
+
+			case "explain-sql-activity-select-top-transactions":
+				limit := sqlStatsActivityTopCount.Get(&st.SV)
+
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectTopTransactionsQuery()
+				// mockAggTs is 2023-04-10 16:00:00.000000 +00:00
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs, limit)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+					require.NoError(t, err)
+				}
+			case "explain-sql-activity-select-all-statements":
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectAllStatementsQuery()
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+					require.NoError(t, err)
+				}
+			case "explain-sql-activity-select-top-statements":
+				limit := sqlStatsActivityTopCount.Get(&st.SV)
+
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectTopStatementsQuery()
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs, limit)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+					require.NoError(t, err)
+				}
+			default:
+				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
-			for _, row := range rows {
-				fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
-			}
-		case "flush-stats":
-			ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, srv.AppStopper())
-		case "update-top-activity":
-			// Populate the Top Activity. This will use the transfer all scenarios
-			// with there only being a few rows.
-			require.NoError(t, updater.TransferStatsToActivity(ctx))
-		}
-
-		return buf.String()
+			return buf.String()
+		})
 	})
 }
 
@@ -916,7 +980,6 @@ func verifyActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, appN
 			sa.contention_time_avg_seconds  = ss.contention_time AND
 			sa.cpu_sql_avg_nanos = ss.cpu_sql_nanos AND      
 			sa.service_latency_avg_seconds = ss.service_latency AND
-			sa.service_latency_p99_seconds = ss.p99_latency AND
 			sa.statistics = ss.statistics`, table)
 		row := db.QueryRow(t, query, appName)
 		var count int

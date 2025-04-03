@@ -1,0 +1,45 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/varchar.out --label=/mnt/data1/postgres/src/test/regress/results/varchar.out /mnt/data1/postgres/src/test/regress/expected/varchar.out /mnt/data1/postgres/src/test/regress/results/varchar.out
+--- /mnt/data1/postgres/src/test/regress/expected/varchar.out
++++ /mnt/data1/postgres/src/test/regress/results/varchar.out
+@@ -16,7 +16,7 @@
+ INSERT INTO VARCHAR_TBL (f1) VALUES ('');
+ -- try varchar's of greater than 1 length
+ INSERT INTO VARCHAR_TBL (f1) VALUES ('cd');
+-ERROR:  value too long for type character varying(1)
++ERROR:  value too long for type VARCHAR(1)
+ INSERT INTO VARCHAR_TBL (f1) VALUES ('c     ');
+ SELECT * FROM VARCHAR_TBL;
+  f1 
+@@ -101,7 +101,7 @@
+ -- Here we just try to insert bad values.
+ --
+ INSERT INTO VARCHAR_TBL (f1) VALUES ('abcde');
+-ERROR:  value too long for type character varying(4)
++ERROR:  value too long for type VARCHAR(4)
+ SELECT * FROM VARCHAR_TBL;
+   f1  
+ ------
+@@ -113,20 +113,8 @@
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('abcd  ', 'varchar(4)');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('abcde', 'varchar(4)');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('abcde', 'varchar(4)');
+-                   message                    | detail | hint | sql_error_code 
+-----------------------------------------------+--------+------+----------------
+- value too long for type character varying(4) |        |      | 22001
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()

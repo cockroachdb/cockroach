@@ -12,6 +12,7 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
@@ -244,11 +245,14 @@ func TestSamplerSketch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		typs          []*types.T
-		inputRows     interface{}
-		cardinalities []int
-		numNulls      []int
-		size          []int
+		typs                []*types.T
+		inputRows           interface{}
+		cardinalities       []int
+		valEncCardinalities []int
+		numNulls            []int
+		size                []int
+		keySize             []int
+		valueSize           []int
 	}{
 		{
 			typs: types.TwoIntCols,
@@ -271,6 +275,8 @@ func TestSamplerSketch(t *testing.T) {
 			cardinalities: []int{3, 9, 12},
 			numNulls:      []int{4, 2, 1},
 			size:          []int{80, 96, 176},
+			keySize:       []int{14, 14, 28},
+			valueSize:     []int{24, 26, 50},
 		},
 		{
 			typs: []*types.T{types.String, types.String},
@@ -284,6 +290,27 @@ func TestSamplerSketch(t *testing.T) {
 			cardinalities: []int{4, 5, 5},
 			numNulls:      []int{1, 0, 0},
 			size:          []int{80, 108, 188},
+			keySize:       []int{29, 43, 72},
+			valueSize:     []int{25, 38, 63},
+		},
+		{
+			// The und-u-ks-level2 collation make the strings case-insensitive.
+			typs: []*types.T{
+				types.MakeCollatedType(types.String, "und-u-ks-level2"),
+				types.MakeCollatedType(types.String, "und-u-ks-level2"),
+			},
+			inputRows: [][]string{
+				{"foo", "bar"},
+				{"FOO", "BAR"},
+				{"", ""},
+				{"bar", "bAr"},
+				{"bar", "baR"},
+			},
+			cardinalities: []int{3, 2, 3},
+			numNulls:      []int{1, 1, 1},
+			size:          []int{352, 352, 704},
+			keySize:       []int{89, 89, 178},
+			valueSize:     []int{21, 21, 42},
 		},
 		{
 			typs: []*types.T{types.Bytes, types.Bytes},
@@ -296,146 +323,191 @@ func TestSamplerSketch(t *testing.T) {
 			},
 			cardinalities: []int{4, 5, 5},
 			numNulls:      []int{0, 0, 0},
-			size:          []int{26, 38, 64},
+			size:          []int{106, 118, 224},
+			keySize:       []int{26, 38, 64},
+			valueSize:     []int{26, 38, 64},
+		},
+		{
+			typs: []*types.T{types.Float, types.Float},
+			inputRows: [][]string{
+				{"1.0", "1.0"},
+				{"1.000", "1.00"},
+				{"0", "0"},
+				{"-0", "-0"},
+			},
+			cardinalities: []int{2, 2, 2},
+			// Composite, value encoded datums may have different encodings for
+			// semantically equivalent types, so the cardinality is not always
+			// 100% accurate.
+			valEncCardinalities: []int{3, 3, 3},
+			numNulls:            []int{0, 0, 0},
+			size:                []int{32, 32, 64},
+			keySize:             []int{20, 20, 40},
+			valueSize:           []int{36, 36, 72},
 		},
 	}
 
-	for _, tc := range testCases {
-		outTypes := []*types.T{
-			types.Int,   // original column
-			types.Int,   // original column
-			types.Int,   // rank
-			types.Int,   // sketch index
-			types.Int,   // num rows
-			types.Int,   // null vals
-			types.Int,   // size
-			types.Bytes, // sketch data
-		}
-		var rows rowenc.EncDatumRows
-		inputLen := 0
-		switch t := tc.inputRows.(type) {
-		case [][]int:
-			inputRows := tc.inputRows.([][]int)
-			inputLen = len(inputRows)
-			rows = randgen.GenEncDatumRowsInt(inputRows)
-		case [][]string:
-			inputRows := tc.inputRows.([][]string)
-			inputLen = len(inputRows)
-			rows = randgen.GenEncDatumRowsString(inputRows)
-			// Override original columns in outTypes.
-			outTypes[0] = types.String
-			outTypes[1] = types.String
-		case [][][]byte:
-			inputRows := tc.inputRows.([][][]byte)
-			inputLen = len(inputRows)
-			rows = randgen.GenEncDatumRowsBytes(inputRows)
-			// Override original columns in outTypes.
-			outTypes[0] = types.Bytes
-			outTypes[1] = types.Bytes
-		default:
-			panic(errors.AssertionFailedf("Type %T not supported for inputRows", t))
-		}
-
-		const (
-			valCol0 = iota
-			valCol1
-			rankCol
-			sketchIndexCol
-			numRowsCol
-			numNullsCol
-			sizeCol
-			sketchDataCol
-		)
-		in := distsqlutils.NewRowBuffer(tc.typs, rows, distsqlutils.RowBufferArgs{})
-		out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
-
-		st := cluster.MakeTestingClusterSettings()
-		evalCtx := eval.MakeTestingEvalContext(st)
-		defer evalCtx.Stop(context.Background())
-		flowCtx := execinfra.FlowCtx{
-			Cfg: &execinfra.ServerConfig{
-				Settings: st,
-			},
-			EvalCtx: &evalCtx,
-			Mon:     evalCtx.TestingMon,
-		}
-
-		ctx := execversion.TestingWithLatestCtx
-		spec := &execinfrapb.SamplerSpec{
-			SampleSize: uint32(1),
-			Sketches: []execinfrapb.SketchSpec{
-				{
-					Columns: []uint32{
-						0,
-					},
-				},
-				{
-					Columns: []uint32{
-						1,
-					},
-				},
-				{
-					Columns: []uint32{
-						0, 1,
-					},
-				},
-			},
-		}
-		p, err := newSamplerProcessor(ctx, &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		p.Run(ctx, out)
-
-		// Collect the rows, excluding metadata.
-		rows = rows[:0]
-		for {
-			row, meta := out.Next()
-			if meta != nil {
-				if meta.SamplerProgress == nil {
-					t.Fatalf("unexpected metadata: %v", meta)
+	for _, enc := range []catenumpb.DatumEncoding{
+		randgen.DatumEncoding_NONE,
+		catenumpb.DatumEncoding_ASCENDING_KEY,
+		catenumpb.DatumEncoding_VALUE,
+	} {
+		t.Run(enc.String(), func(t *testing.T) {
+			for _, tc := range testCases {
+				// The output types don't need to match because they are never
+				// used by the output row buffer. We only need the length to
+				// match the number of output columns. There are 8 columns: 2
+				// datums from the test case, a rank, a sketch index, a row
+				// count, a null value count, a size, and sketch data.
+				outTypes := make([]*types.T, 8)
+				var rows rowenc.EncDatumRows
+				inputLen := 0
+				switch inputRows := tc.inputRows.(type) {
+				case [][]int:
+					inputLen = len(inputRows)
+					rows = randgen.GenEncDatumRowsInt(inputRows, enc)
+				case [][]float64:
+				case [][]string:
+					inputLen = len(inputRows)
+					switch tc.typs[0].Family() {
+					case types.StringFamily:
+						rows = randgen.GenEncDatumRowsString(inputRows, enc)
+					case types.CollatedStringFamily:
+						rows = randgen.GenEncDatumRowsCollatedString(inputRows, tc.typs[0], enc)
+					case types.FloatFamily:
+						inputLen = len(inputRows)
+						rows = randgen.GenEncDatumRowsFloat(inputRows, enc)
+					}
+				case [][][]byte:
+					inputLen = len(inputRows)
+					rows = randgen.GenEncDatumRowsBytes(inputRows, enc)
+				default:
+					panic(errors.AssertionFailedf("Type %T not supported for inputRows", t))
 				}
-				continue
-			} else if row == nil {
-				break
-			}
-			rows = append(rows, row)
-		}
 
-		// We expect one sampled row and three sketch rows.
-		if len(rows) != 4 {
-			t.Fatalf("expected 4 rows, got %v\n", rows.String(outTypes))
-		}
-		rows = rows[1:]
+				const (
+					valCol0 = iota
+					valCol1
+					rankCol
+					sketchIndexCol
+					numRowsCol
+					numNullsCol
+					sizeCol
+					sketchDataCol
+				)
+				in := distsqlutils.NewRowBuffer(tc.typs, rows, distsqlutils.RowBufferArgs{})
+				out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
-		for sketchIdx, r := range rows {
-			// First three columns are for sampled rows.
-			for i := valCol0; i < sketchIndexCol; i++ {
-				if !r[i].IsNull() {
-					t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
+				st := cluster.MakeTestingClusterSettings()
+				evalCtx := eval.MakeTestingEvalContext(st)
+				defer evalCtx.Stop(context.Background())
+				flowCtx := execinfra.FlowCtx{
+					Cfg: &execinfra.ServerConfig{
+						Settings: st,
+					},
+					EvalCtx: &evalCtx,
+					Mon:     evalCtx.TestingMon,
+				}
+
+				ctx := execversion.TestingWithLatestCtx
+				spec := &execinfrapb.SamplerSpec{
+					SampleSize: uint32(1),
+					Sketches: []execinfrapb.SketchSpec{
+						{
+							Columns: []uint32{
+								0,
+							},
+						},
+						{
+							Columns: []uint32{
+								1,
+							},
+						},
+						{
+							Columns: []uint32{
+								0, 1,
+							},
+						},
+					},
+				}
+				p, err := newSamplerProcessor(ctx, &flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				p.Run(ctx, out)
+
+				// Collect the rows, excluding metadata.
+				rows = rows[:0]
+				for {
+					row, meta := out.Next()
+					if meta != nil {
+						if meta.SamplerProgress == nil {
+							t.Fatalf("unexpected metadata: %v", meta)
+						}
+						continue
+					} else if row == nil {
+						break
+					}
+					rows = append(rows, row)
+				}
+
+				// We expect one sampled row and three sketch rows.
+				if len(rows) != 4 {
+					t.Fatalf("expected 4 rows, got %v\n", rows.String(outTypes))
+				}
+				rows = rows[1:]
+
+				for sketchIdx, r := range rows {
+					// First three columns are for sampled rows.
+					for i := valCol0; i < sketchIndexCol; i++ {
+						if !r[i].IsNull() {
+							t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
+						}
+					}
+					if v := int(*r[sketchIndexCol].Datum.(*tree.DInt)); v != sketchIdx {
+						t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
+					}
+					if v := int(*r[numRowsCol].Datum.(*tree.DInt)); v != inputLen {
+						t.Errorf("expected numRows %d, got %d", inputLen, v)
+					}
+					if v := int(*r[numNullsCol].Datum.(*tree.DInt)); v != tc.numNulls[sketchIdx] {
+						t.Errorf("expected numNulls %d, got %d", tc.numNulls[sketchIdx], v)
+					}
+					size := int(*r[sizeCol].Datum.(*tree.DInt))
+					var expectedSize int
+					switch enc {
+					case randgen.DatumEncoding_NONE:
+						expectedSize = tc.size[sketchIdx]
+					case catenumpb.DatumEncoding_ASCENDING_KEY:
+						expectedSize = tc.keySize[sketchIdx]
+					case catenumpb.DatumEncoding_VALUE:
+						expectedSize = tc.valueSize[sketchIdx]
+					}
+					if size != expectedSize {
+						t.Errorf("expected size %d, got %d", expectedSize, size)
+					}
+					data := []byte(*r[sketchDataCol].Datum.(*tree.DBytes))
+					var s hyperloglog.Sketch
+					if err := s.UnmarshalBinary(data); err != nil {
+						t.Fatal(err)
+					}
+					if enc == catenumpb.DatumEncoding_VALUE && tc.valEncCardinalities != nil {
+						// Value encoding cardinalities may be approximate for
+						// composite types. Check against the expected value
+						// encoded cardinalities instead.
+						if v := int(s.Estimate()); v != tc.valEncCardinalities[sketchIdx] {
+							t.Errorf("expected cardinality %d, got %d",
+								tc.valEncCardinalities[sketchIdx], v)
+						}
+					} else {
+						// HLL++ should be exact on small datasets.
+						if v := int(s.Estimate()); v != tc.cardinalities[sketchIdx] {
+							t.Errorf("expected cardinality %d, got %d",
+								tc.cardinalities[sketchIdx], v)
+						}
+					}
 				}
 			}
-			if v := int(*r[sketchIndexCol].Datum.(*tree.DInt)); v != sketchIdx {
-				t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
-			}
-			if v := int(*r[numRowsCol].Datum.(*tree.DInt)); v != inputLen {
-				t.Errorf("expected numRows %d, got %d", inputLen, v)
-			}
-			if v := int(*r[numNullsCol].Datum.(*tree.DInt)); v != tc.numNulls[sketchIdx] {
-				t.Errorf("expected numNulls %d, got %d", tc.numNulls[sketchIdx], v)
-			}
-			if v := int(*r[sizeCol].Datum.(*tree.DInt)); v != tc.size[sketchIdx] {
-				t.Errorf("expected size %d, got %d", tc.size[sketchIdx], v)
-			}
-			data := []byte(*r[sketchDataCol].Datum.(*tree.DBytes))
-			var s hyperloglog.Sketch
-			if err := s.UnmarshalBinary(data); err != nil {
-				t.Fatal(err)
-			}
-			// HLL++ should be exact on small datasets.
-			if v := int(s.Estimate()); v != tc.cardinalities[sketchIdx] {
-				t.Errorf("expected cardinality %d, got %d", tc.cardinalities[sketchIdx], v)
-			}
-		}
+		})
 	}
 }

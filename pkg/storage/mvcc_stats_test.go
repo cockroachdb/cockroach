@@ -2055,7 +2055,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		if s.rng.Intn(2) != 0 {
 			str = lock.Exclusive
 		}
-		if err := MVCCAcquireLock(ctx, s.batch, s.Txn, str, s.key, s.MSDelta, 0, 0); err != nil {
+		var txnMeta *enginepb.TxnMeta
+		var ignoredSeq []enginepb.IgnoredSeqNumRange
+		if s.Txn != nil {
+			txnMeta = &s.Txn.TxnMeta
+			ignoredSeq = s.Txn.IgnoredSeqNums
+		}
+		if err := MVCCAcquireLock(ctx, s.batch, txnMeta, ignoredSeq, str, s.key, s.MSDelta, 0, 0); err != nil {
 			return false, err.Error()
 		}
 		return true, ""

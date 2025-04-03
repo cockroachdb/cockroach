@@ -133,7 +133,7 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	releaseSeries := func(v *clusterupgrade.Version) string {
-		return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+		return v.Format("%X.%Y")
 	}
 
 	// Test definitions which indicates which version of the corpus to fetch,

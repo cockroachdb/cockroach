@@ -39,20 +39,7 @@ type scanNode struct {
 	_ util.NoCopy
 
 	zeroInputPlanNode
-
-	desc  catalog.TableDescriptor
-	index catalog.Index
-
-	colCfg scanColumnsConfig
-	// The table columns, possibly including ones currently in schema changes.
-	// TODO(radu/knz): currently we always load the entire row from KV and only
-	// skip unnecessary decodes to Datum. Investigate whether performance is to
-	// be gained (e.g. for tables with wide rows) by reading only certain
-	// columns from KV using point lookups instead of a single range lookup for
-	// the entire row.
-	cols []catalog.Column
-	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns colinfo.ResultColumns
+	fetchPlanningInfo
 
 	spans   []roachpb.Span
 	reverse bool
@@ -67,32 +54,16 @@ type scanNode struct {
 	// (non-zero), softLimit must be unset (zero).
 	softLimit int64
 
-	disableBatchLimits bool
-
 	// See exec.Factory.ConstructScan.
 	parallelize bool
 
 	// Is this a full scan of an index?
 	isFull bool
 
-	// Indicates if this scanNode will do a physical data check. This is
-	// only true when running SCRUB commands.
-	isCheck bool
-
 	// estimatedRowCount is the estimated number of rows that this scanNode will
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.
 	estimatedRowCount uint64
-
-	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
-	// row-level locking mode of the Scan.
-	lockingStrength   descpb.ScanLockingStrength
-	lockingWaitPolicy descpb.ScanLockingWaitPolicy
-	lockingDurability descpb.ScanLockingDurability
-
-	// containsSystemColumns holds whether or not this scan is expected to
-	// produce any system columns.
-	containsSystemColumns bool
 
 	// localityOptimized is true if this scan is part of a locality optimized
 	// search strategy, which uses a limited UNION ALL operator to try to find a
@@ -100,6 +71,30 @@ type scanNode struct {
 	// order for this optimization to work, the DistSQL planner must create a
 	// local plan.
 	localityOptimized bool
+}
+
+// fetchPlanningInfo contains information common to operators that fetch rows
+// from KV, like scanNode, indexJoinNode, etc.
+type fetchPlanningInfo struct {
+	desc  catalog.TableDescriptor
+	index catalog.Index
+
+	colCfg scanColumnsConfig
+	// The table columns, possibly including ones currently in schema changes.
+	// TODO(radu/knz): currently we always load the entire row from KV and only
+	// skip unnecessary decodes to Datum. Investigate whether performance is to
+	// be gained (e.g. for tables with wide rows) by reading only certain
+	// columns from KV using point lookups instead of a single range lookup for
+	// the entire row.
+	catalogCols []catalog.Column
+	// There is a 1-1 correspondence between catalogCols and columns.
+	columns colinfo.ResultColumns
+
+	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
+	// row-level locking mode of the Scan.
+	lockingStrength   descpb.ScanLockingStrength
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	lockingDurability descpb.ScanLockingDurability
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -136,7 +131,7 @@ var _ tree.IndexedVarContainer = &scanNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
-	return n.resultColumns[idx].Typ
+	return n.columns[idx].Typ
 }
 
 func (n *scanNode) startExec(params runParams) error {
@@ -156,24 +151,23 @@ func (n *scanNode) Values() tree.Datums {
 	panic("scanNode can't be run in local mode")
 }
 
-// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
-// where we scan batches of unordered spans.
-func (n *scanNode) disableBatchLimit() {
-	n.disableBatchLimits = true
-	n.hardLimit = 0
-	n.softLimit = 0
-}
-
-// Initializes a scanNode with a table descriptor.
-func (n *scanNode) initTable(
-	ctx context.Context, p *planner, desc catalog.TableDescriptor, colCfg scanColumnsConfig,
+// Initializes a fetchPlanningInfo with a table descriptor.
+func (n *fetchPlanningInfo) initDescDefaults(
+	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
+	n.colCfg = colCfg
+	n.index = n.desc.GetPrimaryIndex()
 
-	// Check if any system columns are requested, as they need special handling.
-	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
+	var err error
+	n.catalogCols, err = initColsForScan(n.desc, n.colCfg)
+	if err != nil {
+		return err
+	}
 
-	return n.initDescDefaults(colCfg)
+	// Set up the rest of the scanNode.
+	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
+	return nil
 }
 
 // initColsForScan initializes cols according to desc and colCfg.
@@ -203,22 +197,6 @@ func initColsForScan(
 	return cols, nil
 }
 
-// Initializes the column structures.
-func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
-	n.colCfg = colCfg
-	n.index = n.desc.GetPrimaryIndex()
-
-	var err error
-	n.cols, err = initColsForScan(n.desc, n.colCfg)
-	if err != nil {
-		return err
-	}
-
-	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
-	return nil
-}
-
 // initDescSpecificCol initializes the column structures with the
 // index that the provided column is the prefix for.
 func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catalog.Column) error {
@@ -230,7 +208,7 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// table where prefixCol is the key column.
 	foundIndex := false
 	for _, idx := range indexes {
-		if idx.GetType() != descpb.IndexDescriptor_FORWARD || idx.IsPartial() {
+		if idx.GetType().AllowsPrefixColumns() || idx.IsPartial() {
 			continue
 		}
 		columns := n.desc.IndexKeyColumns(idx)
@@ -249,11 +227,11 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 			prefixCol.GetName())
 	}
 	var err error
-	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	n.catalogCols, err = initColsForScan(n.desc, n.colCfg)
 	if err != nil {
 		return err
 	}
 	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
 }

@@ -27,6 +27,18 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			isAllowed: true,
 		},
 		{
+			stmt:      "ALTER INDEX idx NOT VISIBLE",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER INDEX idx CONFIGURE ZONE USING num_replicas = 3",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER INDEX idx RENAME TO idx2",
+			isAllowed: true,
+		},
+		{
 			stmt:      "CREATE UNIQUE INDEX idx ON t (a)",
 			isAllowed: false,
 		},
@@ -36,6 +48,18 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 		},
 		{
 			stmt:      "DROP INDEX idx",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER TABLE t ALTER COLUMN a SET DEFAULT 10",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER TABLE t ALTER COLUMN a DROP DEFAULT",
+			isAllowed: true,
+		},
+		{
+			stmt:      "ALTER TABLE t ALTER COLUMN a SET NOT VISIBLE",
 			isAllowed: true,
 		},
 		{
@@ -60,6 +84,14 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 		},
 		{
 			stmt:      "ALTER TABLE t ADD COLUMN a INT, SET (ttl = 'on', ttl_expiration_expression = 'expires_at')",
+			isAllowed: false,
+		},
+		{
+			stmt:      "ALTER TABLE t RENAME COLUMN a TO b",
+			isAllowed: false,
+		},
+		{
+			stmt:      "ALTER TABLE t DROP COLUMN a",
 			isAllowed: false,
 		},
 		{

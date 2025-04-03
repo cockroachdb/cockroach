@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "commontest",
+    srcs = [
+        "storetests.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@com_github_stretchr_testify//suite",
+        "@org_gonum_v1_gonum//floats/scalar",
+    ],
+)

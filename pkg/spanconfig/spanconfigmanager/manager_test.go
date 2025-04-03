@@ -172,7 +172,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	_, err = db.Exec(
 		`INSERT INTO system.jobs (id, status) VALUES ($1, $2)`,
 		id,
-		jobs.StatusFailed,
+		jobs.StateFailed,
 	)
 	require.NoError(t, err)
 	_, err = db.Exec(
@@ -348,7 +348,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	mu.err = errors.New("injected")
 	mu.Unlock()
 
-	waitForJobStatus(t, tdb, jobID, jobs.StatusFailed)
+	waitForJobState(t, tdb, jobID, jobs.StateFailed)
 
 	mu.Lock()
 	mu.err = nil
@@ -358,7 +358,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, started)
 
-	waitForJobStatus(t, tdb, jobID, jobs.StatusRunning)
+	waitForJobState(t, tdb, jobID, jobs.StateRunning)
 
 	mu.Lock()
 	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
@@ -457,14 +457,12 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 	})
 }
 
-func waitForJobStatus(
-	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.Status,
-) {
+func waitForJobState(t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.State) {
 	testutils.SucceedsSoon(t, func() error {
 		var jobStatus string
 		tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
 
-		if jobs.Status(jobStatus) != status {
+		if jobs.State(jobStatus) != status {
 			return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
 		}
 		return nil

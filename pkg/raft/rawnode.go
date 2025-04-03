@@ -34,13 +34,10 @@ var ErrStepPeerNotFound = errors.New("raft: cannot step as peer not found")
 // The methods of this struct correspond to the methods of Node and are described
 // more fully there.
 type RawNode struct {
-	raft               *raft
-	asyncStorageWrites bool
-
+	raft *raft
 	// Mutable fields.
-	prevSoftSt     *SoftState
-	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	prevSoftSt *SoftState
+	prevHardSt pb.HardState
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -55,7 +52,6 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	rn := &RawNode{
 		raft: r,
 	}
-	rn.asyncStorageWrites = config.AsyncStorageWrites
 	ss := r.softState()
 	rn.prevSoftSt = &ss
 	rn.prevHardSt = r.hardState()
@@ -206,7 +202,7 @@ func (rn *RawNode) LogSnapshot() LogSnapshot {
 //   - the first slice index matches the Next index to send to this peer
 //
 // Returns false if the message can not be sent.
-func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LogSlice) (pb.Message, bool) {
+func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LeadSlice) (pb.Message, bool) {
 	return rn.raft.maybePrepareMsgApp(to, slice)
 }
 
@@ -218,73 +214,41 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LogSlice) (pb.Message, bool) {
 // The returned Ready struct *must* be handled and subsequently passed back via
 // Advance(), unless async storage writes are enabled.
 func (rn *RawNode) Ready() Ready {
-	rd := rn.readyWithoutAccept()
-	rn.acceptReady(rd)
-	return rd
-}
-
-// readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
-// is no obligation that the Ready must be handled.
-func (rn *RawNode) readyWithoutAccept() Ready {
 	r := rn.raft
 
-	rd := Ready{
-		Entries:          r.raftLog.nextUnstableEnts(),
-		CommittedEntries: r.raftLog.nextCommittedEnts(rn.applyUnstableEntries()),
-		Messages:         r.msgs,
-	}
+	var rd Ready
+	rd.Messages, r.msgs = r.msgs, nil
+
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		// Allocate only when SoftState changes.
 		escapingSoftSt := softSt
 		rd.SoftState = &escapingSoftSt
+		rn.prevSoftSt = &escapingSoftSt
 	}
-	if hardSt := r.hardState(); !isHardStateEqual(hardSt, rn.prevHardSt) {
+	hardSt, prevHardSt := r.hardState(), rn.prevHardSt
+	if !isHardStateEqual(hardSt, prevHardSt) {
 		rd.HardState = hardSt
+		rn.prevHardSt = hardSt
 	}
+
 	if r.raftLog.hasNextUnstableSnapshot() {
 		rd.Snapshot = *r.raftLog.nextUnstableSnapshot()
 	}
-	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
-
-	if rn.asyncStorageWrites {
-		// If async storage writes are enabled, enqueue messages to
-		// local storage threads, where applicable.
-		if needStorageAppendMsg(r, rd) {
-			m := newStorageAppendMsg(r, rd)
-			rd.Messages = append(rd.Messages, m)
-		}
-		if needStorageApplyMsg(rd) {
-			m := newStorageApplyMsg(r, rd)
-			rd.Messages = append(rd.Messages, m)
-		}
-	} else {
-		// If async storage writes are disabled, immediately enqueue
-		// msgsAfterAppend to be sent out. The Ready struct contract
-		// mandates that Messages cannot be sent until after Entries
-		// are written to stable storage.
-		for _, m := range r.msgsAfterAppend {
-			if m.To != r.id {
-				rd.Messages = append(rd.Messages, m)
-			}
-		}
+	if r.raftLog.hasNextUnstableEnts() {
+		rd.Entries = r.raftLog.nextUnstableEnts()
 	}
+	// TODO(pav-kv): remove "accept" methods down the stack, since we now accept
+	// all updates unconditionally.
+	r.raftLog.acceptUnstable()
+
+	// For async storage writes, enqueue messages to local storage threads.
+	if needStorageAppendMsg(r, rd) {
+		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
+	}
+	r.msgsAfterAppend = nil
+	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
 
 	return rd
-}
-
-// MustSync returns true if the hard state and count of Raft entries indicate
-// that a synchronous write to persistent storage is required.
-// NOTE: MustSync isn't used under AsyncStorageWrites mode.
-func MustSync(st, prevst pb.HardState, entsnum int) bool {
-	// Persistent state on all servers:
-	// (Updated on stable storage before responding to RPCs)
-	// currentTerm
-	// currentLead
-	// currentLeadEpoch
-	// votedFor
-	// log entries[]
-	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term ||
-		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch || st.Commit != prevst.Commit
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
@@ -306,8 +270,7 @@ func needStorageAppendRespMsg(rd Ready) bool {
 // newStorageAppendMsg creates the message that should be sent to the local
 // append thread to instruct it to append log entries, write an updated hard
 // state, and apply a snapshot. The message also carries a set of responses
-// that should be delivered after the rest of the message is processed. Used
-// with AsyncStorageWrites.
+// that should be delivered after the rest of the message is processed.
 func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	m := pb.Message{
 		Type:    pb.MsgStorageAppend,
@@ -431,83 +394,39 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	return m
 }
 
-func needStorageApplyMsg(rd Ready) bool     { return len(rd.CommittedEntries) > 0 }
-func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
-
-// newStorageApplyMsg creates the message that should be sent to the local
-// apply thread to instruct it to apply committed log entries. The message
-// also carries a response that should be delivered after the rest of the
-// message is processed. Used with AsyncStorageWrites.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
-	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
-		To:      LocalApplyThread,
-		From:    r.id,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
-		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, ents),
-		},
-	}
+// AckApplying accepts all committed entries <= index as being applied to the
+// state machine. The caller gives a promise to eventually apply these entries
+// and call AckApplied to confirm. They can do so asynchronously, while this
+// RawNode keeps making progress.
+//
+// It is allowed to never call AckApplying, and call AckApplied straight away.
+// Technically, AckApplying only prevents committed indices <= index from
+// causing Ready signals.
+//
+// Requires: all AckApplying calls must have increasing indices.
+// Requires: index <= Ready.Committed.Last. That is, the caller can only accept
+// "apply-able" entries that it learns about from Ready().
+func (rn *RawNode) AckApplying(index pb.Index) {
+	rn.raft.raftLog.acceptApplying(uint64(index))
 }
 
-// newStorageApplyRespMsg creates the message that should be returned to node
-// after the committed entries in the current Ready (along with those in all
-// prior Ready structs) have been applied to the local state machine.
-func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
-	return pb.Message{
-		Type:    pb.MsgStorageApplyResp,
-		To:      r.id,
-		From:    LocalApplyThread,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
+// AckApplied acknowledges that the given entries have been applied. Must be
+// called for every span of applied entries, in order. If the caller chose to
+// apply entries asynchronously, they should synchronize the order of these
+// calls with applying snapshots.
+func (rn *RawNode) AckApplied(entries []pb.Entry) {
+	if len(entries) == 0 {
+		return
 	}
-}
-
-// acceptReady is called when the consumer of the RawNode has decided to go
-// ahead and handle a Ready. Nothing must alter the state of the RawNode between
-// this call and the prior call to Ready().
-func (rn *RawNode) acceptReady(rd Ready) {
-	if rd.SoftState != nil {
-		rn.prevSoftSt = rd.SoftState
-	}
-	if !IsEmptyHardState(rd.HardState) {
-		rn.prevHardSt = rd.HardState
-	}
-	if !rn.asyncStorageWrites {
-		if len(rn.stepsOnAdvance) != 0 {
-			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
-		}
-		for _, m := range rn.raft.msgsAfterAppend {
-			if m.To == rn.raft.id {
-				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-			}
-		}
-		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(rn.raft, rd)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-		}
-		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-		}
-	}
-	rn.raft.msgs = nil
-	rn.raft.msgsAfterAppend = nil
-	rn.raft.raftLog.acceptUnstable()
-	if len(rd.CommittedEntries) > 0 {
-		ents := rd.CommittedEntries
-		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
-	}
+	rn.raft.appliedTo(entries[len(entries)-1].Index)
+	rn.raft.reduceUncommittedSize(payloadsSize(entries))
 }
 
 // applyUnstableEntries returns whether entries are allowed to be applied once
 // they are known to be committed but before they have been written locally to
 // stable storage.
 func (rn *RawNode) applyUnstableEntries() bool {
-	return !rn.asyncStorageWrites
+	return rn.raft.testingKnobs.ApplyUnstableEntries()
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
@@ -526,30 +445,63 @@ func (rn *RawNode) HasReady() bool {
 	if len(r.msgs) > 0 || len(r.msgsAfterAppend) > 0 {
 		return true
 	}
-	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
+	if r.raftLog.hasNextUnstableEnts() {
+		return true
+	}
+	if !r.raftLog.nextCommittedSpan(rn.applyUnstableEntries()).Empty() {
 		return true
 	}
 	return false
 }
 
-// Advance notifies the RawNode that the application has applied all the updates
-// from the last Ready() call. It prepares the node to the next Ready handling
-// iteration.
+// SplitMessages splits the messages in Ready into two buckets:
 //
-// Advance must not be called when using AsyncStorageWrites. Response messages
-// from the local append and apply threads take its place.
-func (rn *RawNode) Advance(_ Ready) {
-	// The actions performed by this function are encoded into stepsOnAdvance in
-	// acceptReady. In earlier versions of this library, they were computed from
-	// the provided Ready struct. Retain the unused parameter for compatibility.
-	if rn.asyncStorageWrites {
-		rn.raft.logger.Panicf("Advance must not be called when using AsyncStorageWrites")
+//  1. Messages addressed to other peers. Includes both messages that can be
+//     sent immediately, and the messages subject to storage sync such as
+//     MsgVoteResp and MsgAppResp.
+//  2. Local self-addressed messages that are subject to the local storage sync.
+//     Includes MsgStorageAppendResp and MsgStorageApplyResp, as well as the
+//     leader's self-addressed MsgVoteResp and MsgAppResp.
+//
+// This is a helper for transitioning from synchronous storage API to the
+// asynchronous one. Tests are being migrated to the async API, and temporarily
+// use this helper.
+//
+// Only for testing. Will be replaced with a more explicit API.
+func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Message) {
+	for _, msg := range msgs {
+		if !IsLocalMsgTarget(msg.To) {
+			send = append(send, msg)
+			continue
+		}
+		for _, r := range msg.Responses {
+			if r.To != self {
+				send = append(send, r)
+			} else {
+				advance = append(advance, r)
+			}
+		}
 	}
-	for i, m := range rn.stepsOnAdvance {
-		_ = rn.raft.Step(m)
-		rn.stepsOnAdvance[i] = pb.Message{}
+	return send, advance
+}
+
+// AdvanceHack notifies the RawNode that the application has applied all the
+// updates from the given Ready() call.
+//
+// This is a helper for transitioning from synchronous storage API to the
+// asynchronous one. Tests are being migrated to the async API, and temporarily
+// use this helper.
+//
+// Only for testing. Will be replaced with a more explicit API.
+func (rn *RawNode) AdvanceHack(rd Ready) {
+	_, advance := SplitMessages(rn.raft.id, rd.Messages)
+	rn.advance(advance)
+}
+
+func (rn *RawNode) advance(msgs []pb.Message) {
+	for _, msg := range msgs {
+		_ = rn.Step(msg)
 	}
-	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
 
 // Term returns the current in-memory term of this RawNode. This term may not
@@ -617,19 +569,20 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 	return getSparseStatus(rn.raft)
 }
 
-// ProgressType indicates the type of replica a Progress corresponds to.
-type ProgressType byte
+// ReplicaProgress returns the progress for the replica with the given ID.
+// It returns nil if the replica is not being tracked.
+func (rn *RawNode) ReplicaProgress(id pb.PeerID) *tracker.Progress {
+	return getReplicaProgress(rn.raft, id)
+}
 
-const (
-	// ProgressTypePeer accompanies a Progress for a regular peer replica.
-	ProgressTypePeer ProgressType = iota
-	// ProgressTypeLearner accompanies a Progress for a learner replica.
-	ProgressTypeLearner
-)
+// SupportingFortifiedLeader indicates if this peer supports a fortified leader.
+func (rn *RawNode) SupportingFortifiedLeader() bool {
+	return rn.raft.supportingFortifiedLeader()
+}
 
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
-func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, pr tracker.Progress)) {
 	withProgress(rn.raft, visitor)
 }
 

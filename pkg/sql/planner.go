@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -100,6 +101,8 @@ type extendedEvalContext struct {
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 
+	localStatsProvider *sslocal.SQLStats
+
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
@@ -118,6 +121,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.Tracer = execCfg.AmbientCtx.Tracer
 	if execCfg.SQLLiveness != nil { // nil in some tests
 		evalCtx.SQLLivenessReader = execCfg.SQLLiveness.CachedReader()
+		evalCtx.BlockingSQLLivenessReader = execCfg.SQLLiveness.BlockingReader()
 	}
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
@@ -281,9 +285,6 @@ type planner struct {
 	// This field is embedded into the planner to avoid an allocation in
 	// checkExprForDistSQL.
 	distSQLVisitor distSQLExprCheckVisitor
-	// This field is embedded into the planner to avoid an allocation in
-	// checkScanParallelizationIfLocal.
-	parallelizationChecker localScanParallelizationChecker
 
 	// datumAlloc is used when decoding datums and running subqueries.
 	datumAlloc *tree.DatumAlloc
@@ -401,7 +402,7 @@ func newInternalPlanner(
 	}
 
 	plannerMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("internal-planner." + opName),
+		Name:     mon.MakeName("internal-planner." + opName),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: execCfg.Settings,
@@ -500,6 +501,7 @@ func internalExtendedEvalCtx(
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
 	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
+	var localSqlStatsProvider *sslocal.SQLStats
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
@@ -507,6 +509,7 @@ func internalExtendedEvalCtx(
 			schemaTelemetryController = ief.server.schemaTelemetryController
 			indexUsageStatsController = ief.server.indexUsageStatsController
 			sqlStatsProvider = ief.server.sqlStats
+			localSqlStatsProvider = ief.server.localSqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -518,6 +521,7 @@ func internalExtendedEvalCtx(
 			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
 			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
+			localSqlStatsProvider = &sslocal.SQLStats{}
 		}
 	}
 	ret := extendedEvalContext{
@@ -537,11 +541,12 @@ func internalExtendedEvalCtx(
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
-		Tracing:         &SessionTracing{},
-		Descs:           tables,
-		indexUsageStats: indexUsageStats,
-		statsProvider:   sqlStatsProvider,
-		jobs:            newTxnJobsCollection(),
+		Tracing:            &SessionTracing{},
+		Descs:              tables,
+		indexUsageStats:    indexUsageStats,
+		statsProvider:      sqlStatsProvider,
+		localStatsProvider: localSqlStatsProvider,
+		jobs:               newTxnJobsCollection(),
 	}
 	ret.copyFromExecCfg(execCfg)
 	return ret

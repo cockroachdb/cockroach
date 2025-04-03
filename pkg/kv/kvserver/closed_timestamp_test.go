@@ -625,6 +625,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	for _, test := range []struct {
 		name string

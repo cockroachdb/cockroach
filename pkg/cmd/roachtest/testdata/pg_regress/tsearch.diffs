@@ -1,0 +1,3387 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsearch.out --label=/mnt/data1/postgres/src/test/regress/results/tsearch.out /mnt/data1/postgres/src/test/regress/expected/tsearch.out /mnt/data1/postgres/src/test/regress/results/tsearch.out
+--- /mnt/data1/postgres/src/test/regress/expected/tsearch.out
++++ /mnt/data1/postgres/src/test/regress/results/tsearch.out
+@@ -1,5 +1,6 @@
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ --
+ -- Sanity checks for text search catalogs
+ --
+@@ -53,10 +54,7 @@
+     ON (tt.cfgid=m.mapcfg AND tt.tokid=m.maptokentype)
+ WHERE
+     tt.cfgid IS NULL OR tt.tokid IS NULL;
+- cfgid | tokid | mapcfg | maptokentype | mapseqno | mapdict 
+--------+-------+--------+--------------+----------+---------
+-(0 rows)
+-
++ERROR:  unknown function: ts_token_type()
+ -- Load some test data
+ CREATE TABLE test_tsvector(
+ 	t text,
+@@ -64,56 +62,63 @@
+ );
+ \set filename :abs_srcdir '/data/tsearch.data'
+ COPY test_tsvector FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/tsearch.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY test_tsvector FROM ':abs_srcdir/data/tsearch.data'
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ANALYZE test_tsvector;
+ -- test basic text search behavior without indexes, then with
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -123,13 +128,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -141,135 +146,150 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ create index wowidx on test_tsvector using gist (a);
+ SET enable_seqscan=OFF;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan=ON;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan=OFF;
+-explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+-                      QUERY PLAN                       
+--------------------------------------------------------
+- Aggregate
+-   ->  Index Scan using wowidx on test_tsvector
+-         Index Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-(3 rows)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -279,13 +299,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -297,135 +317,147 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ SET enable_indexscan=OFF;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan=ON;
+-explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-         ->  Bitmap Index Scan on wowidx
+-               Index Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-(5 rows)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -435,13 +467,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -453,158 +485,171 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ -- Test siglen parameter of GiST tsvector_ops
+ CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(foo=1));
+-ERROR:  unrecognized parameter "foo"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(foo=1))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=0));
+-ERROR:  value 0 out of bounds for option "siglen"
+-DETAIL:  Valid values are between "1" and "2024".
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=0))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=2048));
+-ERROR:  value 2048 out of bounds for option "siglen"
+-DETAIL:  Valid values are between "1" and "2024".
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=2048))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=100,foo='bar'));
+-ERROR:  unrecognized parameter "foo"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=100,foo='bar'))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=100, siglen = 200));
+-ERROR:  parameter "siglen" specified more than once
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx1 ON test_tsvector USING gist (a tsvector_ops(siglen=100, siglen = 200))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ CREATE INDEX wowidx2 ON test_tsvector USING gist (a tsvector_ops(siglen=1));
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx2 ON test_tsvector USING gist (a tsvector_ops(siglen=1))
++                                                                ^
++HINT:  try \h CREATE INDEX
+ \d test_tsvector
+-            Table "public.test_tsvector"
+- Column |   Type   | Collation | Nullable | Default 
+---------+----------+-----------+----------+---------
+- t      | text     |           |          | 
+- a      | tsvector |           |          | 
+-Indexes:
+-    "wowidx" gist (a)
+-    "wowidx2" gist (a tsvector_ops (siglen='1'))
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_tsvector)$' COLLATE pg_catalog.default
++                                                                             ^
+ DROP INDEX wowidx;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ EXPLAIN (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-         ->  Bitmap Index Scan on wowidx2
+-               Index Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -614,13 +659,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -632,144 +677,139 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ DROP INDEX wowidx2;
++ERROR:  index "wowidx2" does not exist
+ CREATE INDEX wowidx ON test_tsvector USING gist (a tsvector_ops(siglen=484));
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE INDEX wowidx ON test_tsvector USING gist (a tsvector_ops(siglen=484))
++                                                               ^
++HINT:  try \h CREATE INDEX
+ \d test_tsvector
+-            Table "public.test_tsvector"
+- Column |   Type   | Collation | Nullable | Default 
+---------+----------+-----------+----------+---------
+- t      | text     |           |          | 
+- a      | tsvector |           |          | 
+-Indexes:
+-    "wowidx" gist (a tsvector_ops (siglen='484'))
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_tsvector)$' COLLATE pg_catalog.default
++                                                                             ^
+ EXPLAIN (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-         ->  Bitmap Index Scan on wowidx
+-               Index Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -779,13 +819,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -797,140 +837,155 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_indexscan;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP INDEX wowidx;
++ERROR:  index "wowidx" does not exist
+ CREATE INDEX wowidx ON test_tsvector USING gin (a);
+ SET enable_seqscan=OFF;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- GIN only supports bitmapscan, so no need to test plain indexscan
+ explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-         ->  Bitmap Index Scan on wowidx
+-               Index Cond: (a @@ '''wr'' | ''qh'''::tsquery)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr|qh';
+  count 
+ -------
+-   158
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr&qh';
+  count 
+ -------
+-    17
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq&yt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'eq|yt';
+  count 
+ -------
+-    98
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq&yt)|(wr&qh)';
+  count 
+ -------
+-    23
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '(eq|yt)&(wr|qh)';
+  count 
+ -------
+-    39
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'w:*|q:*';
+- count 
+--------
+-   494
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsvector> @@ <string>
+ SELECT count(*) FROM test_tsvector WHERE a @@ any ('{wr,qh}');
+- count 
+--------
+-   158
+-(1 row)
+-
++ERROR:  unsupported comparison operator: a @@ ANY '{wr,qh}': op ANY <right> requires array, tuple or subquery on right side
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'no_such_lexeme';
+  count 
+ -------
+@@ -940,13 +995,13 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!no_such_lexeme';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'pl <-> yh';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'yh <-> pl';
+@@ -958,402 +1013,307 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'qe <2> qt';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> yh';
+  count 
+ -------
+-     3
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!pl <-> !yh';
+  count 
+ -------
+-   432
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!yh <-> pl';
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qe <2> qt';
+  count 
+ -------
+-     6
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(pl <-> yh)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(yh <-> pl)';
+  count 
+ -------
+-   508
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!(qe <2> qt)';
+  count 
+ -------
+-   507
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:A';
+  count 
+ -------
+-    56
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wd:D';
+  count 
+ -------
+-    58
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:A';
+  count 
+ -------
+-   452
++     0
+ (1 row)
+ 
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!wd:D';
+  count 
+ -------
+-   450
++     0
+ (1 row)
+ 
+ -- Test optimization of non-empty GIN_SEARCH_MODE_ALL queries
+ EXPLAIN (COSTS OFF)
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qh';
+-                     QUERY PLAN                      
+------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: (a @@ '!''qh'''::tsquery)
+-         ->  Bitmap Index Scan on wowidx
+-               Index Cond: (a @@ '!''qh'''::tsquery)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ '!qh';
+  count 
+ -------
+-   410
++     0
+ (1 row)
+ 
+ EXPLAIN (COSTS OFF)
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr' AND a @@ '!qh';
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_tsvector
+-         Recheck Cond: ((a @@ '''wr'''::tsquery) AND (a @@ '!''qh'''::tsquery))
+-         ->  Bitmap Index Scan on wowidx
+-               Index Cond: ((a @@ '''wr'''::tsquery) AND (a @@ '!''qh'''::tsquery))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_tsvector WHERE a @@ 'wr' AND a @@ '!qh';
+  count 
+ -------
+-    60
++     0
+ (1 row)
+ 
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ INSERT INTO test_tsvector VALUES ('???', 'DFG:1A,2B,6C,10 FGH');
+ SELECT * FROM ts_stat('SELECT a FROM test_tsvector') ORDER BY ndoc DESC, nentry DESC, word LIMIT 10;
+- word | ndoc | nentry 
+-------+------+--------
+- qq   |  108 |    108
+- qt   |  102 |    102
+- qe   |  100 |    101
+- qh   |   98 |     99
+- qw   |   98 |     98
+- qa   |   97 |     97
+- ql   |   94 |     94
+- qs   |   94 |     94
+- qr   |   92 |     93
+- qi   |   92 |     92
+-(10 rows)
+-
++ERROR:  unknown function: ts_stat()
+ SELECT * FROM ts_stat('SELECT a FROM test_tsvector', 'AB') ORDER BY ndoc DESC, nentry DESC, word;
+- word | ndoc | nentry 
+-------+------+--------
+- DFG  |    1 |      2
+-(1 row)
+-
++ERROR:  unknown function: ts_stat()
+ --dictionaries and to_tsvector
+ SELECT ts_lexize('english_stem', 'skies');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('english_stem', 'identity');
+- ts_lexize 
+------------
+- {ident}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT * FROM ts_token_type('default');
+- tokid |      alias      |               description                
+--------+-----------------+------------------------------------------
+-     1 | asciiword       | Word, all ASCII
+-     2 | word            | Word, all letters
+-     3 | numword         | Word, letters and digits
+-     4 | email           | Email address
+-     5 | url             | URL
+-     6 | host            | Host
+-     7 | sfloat          | Scientific notation
+-     8 | version         | Version number
+-     9 | hword_numpart   | Hyphenated word part, letters and digits
+-    10 | hword_part      | Hyphenated word part, all letters
+-    11 | hword_asciipart | Hyphenated word part, all ASCII
+-    12 | blank           | Space symbols
+-    13 | tag             | XML tag
+-    14 | protocol        | Protocol head
+-    15 | numhword        | Hyphenated word, letters and digits
+-    16 | asciihword      | Hyphenated word, all ASCII
+-    17 | hword           | Hyphenated word, all letters
+-    18 | url_path        | URL path
+-    19 | file            | File or path name
+-    20 | float           | Decimal notation
+-    21 | int             | Signed integer
+-    22 | uint            | Unsigned integer
+-    23 | entity          | XML entity
+-(23 rows)
+-
++ERROR:  unknown function: ts_token_type()
+ SELECT * FROM ts_parse('default', '345 qwe@efd.r '' http://www.com/ http://aew.werc.ewr/?ad=qwe&dw 1aew.werc.ewr/?ad=qwe&dw 2aew.werc.ewr http://3aew.werc.ewr/?ad=qwe&dw http://4aew.werc.ewr http://5aew.werc.ewr:8100/?  ad=qwe&dw 6aew.werc.ewr:8100/?ad=qwe&dw 7aew.werc.ewr:8100/?ad=qwe&dw=%20%32 +4.0e-10 qwe qwe qwqwe 234.435 455 5.005 teodor@stack.net teodor@123-stack.net 123_teodor@stack.net 123-teodor@stack.net qwe-wer asdf <fr>qwer jf sdjk<we hjwer <werrwe> ewr1> ewri2 <a href="qwe<qwe>">
+ /usr/local/fff /awdf/dwqe/4325 rewt/ewr wefjn /wqe-324/ewr gist.h gist.h.c gist.c. readline 4.2 4.2. 4.2, readline-4.2 readline-4.2. 234
+ <i <b> wow  < jqw <> qwerty');
+- tokid |                token                 
+--------+--------------------------------------
+-    22 | 345
+-    12 |  
++ tokid |  token   
++-------+----------
++     1 | 345
++     1 | qwe
++     1 | efd
++     1 | r
++     1 | http
++     1 | www
++     1 | com
++     1 | http
++     1 | aew
++     1 | werc
++     1 | ewr
++     1 | ad
++     1 | qwe
++     1 | dw
++     1 | 1aew
++     1 | werc
++     1 | ewr
++     1 | ad
++     1 | qwe
++     1 | dw
++     1 | 2aew
++     1 | werc
++     1 | ewr
++     1 | http
++     1 | 3aew
++     1 | werc
++     1 | ewr
++     1 | ad
++     1 | qwe
++     1 | dw
++     1 | http
++     1 | 4aew
++     1 | werc
++     1 | ewr
++     1 | http
++     1 | 5aew
++     1 | werc
++     1 | ewr
++     1 | 8100
++     1 | ad
++     1 | qwe
++     1 | dw
++     1 | 6aew
++     1 | werc
++     1 | ewr
++     1 | 8100
++     1 | ad
+      1 | qwe
+-    12 | @
+-    19 | efd.r
+-    12 |  ' 
+-    14 | http://
+-     6 | www.com
+-    12 | / 
+-    14 | http://
+-     5 | aew.werc.ewr/?ad=qwe&dw
+-     6 | aew.werc.ewr
+-    18 | /?ad=qwe&dw
+-    12 |  
+-     5 | 1aew.werc.ewr/?ad=qwe&dw
+-     6 | 1aew.werc.ewr
+-    18 | /?ad=qwe&dw
+-    12 |  
+-     6 | 2aew.werc.ewr
+-    12 |  
+-    14 | http://
+-     5 | 3aew.werc.ewr/?ad=qwe&dw
+-     6 | 3aew.werc.ewr
+-    18 | /?ad=qwe&dw
+-    12 |  
+-    14 | http://
+-     6 | 4aew.werc.ewr
+-    12 |  
+-    14 | http://
+-     5 | 5aew.werc.ewr:8100/?
+-     6 | 5aew.werc.ewr:8100
+-    18 | /?
+-    12 |   
++     1 | dw
++     1 | 7aew
++     1 | werc
++     1 | ewr
++     1 | 8100
+      1 | ad
+-    12 | =
+      1 | qwe
+-    12 | &
+      1 | dw
+-    12 |  
+-     5 | 6aew.werc.ewr:8100/?ad=qwe&dw
+-     6 | 6aew.werc.ewr:8100
+-    18 | /?ad=qwe&dw
+-    12 |  
+-     5 | 7aew.werc.ewr:8100/?ad=qwe&dw=%20%32
+-     6 | 7aew.werc.ewr:8100
+-    18 | /?ad=qwe&dw=%20%32
+-    12 |  
+-     7 | +4.0e-10
+-    12 |  
++     1 | 20
++     1 | 32
++     1 | 4
++     1 | 0e
++     1 | 10
+      1 | qwe
+-    12 |  
+      1 | qwe
+-    12 |  
+      1 | qwqwe
+-    12 |  
+-    20 | 234.435
+-    12 |  
+-    22 | 455
+-    12 |  
+-    20 | 5.005
+-    12 |  
+-     4 | teodor@stack.net
+-    12 |  
+-     4 | teodor@123-stack.net
+-    12 |  
+-     4 | 123_teodor@stack.net
+-    12 |  
+-     4 | 123-teodor@stack.net
+-    12 |  
+-    16 | qwe-wer
+-    11 | qwe
+-    12 | -
+-    11 | wer
+-    12 |  
++     1 | 234
++     1 | 435
++     1 | 455
++     1 | 5
++     1 | 005
++     1 | teodor
++     1 | stack
++     1 | net
++     1 | teodor
++     1 | 123
++     1 | stack
++     1 | net
++     1 | 123
++     1 | teodor
++     1 | stack
++     1 | net
++     1 | 123
++     1 | teodor
++     1 | stack
++     1 | net
++     1 | qwe
++     1 | wer
+      1 | asdf
+-    12 |  
+-    13 | <fr>
++     1 | fr
+      1 | qwer
+-    12 |  
+      1 | jf
+-    12 |  
+      1 | sdjk
+-    12 | <
+      1 | we
+-    12 |  
+      1 | hjwer
+-    12 |  
+-    13 | <werrwe>
+-    12 |  
+-     3 | ewr1
+-    12 | > 
+-     3 | ewri2
+-    12 |  
+-    13 | <a href="qwe<qwe>">
+-    12 |                                     +
+-       | 
+-    19 | /usr/local/fff
+-    12 |  
+-    19 | /awdf/dwqe/4325
+-    12 |  
+-    19 | rewt/ewr
+-    12 |  
++     1 | werrwe
++     1 | ewr1
++     1 | ewri2
++     1 | a
++     1 | href
++     1 | qwe
++     1 | qwe
++     1 | usr
++     1 | local
++     1 | fff
++     1 | awdf
++     1 | dwqe
++     1 | 4325
++     1 | rewt
++     1 | ewr
+      1 | wefjn
+-    12 |  
+-    19 | /wqe-324/ewr
+-    12 |  
+-    19 | gist.h
+-    12 |  
+-    19 | gist.h.c
+-    12 |  
+-    19 | gist.c
+-    12 | . 
++     1 | wqe
++     1 | 324
++     1 | ewr
++     1 | gist
++     1 | h
++     1 | gist
++     1 | h
++     1 | c
++     1 | gist
++     1 | c
+      1 | readline
+-    12 |  
+-    20 | 4.2
+-    12 |  
+-    20 | 4.2
+-    12 | . 
+-    20 | 4.2
+-    12 | , 
++     1 | 4
++     1 | 2
++     1 | 4
++     1 | 2
++     1 | 4
++     1 | 2
+      1 | readline
+-    20 | -4.2
+-    12 |  
++     1 | 4
++     1 | 2
+      1 | readline
+-    20 | -4.2
+-    12 | . 
+-    22 | 234
+-    12 |                                     +
+-       | 
+-    12 | <
++     1 | 4
++     1 | 2
++     1 | 234
+      1 | i
+-    12 |  
+-    13 | <b>
+-    12 |  
++     1 | b
+      1 | wow
+-    12 |   
+-    12 | < 
+      1 | jqw
+-    12 |  
+-    12 | <> 
+      1 | qwerty
+-(139 rows)
++(138 rows)
+ 
+ SELECT to_tsvector('english', '345 qwe@efd.r '' http://www.com/ http://aew.werc.ewr/?ad=qwe&dw 1aew.werc.ewr/?ad=qwe&dw 2aew.werc.ewr http://3aew.werc.ewr/?ad=qwe&dw http://4aew.werc.ewr http://5aew.werc.ewr:8100/?  ad=qwe&dw 6aew.werc.ewr:8100/?ad=qwe&dw 7aew.werc.ewr:8100/?ad=qwe&dw=%20%32 +4.0e-10 qwe qwe qwqwe 234.435 455 5.005 teodor@stack.net teodor@123-stack.net 123_teodor@stack.net 123-teodor@stack.net qwe-wer asdf <fr>qwer jf sdjk<we hjwer <werrwe> ewr1> ewri2 <a href="qwe<qwe>">
+ /usr/local/fff /awdf/dwqe/4325 rewt/ewr wefjn /wqe-324/ewr gist.h gist.h.c gist.c. readline 4.2 4.2. 4.2, readline-4.2 readline-4.2. 234
+ <i <b> wow  < jqw <> qwerty');
+-                                                                                                                                                                                                                                                                                                                                                                                                                                                                              to_tsvector                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- '+4.0e-10':28 '-4.2':63,65 '/?':18 '/?ad=qwe&dw':7,10,14,24 '/?ad=qwe&dw=%20%32':27 '/awdf/dwqe/4325':51 '/usr/local/fff':50 '/wqe-324/ewr':54 '123-teodor@stack.net':38 '123_teodor@stack.net':37 '1aew.werc.ewr':9 '1aew.werc.ewr/?ad=qwe&dw':8 '234':66 '234.435':32 '2aew.werc.ewr':11 '345':1 '3aew.werc.ewr':13 '3aew.werc.ewr/?ad=qwe&dw':12 '4.2':59,60,61 '455':33 '4aew.werc.ewr':15 '5.005':34 '5aew.werc.ewr:8100':17 '5aew.werc.ewr:8100/?':16 '6aew.werc.ewr:8100':23 '6aew.werc.ewr:8100/?ad=qwe&dw':22 '7aew.werc.ewr:8100':26 '7aew.werc.ewr:8100/?ad=qwe&dw=%20%32':25 'ad':19 'aew.werc.ewr':6 'aew.werc.ewr/?ad=qwe&dw':5 'asdf':42 'dw':21 'efd.r':3 'ewr1':48 'ewri2':49 'gist.c':57 'gist.h':55 'gist.h.c':56 'hjwer':47 'jf':44 'jqw':69 'qwe':2,20,29,30,40 'qwe-wer':39 'qwer':43 'qwerti':70 'qwqwe':31 'readlin':58,62,64 'rewt/ewr':52 'sdjk':45 'teodor@123-stack.net':36 'teodor@stack.net':35 'wefjn':53 'wer':41 'wow':68 'www.com':4
++                                                                                                                                                                                                                                                                                                                                                                                                                                  to_tsvector                                                                                                                                                                                                                                                                                                                                                                                                                                  
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ '005':69 '0e':60 '10':61 '123':74,77,81 '1aew':15 '2':122,124,126,129,132 '20':57 '234':65,133 '2aew':21 '32':58 '324':111 '345':1 '3aew':25 '4':59,121,123,125,128,131 '4325':106 '435':66 '455':67 '4aew':32 '5':68 '5aew':36 '6aew':43 '7aew':50 '8100':39,46,53 'ad':12,18,28,40,47,54 'aew':9 'asdf':87 'awdf':104 'b':135 'c':117,119 'com':7 'dw':14,20,30,42,49,56 'dwqe':105 'efd':3 'ewr':11,17,23,27,34,38,45,52,108,112 'ewr1':95 'ewri2':96 'fff':103 'fr':88 'gist':113,115,118 'h':114,116 'hjwer':93 'href':98 'http':5,8,24,31,35 'jf':90 'jqw':137 'local':102 'net':72,76,80,84 'qwe':2,13,19,29,41,48,55,62,63,85,99,100 'qwer':89 'qwerti':138 'qwqwe':64 'r':4 'readlin':120,127,130 'rewt':107 'sdjk':91 'stack':71,75,79,83 'teodor':70,73,78,82 'usr':101 'wefjn':109 'wer':86 'werc':10,16,22,26,33,37,44,51 'werrw':94 'wow':136 'wqe':110 'www':6
+ (1 row)
+ 
+ SELECT length(to_tsvector('english', '345 qwe@efd.r '' http://www.com/ http://aew.werc.ewr/?ad=qwe&dw 1aew.werc.ewr/?ad=qwe&dw 2aew.werc.ewr http://3aew.werc.ewr/?ad=qwe&dw http://4aew.werc.ewr http://5aew.werc.ewr:8100/?  ad=qwe&dw 6aew.werc.ewr:8100/?ad=qwe&dw 7aew.werc.ewr:8100/?ad=qwe&dw=%20%32 +4.0e-10 qwe qwe qwqwe 234.435 455 5.005 teodor@stack.net teodor@123-stack.net 123_teodor@stack.net 123-teodor@stack.net qwe-wer asdf <fr>qwer jf sdjk<we hjwer <werrwe> ewr1> ewri2 <a href="qwe<qwe>">
+ /usr/local/fff /awdf/dwqe/4325 rewt/ewr wefjn /wqe-324/ewr gist.h gist.h.c gist.c. readline 4.2 4.2. 4.2, readline-4.2 readline-4.2. 234
+ <i <b> wow  < jqw <> qwerty'));
+- length 
+---------
+-     56
+-(1 row)
+-
++ERROR:  unknown signature: length(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- ts_debug
+ SELECT * from ts_debug('english', '<myns:foo-bar_baz.blurfl>abc&nm1;def&#xa9;ghi&#245;jkl</myns:foo-bar_baz.blurfl>');
+-   alias   |   description   |           token            |  dictionaries  |  dictionary  | lexemes 
+------------+-----------------+----------------------------+----------------+--------------+---------
+- tag       | XML tag         | <myns:foo-bar_baz.blurfl>  | {}             |              | 
+- asciiword | Word, all ASCII | abc                        | {english_stem} | english_stem | {abc}
+- entity    | XML entity      | &nm1;                      | {}             |              | 
+- asciiword | Word, all ASCII | def                        | {english_stem} | english_stem | {def}
+- entity    | XML entity      | &#xa9;                     | {}             |              | 
+- asciiword | Word, all ASCII | ghi                        | {english_stem} | english_stem | {ghi}
+- entity    | XML entity      | &#245;                     | {}             |              | 
+- asciiword | Word, all ASCII | jkl                        | {english_stem} | english_stem | {jkl}
+- tag       | XML tag         | </myns:foo-bar_baz.blurfl> | {}             |              | 
+-(9 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- check parsing of URLs
+ SELECT * from ts_debug('english', 'http://www.harewoodsolutions.co.uk/press.aspx</span>');
+-  alias   |  description  |                 token                  | dictionaries | dictionary |                 lexemes                  
+-----------+---------------+----------------------------------------+--------------+------------+------------------------------------------
+- protocol | Protocol head | http://                                | {}           |            | 
+- url      | URL           | www.harewoodsolutions.co.uk/press.aspx | {simple}     | simple     | {www.harewoodsolutions.co.uk/press.aspx}
+- host     | Host          | www.harewoodsolutions.co.uk            | {simple}     | simple     | {www.harewoodsolutions.co.uk}
+- url_path | URL path      | /press.aspx                            | {simple}     | simple     | {/press.aspx}
+- tag      | XML tag       | </span>                                | {}           |            | 
+-(5 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT * from ts_debug('english', 'http://aew.wer0c.ewr/id?ad=qwe&dw<span>');
+-  alias   |  description  |           token            | dictionaries | dictionary |           lexemes            
+-----------+---------------+----------------------------+--------------+------------+------------------------------
+- protocol | Protocol head | http://                    | {}           |            | 
+- url      | URL           | aew.wer0c.ewr/id?ad=qwe&dw | {simple}     | simple     | {aew.wer0c.ewr/id?ad=qwe&dw}
+- host     | Host          | aew.wer0c.ewr              | {simple}     | simple     | {aew.wer0c.ewr}
+- url_path | URL path      | /id?ad=qwe&dw              | {simple}     | simple     | {/id?ad=qwe&dw}
+- tag      | XML tag       | <span>                     | {}           |            | 
+-(5 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT * from ts_debug('english', 'http://5aew.werc.ewr:8100/?');
+-  alias   |  description  |        token         | dictionaries | dictionary |        lexemes         
+-----------+---------------+----------------------+--------------+------------+------------------------
+- protocol | Protocol head | http://              | {}           |            | 
+- url      | URL           | 5aew.werc.ewr:8100/? | {simple}     | simple     | {5aew.werc.ewr:8100/?}
+- host     | Host          | 5aew.werc.ewr:8100   | {simple}     | simple     | {5aew.werc.ewr:8100}
+- url_path | URL path      | /?                   | {simple}     | simple     | {/?}
+-(4 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT * from ts_debug('english', '5aew.werc.ewr:8100/?xx');
+-  alias   | description |         token          | dictionaries | dictionary |         lexemes          
+-----------+-------------+------------------------+--------------+------------+--------------------------
+- url      | URL         | 5aew.werc.ewr:8100/?xx | {simple}     | simple     | {5aew.werc.ewr:8100/?xx}
+- host     | Host        | 5aew.werc.ewr:8100     | {simple}     | simple     | {5aew.werc.ewr:8100}
+- url_path | URL path    | /?xx                   | {simple}     | simple     | {/?xx}
+-(3 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT token, alias,
+   dictionaries, dictionaries is null as dnull, array_dims(dictionaries) as ddims,
+   lexemes, lexemes is null as lnull, array_dims(lexemes) as ldims
+ from ts_debug('english', 'a title');
+- token |   alias   |  dictionaries  | dnull | ddims | lexemes | lnull | ldims 
+--------+-----------+----------------+-------+-------+---------+-------+-------
+- a     | asciiword | {english_stem} | f     | [1:1] | {}      | f     | 
+-       | blank     | {}             | f     |       |         | t     | 
+- title | asciiword | {english_stem} | f     | [1:1] | {titl}  | f     | [1:1]
+-(3 rows)
+-
++ERROR:  ts_debug(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- to_tsquery
+ SELECT to_tsquery('english', 'qwe & sKies ');
+   to_tsquery   
+@@ -1398,35 +1358,18 @@
+ (1 row)
+ 
+ SELECT plainto_tsquery('english', 'the and z 1))& fghj');
+-  plainto_tsquery   
+---------------------
+- 'z' & '1' & 'fghj'
+-(1 row)
+-
++ERROR:  plainto_tsquery(): syntax error in TSQuery: the and z 1))& fghj
+ SELECT plainto_tsquery('english', 'foo bar') && plainto_tsquery('english', 'asd');
+-       ?column?        
+------------------------
+- 'foo' & 'bar' & 'asd'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> && <tsquery>
+ SELECT plainto_tsquery('english', 'foo bar') || plainto_tsquery('english', 'asd fg');
+-           ?column?           
+-------------------------------
+- 'foo' & 'bar' | 'asd' & 'fg'
+-(1 row)
+-
++ERROR:  unsupported binary operator: <tsquery> || <tsquery>
+ SELECT plainto_tsquery('english', 'foo bar') || !!plainto_tsquery('english', 'asd fg');
+-             ?column?              
+------------------------------------
+- 'foo' & 'bar' | !( 'asd' & 'fg' )
+-(1 row)
+-
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT plainto_tsquery('english', 'foo bar') || !!plainto_tsquery('english', 'asd fg')
++                                                ^
+ SELECT plainto_tsquery('english', 'foo bar') && 'asd | fg';
+-             ?column?             
+-----------------------------------
+- 'foo' & 'bar' & ( 'asd' | 'fg' )
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> && <string>
+ -- Check stop word deletion, a and s are stop-words
+ SELECT to_tsquery('english', '!(a & !b) & c');
+  to_tsquery  
+@@ -1679,11 +1622,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ '), to_tsquery('english', 'paint&water'));
+- ts_rank_cd 
+-------------
+-       0.05
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(to_tsvector('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1695,11 +1636,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ '), to_tsquery('english', 'breath&motion&water'));
+- ts_rank_cd  
+--------------
+- 0.008333334
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(to_tsvector('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1711,11 +1650,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ '), to_tsquery('english', 'ocean'));
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(to_tsvector('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1727,25 +1664,19 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ '), to_tsquery('english', 'painted <-> Ship'));
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(strip(to_tsvector('both stripped')),
+                   to_tsquery('both & stripped'));
+- ts_rank_cd 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(to_tsvector('unstripped') || strip(to_tsvector('stripped')),
+                   to_tsquery('unstripped & stripped'));
+- ts_rank_cd 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --headline tests
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+@@ -1758,14 +1689,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'paint&water'));
+-               ts_headline               
+------------------------------------------
+- <b>painted</b> Ocean.                  +
+- <b>Water</b>, <b>water</b>, every where+
+-   And all the boards did shrink;       +
+- <b>Water</b>, <b>water</b>, every
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1777,14 +1703,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'breath&motion&water'));
+-           ts_headline            
+-----------------------------------
+- <b>breath</b> nor <b>motion</b>,+
+- As idle as a painted Ship       +
+-   Upon a painted Ocean.         +
+- <b>Water</b>, <b>water</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1796,14 +1717,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'ocean'));
+-           ts_headline            
+-----------------------------------
+- <b>Ocean</b>.                   +
+- Water, water, every where       +
+-   And all the boards did shrink;+
+- Water, water, every where
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1815,18 +1731,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'day & drink'));
+-            ts_headline             
+-------------------------------------
+- <b>day</b>,                       +
+-   We stuck, nor breath nor motion,+
+- As idle as a painted Ship         +
+-   Upon a painted Ocean.           +
+- Water, water, every where         +
+-   And all the boards did shrink;  +
+- Water, water, every where,        +
+-   Nor any drop
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1838,13 +1745,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'day | drink'));
+-                        ts_headline                        
+------------------------------------------------------------
+- <b>Day</b> after <b>day</b>, <b>day</b> after <b>day</b>,+
+-   We stuck, nor breath nor motion,                       +
+- As idle as a painted
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1856,13 +1759,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'day | !drink'));
+-                        ts_headline                        
+------------------------------------------------------------
+- <b>Day</b> after <b>day</b>, <b>day</b> after <b>day</b>,+
+-   We stuck, nor breath nor motion,                       +
+- As idle as a painted
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1874,16 +1773,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'painted <-> Ship & drink'));
+-           ts_headline            
+-----------------------------------
+- <b>painted</b> <b>Ship</b>      +
+-   Upon a <b>painted</b> Ocean.  +
+- Water, water, every where       +
+-   And all the boards did shrink;+
+- Water, water, every where,      +
+-   Nor any drop to <b>drink</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1895,14 +1787,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'painted <-> Ship | drink'));
+-           ts_headline           
+----------------------------------
+- <b>painted</b> <b>Ship</b>     +
+-   Upon a <b>painted</b> Ocean. +
+- Water, water, every where      +
+-   And all the boards did shrink
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1914,14 +1801,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'painted <-> Ship | !drink'));
+-           ts_headline           
+----------------------------------
+- <b>painted</b> <b>Ship</b>     +
+-   Upon a <b>painted</b> Ocean. +
+- Water, water, every where      +
+-   And all the boards did shrink
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1933,14 +1815,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', phraseto_tsquery('english', 'painted Ocean'));
+-           ts_headline            
+-----------------------------------
+- <b>painted</b> <b>Ocean</b>.    +
+- Water, water, every where       +
+-   And all the boards did shrink;+
+- Water, water, every
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+   We stuck, nor breath nor motion,
+@@ -1952,32 +1829,23 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', phraseto_tsquery('english', 'idle as a painted Ship'));
+-                 ts_headline                 
+----------------------------------------------
+- <b>idle</b> as a <b>painted</b> <b>Ship</b>+
+-   Upon a <b>painted</b> Ocean.             +
+- Water, water, every where                  +
+-   And all the boards
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english',
+ 'Lorem ipsum urna.  Nullam nullam ullamcorper urna.',
+ to_tsquery('english','Lorem') && phraseto_tsquery('english','ullamcorper urna'),
+ 'MaxWords=100, MinWords=1');
+-                                  ts_headline                                  
+--------------------------------------------------------------------------------
+- <b>Lorem</b> ipsum <b>urna</b>.  Nullam nullam <b>ullamcorper</b> <b>urna</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english',
+ 'Lorem ipsum urna.  Nullam nullam ullamcorper urna.',
+ phraseto_tsquery('english','ullamcorper urna'),
+ 'MaxWords=100, MinWords=5');
+-                         ts_headline                         
+--------------------------------------------------------------
+- <b>urna</b>.  Nullam nullam <b>ullamcorper</b> <b>urna</b>.
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english', '
+ <html>
+ <!-- some comment -->
+@@ -1991,40 +1859,21 @@
+ </body>
+ </html>',
+ to_tsquery('english', 'sea&foo'), 'HighlightAll=true');
+-                                 ts_headline                                 
+------------------------------------------------------------------------------
+-                                                                            +
+- <html>                                                                     +
+- <!-- some comment -->                                                      +
+- <body>                                                                     +
+- <b>Sea</b> view wow <u><b>foo</b> bar</u> <i>qq</i>                        +
+- <a href="http://www.google.com/foo.bar.html" target="_blank">YES &nbsp;</a>+
+- ff-bg                                                                      +
+- <script>                                                                   +
+-        document.write(15);                                                 +
+- </script>                                                                  +
+- </body>                                                                    +
+- </html>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('simple', '1 2 3 1 3'::text, '1 <-> 3', 'MaxWords=2, MinWords=1');
+-    ts_headline    
+--------------------
+- <b>1</b> <b>3</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('simple', '1 2 3 1 3'::text, '1 & 3', 'MaxWords=4, MinWords=1');
+-     ts_headline     
+----------------------
+- <b>1</b> 2 <b>3</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('simple', '1 2 3 1 3'::text, '1 <-> 3', 'MaxWords=4, MinWords=1');
+-    ts_headline    
+--------------------
+- <b>1</b> <b>3</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --Check if headline fragments work
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+@@ -2037,18 +1886,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'ocean'), 'MaxFragments=1');
+-            ts_headline             
+-------------------------------------
+- after day,                        +
+-   We stuck, nor breath nor motion,+
+- As idle as a painted Ship         +
+-   Upon a painted <b>Ocean</b>.    +
+- Water, water, every where         +
+-   And all the boards did shrink;  +
+- Water, water, every where,        +
+-   Nor any drop
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --Check if more than one fragments are displayed
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+@@ -2061,18 +1901,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'Coleridge & stuck'), 'MaxFragments=2');
+-                 ts_headline                  
+-----------------------------------------------
+- after day, day after day,                   +
+-   We <b>stuck</b>, nor breath nor motion,   +
+- As idle as a painted Ship                   +
+-   Upon a painted Ocean.                     +
+- Water, water, every where                   +
+-   And all the boards did shrink;            +
+- Water, water, every where ... drop to drink.+
+- S. T. <b>Coleridge</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --Fragments when there all query words are not in the document
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+@@ -2085,14 +1916,9 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'ocean & seahorse'), 'MaxFragments=1');
+-            ts_headline             
+-------------------------------------
+-                                   +
+- Day after day, day after day,     +
+-   We stuck, nor breath nor motion,+
+- As idle as
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --FragmentDelimiter option
+ SELECT ts_headline('english', '
+ Day after day, day after day,
+@@ -2105,45 +1931,28 @@
+   Nor any drop to drink.
+ S. T. Coleridge (1772-1834)
+ ', to_tsquery('english', 'Coleridge & stuck'), 'MaxFragments=2,FragmentDelimiter=***');
+-                ts_headline                 
+---------------------------------------------
+- after day, day after day,                 +
+-   We <b>stuck</b>, nor breath nor motion, +
+- As idle as a painted Ship                 +
+-   Upon a painted Ocean.                   +
+- Water, water, every where                 +
+-   And all the boards did shrink;          +
+- Water, water, every where***drop to drink.+
+- S. T. <b>Coleridge</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --Fragments with phrase search
+ SELECT ts_headline('english',
+ 'Lorem ipsum urna.  Nullam nullam ullamcorper urna.',
+ to_tsquery('english','Lorem') && phraseto_tsquery('english','ullamcorper urna'),
+ 'MaxFragments=100, MaxWords=100, MinWords=1');
+-                                  ts_headline                                  
+--------------------------------------------------------------------------------
+- <b>Lorem</b> ipsum <b>urna</b>.  Nullam nullam <b>ullamcorper</b> <b>urna</b>
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Edge cases with empty query
+ SELECT ts_headline('english',
+ '', to_tsquery('english', ''));
+-NOTICE:  text-search query doesn't contain lexemes: ""
+- ts_headline 
+--------------
+- 
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_headline('english',
+ 'foo bar', to_tsquery('english', ''));
+-NOTICE:  text-search query doesn't contain lexemes: ""
+- ts_headline 
+--------------
+- foo bar
+-(1 row)
+-
++ERROR:  ts_headline(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ --Rewrite sub system
+ CREATE TABLE test_tsquery (txtkeyword TEXT, txtsample TEXT);
+ \set ECHO none
+@@ -2152,17 +1961,9 @@
+ ALTER TABLE test_tsquery ADD COLUMN sample tsquery;
+ UPDATE test_tsquery SET sample = to_tsquery('english', txtsample::text);
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword <  'new <-> york';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> < <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword <= 'new <-> york';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> <= <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword = 'new <-> york';
+  count 
+ -------
+@@ -2170,31 +1971,19 @@
+ (1 row)
+ 
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword >= 'new <-> york';
+- count 
+--------
+-     4
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> >= <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword >  'new <-> york';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> > <string>
+ CREATE UNIQUE INDEX bt_tsq ON test_tsquery (keyword);
++ERROR:  unimplemented: column keyword has type tsquery, which is not indexable
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/35730/_version_
+ SET enable_seqscan=OFF;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword <  'new <-> york';
+- count 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> < <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword <= 'new <-> york';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> <= <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword = 'new <-> york';
+  count 
+ -------
+@@ -2202,247 +1991,154 @@
+ (1 row)
+ 
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword >= 'new <-> york';
+- count 
+--------
+-     4
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> >= <string>
+ SELECT COUNT(*) FROM test_tsquery WHERE keyword >  'new <-> york';
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> > <string>
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT ts_rewrite('foo & bar & qq & new & york',  'new & york'::tsquery, 'big & apple | nyc | new & york & city');
+-                                  ts_rewrite                                  
+-------------------------------------------------------------------------------
+- 'foo' & 'bar' & 'qq' & ( 'city' & 'new' & 'york' | 'nyc' | 'big' & 'apple' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite(ts_rewrite('new & !york ', 'york', '!jersey'),
+                   'jersey', 'mexico');
+-     ts_rewrite     
+---------------------
+- 'new' & !!'mexico'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('moscow', 'SELECT keyword, sample FROM test_tsquery'::text );
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('moscow & hotel', 'SELECT keyword, sample FROM test_tsquery'::text );
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('bar & qq & foo & (new <-> york)', 'SELECT keyword, sample FROM test_tsquery'::text );
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( 'moscow', 'SELECT keyword, sample FROM test_tsquery');
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( 'moscow & hotel', 'SELECT keyword, sample FROM test_tsquery');
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( 'bar & qq & foo & (new <-> york)', 'SELECT keyword, sample FROM test_tsquery');
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('1 & (2 <-> 3)', 'SELECT keyword, sample FROM test_tsquery'::text );
+- ts_rewrite  
+--------------
+- '2' <-> '4'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('1 & (2 <2> 3)', 'SELECT keyword, sample FROM test_tsquery'::text );
+-    ts_rewrite     
+--------------------
+- '1' & '2' <2> '3'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('5 <-> (1 & (2 <-> 3))', 'SELECT keyword, sample FROM test_tsquery'::text );
+-       ts_rewrite        
+--------------------------
+- '5' <-> ( '2' <-> '4' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite('5 <-> (6 | 8)', 'SELECT keyword, sample FROM test_tsquery'::text );
+-      ts_rewrite       
+------------------------
+- '5' <-> ( '6' | '8' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Check empty substitution
+ SELECT ts_rewrite(to_tsquery('5 & (6 | 5)'), to_tsquery('5'), to_tsquery(''));
+-NOTICE:  text-search query doesn't contain lexemes: ""
+- ts_rewrite 
+-------------
+- '6'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite(to_tsquery('!5'), to_tsquery('5'), to_tsquery(''));
+-NOTICE:  text-search query doesn't contain lexemes: ""
+- ts_rewrite 
+-------------
+- 
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT keyword FROM test_tsquery WHERE keyword @> 'new';
+-     keyword      
+-------------------
+- 'new' <-> 'york'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> @> <string>
+ SELECT keyword FROM test_tsquery WHERE keyword @> 'moscow';
+- keyword  
+-----------
+- 'moscow'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> @> <string>
+ SELECT keyword FROM test_tsquery WHERE keyword <@ 'new';
+- keyword 
+----------
+-(0 rows)
+-
++ERROR:  unsupported comparison operator: <tsquery> <@ <string>
+ SELECT keyword FROM test_tsquery WHERE keyword <@ 'moscow';
+- keyword  
+-----------
+- 'moscow'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> <@ <string>
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow') AS query;
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow & hotel') AS query;
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'bar & qq & foo & (new <-> york)') AS query;
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow') AS query;
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow & hotel') AS query;
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'bar & qq & foo & (new <-> york)') AS query;
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE INDEX qq ON test_tsquery USING gist (keyword tsquery_ops);
++ERROR:  column keyword has type tsquery, which is not allowed as the last column in an inverted index
++HINT:  see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/_version_/inverted-indexes.html
+ SET enable_seqscan=OFF;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SELECT keyword FROM test_tsquery WHERE keyword @> 'new';
+-     keyword      
+-------------------
+- 'new' <-> 'york'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> @> <string>
+ SELECT keyword FROM test_tsquery WHERE keyword @> 'moscow';
+- keyword  
+-----------
+- 'moscow'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> @> <string>
+ SELECT keyword FROM test_tsquery WHERE keyword <@ 'new';
+- keyword 
+----------
+-(0 rows)
+-
++ERROR:  unsupported comparison operator: <tsquery> <@ <string>
+ SELECT keyword FROM test_tsquery WHERE keyword <@ 'moscow';
+- keyword  
+-----------
+- 'moscow'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> <@ <string>
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow') AS query;
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow & hotel') AS query;
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'bar & qq & foo & (new <-> york)') AS query;
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow') AS query;
+-     ts_rewrite      
+----------------------
+- 'moskva' | 'moscow'
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'moscow & hotel') AS query;
+-            ts_rewrite             
+------------------------------------
+- 'hotel' & ( 'moskva' | 'moscow' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite( query, 'SELECT keyword, sample FROM test_tsquery' ) FROM to_tsquery('english', 'bar & qq & foo & (new <-> york)') AS query;
+-                                     ts_rewrite                                      
+--------------------------------------------------------------------------------------
+- 'citi' & 'foo' & ( 'bar' | 'qq' ) & ( 'nyc' | 'big' <-> 'appl' | 'new' <-> 'york' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rewrite(tsquery_phrase('foo', 'foo'), 'foo', 'bar | baz');
+-               ts_rewrite                
+------------------------------------------
+- ( 'bar' | 'baz' ) <-> ( 'bar' | 'baz' )
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT to_tsvector('foo bar') @@
+   ts_rewrite(tsquery_phrase('foo', 'foo'), 'foo', 'bar | baz');
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT to_tsvector('bar baz') @@
+   ts_rewrite(tsquery_phrase('foo', 'foo'), 'foo', 'bar | baz');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  ts_rewrite(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ --test GUC
+ SET default_text_search_config=simple;
+ SELECT to_tsvector('SKIES My booKs');
+@@ -2486,6 +2182,9 @@
+ CREATE TRIGGER tsvectorupdate
+ BEFORE UPDATE OR INSERT ON test_tsvector
+ FOR EACH ROW EXECUTE PROCEDURE tsvector_update_trigger(a, 'pg_catalog.english', t);
++ERROR:  tsvector_update_trigger(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT count(*) FROM test_tsvector WHERE a @@ to_tsquery('345&qwerty');
+  count 
+ -------
+@@ -2496,7 +2195,7 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ to_tsquery('345&qwerty');
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ UPDATE test_tsvector SET t = null WHERE t = '345 qwerty';
+@@ -2510,31 +2209,27 @@
+ SELECT count(*) FROM test_tsvector WHERE a @@ to_tsquery('345&qwerty');
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ -- Test inlining of immutable constant functions
+ -- to_tsquery(text) is not immutable, so it won't be inlined
+ explain (costs off)
+ select * from test_tsquery, to_tsquery('new') q where txtsample @@ q;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Nested Loop
+-   Join Filter: (test_tsquery.txtsample @@ q.q)
+-   ->  Function Scan on to_tsquery q
+-   ->  Seq Scan on test_tsquery
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- to_tsquery(regconfig, text) is an immutable function.
+ -- That allows us to get rid of using function scan and join at all.
+ explain (costs off)
+ select * from test_tsquery, to_tsquery('english', 'new') q where txtsample @@ q;
+-                 QUERY PLAN                  
+----------------------------------------------
+- Seq Scan on test_tsquery
+-   Filter: (txtsample @@ '''new'''::tsquery)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- test finding items in GIN's pending list
+ create temp table pendtest (ts tsvector);
+ create index pendtest_idx on pendtest using gin(ts);
+@@ -2575,6 +2270,7 @@
+ insert into phrase_index_test values (to_tsvector('english', 'A fat cat has just eaten a rat.'));
+ create index phrase_index_test_idx on phrase_index_test using gin(fts);
+ set enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ select * from phrase_index_test where fts @@ phraseto_tsquery('english', 'fat cat');
+                 fts                
+ -----------------------------------
+@@ -2582,426 +2278,287 @@
+ (1 row)
+ 
+ set enable_seqscan = on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- test websearch_to_tsquery function
+ select websearch_to_tsquery('simple', 'I have a fat:*ABCD cat');
+-            websearch_to_tsquery             
+----------------------------------------------
+- 'i' & 'have' & 'a' & 'fat' & 'abcd' & 'cat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'orange:**AABBCCDD');
+- websearch_to_tsquery  
+------------------------
+- 'orange' & 'aabbccdd'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat:A!cat:B|rat:C<');
+-          websearch_to_tsquery           
+------------------------------------------
+- 'fat' & 'a' & 'cat' & 'b' & 'rat' & 'c'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat:A : cat:B');
+-   websearch_to_tsquery    
+----------------------------
+- 'fat' & 'a' & 'cat' & 'b'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat*rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' <-> 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat-rat');
+-     websearch_to_tsquery      
+--------------------------------
+- 'fat-rat' <-> 'fat' <-> 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat_rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' <-> 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- weights are completely ignored
+ select websearch_to_tsquery('simple', 'abc : def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc:def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'a:::b');
+- websearch_to_tsquery 
+-----------------------
+- 'a' & 'b'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc:d');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'd'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', ':');
+-NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+- websearch_to_tsquery 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- these operators are ignored
+ select websearch_to_tsquery('simple', 'abc & def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc | def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc <-> def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc (pg or class)');
+-  websearch_to_tsquery  
+-------------------------
+- 'abc' & 'pg' | 'class'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- NOT is ignored in quotes
+ select websearch_to_tsquery('english', 'My brand new smartphone');
+-     websearch_to_tsquery      
+--------------------------------
+- 'brand' & 'new' & 'smartphon'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'My brand "new smartphone"');
+-      websearch_to_tsquery       
+----------------------------------
+- 'brand' & 'new' <-> 'smartphon'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'My brand "new -smartphone"');
+-      websearch_to_tsquery       
+----------------------------------
+- 'brand' & 'new' <-> 'smartphon'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- test OR operator
+ select websearch_to_tsquery('simple', 'cat or rat');
+- websearch_to_tsquery 
+-----------------------
+- 'cat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'cat OR rat');
+- websearch_to_tsquery 
+-----------------------
+- 'cat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'cat "OR" rat');
+- websearch_to_tsquery 
+-----------------------
+- 'cat' & 'or' & 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'cat OR');
+- websearch_to_tsquery 
+-----------------------
+- 'cat' & 'or'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'OR rat');
+- websearch_to_tsquery 
+-----------------------
+- 'or' & 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', '"fat cat OR rat"');
+-        websearch_to_tsquery        
+-------------------------------------
+- 'fat' <-> 'cat' <-> 'or' <-> 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat (cat OR rat');
+- websearch_to_tsquery  
+------------------------
+- 'fat' & 'cat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'or OR or');
+- websearch_to_tsquery 
+-----------------------
+- 'or' | 'or'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- OR is an operator here ...
+ select websearch_to_tsquery('simple', '"fat cat"or"fat rat"');
+-       websearch_to_tsquery        
+------------------------------------
+- 'fat' <-> 'cat' | 'fat' <-> 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or(rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or)rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or&rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or|rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or!rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or<rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or>rat');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'fat or ');
+- websearch_to_tsquery 
+-----------------------
+- 'fat' & 'or'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- ... but not here
+ select websearch_to_tsquery('simple', 'abc orange');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'orange'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc OR1234');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'or1234'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc or-abc');
+-        websearch_to_tsquery         
+--------------------------------------
+- 'abc' & 'or-abc' <-> 'or' <-> 'abc'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('simple', 'abc OR_abc');
+-  websearch_to_tsquery  
+-------------------------
+- 'abc' & 'or' <-> 'abc'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- test quotes
+ select websearch_to_tsquery('english', '"pg_class pg');
+-   websearch_to_tsquery    
+----------------------------
+- 'pg' <-> 'class' <-> 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'pg_class pg"');
+-  websearch_to_tsquery   
+--------------------------
+- 'pg' <-> 'class' & 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"pg_class pg"');
+-   websearch_to_tsquery    
+----------------------------
+- 'pg' <-> 'class' <-> 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"pg_class : pg"');
+-   websearch_to_tsquery    
+----------------------------
+- 'pg' <-> 'class' <-> 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'abc "pg_class pg"');
+-       websearch_to_tsquery        
+------------------------------------
+- 'abc' & 'pg' <-> 'class' <-> 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"pg_class pg" def');
+-       websearch_to_tsquery        
+------------------------------------
+- 'pg' <-> 'class' <-> 'pg' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'abc "pg pg_class pg" def');
+-                websearch_to_tsquery                
+-----------------------------------------------------
+- 'abc' & 'pg' <-> 'pg' <-> 'class' <-> 'pg' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', ' or "pg pg_class pg" or ');
+-        websearch_to_tsquery        
+-------------------------------------
+- 'pg' <-> 'pg' <-> 'class' <-> 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '""pg pg_class pg""');
+-      websearch_to_tsquery      
+---------------------------------
+- 'pg' & 'pg' <-> 'class' & 'pg'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'abc """"" def');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'cat -"fat rat"');
+-     websearch_to_tsquery     
+-------------------------------
+- 'cat' & !( 'fat' <-> 'rat' )
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'cat -"fat rat" cheese');
+-          websearch_to_tsquery          
+-----------------------------------------
+- 'cat' & !( 'fat' <-> 'rat' ) & 'chees'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'abc "def -"');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'abc "def :"');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' & 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"A fat cat" has just eaten a -rat.');
+-        websearch_to_tsquery        
+-------------------------------------
+- 'fat' <-> 'cat' & 'eaten' & !'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"A fat cat" has just eaten OR !rat.');
+-       websearch_to_tsquery        
+------------------------------------
+- 'fat' <-> 'cat' & 'eaten' | 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"A fat cat" has just (+eaten OR -rat)');
+-        websearch_to_tsquery        
+-------------------------------------
+- 'fat' <-> 'cat' & 'eaten' | !'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'this is ----fine');
+- websearch_to_tsquery 
+-----------------------
+- !!!!'fine'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '(()) )))) this ||| is && -fine, "dear friend" OR good');
+-          websearch_to_tsquery          
+-----------------------------------------
+- !'fine' & 'dear' <-> 'friend' | 'good'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', 'an old <-> cat " is fine &&& too');
+-  websearch_to_tsquery  
+-------------------------
+- 'old' & 'cat' & 'fine'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"A the" OR just on');
+-NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+- websearch_to_tsquery 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('english', '"a fat cat" ate a rat');
+-      websearch_to_tsquery       
+----------------------------------
+- 'fat' <-> 'cat' & 'ate' & 'rat'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select to_tsvector('english', 'A fat cat ate a rat') @@
+ 	websearch_to_tsquery('english', '"a fat cat" ate a rat');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select to_tsvector('english', 'A fat grey cat ate a rat') @@
+ 	websearch_to_tsquery('english', '"a fat cat" ate a rat');
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- cases handled by gettoken_tsvector()
+ select websearch_to_tsquery('''');
+-NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+- websearch_to_tsquery 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('''abc''''def''');
+- websearch_to_tsquery 
+-----------------------
+- 'abc' <-> 'def'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('\abc');
+- websearch_to_tsquery 
+-----------------------
+- 'abc'
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select websearch_to_tsquery('\');
+-NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+- websearch_to_tsquery 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  websearch_to_tsquery(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_

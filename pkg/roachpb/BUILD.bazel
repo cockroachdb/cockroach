@@ -76,6 +76,7 @@ go_test(
     embed = [":roachpb"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/geo",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -95,6 +96,8 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",

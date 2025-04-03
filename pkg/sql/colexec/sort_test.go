@@ -413,6 +413,13 @@ func BenchmarkAllSpooler(b *testing.B) {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}
+				// Warm up.
+				for n := 0; n < 250; n++ {
+					source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
+					allSpooler := newAllSpooler(testAllocator, source, typs)
+					allSpooler.init(ctx)
+					allSpooler.spool()
+				}
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)

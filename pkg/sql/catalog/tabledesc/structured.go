@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -30,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -293,6 +294,19 @@ func ForEachExprStringInTableDesc(
 		}
 		return f(&t.FuncBody, catalog.PLpgSQLStmt)
 	}
+	doPolicy := func(p *descpb.PolicyDescriptor) error {
+		if p.UsingExpr != "" {
+			if err := f(&p.UsingExpr, catalog.SQLExpr); err != nil {
+				return err
+			}
+		}
+		if p.WithCheckExpr != "" {
+			if err := f(&p.WithCheckExpr, catalog.SQLExpr); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	// Process columns.
 	for i := range desc.Columns {
@@ -351,6 +365,13 @@ func ForEachExprStringInTableDesc(
 			return err
 		}
 	}
+
+	// Process all policies.
+	for i := range desc.Policies {
+		if err := doPolicy(&desc.Policies[i]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -368,6 +389,10 @@ func (desc *wrapper) GetAllReferencedTableIDs() descpb.IDs {
 	// Add trigger dependencies.
 	for i := range desc.Triggers {
 		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+	}
+	// Add policy dependencies.
+	for i := range desc.Policies {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...))
 	}
 	// Add view dependencies.
 	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
@@ -400,6 +425,11 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnTypes...))
 	}
 
+	// Add type dependencies from policies.
+	for i := range desc.Policies {
+		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnTypes...))
+	}
+
 	// Add any other type dependencies that are not
 	// used in a column (specifically for views).
 	for _, id := range desc.DependsOnTypes {
@@ -427,6 +457,10 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 	// Add routine dependencies from triggers.
 	for i := range desc.Triggers {
 		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOnRoutines...))
+	}
+	// Add deps from policies
+	for i := range desc.Policies {
+		ret = ret.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnFunctions...))
 	}
 	// TODO(chengxiong): add logic to extract references from indexes when UDFs
 	// are allowed in them.
@@ -457,6 +491,17 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInTrigger(
 ) (fnIDs catalog.DescriptorIDSet) {
 	t := catalog.FindTriggerByID(desc, triggerID)
 	for _, id := range t.DependsOnRoutines {
+		fnIDs.Add(id)
+	}
+	return fnIDs
+}
+
+// GetAllReferencedFunctionIDsInPolicy implements the TableDescriptor interface.
+func (desc *wrapper) GetAllReferencedFunctionIDsInPolicy(
+	policyID descpb.PolicyID,
+) (fnIDs catalog.DescriptorIDSet) {
+	t := catalog.FindPolicyByID(desc, policyID)
+	for _, id := range t.DependsOnFunctions {
 		fnIDs.Add(id)
 	}
 	return fnIDs
@@ -590,6 +635,14 @@ func (desc *Mutable) MaybeFillColumnID(
 func (desc *Mutable) AllocateIDs(ctx context.Context, version clusterversion.ClusterVersion) error {
 	if err := desc.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
 		return err
+	}
+
+	// The virtual table descriptors are entirely under our control. Since
+	// validating is expensive, skip it for virtual tables if this code is running
+	// in a test environment. This step was found to be a bottleneck in TestServer
+	// startup.
+	if desc.IsVirtualTable() && buildutil.CrdbTestBuild {
+		return nil
 	}
 
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
@@ -746,7 +799,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		// index encoding. It is the set difference of the primary key minus the
 		// non-inverted columns in the index's key.
 		colIDs := idx.CollectKeyColumnIDs()
-		isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
+		isInverted := idx.GetType() == idxtype.INVERTED
 		invID := catid.ColumnID(0)
 		if isInverted {
 			invID = idx.InvertedColumnID()
@@ -1039,94 +1092,38 @@ func (desc *Mutable) ClusterVersion() descpb.TableDescriptor {
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
 
-func notIndexableError(cols []descpb.ColumnDescriptor) error {
-	if len(cols) == 0 {
-		return nil
-	}
-	var msg string
-	var typInfo string
-	if len(cols) == 1 {
-		col := &cols[0]
-		msg = "column %s is of type %s and thus is not indexable"
-		typInfo = col.Type.DebugString()
-		msg = fmt.Sprintf(msg, col.Name, col.Type.Name())
-	} else {
-		msg = "the following columns are not indexable due to their type: "
-		for i := range cols {
-			col := &cols[i]
-			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.Name())
-			typInfo += col.Type.DebugString()
-			if i != len(cols)-1 {
-				msg += ", "
-				typInfo += ","
-			}
-		}
-	}
-	return unimplemented.NewWithIssueDetailf(35730, typInfo, "%s", msg)
-}
-
-func checkColumnsValidForIndex(tableDesc *Mutable, indexColNames []string) error {
-	invalidColumns := make([]descpb.ColumnDescriptor, 0, len(indexColNames))
-	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumns() {
-			if col.GetName() == indexCol {
-				if !colinfo.ColumnTypeIsIndexable(col.GetType()) {
-					invalidColumns = append(invalidColumns, *col.ColumnDesc())
-				}
-			}
-		}
-	}
-	if len(invalidColumns) > 0 {
-		return notIndexableError(invalidColumns)
-	}
-	return nil
-}
-
-func checkColumnsValidForInvertedIndex(
-	tableDesc *Mutable, indexColNames []string, colDirs []catenumpb.IndexColumn_Direction,
-) error {
+func checkColumnsValidForIndex(tableDesc *Mutable, indexDesc *descpb.IndexDescriptor) error {
+	indexColNames := indexDesc.KeyColumnNames
+	indexColDirs := indexDesc.KeyColumnDirections
 	lastCol := len(indexColNames) - 1
 	for i, indexCol := range indexColNames {
-		for _, col := range tableDesc.NonDropColumns() {
-			if col.GetName() == indexCol {
-				// The last column indexed by an inverted index must be
-				// inverted indexable.
-				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
-					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
-				}
-				if i == lastCol && colDirs[i] == catenumpb.IndexColumn_DESC {
-					return pgerror.New(pgcode.FeatureNotSupported,
-						"the last column in an inverted index cannot have the DESC option")
-				}
-				// Any preceding columns must not be inverted indexable.
-				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.FeatureNotSupported,
-							"column %s of type %s is only allowed as the last column in an inverted index",
-							col.GetName(),
-							col.GetType().Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
+		for _, tableCol := range tableDesc.NonDropColumns() {
+			// Skip until we find the matching column in the table, by name.
+			if tableCol.GetName() != indexCol {
+				continue
+			}
+
+			// Report error if the index type does not allow DESC to be used in
+			// the last column, because it has no linear ordering.
+			if !indexDesc.Type.HasLinearOrdering() {
+				if i == lastCol && indexColDirs[i] == catenumpb.IndexColumn_DESC {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"the last column in %s cannot have the DESC option",
+						idxtype.ErrorText(indexDesc.Type))
 				}
 			}
+
+			// Check whether column is allowed in the index, at this position.
+			err := colinfo.ValidateColumnForIndex(
+				indexDesc.Type, tableCol.GetName(), tableCol.GetType(), i == lastCol)
+			if err != nil {
+				return err
+			}
+
+			break
 		}
 	}
 	return nil
-}
-
-// NewInvalidInvertedColumnError returns an error for a column that's not
-// inverted indexable.
-func NewInvalidInvertedColumnError(colName, colType string) error {
-	return errors.WithHint(
-		pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"column %s of type %s is not allowed as the last column in an inverted index",
-			colName, colType,
-		),
-		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-	)
 }
 
 // AddColumn adds a column to the table.
@@ -1142,10 +1139,10 @@ func (desc *Mutable) AddFamily(fam descpb.ColumnFamilyDescriptor) {
 // AddPrimaryIndex adds a primary index to a mutable table descriptor, assuming
 // that none has yet been set, and performs some sanity checks.
 func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == descpb.IndexDescriptor_INVERTED {
-		return fmt.Errorf("primary index cannot be inverted")
+	if !idx.Type.CanBePrimary() {
+		return fmt.Errorf("primary index cannot be %s", idxtype.ErrorText(idx.Type))
 	}
-	if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
+	if err := checkColumnsValidForIndex(desc, &idx); err != nil {
 		return err
 	}
 	if desc.PrimaryIndex.Name != "" {
@@ -1182,16 +1179,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 
 // AddSecondaryIndex adds a secondary index to a mutable table descriptor.
 func (desc *Mutable) AddSecondaryIndex(idx descpb.IndexDescriptor) error {
-	if idx.Type == descpb.IndexDescriptor_FORWARD {
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-	} else {
-		if err := checkColumnsValidForInvertedIndex(
-			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
-		); err != nil {
-			return err
-		}
+	if err := checkColumnsValidForIndex(desc, &idx); err != nil {
+		return err
 	}
 	desc.AddPublicNonPrimaryIndex(idx)
 	return nil
@@ -1977,7 +1966,7 @@ func (desc *Mutable) AddColumnMutation(
 // AddDropIndexMutation adds a a dropping index mutation for the given
 // index descriptor.
 func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	m := descpb.DescriptorMutation{
@@ -1993,7 +1982,7 @@ func (desc *Mutable) AddDropIndexMutation(idx *descpb.IndexDescriptor) error {
 func (desc *Mutable) AddIndexMutationMaybeWithTempIndex(
 	idx *descpb.IndexDescriptor, direction descpb.DescriptorMutation_Direction,
 ) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	m := descpb.DescriptorMutation{
@@ -2011,7 +2000,7 @@ func (desc *Mutable) AddIndexMutation(
 	direction descpb.DescriptorMutation_Direction,
 	state descpb.DescriptorMutation_State,
 ) error {
-	if err := desc.checkValidIndex(idx); err != nil {
+	if err := checkColumnsValidForIndex(desc, idx); err != nil {
 		return err
 	}
 	stateIsValid := func() bool {
@@ -2035,22 +2024,6 @@ func (desc *Mutable) AddIndexMutation(
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: idx},
 		Direction:   direction,
 	}, state)
-	return nil
-}
-
-func (desc *Mutable) checkValidIndex(idx *descpb.IndexDescriptor) error {
-	switch idx.Type {
-	case descpb.IndexDescriptor_FORWARD:
-		if err := checkColumnsValidForIndex(desc, idx.KeyColumnNames); err != nil {
-			return err
-		}
-	case descpb.IndexDescriptor_INVERTED:
-		if err := checkColumnsValidForInvertedIndex(
-			desc, idx.KeyColumnNames, idx.KeyColumnDirections,
-		); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -2546,6 +2519,11 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 			appendStorageParam(catpb.AutoPartialStatsEnabledTableSettingName,
 				fmt.Sprintf("%v", value))
 		}
+		if settings.FullEnabled != nil {
+			value := *settings.FullEnabled
+			appendStorageParam(catpb.AutoFullStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
 		if settings.PartialMinStaleRows != nil {
 			value := *settings.PartialMinStaleRows
 			appendStorageParam(catpb.AutoPartialStatsMinStaleTableSettingName,
@@ -2603,11 +2581,20 @@ func (desc *wrapper) AutoStatsCollectionEnabled() catpb.AutoStatsCollectionStatu
 	return desc.AutoStatsSettings.AutoStatsCollectionEnabled()
 }
 
+// AutoPartialStatsCollectionEnabled implements the TableDescriptor interface.
 func (desc *wrapper) AutoPartialStatsCollectionEnabled() catpb.AutoPartialStatsCollectionStatus {
 	if desc.AutoStatsSettings == nil {
 		return catpb.AutoPartialStatsCollectionNotSet
 	}
 	return desc.AutoStatsSettings.AutoPartialStatsCollectionEnabled()
+}
+
+// AutoFullStatsCollectionEnabled implements the TableDescriptor interface.
+func (desc *wrapper) AutoFullStatsCollectionEnabled() catpb.AutoFullStatsCollectionStatus {
+	if desc.AutoStatsSettings == nil {
+		return catpb.AutoFullStatsCollectionNotSet
+	}
+	return desc.AutoStatsSettings.AutoFullStatsCollectionEnabled()
 }
 
 // AutoStatsMinStaleRows implements the TableDescriptor interface.

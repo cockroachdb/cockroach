@@ -120,13 +120,13 @@ func persistFrontier(
 ) []jobspb.RestoreProgress_FrontierEntry {
 	var used int64
 	completedSpansSlice := make([]jobspb.RestoreProgress_FrontierEntry, 0)
-	frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done spanUtils.OpResult) {
+	for sp, ts := range frontier.Entries() {
 		if ts.Equal(completedSpanTime) {
 
 			// Persist the first N spans in the frontier that remain below the memory limit.
 			used += int64(len(sp.Key) + len(sp.EndKey) + ts.Size())
 			if maxBytes != 0 && used > maxBytes {
-				return spanUtils.StopMatch
+				break
 			}
 			// TODO (msbutler): we may want to persist spans that have been
 			// restored up to a certain system time, if on resume, we build
@@ -136,8 +136,7 @@ func persistFrontier(
 			completedSpansSlice = append(completedSpansSlice,
 				jobspb.RestoreProgress_FrontierEntry{Span: sp, Timestamp: ts})
 		}
-		return spanUtils.ContinueMatch
-	})
+	}
 	return completedSpansSlice
 }
 

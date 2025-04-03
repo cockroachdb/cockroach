@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -663,14 +663,11 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	if tc.StartedDefaultTestTenant() {
-		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, serverutils.DBName("system"))
-		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanAdminRelocateRange: "true",
-		}, "")
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
+
 	origDB0 := tc.ServerConn(0)
 
 	sqlutils.CreateTable(t, origDB0, "t",

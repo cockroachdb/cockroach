@@ -11,7 +11,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/keys",
@@ -23,7 +22,7 @@ go_library(
         "//pkg/multitenant/mtinfo",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -66,7 +65,6 @@ go_test(
     embed = [":kvtenant"],
     deps = [
         "//pkg/base",
-        "//pkg/config",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",
@@ -76,7 +74,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/load",
         "//pkg/multitenant/mtinfopb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	idxtype "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
 
 // HasDeprecatedElements returns if the target contains any element or fields
@@ -25,6 +26,24 @@ func migrateDeprecatedFields(
 	version clusterversion.ClusterVersion, target Target,
 ) (migrated bool, newTargets []Target) {
 	newTargets = make([]Target, 0)
+
+	// Migrate IsInverted boolean to index Type enumeration.
+	var idx *Index
+	if primary := target.GetPrimaryIndex(); primary != nil {
+		idx = &primary.Index
+	}
+	if secondary := target.GetSecondaryIndex(); secondary != nil {
+		idx = &secondary.Index
+	}
+	if temp := target.GetTemporaryIndex(); temp != nil {
+		idx = &temp.Index
+	}
+	if idx != nil && idx.IsInverted && idx.Type != idxtype.INVERTED {
+		idx.Type = idxtype.INVERTED
+		migrated = true
+	}
+
+	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
 	if columnType := target.GetColumnType(); columnType != nil {
 		if columnType.ComputeExpr != nil {
 			newTarget := MakeTarget(

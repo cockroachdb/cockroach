@@ -9,7 +9,7 @@ package split
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,6 +22,11 @@ import (
 const minSplitSuggestionInterval = time.Minute
 const minNoSplitKeyLoggingMetricsInterval = time.Minute
 const minPerSecondSampleDuration = time.Second
+
+type PopularKey struct {
+	Key       roachpb.Key
+	Frequency float64
+}
 
 type LoadBasedSplitter interface {
 	redact.SafeFormatter
@@ -43,12 +48,16 @@ type LoadBasedSplitter interface {
 	// empty string.
 	NoSplitKeyCauseLogMsg() redact.RedactableString
 
-	// PopularKeyFrequency returns the percentage that the most popular key
-	// appears in the sampled candidate split keys.
-	PopularKeyFrequency() float64
+	// PopularKey returns the most popular key in the sample dataset in addition
+	// to its frequency..
+	PopularKey() PopularKey
 
 	// String formats the state of the load based splitter.
 	String() string
+
+	// AccessDirection returns a value in [-1, 1] indicating
+	// how requests are shifting over time (left/descending vs right/ascending).
+	AccessDirection() float64
 }
 
 type LoadSplitConfig interface {
@@ -67,9 +76,9 @@ type RandSource interface {
 	// interval [0.0,1.0) from the RandSource.
 	Float64() float64
 
-	// Intn returns, as an int, a non-negative pseudo-random number in the
+	// IntN returns, as an int, a non-negative pseudo-random number in the
 	// half-open interval [0,n).
-	Intn(n int) int
+	IntN(n int) int
 }
 
 // globalRandSource implements the RandSource interface.
@@ -81,10 +90,10 @@ func (g globalRandSource) Float64() float64 {
 	return rand.Float64()
 }
 
-// Intn returns, as an int, a non-negative pseudo-random number in the
+// IntN returns, as an int, a non-negative pseudo-random number in the
 // half-open interval [0,n).
-func (g globalRandSource) Intn(n int) int {
-	return rand.Intn(n)
+func (g globalRandSource) IntN(n int) int {
+	return rand.IntN(n)
 }
 
 // GlobalRandSource returns an implementation of the RandSource interface that
@@ -262,7 +271,7 @@ func (d *Decider) recordLocked(
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
-						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
 						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
 							causeMsg, int(popularKeyFrequency*100))
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))

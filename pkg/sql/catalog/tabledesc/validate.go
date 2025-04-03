@@ -131,6 +131,18 @@ func (desc *wrapper) GetReferencedDescIDs(
 			ids.Add(id)
 		}
 	}
+	// Add policy dependencies.
+	for _, p := range desc.Policies {
+		for _, id := range p.DependsOnTypes {
+			ids.Add(id)
+		}
+		for _, id := range p.DependsOnRelations {
+			ids.Add(id)
+		}
+		for _, id := range p.DependsOnFunctions {
+			ids.Add(id)
+		}
+	}
 	return ids, nil
 }
 
@@ -245,12 +257,41 @@ func (desc *wrapper) ValidateForwardReferences(
 			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
 		}
 	}
+
+	for i := range desc.Policies {
+		policy := &desc.Policies[i]
+		for _, id := range policy.DependsOnTypes {
+			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
+		}
+		for _, id := range policy.DependsOnRelations {
+			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+		}
+		for _, id := range policy.DependsOnFunctions {
+			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
+		}
+	}
 }
 
 // ValidateBackReferences implements the catalog.Descriptor interface.
 func (desc *wrapper) ValidateBackReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
+	// Check that all expression strings can be parsed.
+	// NOTE: This could be performed in ValidateSelf, but we want to avoid that
+	// since parsing all the expressions is a relatively expensive thing to do.
+	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
+		switch typ {
+		case catalog.SQLExpr:
+			_, err = parser.ParseExpr(*expr)
+		case catalog.SQLStmt:
+			_, err = parser.Parse(*expr)
+		case catalog.PLpgSQLStmt:
+			_, err = plpgsqlparser.Parse(*expr)
+		}
+		vea.Report(err)
+		return nil
+	})
+
 	// Check that outbound foreign keys have matching back-references.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFKBackReference(&desc.OutboundFKs[i], vdg))
@@ -329,6 +370,33 @@ func (desc *wrapper) ValidateBackReferences(
 		default:
 			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
 				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		}
+	}
+
+	// Check back-references in policies
+	for _, p := range desc.Policies {
+		for _, fnID := range p.DependsOnFunctions {
+			fn, err := vdg.GetFunctionDescriptor(fnID)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundFuncRefBackReference(fn))
+		}
+		for _, id := range p.DependsOnTypes {
+			typ, err := vdg.GetTypeDescriptor(id)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundTypeRefBackReference(typ))
+		}
+		for _, id := range p.DependsOnRelations {
+			ref, _ := vdg.GetTableDescriptor(id)
+			if ref == nil {
+				continue
+			}
+			vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), ref))
 		}
 	}
 }
@@ -995,20 +1063,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
 			dscs.JobID, desc.MutationJobs))
 	}
-
-	// Check that all expression strings can be parsed.
-	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
-		switch typ {
-		case catalog.SQLExpr:
-			_, err = parser.ParseExpr(*expr)
-		case catalog.SQLStmt:
-			_, err = parser.Parse(*expr)
-		case catalog.PLpgSQLStmt:
-			_, err = plpgsqlparser.Parse(*expr)
-		}
-		vea.Report(err)
-		return nil
-	})
 
 	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
 	// The remaining validation is called separately from ValidateRowLevelTTL
@@ -1737,13 +1791,10 @@ func (desc *wrapper) validateTableIndexes(
 			}
 
 			// When newPKColIDs is not empty, it means there is an in-progress `ALTER
-			// PRIMARY KEY`. We don't allow queueing schema changes when there's a
-			// primary key mutation, so it's safe to make the assumption that `Adding`
-			// indexes are associated with the new primary key because they are
-			// rewritten and `Non-adding` indexes should only contain virtual column
-			// from old primary key.
+			// PRIMARY KEY`. Certain schema changes will make the new virtual columns
+			// public earlier than the new primary key, which should be acceptable.
 			isOldPKCol := !idx.Adding() && curPKColIDs.Contains(colID)
-			isNewPKCol := idx.Adding() && newPKColIDs.Contains(colID)
+			isNewPKCol := newPKColIDs.Contains(colID)
 			if newPKColIDs.Len() > 0 && (isOldPKCol || isNewPKCol) {
 				continue
 			}
@@ -2104,7 +2155,13 @@ func (desc *wrapper) validatePolicy(p *descpb.PolicyDescriptor) error {
 		return errors.AssertionFailedf(
 			"policy %q has an unknown policy command %v", p.Name, p.Command)
 	}
-	return desc.validatePolicyRoles(p)
+	if err := desc.validatePolicyRoles(p); err != nil {
+		return err
+	}
+	if err := desc.validatePolicyExprs(p); err != nil {
+		return err
+	}
+	return nil
 }
 
 // validatePolicyRoles will validate the roles that are in one policy.
@@ -2130,6 +2187,46 @@ func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
 	return nil
 }
 
+// validatePolicyExprs will validate the expressions within the policy.
+func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
+	if p.WithCheckExpr != "" {
+		_, err := parser.ParseExpr(p.WithCheckExpr)
+		if err != nil {
+			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
+		}
+	}
+	if p.UsingExpr != "" {
+		_, err := parser.ParseExpr(p.UsingExpr)
+		if err != nil {
+			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
+		}
+	}
+
+	// Ensure the validity of policy back-references. The existence and status of
+	// referenced objects are verified during the execution of
+	// ValidateForwardReferences and ValidateBackwardReferences for the table.
+	var seenIDs catalog.DescriptorIDSet
+	for _, id := range []struct {
+		idName string
+		ids    []descpb.ID
+	}{
+		{"type", p.DependsOnTypes},
+		{"functions", p.DependsOnFunctions},
+		{"relations", p.DependsOnRelations},
+	} {
+		for idx, depID := range id.ids {
+			if depID == descpb.InvalidID {
+				return errors.Newf("invalid %s id %d in depends-on references #%d", id.idName, id, idx)
+			}
+			if seenIDs.Contains(depID) {
+				return errors.Newf("%s id %d in depends-on references #%d is duplicated", id.idName, depID, idx)
+			}
+			seenIDs.Add(depID)
+		}
+	}
+	return nil
+}
+
 // validateAutoStatsSettings validates that any new settings in
 // catpb.AutoStatsSettings hold a valid value.
 func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumulator) {
@@ -2138,6 +2235,7 @@ func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumu
 	}
 	desc.validateAutoStatsEnabled(vea, catpb.AutoStatsEnabledTableSettingName, desc.AutoStatsSettings.Enabled)
 	desc.validateAutoStatsEnabled(vea, catpb.AutoPartialStatsEnabledTableSettingName, desc.AutoStatsSettings.PartialEnabled)
+	desc.validateAutoStatsEnabled(vea, catpb.AutoFullStatsEnabledTableSettingName, desc.AutoStatsSettings.FullEnabled)
 
 	desc.validateMinStaleRows(vea, catpb.AutoStatsMinStaleTableSettingName, desc.AutoStatsSettings.MinStaleRows)
 	desc.validateMinStaleRows(vea, catpb.AutoPartialStatsMinStaleTableSettingName, desc.AutoStatsSettings.PartialMinStaleRows)

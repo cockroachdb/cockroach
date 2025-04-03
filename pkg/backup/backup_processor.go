@@ -137,7 +137,7 @@ type backupDataProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
-	agg      *bulk.TracingAggregator
+	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
 
 	// completedSpans tracks how many spans have been successfully backed up by
@@ -194,7 +194,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
 	// bps' trace recording.
-	bp.agg = bulk.TracingAggregatorForContext(ctx)
+	bp.agg = tracing.TracingAggregatorForContext(ctx)
 	// If the aggregator is nil, we do not want the timer to fire.
 	if bp.agg != nil {
 		bp.aggTimer.Reset(15 * time.Second)
@@ -557,12 +557,19 @@ func runBackupProcessor(
 							redact.Sprintf("ExportRequest for span %s", span.span),
 							timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 								sp := tracing.SpanFromContext(ctx)
+								tracer := sp.Tracer()
+								if tracer == nil {
+									tracer = flowCtx.Cfg.Tracer
+								}
+								if tracer == nil {
+									log.Warning(ctx, "nil tracer in backup processor")
+								}
 								opts := make([]tracing.SpanOption, 0)
 								opts = append(opts, tracing.WithParent(sp))
 								if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
 									opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
 								}
-								ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "backup.ExportRequest", opts...)
+								ctx, exportSpan := tracer.StartSpanCtx(ctx, "backup.ExportRequest", opts...)
 								rawResp, pErr = kv.SendWrappedWithAdmission(
 									ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
 								recording = exportSpan.FinishAndGetConfiguredRecording()

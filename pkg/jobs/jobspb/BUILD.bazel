@@ -14,9 +14,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",

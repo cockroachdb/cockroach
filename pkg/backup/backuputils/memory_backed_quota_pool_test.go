@@ -21,7 +21,7 @@ import (
 
 func getMemoryMonitor(limit int64) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("test-mon"),
+		Name:      mon.MakeName("test-mon"),
 		Limit:     limit,
 		Increment: 1,
 		Settings:  cluster.MakeTestingClusterSettings(),

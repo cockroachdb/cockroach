@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -60,7 +61,7 @@ func (b *logicalPropsBuilder) init(ctx context.Context, evalCtx *eval.Context, m
 		evalCtx: evalCtx,
 		mem:     mem,
 	}
-	b.sb.init(ctx, evalCtx, mem.Metadata())
+	b.sb.init(ctx, evalCtx, mem)
 }
 
 func (b *logicalPropsBuilder) clear() {
@@ -70,7 +71,7 @@ func (b *logicalPropsBuilder) clear() {
 }
 
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
-	md := scan.Memo().Metadata()
+	md := b.mem.Metadata()
 	hardLimit := scan.HardLimit.RowCount()
 	pred := scan.PartialIndexPredicate(md)
 
@@ -500,6 +501,13 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	inputProps := indexJoin.Input.Relational()
 	md := b.mem.Metadata()
 
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !indexJoin.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	// Output Columns
 	// --------------
 	rel.OutputCols = indexJoin.Cols
@@ -540,6 +548,13 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 }
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 	if join.Locking.WaitPolicy == tree.LockWaitSkipLocked {
 		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
@@ -552,10 +567,24 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 func (b *logicalPropsBuilder) buildInvertedJoinProps(
 	join *InvertedJoinExpr, rel *props.Relational,
 ) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.Locking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 }
 
 func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *props.Relational) {
+	// Side Effects
+	// ------------
+	// A Locking option is a side effect.
+	if !join.LeftLocking.IsNoOp() || !join.RightLocking.IsNoOp() {
+		rel.VolatilitySet.AddVolatile()
+	}
+
 	b.buildJoinProps(join, rel)
 }
 
@@ -1582,6 +1611,11 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
 	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
 
+	// Side Effects
+	// ------------
+	// Locking is a side effect.
+	rel.VolatilitySet.AddVolatile()
+
 	private := lock.Private().(*LockPrivate)
 	inputProps := lock.Child(0).(RelExpr).Relational()
 
@@ -1601,7 +1635,7 @@ func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relation
 func (b *logicalPropsBuilder) buildVectorSearchProps(
 	search *VectorSearchExpr, rel *props.Relational,
 ) {
-	md := search.Memo().Metadata()
+	md := b.mem.Metadata()
 	BuildSharedProps(search, &rel.Shared, b.evalCtx)
 
 	// Output Columns
@@ -1624,8 +1658,13 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	// from the constraint, minus any columns that are not projected by the
 	// VectorSearch operator.
 	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
-	if search.PrefixConstraint != nil {
-		rel.FuncDeps.AddConstants(search.PrefixConstraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
+	if idx := md.Table(search.Table).Index(search.Index); idx.PrefixColumnCount() > 0 {
+		// Prefix columns are restricted to constant values.
+		var constants opt.ColSet
+		for i := 0; i < idx.PrefixColumnCount(); i++ {
+			constants.Add(search.Table.ColumnID(idx.Column(i).Ordinal()))
+		}
+		rel.FuncDeps.AddConstants(constants)
 	}
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
@@ -1639,8 +1678,6 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	rel.Cardinality = props.AnyCardinality
 	if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
-	} else if search.PrefixConstraint != nil {
-		b.updateCardinalityFromConstraint(search.PrefixConstraint, rel)
 	}
 
 	// Statistics
@@ -1650,20 +1687,20 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	}
 }
 
-func (b *logicalPropsBuilder) buildVectorPartitionSearchProps(
-	search *VectorPartitionSearchExpr, rel *props.Relational,
+func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
+	search *VectorMutationSearchExpr, rel *props.Relational,
 ) {
 	BuildSharedProps(search, &rel.Shared, b.evalCtx)
 	inputProps := search.Input.Relational()
 
 	// Output Columns
 	// --------------
-	// VectorPartitionSearch passes through all input columns. It also produces
-	// the partition column, and optionally, the centroid column.
+	// VectorMutationSearch passes through all input columns. It also produces
+	// the partition column, and optionally, the quantized vector column.
 	rel.OutputCols = inputProps.OutputCols.Copy()
 	rel.OutputCols.Add(search.PartitionCol)
-	if search.CentroidCol != 0 {
-		rel.OutputCols.Add(search.CentroidCol)
+	if search.QuantizedVectorCol != 0 {
+		rel.OutputCols.Add(search.QuantizedVectorCol)
 	}
 
 	// Not Null Columns
@@ -1690,7 +1727,7 @@ func (b *logicalPropsBuilder) buildVectorPartitionSearchProps(
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildVectorPartitionSearch(search, rel)
+		b.sb.buildVectorMutationSearch(search, rel)
 	}
 }
 
@@ -2019,13 +2056,9 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			continue
 		}
 
-		if index.IsInverted() {
-			// Skip inverted indexes for now.
-			continue
-		}
-
-		if index.IsVector() {
-			// Skip vector indexes for now.
+		switch index.Type() {
+		case idxtype.INVERTED, idxtype.VECTOR:
+			// Skip inverted and vector indexes for now.
 			continue
 		}
 
@@ -2341,7 +2374,7 @@ func distinctCountFromType(md *opt.Metadata, typ *types.T) (_ uint64, ok bool) {
 func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := join.Memo().Metadata()
+		md := sb.mem.Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 
 		// Include the key columns in the output columns.
@@ -2375,7 +2408,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := join.Memo().Metadata()
+		md := sb.mem.Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
@@ -2396,7 +2429,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 // apply to the two sides of the join, as if it were a Scan operator.
 func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	ensureInputPropsForIndex(
-		join.Memo().Metadata(),
+		sb.mem.Metadata(),
 		join.LeftTable,
 		join.LeftIndex,
 		join.Cols,
@@ -2405,7 +2438,7 @@ func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	)
 	// For stats purposes, ensure left and right column sets are disjoint.
 	ensureInputPropsForIndex(
-		join.Memo().Metadata(),
+		sb.mem.Metadata(),
 		join.RightTable,
 		join.RightIndex,
 		join.Cols.Difference(join.leftProps.OutputCols),
@@ -2476,6 +2509,7 @@ func addOuterColsToFuncDep(outerCols opt.ColSet, fdset *props.FuncDepSet) {
 // statistics.
 type joinPropsHelper struct {
 	evalCtx  *eval.Context
+	mem      *Memo
 	join     RelExpr
 	joinType opt.Operator
 
@@ -2494,7 +2528,8 @@ type joinPropsHelper struct {
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
+	*h = joinPropsHelper{evalCtx: b.evalCtx, mem: b.mem, join: joinExpr}
+	md := b.mem.Metadata()
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
@@ -2507,7 +2542,6 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the lookup join equalities.
-		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.KeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2534,7 +2568,6 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the prefix column equalities.
-		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.PrefixKeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2740,7 +2773,7 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self
 // join equality between key columns on a table.
 func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
-	md := h.join.Memo().Metadata()
+	md := h.mem.Metadata()
 	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
 	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
 		// There are no equalities between left and right columns.

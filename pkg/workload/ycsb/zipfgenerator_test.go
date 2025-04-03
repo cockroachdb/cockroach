@@ -8,13 +8,12 @@ package ycsb
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/exp/rand"
 )
 
 type params struct {
@@ -30,7 +29,7 @@ var gens = []params{
 func TestCreateZipfGenerator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, gen := range gens {
-		rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 		_, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 		if err != nil {
 			t.Fatal(err)
@@ -102,7 +101,7 @@ func TestZetaIncrementally(t *testing.T) {
 
 func runZipfGenerators(t *testing.T, withIncrements bool) {
 	gen := gens[0]
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	z, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 	if err != nil {
 		t.Fatal(err)

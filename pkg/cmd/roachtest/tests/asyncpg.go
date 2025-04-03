@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
+var asyncpgWarningArgs = "ignore::ResourceWarning"
+
 var asyncpgRunTestCmd = fmt.Sprintf(`
 source venv/bin/activate &&
 cd /mnt/data1/asyncpg &&
-PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
-`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
+PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 -W%q setup.py test > asyncpg.stdout
+`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir, asyncpgWarningArgs,
+)
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 

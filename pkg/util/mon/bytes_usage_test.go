@@ -47,7 +47,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var paramHeader func()
 
 	m := NewMonitor(Options{
-		Name:     MakeMonitorName("test"),
+		Name:     MakeName("test"),
 		Settings: st,
 	})
 	m.StartNoReserved(ctx, nil /* pool */)
@@ -144,7 +144,7 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 
 	for _, max := range maxs {
-		pool = getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, max /* reservedBytes */)
+		pool = getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, max /* reservedBytes */)
 
 		for _, hf := range hysteresisFactors {
 			maxAllocatedButUnusedBlocks = hf
@@ -158,7 +158,7 @@ func TestMemoryAllocations(t *testing.T) {
 					// We start with a fresh monitor for every set of
 					// parameters.
 					m = NewMonitor(Options{
-						Name:      MakeMonitorName("test"),
+						Name:      MakeName("test"),
 						Increment: pa,
 						Settings:  st,
 					})
@@ -226,7 +226,7 @@ func TestBoundAccount(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
+	m := getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, 100 /* reservedBytes */)
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
@@ -285,7 +285,7 @@ func TestBytesMonitor(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	m := getMonitorEx(ctx, st, "test" /* name */, nil /* parent */, 100 /* reservedBytes */)
+	m := getMonitorEx(ctx, st, "test" /* prefix */, nil /* parent */, 100 /* reservedBytes */)
 	maxAllocatedButUnusedBlocks = 1
 
 	if err := m.reserveBytes(ctx, 10); err != nil {
@@ -318,7 +318,7 @@ func TestBytesMonitor(t *testing.T) {
 	}
 
 	limitedMonitor := NewMonitor(Options{
-		Name:      MakeMonitorName("testlimit"),
+		Name:      MakeName("testlimit"),
 		Limit:     10,
 		Increment: 1,
 		Settings:  cluster.MakeTestingClusterSettings(),
@@ -343,7 +343,7 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := NewMonitor(Options{
-		Name:      MakeMonitorName("test"),
+		Name:      MakeName("test"),
 		Increment: 1e9,
 		Settings:  st,
 	})
@@ -367,14 +367,14 @@ func TestMultiSharedGauge(t *testing.T) {
 	minAllocation := int64(1000)
 
 	parent := NewMonitor(Options{
-		Name:      MakeMonitorName("root"),
+		Name:      MakeName("root"),
 		CurCount:  resourceGauge,
 		Increment: minAllocation,
 		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
-	child := NewMonitorInheritWithLimit("child", 20000, parent, false /* longLiving */)
+	child := NewMonitorInheritWithLimit(MakeName("child"), 20000, parent, false /* longLiving */)
 	child.StartNoReserved(ctx, parent)
 
 	acc := child.MakeBoundAccount()
@@ -387,7 +387,7 @@ func TestReservedAccountCleared(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	root := getMonitor(ctx, st, "root" /* name */, nil /* parent */)
+	root := getMonitor(ctx, st, "root" /* prefix */, nil /* parent */)
 	root.RelinquishAllOnReleaseBytes()
 
 	// Pre-reserve a budget of 100 bytes.
@@ -395,7 +395,7 @@ func TestReservedAccountCleared(t *testing.T) {
 	require.NoError(t, reserved.Grow(ctx, 100))
 
 	m := NewMonitor(Options{
-		Name:      MakeMonitorName("test"),
+		Name:      MakeName("test"),
 		Increment: 1,
 		Settings:  st,
 	})
@@ -432,7 +432,7 @@ func getMonitorEx(
 	reservedBytes int64,
 ) *BytesMonitor {
 	m := NewMonitor(Options{
-		Name:      MakeMonitorName(name),
+		Name:      MakeName(name),
 		Increment: 1,
 		Settings:  st,
 	})
@@ -614,7 +614,7 @@ func TestBytesMonitorNoDeadlocks(t *testing.T) {
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
 	m := NewMonitor(Options{
-		Name:      MakeMonitorName("test"),
+		Name:      MakeName("test"),
 		Increment: 1e9,
 		Settings:  cluster.MakeTestingClusterSettings(),
 	})
@@ -676,7 +676,7 @@ func TestLimit(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	m := NewMonitor(Options{
-		Name:     MakeMonitorName("test"),
+		Name:     MakeName("test"),
 		Settings: st,
 	})
 
@@ -689,7 +689,7 @@ func TestLimit(t *testing.T) {
 	m.Stop(ctx)
 
 	m2 := NewMonitor(Options{
-		Name:     MakeMonitorName("test"),
+		Name:     MakeName("test"),
 		Settings: st,
 	})
 

@@ -11,10 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -95,21 +92,7 @@ func countLeasesWithDetail(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (countDetail, error) {
-	// Indicates if the leasing descriptor has been upgraded for session based
-	// leasing. Note: Unit tests will never provide cached database regions
-	// so resolve the version from the cluster settings.
-	var systemDBVersion *roachpb.Version
-	if cachedDatabaseRegions != nil {
-		systemDBVersion = cachedDatabaseRegions.GetSystemDatabaseVersion()
-	} else {
-		v := settings.Version.ActiveVersion(ctx).Version
-		systemDBVersion = &v
-	}
-	// TODO(radu): this used to check the version against a pre-v24.1 gate; should
-	// this be always true now?
-	leasingDescIsSessionBased := systemDBVersion != nil
-	leasingMode := readSessionBasedLeasingMode(ctx, settings)
-	whereClauses := make([][]string, 2)
+	var whereClause []string
 	forceMultiRegionQuery := false
 	useBytesOnRetry := false
 	for _, t := range versions {
@@ -117,41 +100,11 @@ func countLeasesWithDetail(
 		if !forAnyVersion {
 			versionClause = fmt.Sprintf("AND version = %d", t.Version)
 		}
-		whereClauses[0] = append(
-			whereClauses[0],
-			fmt.Sprintf(`("descID" = %d %s AND expiration > $1)`, t.ID, versionClause),
-		)
-		whereClauses[1] = append(whereClauses[1],
+		whereClause = append(whereClause,
 			fmt.Sprintf(`(desc_id = %d %s AND (crdb_internal.sql_liveness_is_alive(session_id)))`,
 				t.ID, versionClause),
 		)
 	}
-	whereClauseIdx := make([]int, 0, 2)
-	usesOldSchema := make([]bool, 0, 2)
-	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
-	if leasingMode != SessionBasedOnly {
-		// The leasing descriptor is session based, so we need to inject
-		// expiry based descriptor synthetically.
-		if leasingDescIsSessionBased {
-			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
-		} else {
-			syntheticDescriptors = append(syntheticDescriptors, nil)
-		}
-		whereClauseIdx = append(whereClauseIdx, 0)
-		usesOldSchema = append(usesOldSchema, true)
-	}
-	if leasingMode >= SessionBasedDrain {
-		// The leasing descriptor is not yet session based, so inject the session
-		// based descriptor synthetically.
-		if !leasingDescIsSessionBased {
-			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable())
-		} else {
-			syntheticDescriptors = append(syntheticDescriptors, nil)
-		}
-		whereClauseIdx = append(whereClauseIdx, 1)
-		usesOldSchema = append(usesOldSchema, false)
-	}
-
 	var detail countDetail
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("count-leases")
@@ -165,41 +118,30 @@ func countLeasesWithDetail(
 		}
 		// Depending on the database configuration query by region or the
 		// entire table.
-		for i := range syntheticDescriptors {
-			whereClause := whereClauses[whereClauseIdx[i]]
-			var descsToInject catalog.Descriptors
-			if syntheticDescriptors[i] != nil {
-				descsToInject = append(descsToInject, syntheticDescriptors[i])
-			}
-			err := txn.WithSyntheticDescriptors(descsToInject,
-				func() error {
-					var err error
-					if (cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()) ||
-						forceMultiRegionQuery {
-						// If we are injecting a raw leases descriptors, that will not have the enum
-						// type set, so convert the region to byte equivalent physical representation.
-						detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions,
-							len(descsToInject) > 0 || useBytesOnRetry, at, whereClause, usesOldSchema[i])
-					} else {
-						detail, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause, usesOldSchema[i])
-					}
-					// If any transient region column errors occur then we should retry the count query.
-					if isTransientRegionColumnError(err) {
-						forceMultiRegionQuery = true
-						// If the query was already multi-region aware, then the system database is MR,
-						// but our lease descriptor has not been upgraded yet.
-						useBytesOnRetry = cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()
-						return txn.KV().GenerateForcedRetryableErr(ctx, "forcing retry once with MR columns")
-					}
-					return err
-				})
-			if err != nil {
-				return err
-			}
-			// Exit if either the session or expiry based counts are zero.
-			if detail.count > 0 {
-				return nil
-			}
+		if (cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()) ||
+			forceMultiRegionQuery {
+			// If we are injecting a raw leases descriptors, that will not have the enum
+			// type set, so convert the region to byte equivalent physical representation.
+			detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions,
+				useBytesOnRetry, at, whereClause)
+		} else {
+			detail, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
+		}
+		// If any transient region column errors occur then we should retry the count query.
+		if isTransientRegionColumnError(err) {
+			forceMultiRegionQuery = true
+			// If the query was already multi-region aware, then the system database is MR,
+			// but our lease descriptor has not been upgraded yet.
+			useBytesOnRetry = cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()
+			return txn.KV().GenerateForcedRetryableErr(ctx, "forcing retry once with MR columns")
+		}
+
+		if err != nil {
+			return err
+		}
+		// Exit if there are no leases.
+		if detail.count > 0 {
+			return nil
 		}
 		return nil
 	}); err != nil {
@@ -210,12 +152,12 @@ func countLeasesWithDetail(
 
 // Counts leases in non multi-region environments.
 func countLeasesNonMultiRegion(
-	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string, usesOldSchema bool,
+	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
 ) (countDetail, error) {
 	stmt := fmt.Sprintf(
 		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE 
 crdb_region=$2 AND %[3]s`,
-		getCountLeaseColumns(usesOldSchema),
+		getCountLeaseColumns(),
 		at.AsOfSystemTime(),
 		strings.Join(whereClauses, " OR "),
 	)
@@ -249,7 +191,6 @@ func countLeasesByRegion(
 	convertRegionsToBytes bool,
 	at hlc.Timestamp,
 	whereClauses []string,
-	usesOldSchema bool,
 ) (countDetail, error) {
 	regionClause := "crdb_region=$2::system.crdb_internal_region"
 	if convertRegionsToBytes {
@@ -257,7 +198,7 @@ func countLeasesByRegion(
 	}
 	stmt := fmt.Sprintf(
 		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE %[3]s `,
-		getCountLeaseColumns(usesOldSchema),
+		getCountLeaseColumns(),
 		at.AsOfSystemTime(),
 		regionClause+` AND (`+strings.Join(whereClauses, " OR ")+")",
 	)
@@ -312,22 +253,8 @@ func countLeasesByRegion(
 	return detail, nil
 }
 
-func getCountLeaseColumns(usesOldSchema bool) string {
-	var sb strings.Builder
-	sb.WriteString("count(1)")
-	// We only care about the count of leases, which is the first column. For
-	// debugging purposes, we also return the number of distinct nodes we are
-	// waiting on and one of the nodes we are waiting on. These two details will
-	// appear in the periodic dumping of wait stats.
-	//
-	// The system.lease table went through some column renames in past versions.
-	// Pick the correct version.
-	if usesOldSchema {
-		sb.WriteString(`, count(distinct "nodeID"), ifnull(min("nodeID"),0)`)
-		return sb.String()
-	}
-	sb.WriteString(`, count(distinct sql_instance_id), ifnull(min(sql_instance_id),0)`)
-	return sb.String()
+func getCountLeaseColumns() string {
+	return `count(1), count(distinct sql_instance_id), ifnull(min(sql_instance_id),0)`
 }
 
 // handleRegionLivenessErrors handles errors that are linked to region liveness

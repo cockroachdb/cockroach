@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 )
 
 // DefaultCockroachPath is the path where the binary passed to the
@@ -85,6 +85,7 @@ type Test interface {
 	GoWithCancel(task.Func, ...task.Option) context.CancelFunc
 	NewGroup(...task.Option) task.Group
 	NewErrorGroup(...task.Option) task.ErrorGroup
+	Monitor() Monitor
 
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
@@ -99,4 +100,7 @@ type Test interface {
 	// GetRunId returns the run id of the roachtest run, this is set to build id
 	// when ran from teamcity
 	GetRunId() string
+
+	// Owner returns the owner of the test
+	Owner() string
 }

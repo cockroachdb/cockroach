@@ -58,33 +58,37 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	createStmtRes := sqlDB.QueryStr(t, createStmt)
 
 	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		testutils.RunTrueAndFalse(t, "blocking download", func(t *testing.T, blockingDownload bool) {
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
 
-		if incremental {
-			sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+123 where true;")
-			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
-		}
+			if incremental {
+				sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+123 where true;")
+				sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+			}
 
-		var preRestoreTs float64
-		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+			var preRestoreTs float64
+			sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
-		bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
+			bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage, blockingDownload)
 
-		fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
-		require.NoError(t, err)
-		fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
-		require.NoError(t, err)
-		require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+			fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
 
-		assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
-		assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
+			assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
+			assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
 
-		waitForLatestDownloadJobToSucceed(t, rSQLDB)
+			if !blockingDownload {
+				waitForLatestDownloadJobToSucceed(t, rSQLDB)
+			}
 
-		rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
-		sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+			rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+			sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
 
-		rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
+			rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
+		})
 	})
 
 }
@@ -365,13 +369,21 @@ func TestOnlineRestoreErrors(t *testing.T) {
 }
 
 func bankOnlineRestore(
-	t *testing.T, sqlDB *sqlutils.SQLRunner, numAccounts int, externalStorage string,
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	numAccounts int,
+	externalStorage string,
+	blockingDownload bool,
 ) {
 	// Create a table in the default database to force table id rewriting.
 	sqlDB.Exec(t, "CREATE TABLE IF NOT EXISTS foo (i INT PRIMARY KEY, s STRING);")
 
 	sqlDB.Exec(t, "CREATE DATABASE data")
-	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
+	stmt := fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage)
+	if blockingDownload {
+		stmt = fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL COPY", externalStorage)
+	}
+	sqlDB.Exec(t, stmt)
 
 	var restoreRowCount int
 	sqlDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)

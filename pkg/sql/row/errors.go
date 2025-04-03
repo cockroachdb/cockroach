@@ -41,6 +41,11 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		)
 
 	case *kvpb.ConditionFailedError:
+		if !v.OriginTimestampOlderThan.IsEmpty() {
+			// NOTE: we return the go error here because this error should never be
+			// communicated to pgwire. It's exposed for the LDR writer.
+			return origPErr.GoError()
+		}
 		if origPErr.Index == nil {
 			break
 		}
@@ -300,8 +305,15 @@ func CheckFailed(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tabDesc catalog.TableDescriptor,
-	check catalog.CheckConstraint,
+	check catalog.CheckConstraintValidator,
 ) error {
+	// If this is the synthetic check added for row-level security, we should
+	// return a different error.
+	if check.IsRLSConstraint() {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"new row violates row-level security policy for table %q",
+			tabDesc.GetName())
+	}
 	// Failed to satisfy CHECK constraint, so unwrap the serialized
 	// check expression to display to the user.
 	expr, err := schemaexpr.FormatExprForDisplay(

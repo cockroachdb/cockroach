@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testutils",
+    srcs = ["testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/util/num32",
+        "//pkg/util/vector",
+        "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
+    ],
+)

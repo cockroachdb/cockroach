@@ -47,13 +47,13 @@ type ScanSymType interface {
 	SetUnionVal(interface{})
 }
 
-// Scanner lexes SQL statements.
+// Scanner lexes statements.
 type Scanner struct {
 	in            string
 	pos           int
 	bytesPrealloc []byte
 
-	// Comments is the list of parsed comments from the SQL statement.
+	// Comments is the list of parsed comments from the statement.
 	Comments []string
 
 	// lastAttemptedID indicates the ID of the last attempted
@@ -606,7 +606,10 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 	return false, true
 }
 
-func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
+// normalizeIdent takes in a function that determines if a character is a legal
+// identifier character, and a boolean toLower that indicates whether to set the
+// identifier to lowercase when normalizing.
+func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool, toLower bool) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
@@ -627,18 +630,15 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
 			isLower = false
 		}
 
-		if !lexbase.IsIdentMiddle(ch) {
+		if !isIdentMiddle(ch) {
 			break
 		}
 
 		s.pos++
 	}
 
-	if isLower && isASCII {
-		// Already lowercased - nothing to do.
-		lval.SetStr(s.in[start:s.pos])
-	} else if isASCII {
-		// We know that the identifier we've seen so far is ASCII, so we don't need
+	if toLower && !isLower && isASCII {
+		// We know that the identifier we've seen so far is ASCII, so we don't
 		// to unicode normalize. Instead, just lowercase as normal.
 		b := s.allocBytes(s.pos - start)
 		_ = b[s.pos-start-1] // For bounds check elimination.
@@ -649,14 +649,20 @@ func (s *Scanner) lowerCaseAndNormalizeIdent(lval ScanSymType) {
 			b[i] = byte(c)
 		}
 		lval.SetStr(*(*string)(unsafe.Pointer(&b)))
-	} else {
-		// The string has unicode in it. No choice but to run Normalize.
+	} else if toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize and lowercase.
 		lval.SetStr(lexbase.NormalizeName(s.in[start:s.pos]))
+	} else if !toLower && !isASCII {
+		// The string has unicode in it. No choice but to normalize.
+		lval.SetStr(lexbase.NormalizeString(s.in[start:s.pos]))
+	} else {
+		// Don't do anything.
+		lval.SetStr(s.in[start:s.pos])
 	}
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
-	s.lowerCaseAndNormalizeIdent(lval)
+	s.normalizeIdent(lval, lexbase.IsIdentMiddle, true /* toLower */)
 
 	isExperimental := false
 	kw := lval.Str()
@@ -691,6 +697,10 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 }
 
 func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
+	s.scanNumberImpl(lval, ch, lexbase.ERROR, lexbase.FCONST, lexbase.ICONST)
+}
+
+func (s *Scanner) scanNumberImpl(lval ScanSymType, ch int, errorID, fconstID, iconstID int32) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -704,7 +714,7 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 		}
 		if ch == 'x' || ch == 'X' {
 			if isHex || s.in[start] != '0' || s.pos != start+1 {
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(errorID)
 				lval.SetStr(errInvalidHexNumeric)
 				return
 			}
@@ -738,10 +748,10 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 			ch = s.peek()
 			if ch == '-' || ch == '+' {
 				s.pos++
+				ch = s.peek()
 			}
-			ch = s.peek()
 			if !lexbase.IsDigit(ch) {
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(errorID)
 				lval.SetStr("invalid floating point literal")
 				return
 			}
@@ -752,17 +762,17 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 
 	// Disallow identifier after numerical constants e.g. "124foo".
 	if lexbase.IsIdentStart(s.peek()) {
-		lval.SetID(lexbase.ERROR)
+		lval.SetID(errorID)
 		lval.SetStr(fmt.Sprintf("trailing junk after numeric literal at or near %q", s.in[start:s.pos+1]))
 		return
 	}
 
 	lval.SetStr(s.in[start:s.pos])
 	if hasDecimal || hasExponent {
-		lval.SetID(lexbase.FCONST)
+		lval.SetID(fconstID)
 		floatConst := constant.MakeFromLiteral(lval.Str(), token.FLOAT, 0)
 		if floatConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(errorID)
 			lval.SetStr(fmt.Sprintf("could not make constant float from literal %q", lval.Str()))
 			return
 		}
@@ -784,10 +794,10 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 			}
 		}
 
-		lval.SetID(lexbase.ICONST)
+		lval.SetID(iconstID)
 		intConst := constant.MakeFromLiteral(lval.Str(), token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(errorID)
 			lval.SetStr(fmt.Sprintf("could not make constant int from literal %q", lval.Str()))
 			return
 		}

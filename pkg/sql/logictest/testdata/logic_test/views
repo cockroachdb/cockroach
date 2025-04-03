@@ -733,14 +733,6 @@ dt2  CREATE VIEW public.dt2 (
 statement ok
 SELECT * FROM dt2
 
-# Ensure that creating a view doesn't leak any session-level settings that
-# could affect subsequent AS OF SYSTEM TIME queries (#13547).
-statement ok
-CREATE VIEW v AS SELECT d, t FROM t
-
-statement error pq: AS OF SYSTEM TIME must be provided on a top-level statement
-CREATE TABLE t2 AS SELECT d, t FROM t AS OF SYSTEM TIME '2017-02-13 21:30:00'
-
 statement ok
 DROP TABLE t CASCADE
 
@@ -1942,3 +1934,8 @@ statement error cross database type references are not supported: db106602a.publ
 CREATE OR REPLACE VIEW v AS (SELECT 1 FROM (VALUES (1)) val(i) WHERE 'foo'::db106602a.e = 'foo'::db106602a.e)
 
 subtest end
+
+# Regression test for hitting an assertion error when using an unimplemented
+# builtin in the view (#128535).
+statement error pgcode 0A000 unimplemented
+CREATE VIEW v128535 AS SELECT json_to_tsvector()

@@ -57,7 +57,7 @@ WHERE
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var unused int64
 		return h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, sj.ScheduleID()).Scan(&unused)
+			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, sj.ScheduleID()).Scan(&unused)
 	})
 }
 
@@ -134,7 +134,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	// We run some queries then flush so that we ensure that are some stats in
 	// the system table.
 	helper.sqlDB.Exec(t, "SELECT 1; SELECT 1, 1")
-	helper.server.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, helper.server.AppStopper())
+	helper.server.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, helper.server.AppStopper())
 	helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
 
 	stmtStatsCnt, txnStatsCnt := getPersistedStatsEntry(t, helper.sqlDB)
@@ -145,7 +145,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 
 	verifySQLStatsCompactionScheduleCreatedOnStartup(t, helper)
 	schedule := getSQLStatsCompactionSchedule(t, helper)
-	require.Equal(t, string(jobs.StatusPending), schedule.ScheduleStatus())
+	require.Equal(t, string(jobs.StatePending), schedule.ScheduleStatus())
 
 	tm.Store(timeutil.Now())
 
@@ -156,7 +156,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 
 	// Read the system.scheduled_job table again.
 	schedule = getSQLStatsCompactionSchedule(t, helper)
-	require.Equal(t, string(jobs.StatusSucceeded), schedule.ScheduleStatus())
+	require.Equal(t, string(jobs.StateSucceeded), schedule.ScheduleStatus())
 
 	stmtStatsCntPostCompact, txnStatsCntPostCompact := getPersistedStatsEntry(t, helper.sqlDB)
 	require.Less(t, stmtStatsCntPostCompact, stmtStatsCnt,

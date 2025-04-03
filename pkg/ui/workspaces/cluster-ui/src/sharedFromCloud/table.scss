@@ -79,18 +79,18 @@
     padding-bottom: crl-gutters(1);
   }
 
-  .crl-ant-table-thead {
+  .crdb-ant-table-thead {
     > tr > th {
       border-bottom: crl-borders();
 
       &.crl-table__column--with-sorter-tooltip {
-        .crl-ant-table-column-title {
+        .crdb-ant-table-column-title {
           text-decoration: underline dashed $color-core-neutral-4;
           text-underline-offset: 4px;
         }
       }
 
-      &.crl-ant-table-cell {
+      &.crdb-ant-table-cell {
         padding: crl-gutters(2.5) crl-gutters(2) crl-gutters(1);
         @include crl-type-body--strong;
       }
@@ -99,15 +99,15 @@
         text-align: right;
       }
 
-      .crl-ant-table-column-sorters {
+      .crdb-ant-table-column-sorters {
         padding: 0;
 
-        > span:not(.crl-ant-table-column-sorter-full) {
+        > span:not(.crdb-ant-table-column-sorter-full) {
           @include crl-type-body--strong;
         }
       }
 
-      .crl-ant-table-column-sorter {
+      .crdb-ant-table-column-sorter {
         margin-left: 5px;
 
         &-inner-full {
@@ -117,7 +117,7 @@
     }
   }
 
-  .crl-ant-table-tbody {
+  .crdb-ant-table-tbody {
     > tr {
       &:last-child {
         > td {
@@ -142,17 +142,17 @@
     }
   }
 
-  .crl-ant-table-wrapper {
+  .crdb-ant-table-wrapper {
     height: 100%;
     overflow: auto;
   }
 
-  .crl-ant-table-column-title {
+  .crdb-ant-table-column-title {
     padding: 0;
     @include crl-type-body--strong;
   }
 
-  .crl-ant-table .crl-ant-table-row-indent + .crl-ant-table-row-expand-icon {
+  .crdb-ant-table .crdb-ant-table-row-indent + .crdb-ant-table-row-expand-icon {
     margin-right: crl-gutters(1.5);
   }
 
@@ -162,11 +162,11 @@
   &--darkmode {
     background: $color-core-neutral-8;
 
-    .crl-ant-table {
+    .crdb-ant-table {
       background: $color-core-neutral-8;
     }
 
-    .crl-ant-table-thead {
+    .crdb-ant-table-thead {
       > tr {
         &:hover {
           > th {
@@ -177,11 +177,11 @@
         > th {
           background: $color-core-neutral-8;
 
-          &.crl-ant-table-column-sort {
+          &.crdb-ant-table-column-sort {
             background: $color-core-neutral-8;
           }
 
-          &.crl-ant-table-cell {
+          &.crdb-ant-table-cell {
             color: $color-base-white;
             span {
               color: $color-base-white;
@@ -195,7 +195,7 @@
       }
     }
 
-    .crl-ant-table-tbody {
+    .crdb-ant-table-tbody {
       > tr {
         &:hover {
           > td {
@@ -206,7 +206,7 @@
         > td {
           color: $color-base-white;
 
-          &.crl-ant-table-column-sort {
+          &.crdb-ant-table-column-sort {
             background: $color-core-neutral-8;
           }
 
@@ -217,28 +217,28 @@
       }
     }
 
-    .crl-ant-table-cell-row-hover {
+    .crdb-ant-table-cell-row-hover {
       background: $color-core-neutral-7;
     }
 
-    .crl-ant-pagination {
-      .crl-ant-pagination-item {
+    .crdb-ant-pagination {
+      .crdb-ant-pagination-item {
         a {
           color: $color-base-white;
         }
       }
 
-      .crl-ant-pagination-item-container {
-        .crl-ant-pagination-item-ellipsis {
+      .crdb-ant-pagination-item-container {
+        .crdb-ant-pagination-item-ellipsis {
           color: $color-base-white;
         }
       }
 
-      .crl-ant-pagination-item-link {
+      .crdb-ant-pagination-item-link {
         color: $color-base-white;
       }
 
-      .crl-ant-pagination-item-active {
+      .crdb-ant-pagination-item-active {
         background-color: $color-core-neutral-7;
       }
     }
@@ -250,14 +250,14 @@
     padding: 0; // Remove padding added by cockroach container;
   }
 
-  .crl-ant-table-content {
+  .crdb-ant-table-content {
     padding: 5px; // Allows the box shadow to take effect on Right/Left/Bottom
   }
 
   // Use very specific .crl-table selectors to override selectors in AntD without the use
   // of !important tags.
-  .crl-table .crl-ant-table-thead {
-    & > tr > .crl-ant-table-cell {
+  .crl-table .crdb-ant-table-thead {
+    & > tr > .crdb-ant-table-cell {
       padding-bottom: 0; // Only remove the padding in the header row;
       border-bottom: 0;
     }
@@ -269,7 +269,7 @@
     }
   }
 
-  .crl-table .crl-ant-table-tbody {
+  .crl-table .crdb-ant-table-tbody {
     outline: 1px solid $color-core-neutral-3;
     border-radius: $crl-border-radius;
 
@@ -289,12 +289,12 @@
     }
   }
 
-  .crl-table .crl-ant-table-expanded-row > td {
+  .crl-table .crdb-ant-table-expanded-row > td {
     padding: 0; // Remove default padding of an expanded row. This is the padding for the inner table.
   }
 
   // Note: "!important" is necessary here due to an enormous selector on AntD's side.
-  .crl-ant-table-cell::before {
+  .crdb-ant-table-cell::before {
     width: 0 !important; // Remove a border line between cells without a sorter.
   }
 
@@ -303,7 +303,7 @@
   // an expanded row, when the "+" button is clicked.
   //
   // Note: "!important" is necessary here due to table.scss having one.
-  .crl-table .crl-ant-table-tbody > .expanded-row > td {
+  .crl-table .crdb-ant-table-tbody > .expanded-row > td {
     background-color: $color-core-neutral-2 !important;
   }
 }
@@ -316,23 +316,23 @@
     padding: 0; // Remove padding added by cockroach container;
   }
 
-  .crl-table .crl-ant-table-content {
+  .crl-table .crdb-ant-table-content {
     padding: 0 crl-gutters(2) crl-gutters(2) crl-gutters(2);
     background-color: $color-core-neutral-1;
   }
 
-  .crl-table .crl-ant-table-tbody {
+  .crl-table .crdb-ant-table-tbody {
     outline: 0;
 
-    .crl-ant-table-cell {
+    .crdb-ant-table-cell {
       // Ensure that the inner table remains the same background on hover.
       // Note: "!important" is necessary here due to table.scss having one.
       background: $color-core-neutral-1 !important;
     }
   }
 
-  .crl-table .crl-ant-table-thead {
-    .crl-ant-table-cell {
+  .crl-table .crdb-ant-table-thead {
+    .crdb-ant-table-cell {
       // Ensure that the inner table remains the same background on hover.
       background: $color-core-neutral-1 !important;
       transition: background-color 0.3s; // Copy AntD background transition;

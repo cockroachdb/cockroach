@@ -538,7 +538,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 				// item is added a short time after, it will wait to acquire the lock,
 				// notice the watcher is now stopped and start it again.
 				if w.emptyLocked() {
-					defer w.mu.Unlock()
+					defer w.mu.Unlock() //nolint:deferloop
 					w.mu.started = false
 					return
 				}

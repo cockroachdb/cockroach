@@ -9,10 +9,10 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/rand"
 )
 
 type partitionStrategy int
@@ -380,29 +380,39 @@ func makePartitioner(total, active, parts int) (*partitioner, error) {
 
 // randActive returns a random active element.
 func (p *partitioner) randActive(rng *rand.Rand) int {
-	return p.totalElems[rng.Intn(len(p.totalElems))]
+	return p.totalElems[rng.IntN(len(p.totalElems))]
 }
 
 // configureZone sets up zone configs for previously created partitions. By
 // default it adds constraints/preferences in terms of racks, but if the zones
 // flag is passed into tpcc, it will set the constraints/preferences based on
 // the geographic zones provided.
-func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partIdx int) error {
-	var kv string
+func configureZone(
+	db *gosql.DB, cfg zoneConfig, table, partition string, partIdx int, totalParts int,
+) error {
+	var constraint string
+	var lease string
 	if len(cfg.zones) > 0 {
-		kv = fmt.Sprintf("zone=%s", cfg.zones[partIdx])
+		constraint = fmt.Sprintf("[+zone=%s]", cfg.zones[partIdx])
 	} else {
-		kv = fmt.Sprintf("rack=%d", partIdx)
+		if cfg.strategy == partitionedLeases {
+			// Note that this only specifies 3 replica locations. If the number of
+			// replicas is >3 this will only specify the location for 3 of them.
+			constraint = fmt.Sprintf(`{+rack=%d: 1, +rack=%d: 1, +rack=%d: 1}`, partIdx, (partIdx+totalParts/3)%totalParts, (partIdx+2*totalParts/3)%totalParts)
+			lease = fmt.Sprintf("[[+rack=%d]]", partIdx)
+		} else {
+			constraint = fmt.Sprintf("[+rack=%d]", partIdx)
+		}
 	}
 
 	var opts string
 	switch cfg.strategy {
 	case partitionedReplication:
 		// Place all replicas in the zone.
-		opts = fmt.Sprintf(`constraints = '[+%s]'`, kv)
+		opts = fmt.Sprintf(`constraints = '%s'`, constraint)
 	case partitionedLeases:
 		// Place one replica in the zone and give that replica lease preference.
-		opts = fmt.Sprintf(`num_replicas = COPY FROM PARENT, constraints = '{"+%s":1}', lease_preferences = '[[+%s]]'`, kv, kv)
+		opts = fmt.Sprintf(`num_replicas = COPY FROM PARENT, constraints = '%s', lease_preferences = '%s'`, constraint, lease)
 	default:
 		panic("unexpected")
 	}
@@ -437,7 +447,7 @@ func partitionObject(
 	}
 
 	for i := 0; i < p.parts; i++ {
-		if err := configureZone(db, cfg, table, fmt.Sprintf("p%d_%d", idx, i), i); err != nil {
+		if err := configureZone(db, cfg, table, fmt.Sprintf("p%d_%d", idx, i), i, p.parts); err != nil {
 			return err
 		}
 	}

@@ -335,6 +335,13 @@ func TestReadCommittedLogic_bpchar(
 	runLogicTest(t, "bpchar")
 }
 
+func TestReadCommittedLogic_buffered_writes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "buffered_writes")
+}
+
 func TestReadCommittedLogic_builtin_function(
 	t *testing.T,
 ) {
@@ -1159,6 +1166,27 @@ func TestReadCommittedLogic_json_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_index")
+}
+
+func TestReadCommittedLogic_jsonb_path_exists(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists")
+}
+
+func TestReadCommittedLogic_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query")
+}
+
+func TestReadCommittedLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
 }
 
 func TestReadCommittedLogic_kv_builtin_functions(
@@ -2503,6 +2531,13 @@ func TestReadCommittedLogic_values(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
+}
+
+func TestReadCommittedLogic_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index")
 }
 
 func TestReadCommittedLogic_vectorize_agg(

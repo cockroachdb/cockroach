@@ -520,6 +520,15 @@ RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (schema_only) -- identi
 RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (schema_only) -- passwords exposed
 
 parse
+RESTORE DATABASE foo FROM LATEST IN 'bar' WITH experimental copy
+----
+RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (experimental copy) -- normalized!
+RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (experimental copy) -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (experimental copy) -- literals removed
+RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (experimental copy) -- identifiers removed
+RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (experimental copy) -- passwords exposed
+
+parse
 RESTORE DATABASE foo FROM LATEST IN 'bar' WITH incremental_location = 'baz'
 ----
 RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!

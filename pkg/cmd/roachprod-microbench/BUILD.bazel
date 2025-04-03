@@ -21,6 +21,7 @@ go_library(
         "//pkg/cmd/roachprod-microbench/cluster",
         "//pkg/cmd/roachprod-microbench/google",
         "//pkg/cmd/roachprod-microbench/model",
+        "//pkg/cmd/roachprod-microbench/parser",
         "//pkg/cmd/roachprod-microbench/util",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
@@ -58,6 +59,7 @@ go_test(
     embed = [":roachprod-microbench_lib"],
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
+        "//pkg/cmd/roachprod-microbench/parser",
         "//pkg/testutils/datapathutils",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

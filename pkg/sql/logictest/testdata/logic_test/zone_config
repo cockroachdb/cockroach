@@ -288,10 +288,16 @@ statement ok
 ALTER TABLE zc CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE MATERIALIZED VIEW vm (x, y) AS SELECT a,b FROM zc; ALTER TABLE vm CONFIGURE ZONE USING gc.ttlseconds = 100000
 
 statement error pgcode 42809 cannot set a zone configuration on non-physical object v
 CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement ok
+RESET autocommit_before_ddl
 
 user root
 
@@ -523,5 +529,98 @@ true
 
 statement ok
 RESET use_declarative_schema_changer;
+
+subtest end
+
+# Ensure that index ID changes due to a backfill have a properly corresponding
+# zone config.
+subtest backfill_idx_id
+
+statement ok
+CREATE TABLE foo(i int);
+
+statement ok
+ALTER INDEX foo@foo_pkey CONFIGURE ZONE USING gc.ttlseconds=90;
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42;
+
+# Here, we can see that although the index ID changed, our corresponding
+# subzone config has an entry for our new index, along with a corresponding
+# subzone span.
+skipif config local-mixed-24.3 local-legacy-schema-changer
+statement ok
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 'foo'::regclass::oid
+),
+index_ids_match AS (
+  SELECT EXISTS (
+      SELECT 1
+      FROM primary_index, subzone_indexes
+      WHERE primaryID = indexID
+  ) AS match_found
+)
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM index_ids_match WHERE match_found = false;
+
+# The new primary index should have a subzone. The old primary index and the
+# temporary index also have a subzone, and those will be cleaned up later by the
+# schema change GC job.
+skipif config local-mixed-24.3 local-legacy-schema-changer
+query I
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+)
+SELECT indexID
+FROM subzone_indexes
+ORDER BY indexID;
+----
+1
+2
+3
+
+skipif config local-mixed-24.3 local-legacy-schema-changer
+query T
+WITH subzone_spans AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+)
+SELECT crdb_internal.pretty_key(decode(key, 'base64'), 0)
+FROM subzone_spans
+ORDER BY 1
+----
+/1
+/2
+/3
 
 subtest end

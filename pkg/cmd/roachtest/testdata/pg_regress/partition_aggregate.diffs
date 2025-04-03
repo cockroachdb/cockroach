@@ -1,0 +1,2069 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/partition_aggregate.out --label=/mnt/data1/postgres/src/test/regress/results/partition_aggregate.out /mnt/data1/postgres/src/test/regress/expected/partition_aggregate.out /mnt/data1/postgres/src/test/regress/results/partition_aggregate.out
+--- /mnt/data1/postgres/src/test/regress/expected/partition_aggregate.out
++++ /mnt/data1/postgres/src/test/regress/results/partition_aggregate.out
+@@ -7,1324 +7,683 @@
+ --
+ -- Enable partitionwise aggregate, which by default is disabled.
+ SET enable_partitionwise_aggregate TO true;
++ERROR:  unrecognized configuration parameter "enable_partitionwise_aggregate"
+ -- Enable partitionwise join, which by default is disabled.
+ SET enable_partitionwise_join TO true;
++ERROR:  unrecognized configuration parameter "enable_partitionwise_join"
+ -- Disable parallel plans.
+ SET max_parallel_workers_per_gather TO 0;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Disable incremental sort, which can influence selected plans due to fuzz factor.
+ SET enable_incremental_sort TO off;
++ERROR:  unrecognized configuration parameter "enable_incremental_sort"
+ --
+ -- Tests for list partitioned tables.
+ --
+ CREATE TABLE pagg_tab (a int, b int, c text, d int) PARTITION BY LIST(c);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab (a int, b int, c text, d int) PARTITION BY LIST(c)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_p1 PARTITION OF pagg_tab FOR VALUES IN ('0000', '0001', '0002', '0003', '0004');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_p1 PARTITION OF pagg_tab FOR VALUES IN ('0000', '0001', '0002', '0003', '0004')
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_p2 PARTITION OF pagg_tab FOR VALUES IN ('0005', '0006', '0007', '0008');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_p2 PARTITION OF pagg_tab FOR VALUES IN ('0005', '0006', '0007', '0008')
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_p3 PARTITION OF pagg_tab FOR VALUES IN ('0009', '0010', '0011');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_p3 PARTITION OF pagg_tab FOR VALUES IN ('0009', '0010', '0011')
++                         ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO pagg_tab SELECT i % 20, i % 30, to_char(i % 12, 'FM0000'), i % 30 FROM generate_series(0, 2999) i;
++ERROR:  relation "pagg_tab" does not exist
+ ANALYZE pagg_tab;
++ERROR:  relation "pagg_tab" does not exist
+ -- When GROUP BY clause matches; full aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(a), avg(b), count(*), min(a), max(b) FROM pagg_tab GROUP BY c HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.c, (sum(pagg_tab.a)), (avg(pagg_tab.b))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: pagg_tab.c
+-               Filter: (avg(pagg_tab.d) < '15'::numeric)
+-               ->  Seq Scan on pagg_tab_p1 pagg_tab
+-         ->  HashAggregate
+-               Group Key: pagg_tab_1.c
+-               Filter: (avg(pagg_tab_1.d) < '15'::numeric)
+-               ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-         ->  HashAggregate
+-               Group Key: pagg_tab_2.c
+-               Filter: (avg(pagg_tab_2.d) < '15'::numeric)
+-               ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT c, sum(a), avg(b), count(*), min(a), max(b) FROM pagg_tab GROUP BY c HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-  c   | sum  |         avg         | count | min | max 
+-------+------+---------------------+-------+-----+-----
+- 0000 | 2000 | 12.0000000000000000 |   250 |   0 |  24
+- 0001 | 2250 | 13.0000000000000000 |   250 |   1 |  25
+- 0002 | 2500 | 14.0000000000000000 |   250 |   2 |  26
+- 0006 | 2500 | 12.0000000000000000 |   250 |   2 |  24
+- 0007 | 2750 | 13.0000000000000000 |   250 |   3 |  25
+- 0008 | 2000 | 14.0000000000000000 |   250 |   0 |  26
+-(6 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ -- When GROUP BY clause does not match; partial aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), avg(b), count(*), min(a), max(b) FROM pagg_tab GROUP BY a HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.a, (sum(pagg_tab.b)), (avg(pagg_tab.b))
+-   ->  Finalize HashAggregate
+-         Group Key: pagg_tab.a
+-         Filter: (avg(pagg_tab.d) < '15'::numeric)
+-         ->  Append
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab.a
+-                     ->  Seq Scan on pagg_tab_p1 pagg_tab
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab_1.a
+-                     ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab_2.a
+-                     ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), avg(b), count(*), min(a), max(b) FROM pagg_tab GROUP BY a HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+- a  | sum  |         avg         | count | min | max 
+-----+------+---------------------+-------+-----+-----
+-  0 | 1500 | 10.0000000000000000 |   150 |   0 |  20
+-  1 | 1650 | 11.0000000000000000 |   150 |   1 |  21
+-  2 | 1800 | 12.0000000000000000 |   150 |   2 |  22
+-  3 | 1950 | 13.0000000000000000 |   150 |   3 |  23
+-  4 | 2100 | 14.0000000000000000 |   150 |   4 |  24
+- 10 | 1500 | 10.0000000000000000 |   150 |  10 |  20
+- 11 | 1650 | 11.0000000000000000 |   150 |  11 |  21
+- 12 | 1800 | 12.0000000000000000 |   150 |  12 |  22
+- 13 | 1950 | 13.0000000000000000 |   150 |  13 |  23
+- 14 | 2100 | 14.0000000000000000 |   150 |  14 |  24
+-(10 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ -- Check with multiple columns in GROUP BY
+ EXPLAIN (COSTS OFF)
+ SELECT a, c, count(*) FROM pagg_tab GROUP BY a, c;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Append
+-   ->  HashAggregate
+-         Group Key: pagg_tab.a, pagg_tab.c
+-         ->  Seq Scan on pagg_tab_p1 pagg_tab
+-   ->  HashAggregate
+-         Group Key: pagg_tab_1.a, pagg_tab_1.c
+-         ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-   ->  HashAggregate
+-         Group Key: pagg_tab_2.a, pagg_tab_2.c
+-         ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Check with multiple columns in GROUP BY, order in GROUP BY is reversed
+ EXPLAIN (COSTS OFF)
+ SELECT a, c, count(*) FROM pagg_tab GROUP BY c, a;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Append
+-   ->  HashAggregate
+-         Group Key: pagg_tab.c, pagg_tab.a
+-         ->  Seq Scan on pagg_tab_p1 pagg_tab
+-   ->  HashAggregate
+-         Group Key: pagg_tab_1.c, pagg_tab_1.a
+-         ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-   ->  HashAggregate
+-         Group Key: pagg_tab_2.c, pagg_tab_2.a
+-         ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Check with multiple columns in GROUP BY, order in target-list is reversed
+ EXPLAIN (COSTS OFF)
+ SELECT c, a, count(*) FROM pagg_tab GROUP BY a, c;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Append
+-   ->  HashAggregate
+-         Group Key: pagg_tab.a, pagg_tab.c
+-         ->  Seq Scan on pagg_tab_p1 pagg_tab
+-   ->  HashAggregate
+-         Group Key: pagg_tab_1.a, pagg_tab_1.c
+-         ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-   ->  HashAggregate
+-         Group Key: pagg_tab_2.a, pagg_tab_2.c
+-         ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Test when input relation for grouping is dummy
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(a) FROM pagg_tab WHERE 1 = 2 GROUP BY c;
+-           QUERY PLAN           
+---------------------------------
+- HashAggregate
+-   Group Key: c
+-   ->  Result
+-         One-Time Filter: false
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT c, sum(a) FROM pagg_tab WHERE 1 = 2 GROUP BY c;
+- c | sum 
+----+-----
+-(0 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(a) FROM pagg_tab WHERE c = 'x' GROUP BY c;
+-           QUERY PLAN           
+---------------------------------
+- GroupAggregate
+-   ->  Result
+-         One-Time Filter: false
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT c, sum(a) FROM pagg_tab WHERE c = 'x' GROUP BY c;
+- c | sum 
+----+-----
+-(0 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ -- Test GroupAggregate paths by disabling hash aggregates.
+ SET enable_hashagg TO false;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- When GROUP BY clause matches full aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(a), avg(b), count(*) FROM pagg_tab GROUP BY 1 HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.c, (sum(pagg_tab.a)), (avg(pagg_tab.b))
+-   ->  Append
+-         ->  GroupAggregate
+-               Group Key: pagg_tab.c
+-               Filter: (avg(pagg_tab.d) < '15'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab.c
+-                     ->  Seq Scan on pagg_tab_p1 pagg_tab
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_1.c
+-               Filter: (avg(pagg_tab_1.d) < '15'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_1.c
+-                     ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_2.c
+-               Filter: (avg(pagg_tab_2.d) < '15'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_2.c
+-                     ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(21 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT c, sum(a), avg(b), count(*) FROM pagg_tab GROUP BY 1 HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-  c   | sum  |         avg         | count 
+-------+------+---------------------+-------
+- 0000 | 2000 | 12.0000000000000000 |   250
+- 0001 | 2250 | 13.0000000000000000 |   250
+- 0002 | 2500 | 14.0000000000000000 |   250
+- 0006 | 2500 | 12.0000000000000000 |   250
+- 0007 | 2750 | 13.0000000000000000 |   250
+- 0008 | 2000 | 14.0000000000000000 |   250
+-(6 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ -- When GROUP BY clause does not match; partial aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), avg(b), count(*) FROM pagg_tab GROUP BY 1 HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.a, (sum(pagg_tab.b)), (avg(pagg_tab.b))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab.a
+-         Filter: (avg(pagg_tab.d) < '15'::numeric)
+-         ->  Merge Append
+-               Sort Key: pagg_tab.a
+-               ->  Partial GroupAggregate
+-                     Group Key: pagg_tab.a
+-                     ->  Sort
+-                           Sort Key: pagg_tab.a
+-                           ->  Seq Scan on pagg_tab_p1 pagg_tab
+-               ->  Partial GroupAggregate
+-                     Group Key: pagg_tab_1.a
+-                     ->  Sort
+-                           Sort Key: pagg_tab_1.a
+-                           ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-               ->  Partial GroupAggregate
+-                     Group Key: pagg_tab_2.a
+-                     ->  Sort
+-                           Sort Key: pagg_tab_2.a
+-                           ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(22 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), avg(b), count(*) FROM pagg_tab GROUP BY 1 HAVING avg(d) < 15 ORDER BY 1, 2, 3;
+- a  | sum  |         avg         | count 
+-----+------+---------------------+-------
+-  0 | 1500 | 10.0000000000000000 |   150
+-  1 | 1650 | 11.0000000000000000 |   150
+-  2 | 1800 | 12.0000000000000000 |   150
+-  3 | 1950 | 13.0000000000000000 |   150
+-  4 | 2100 | 14.0000000000000000 |   150
+- 10 | 1500 | 10.0000000000000000 |   150
+- 11 | 1650 | 11.0000000000000000 |   150
+- 12 | 1800 | 12.0000000000000000 |   150
+- 13 | 1950 | 13.0000000000000000 |   150
+- 14 | 2100 | 14.0000000000000000 |   150
+-(10 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ -- Test partitionwise grouping without any aggregates
+ EXPLAIN (COSTS OFF)
+ SELECT c FROM pagg_tab GROUP BY c ORDER BY 1;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Merge Append
+-   Sort Key: pagg_tab.c
+-   ->  Group
+-         Group Key: pagg_tab.c
+-         ->  Sort
+-               Sort Key: pagg_tab.c
+-               ->  Seq Scan on pagg_tab_p1 pagg_tab
+-   ->  Group
+-         Group Key: pagg_tab_1.c
+-         ->  Sort
+-               Sort Key: pagg_tab_1.c
+-               ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-   ->  Group
+-         Group Key: pagg_tab_2.c
+-         ->  Sort
+-               Sort Key: pagg_tab_2.c
+-               ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(17 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT c FROM pagg_tab GROUP BY c ORDER BY 1;
+-  c   
+-------
+- 0000
+- 0001
+- 0002
+- 0003
+- 0004
+- 0005
+- 0006
+- 0007
+- 0008
+- 0009
+- 0010
+- 0011
+-(12 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT a FROM pagg_tab WHERE a < 3 GROUP BY a ORDER BY 1;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Group
+-   Group Key: pagg_tab.a
+-   ->  Merge Append
+-         Sort Key: pagg_tab.a
+-         ->  Group
+-               Group Key: pagg_tab.a
+-               ->  Sort
+-                     Sort Key: pagg_tab.a
+-                     ->  Seq Scan on pagg_tab_p1 pagg_tab
+-                           Filter: (a < 3)
+-         ->  Group
+-               Group Key: pagg_tab_1.a
+-               ->  Sort
+-                     Sort Key: pagg_tab_1.a
+-                     ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-                           Filter: (a < 3)
+-         ->  Group
+-               Group Key: pagg_tab_2.a
+-               ->  Sort
+-                     Sort Key: pagg_tab_2.a
+-                     ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-                           Filter: (a < 3)
+-(22 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a FROM pagg_tab WHERE a < 3 GROUP BY a ORDER BY 1;
+- a 
+----
+- 0
+- 1
+- 2
+-(3 rows)
+-
++ERROR:  relation "pagg_tab" does not exist
+ RESET enable_hashagg;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- ROLLUP, partitionwise aggregation does not apply
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(a) FROM pagg_tab GROUP BY rollup(c) ORDER BY 1, 2;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.c, (sum(pagg_tab.a))
+-   ->  MixedAggregate
+-         Hash Key: pagg_tab.c
+-         Group Key: ()
+-         ->  Append
+-               ->  Seq Scan on pagg_tab_p1 pagg_tab_1
+-               ->  Seq Scan on pagg_tab_p2 pagg_tab_2
+-               ->  Seq Scan on pagg_tab_p3 pagg_tab_3
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- ORDERED SET within the aggregate.
+ -- Full aggregation; since all the rows that belong to the same group come
+ -- from the same partition, having an ORDER BY within the aggregate doesn't
+ -- make any difference.
+ EXPLAIN (COSTS OFF)
+ SELECT c, sum(b order by a) FROM pagg_tab GROUP BY c ORDER BY 1, 2;
+-                          QUERY PLAN                           
+----------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.c, (sum(pagg_tab.b ORDER BY pagg_tab.a))
+-   ->  Append
+-         ->  GroupAggregate
+-               Group Key: pagg_tab.c
+-               ->  Sort
+-                     Sort Key: pagg_tab.c, pagg_tab.a
+-                     ->  Seq Scan on pagg_tab_p1 pagg_tab
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_1.c
+-               ->  Sort
+-                     Sort Key: pagg_tab_1.c, pagg_tab_1.a
+-                     ->  Seq Scan on pagg_tab_p2 pagg_tab_1
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_2.c
+-               ->  Sort
+-                     Sort Key: pagg_tab_2.c, pagg_tab_2.a
+-                     ->  Seq Scan on pagg_tab_p3 pagg_tab_2
+-(18 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Since GROUP BY clause does not match with PARTITION KEY; we need to do
+ -- partial aggregation. However, ORDERED SET are not partial safe and thus
+ -- partitionwise aggregation plan is not generated.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b order by a) FROM pagg_tab GROUP BY a ORDER BY 1, 2;
+-                          QUERY PLAN                           
+----------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab.a, (sum(pagg_tab.b ORDER BY pagg_tab.a))
+-   ->  GroupAggregate
+-         Group Key: pagg_tab.a
+-         ->  Sort
+-               Sort Key: pagg_tab.a
+-               ->  Append
+-                     ->  Seq Scan on pagg_tab_p1 pagg_tab_1
+-                     ->  Seq Scan on pagg_tab_p2 pagg_tab_2
+-                     ->  Seq Scan on pagg_tab_p3 pagg_tab_3
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- JOIN query
+ CREATE TABLE pagg_tab1(x int, y int) PARTITION BY RANGE(x);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab1(x int, y int) PARTITION BY RANGE(x)
++                                                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab1_p1 PARTITION OF pagg_tab1 FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab1_p1 PARTITION OF pagg_tab1 FOR VALUES FROM (0) TO (10)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab1_p2 PARTITION OF pagg_tab1 FOR VALUES FROM (10) TO (20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab1_p2 PARTITION OF pagg_tab1 FOR VALUES FROM (10) TO (20)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab1_p3 PARTITION OF pagg_tab1 FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab1_p3 PARTITION OF pagg_tab1 FOR VALUES FROM (20) TO (30)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab2(x int, y int) PARTITION BY RANGE(y);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab2(x int, y int) PARTITION BY RANGE(y)
++                                                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab2_p1 PARTITION OF pagg_tab2 FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab2_p1 PARTITION OF pagg_tab2 FOR VALUES FROM (0) TO (10)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab2_p2 PARTITION OF pagg_tab2 FOR VALUES FROM (10) TO (20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab2_p2 PARTITION OF pagg_tab2 FOR VALUES FROM (10) TO (20)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab2_p3 PARTITION OF pagg_tab2 FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab2_p3 PARTITION OF pagg_tab2 FOR VALUES FROM (20) TO (30)
++                          ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO pagg_tab1 SELECT i % 30, i % 20 FROM generate_series(0, 299, 2) i;
++ERROR:  relation "pagg_tab1" does not exist
+ INSERT INTO pagg_tab2 SELECT i % 20, i % 30 FROM generate_series(0, 299, 3) i;
++ERROR:  relation "pagg_tab2" does not exist
+ ANALYZE pagg_tab1;
++ERROR:  relation "pagg_tab1" does not exist
+ ANALYZE pagg_tab2;
++ERROR:  relation "pagg_tab2" does not exist
+ -- When GROUP BY clause matches; full aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT t1.x, sum(t1.y), count(*) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.x ORDER BY 1, 2, 3;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Sort
+-   Sort Key: t1.x, (sum(t1.y)), (count(*))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: t1.x
+-               ->  Hash Join
+-                     Hash Cond: (t1.x = t2.y)
+-                     ->  Seq Scan on pagg_tab1_p1 t1
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p1 t2
+-         ->  HashAggregate
+-               Group Key: t1_1.x
+-               ->  Hash Join
+-                     Hash Cond: (t1_1.x = t2_1.y)
+-                     ->  Seq Scan on pagg_tab1_p2 t1_1
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p2 t2_1
+-         ->  HashAggregate
+-               Group Key: t1_2.x
+-               ->  Hash Join
+-                     Hash Cond: (t2_2.y = t1_2.x)
+-                     ->  Seq Scan on pagg_tab2_p3 t2_2
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab1_p3 t1_2
+-(24 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT t1.x, sum(t1.y), count(*) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.x ORDER BY 1, 2, 3;
+- x  | sum  | count 
+-----+------+-------
+-  0 |  500 |   100
+-  6 | 1100 |   100
+- 12 |  700 |   100
+- 18 | 1300 |   100
+- 24 |  900 |   100
+-(5 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- Check with whole-row reference; partitionwise aggregation does not apply
+ EXPLAIN (COSTS OFF)
+ SELECT t1.x, sum(t1.y), count(t1) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.x ORDER BY 1, 2, 3;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Sort
+-   Sort Key: t1.x, (sum(t1.y)), (count(((t1.*)::pagg_tab1)))
+-   ->  HashAggregate
+-         Group Key: t1.x
+-         ->  Hash Join
+-               Hash Cond: (t1.x = t2.y)
+-               ->  Append
+-                     ->  Seq Scan on pagg_tab1_p1 t1_1
+-                     ->  Seq Scan on pagg_tab1_p2 t1_2
+-                     ->  Seq Scan on pagg_tab1_p3 t1_3
+-               ->  Hash
+-                     ->  Append
+-                           ->  Seq Scan on pagg_tab2_p1 t2_1
+-                           ->  Seq Scan on pagg_tab2_p2 t2_2
+-                           ->  Seq Scan on pagg_tab2_p3 t2_3
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT t1.x, sum(t1.y), count(t1) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.x ORDER BY 1, 2, 3;
+- x  | sum  | count 
+-----+------+-------
+-  0 |  500 |   100
+-  6 | 1100 |   100
+- 12 |  700 |   100
+- 18 | 1300 |   100
+- 24 |  900 |   100
+-(5 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- GROUP BY having other matching key
+ EXPLAIN (COSTS OFF)
+ SELECT t2.y, sum(t1.y), count(*) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t2.y ORDER BY 1, 2, 3;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Sort
+-   Sort Key: t2.y, (sum(t1.y)), (count(*))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: t2.y
+-               ->  Hash Join
+-                     Hash Cond: (t1.x = t2.y)
+-                     ->  Seq Scan on pagg_tab1_p1 t1
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p1 t2
+-         ->  HashAggregate
+-               Group Key: t2_1.y
+-               ->  Hash Join
+-                     Hash Cond: (t1_1.x = t2_1.y)
+-                     ->  Seq Scan on pagg_tab1_p2 t1_1
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p2 t2_1
+-         ->  HashAggregate
+-               Group Key: t2_2.y
+-               ->  Hash Join
+-                     Hash Cond: (t2_2.y = t1_2.x)
+-                     ->  Seq Scan on pagg_tab2_p3 t2_2
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab1_p3 t1_2
+-(24 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- When GROUP BY clause does not match; partial aggregation is performed for each partition.
+ -- Also test GroupAggregate paths by disabling hash aggregates.
+ SET enable_hashagg TO false;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (COSTS OFF)
+ SELECT t1.y, sum(t1.x), count(*) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.y HAVING avg(t1.x) > 10 ORDER BY 1, 2, 3;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Sort
+-   Sort Key: t1.y, (sum(t1.x)), (count(*))
+-   ->  Finalize GroupAggregate
+-         Group Key: t1.y
+-         Filter: (avg(t1.x) > '10'::numeric)
+-         ->  Merge Append
+-               Sort Key: t1.y
+-               ->  Partial GroupAggregate
+-                     Group Key: t1.y
+-                     ->  Sort
+-                           Sort Key: t1.y
+-                           ->  Hash Join
+-                                 Hash Cond: (t1.x = t2.y)
+-                                 ->  Seq Scan on pagg_tab1_p1 t1
+-                                 ->  Hash
+-                                       ->  Seq Scan on pagg_tab2_p1 t2
+-               ->  Partial GroupAggregate
+-                     Group Key: t1_1.y
+-                     ->  Sort
+-                           Sort Key: t1_1.y
+-                           ->  Hash Join
+-                                 Hash Cond: (t1_1.x = t2_1.y)
+-                                 ->  Seq Scan on pagg_tab1_p2 t1_1
+-                                 ->  Hash
+-                                       ->  Seq Scan on pagg_tab2_p2 t2_1
+-               ->  Partial GroupAggregate
+-                     Group Key: t1_2.y
+-                     ->  Sort
+-                           Sort Key: t1_2.y
+-                           ->  Hash Join
+-                                 Hash Cond: (t2_2.y = t1_2.x)
+-                                 ->  Seq Scan on pagg_tab2_p3 t2_2
+-                                 ->  Hash
+-                                       ->  Seq Scan on pagg_tab1_p3 t1_2
+-(34 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT t1.y, sum(t1.x), count(*) FROM pagg_tab1 t1, pagg_tab2 t2 WHERE t1.x = t2.y GROUP BY t1.y HAVING avg(t1.x) > 10 ORDER BY 1, 2, 3;
+- y  | sum  | count 
+-----+------+-------
+-  2 |  600 |    50
+-  4 | 1200 |    50
+-  8 |  900 |    50
+- 12 |  600 |    50
+- 14 | 1200 |    50
+- 18 |  900 |    50
+-(6 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ RESET enable_hashagg;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Check with LEFT/RIGHT/FULL OUTER JOINs which produces NULL values for
+ -- aggregation
+ -- LEFT JOIN, should produce partial partitionwise aggregation plan as
+ -- GROUP BY is on nullable column
+ EXPLAIN (COSTS OFF)
+ SELECT b.y, sum(a.y) FROM pagg_tab1 a LEFT JOIN pagg_tab2 b ON a.x = b.y GROUP BY b.y ORDER BY 1 NULLS LAST;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Finalize GroupAggregate
+-   Group Key: b.y
+-   ->  Sort
+-         Sort Key: b.y
+-         ->  Append
+-               ->  Partial HashAggregate
+-                     Group Key: b.y
+-                     ->  Hash Left Join
+-                           Hash Cond: (a.x = b.y)
+-                           ->  Seq Scan on pagg_tab1_p1 a
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab2_p1 b
+-               ->  Partial HashAggregate
+-                     Group Key: b_1.y
+-                     ->  Hash Left Join
+-                           Hash Cond: (a_1.x = b_1.y)
+-                           ->  Seq Scan on pagg_tab1_p2 a_1
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab2_p2 b_1
+-               ->  Partial HashAggregate
+-                     Group Key: b_2.y
+-                     ->  Hash Right Join
+-                           Hash Cond: (b_2.y = a_2.x)
+-                           ->  Seq Scan on pagg_tab2_p3 b_2
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab1_p3 a_2
+-(26 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT b.y, sum(a.y) FROM pagg_tab1 a LEFT JOIN pagg_tab2 b ON a.x = b.y GROUP BY b.y ORDER BY 1 NULLS LAST;
+- y  | sum  
+-----+------
+-  0 |  500
+-  6 | 1100
+- 12 |  700
+- 18 | 1300
+- 24 |  900
+-    |  900
+-(6 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- RIGHT JOIN, should produce full partitionwise aggregation plan as
+ -- GROUP BY is on non-nullable column
+ EXPLAIN (COSTS OFF)
+ SELECT b.y, sum(a.y) FROM pagg_tab1 a RIGHT JOIN pagg_tab2 b ON a.x = b.y GROUP BY b.y ORDER BY 1 NULLS LAST;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Sort
+-   Sort Key: b.y
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: b.y
+-               ->  Hash Right Join
+-                     Hash Cond: (a.x = b.y)
+-                     ->  Seq Scan on pagg_tab1_p1 a
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p1 b
+-         ->  HashAggregate
+-               Group Key: b_1.y
+-               ->  Hash Right Join
+-                     Hash Cond: (a_1.x = b_1.y)
+-                     ->  Seq Scan on pagg_tab1_p2 a_1
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab2_p2 b_1
+-         ->  HashAggregate
+-               Group Key: b_2.y
+-               ->  Hash Left Join
+-                     Hash Cond: (b_2.y = a_2.x)
+-                     ->  Seq Scan on pagg_tab2_p3 b_2
+-                     ->  Hash
+-                           ->  Seq Scan on pagg_tab1_p3 a_2
+-(24 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT b.y, sum(a.y) FROM pagg_tab1 a RIGHT JOIN pagg_tab2 b ON a.x = b.y GROUP BY b.y ORDER BY 1 NULLS LAST;
+- y  | sum  
+-----+------
+-  0 |  500
+-  3 |     
+-  6 | 1100
+-  9 |     
+- 12 |  700
+- 15 |     
+- 18 | 1300
+- 21 |     
+- 24 |  900
+- 27 |     
+-(10 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- FULL JOIN, should produce partial partitionwise aggregation plan as
+ -- GROUP BY is on nullable column
+ EXPLAIN (COSTS OFF)
+ SELECT a.x, sum(b.x) FROM pagg_tab1 a FULL OUTER JOIN pagg_tab2 b ON a.x = b.y GROUP BY a.x ORDER BY 1 NULLS LAST;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Finalize GroupAggregate
+-   Group Key: a.x
+-   ->  Sort
+-         Sort Key: a.x
+-         ->  Append
+-               ->  Partial HashAggregate
+-                     Group Key: a.x
+-                     ->  Hash Full Join
+-                           Hash Cond: (a.x = b.y)
+-                           ->  Seq Scan on pagg_tab1_p1 a
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab2_p1 b
+-               ->  Partial HashAggregate
+-                     Group Key: a_1.x
+-                     ->  Hash Full Join
+-                           Hash Cond: (a_1.x = b_1.y)
+-                           ->  Seq Scan on pagg_tab1_p2 a_1
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab2_p2 b_1
+-               ->  Partial HashAggregate
+-                     Group Key: a_2.x
+-                     ->  Hash Full Join
+-                           Hash Cond: (b_2.y = a_2.x)
+-                           ->  Seq Scan on pagg_tab2_p3 b_2
+-                           ->  Hash
+-                                 ->  Seq Scan on pagg_tab1_p3 a_2
+-(26 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a.x, sum(b.x) FROM pagg_tab1 a FULL OUTER JOIN pagg_tab2 b ON a.x = b.y GROUP BY a.x ORDER BY 1 NULLS LAST;
+- x  | sum  
+-----+------
+-  0 |  500
+-  2 |     
+-  4 |     
+-  6 | 1100
+-  8 |     
+- 10 |     
+- 12 |  700
+- 14 |     
+- 16 |     
+- 18 | 1300
+- 20 |     
+- 22 |     
+- 24 |  900
+- 26 |     
+- 28 |     
+-    |  500
+-(16 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- LEFT JOIN, with dummy relation on right side, ideally
+ -- should produce full partitionwise aggregation plan as GROUP BY is on
+ -- non-nullable columns.
+ -- But right now we are unable to do partitionwise join in this case.
+ EXPLAIN (COSTS OFF)
+ SELECT a.x, b.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x < 20) a LEFT JOIN (SELECT * FROM pagg_tab2 WHERE y > 10) b ON a.x = b.y WHERE a.x > 5 or b.y < 20  GROUP BY a.x, b.y ORDER BY 1, 2;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab1.x, pagg_tab2.y
+-   ->  HashAggregate
+-         Group Key: pagg_tab1.x, pagg_tab2.y
+-         ->  Hash Left Join
+-               Hash Cond: (pagg_tab1.x = pagg_tab2.y)
+-               Filter: ((pagg_tab1.x > 5) OR (pagg_tab2.y < 20))
+-               ->  Append
+-                     ->  Seq Scan on pagg_tab1_p1 pagg_tab1_1
+-                           Filter: (x < 20)
+-                     ->  Seq Scan on pagg_tab1_p2 pagg_tab1_2
+-                           Filter: (x < 20)
+-               ->  Hash
+-                     ->  Append
+-                           ->  Seq Scan on pagg_tab2_p2 pagg_tab2_1
+-                                 Filter: (y > 10)
+-                           ->  Seq Scan on pagg_tab2_p3 pagg_tab2_2
+-                                 Filter: (y > 10)
+-(18 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a.x, b.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x < 20) a LEFT JOIN (SELECT * FROM pagg_tab2 WHERE y > 10) b ON a.x = b.y WHERE a.x > 5 or b.y < 20  GROUP BY a.x, b.y ORDER BY 1, 2;
+- x  | y  | count 
+-----+----+-------
+-  6 |    |    10
+-  8 |    |    10
+- 10 |    |    10
+- 12 | 12 |   100
+- 14 |    |    10
+- 16 |    |    10
+- 18 | 18 |   100
+-(7 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- FULL JOIN, with dummy relations on both sides, ideally
+ -- should produce partial partitionwise aggregation plan as GROUP BY is on
+ -- nullable columns.
+ -- But right now we are unable to do partitionwise join in this case.
+ EXPLAIN (COSTS OFF)
+ SELECT a.x, b.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x < 20) a FULL JOIN (SELECT * FROM pagg_tab2 WHERE y > 10) b ON a.x = b.y WHERE a.x > 5 or b.y < 20  GROUP BY a.x, b.y ORDER BY 1, 2;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab1.x, pagg_tab2.y
+-   ->  HashAggregate
+-         Group Key: pagg_tab1.x, pagg_tab2.y
+-         ->  Hash Full Join
+-               Hash Cond: (pagg_tab1.x = pagg_tab2.y)
+-               Filter: ((pagg_tab1.x > 5) OR (pagg_tab2.y < 20))
+-               ->  Append
+-                     ->  Seq Scan on pagg_tab1_p1 pagg_tab1_1
+-                           Filter: (x < 20)
+-                     ->  Seq Scan on pagg_tab1_p2 pagg_tab1_2
+-                           Filter: (x < 20)
+-               ->  Hash
+-                     ->  Append
+-                           ->  Seq Scan on pagg_tab2_p2 pagg_tab2_1
+-                                 Filter: (y > 10)
+-                           ->  Seq Scan on pagg_tab2_p3 pagg_tab2_2
+-                                 Filter: (y > 10)
+-(18 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a.x, b.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x < 20) a FULL JOIN (SELECT * FROM pagg_tab2 WHERE y > 10) b ON a.x = b.y WHERE a.x > 5 or b.y < 20 GROUP BY a.x, b.y ORDER BY 1, 2;
+- x  | y  | count 
+-----+----+-------
+-  6 |    |    10
+-  8 |    |    10
+- 10 |    |    10
+- 12 | 12 |   100
+- 14 |    |    10
+- 16 |    |    10
+- 18 | 18 |   100
+-    | 15 |    10
+-(8 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- Empty join relation because of empty outer side, no partitionwise agg plan
+ EXPLAIN (COSTS OFF)
+ SELECT a.x, a.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x = 1 AND x = 2) a LEFT JOIN pagg_tab2 b ON a.x = b.y GROUP BY a.x, a.y ORDER BY 1, 2;
+-              QUERY PLAN              
+---------------------------------------
+- GroupAggregate
+-   Group Key: pagg_tab1.y
+-   ->  Sort
+-         Sort Key: pagg_tab1.y
+-         ->  Result
+-               One-Time Filter: false
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a.x, a.y, count(*) FROM (SELECT * FROM pagg_tab1 WHERE x = 1 AND x = 2) a LEFT JOIN pagg_tab2 b ON a.x = b.y GROUP BY a.x, a.y ORDER BY 1, 2;
+- x | y | count 
+----+---+-------
+-(0 rows)
+-
++ERROR:  relation "pagg_tab1" does not exist
+ -- Partition by multiple columns
+ CREATE TABLE pagg_tab_m (a int, b int, c int) PARTITION BY RANGE(a, ((a+b)/2));
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_m (a int, b int, c int) PARTITION BY RANGE(a, ((a+b)/2))
++                                                                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_m_p1 PARTITION OF pagg_tab_m FOR VALUES FROM (0, 0) TO (12, 12);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_m_p1 PARTITION OF pagg_tab_m FOR VALUES FROM (0, 0) TO (12, 12)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_m_p2 PARTITION OF pagg_tab_m FOR VALUES FROM (12, 12) TO (22, 22);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_m_p2 PARTITION OF pagg_tab_m FOR VALUES FROM (12, 12) TO (22, 22)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_m_p3 PARTITION OF pagg_tab_m FOR VALUES FROM (22, 22) TO (30, 30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_m_p3 PARTITION OF pagg_tab_m FOR VALUES FROM (22, 22) TO (30, 30)
++                           ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO pagg_tab_m SELECT i % 30, i % 40, i % 50 FROM generate_series(0, 2999) i;
++ERROR:  relation "pagg_tab_m" does not exist
+ ANALYZE pagg_tab_m;
++ERROR:  relation "pagg_tab_m" does not exist
+ -- Partial aggregation as GROUP BY clause does not match with PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY a HAVING avg(c) < 22 ORDER BY 1, 2, 3;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_m.a, (sum(pagg_tab_m.b)), (avg(pagg_tab_m.c))
+-   ->  Finalize HashAggregate
+-         Group Key: pagg_tab_m.a
+-         Filter: (avg(pagg_tab_m.c) < '22'::numeric)
+-         ->  Append
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab_m.a
+-                     ->  Seq Scan on pagg_tab_m_p1 pagg_tab_m
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab_m_1.a
+-                     ->  Seq Scan on pagg_tab_m_p2 pagg_tab_m_1
+-               ->  Partial HashAggregate
+-                     Group Key: pagg_tab_m_2.a
+-                     ->  Seq Scan on pagg_tab_m_p3 pagg_tab_m_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY a HAVING avg(c) < 22 ORDER BY 1, 2, 3;
+- a  | sum  |         avg         | count 
+-----+------+---------------------+-------
+-  0 | 1500 | 20.0000000000000000 |   100
+-  1 | 1600 | 21.0000000000000000 |   100
+- 10 | 1500 | 20.0000000000000000 |   100
+- 11 | 1600 | 21.0000000000000000 |   100
+- 20 | 1500 | 20.0000000000000000 |   100
+- 21 | 1600 | 21.0000000000000000 |   100
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_m" does not exist
+ -- Full aggregation as GROUP BY clause matches with PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY a, (a+b)/2 HAVING sum(b) < 50 ORDER BY 1, 2, 3;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_m.a, (sum(pagg_tab_m.b)), (avg(pagg_tab_m.c))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: pagg_tab_m.a, ((pagg_tab_m.a + pagg_tab_m.b) / 2)
+-               Filter: (sum(pagg_tab_m.b) < 50)
+-               ->  Seq Scan on pagg_tab_m_p1 pagg_tab_m
+-         ->  HashAggregate
+-               Group Key: pagg_tab_m_1.a, ((pagg_tab_m_1.a + pagg_tab_m_1.b) / 2)
+-               Filter: (sum(pagg_tab_m_1.b) < 50)
+-               ->  Seq Scan on pagg_tab_m_p2 pagg_tab_m_1
+-         ->  HashAggregate
+-               Group Key: pagg_tab_m_2.a, ((pagg_tab_m_2.a + pagg_tab_m_2.b) / 2)
+-               Filter: (sum(pagg_tab_m_2.b) < 50)
+-               ->  Seq Scan on pagg_tab_m_p3 pagg_tab_m_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY a, (a+b)/2 HAVING sum(b) < 50 ORDER BY 1, 2, 3;
+- a  | sum |         avg         | count 
+-----+-----+---------------------+-------
+-  0 |   0 | 20.0000000000000000 |    25
+-  1 |  25 | 21.0000000000000000 |    25
+- 10 |   0 | 20.0000000000000000 |    25
+- 11 |  25 | 21.0000000000000000 |    25
+- 20 |   0 | 20.0000000000000000 |    25
+- 21 |  25 | 21.0000000000000000 |    25
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_m" does not exist
+ -- Full aggregation as PARTITION KEY is part of GROUP BY clause
+ EXPLAIN (COSTS OFF)
+ SELECT a, c, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY (a+b)/2, 2, 1 HAVING sum(b) = 50 AND avg(c) > 25 ORDER BY 1, 2, 3;
+-                                            QUERY PLAN                                            
+---------------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_m.a, pagg_tab_m.c, (sum(pagg_tab_m.b))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: ((pagg_tab_m.a + pagg_tab_m.b) / 2), pagg_tab_m.c, pagg_tab_m.a
+-               Filter: ((sum(pagg_tab_m.b) = 50) AND (avg(pagg_tab_m.c) > '25'::numeric))
+-               ->  Seq Scan on pagg_tab_m_p1 pagg_tab_m
+-         ->  HashAggregate
+-               Group Key: ((pagg_tab_m_1.a + pagg_tab_m_1.b) / 2), pagg_tab_m_1.c, pagg_tab_m_1.a
+-               Filter: ((sum(pagg_tab_m_1.b) = 50) AND (avg(pagg_tab_m_1.c) > '25'::numeric))
+-               ->  Seq Scan on pagg_tab_m_p2 pagg_tab_m_1
+-         ->  HashAggregate
+-               Group Key: ((pagg_tab_m_2.a + pagg_tab_m_2.b) / 2), pagg_tab_m_2.c, pagg_tab_m_2.a
+-               Filter: ((sum(pagg_tab_m_2.b) = 50) AND (avg(pagg_tab_m_2.c) > '25'::numeric))
+-               ->  Seq Scan on pagg_tab_m_p3 pagg_tab_m_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, c, sum(b), avg(c), count(*) FROM pagg_tab_m GROUP BY (a+b)/2, 2, 1 HAVING sum(b) = 50 AND avg(c) > 25 ORDER BY 1, 2, 3;
+- a  | c  | sum |         avg         | count 
+-----+----+-----+---------------------+-------
+-  0 | 30 |  50 | 30.0000000000000000 |     5
+-  0 | 40 |  50 | 40.0000000000000000 |     5
+- 10 | 30 |  50 | 30.0000000000000000 |     5
+- 10 | 40 |  50 | 40.0000000000000000 |     5
+- 20 | 30 |  50 | 30.0000000000000000 |     5
+- 20 | 40 |  50 | 40.0000000000000000 |     5
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_m" does not exist
+ -- Test with multi-level partitioning scheme
+ CREATE TABLE pagg_tab_ml (a int, b int, c text) PARTITION BY RANGE(a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml (a int, b int, c text) PARTITION BY RANGE(a)
++                                                                     ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_ml_p1 PARTITION OF pagg_tab_ml FOR VALUES FROM (0) TO (12);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p1 PARTITION OF pagg_tab_ml FOR VALUES FROM (0) TO (12)
++                            ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_ml_p2 PARTITION OF pagg_tab_ml FOR VALUES FROM (12) TO (20) PARTITION BY LIST (c);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p2 PARTITION OF pagg_tab_ml FOR VALUES FROM (12) TO (20) PARTITION BY LIST (c)
++                            ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_ml_p2_s1 PARTITION OF pagg_tab_ml_p2 FOR VALUES IN ('0000', '0001', '0002');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p2_s1 PARTITION OF pagg_tab_ml_p2 FOR VALUES IN ('0000', '0001', '0002')
++                               ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_ml_p2_s2 PARTITION OF pagg_tab_ml_p2 FOR VALUES IN ('0003');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p2_s2 PARTITION OF pagg_tab_ml_p2 FOR VALUES IN ('0003')
++                               ^
++HINT:  try \h CREATE TABLE
+ -- This level of partitioning has different column positions than the parent
+ CREATE TABLE pagg_tab_ml_p3(b int, c text, a int) PARTITION BY RANGE (b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p3(b int, c text, a int) PARTITION BY RANGE (b)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_ml_p3_s1(c text, a int, b int);
+ CREATE TABLE pagg_tab_ml_p3_s2 PARTITION OF pagg_tab_ml_p3 FOR VALUES FROM (7) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_ml_p3_s2 PARTITION OF pagg_tab_ml_p3 FOR VALUES FROM (7) TO (10)
++                               ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE pagg_tab_ml_p3 ATTACH PARTITION pagg_tab_ml_p3_s1 FOR VALUES FROM (0) TO (7);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pagg_tab_ml_p3 ATTACH PARTITION pagg_tab_ml_p3_s1 FOR VALUES FROM (0) TO (7)
++                           ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE pagg_tab_ml ATTACH PARTITION pagg_tab_ml_p3 FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pagg_tab_ml ATTACH PARTITION pagg_tab_ml_p3 FOR VALUES FROM (20) TO (30)
++                        ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO pagg_tab_ml SELECT i % 30, i % 10, to_char(i % 4, 'FM0000') FROM generate_series(0, 29999) i;
++ERROR:  relation "pagg_tab_ml" does not exist
+ ANALYZE pagg_tab_ml;
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- For Parallel Append
+ SET max_parallel_workers_per_gather TO 2;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_setup_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Full aggregation at level 1 as GROUP BY clause matches with PARTITION KEY
+ -- for level 1 only. For subpartitions, GROUP BY clause does not match with
+ -- PARTITION KEY, but still we do not see a partial aggregation as array_agg()
+ -- is not partial agg safe.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), array_agg(distinct c), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+-                                      QUERY PLAN                                      
+---------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.a, (sum(pagg_tab_ml.b)), (array_agg(DISTINCT pagg_tab_ml.c))
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Parallel Append
+-               ->  GroupAggregate
+-                     Group Key: pagg_tab_ml.a
+-                     Filter: (avg(pagg_tab_ml.b) < '3'::numeric)
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml.a, pagg_tab_ml.c
+-                           ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-               ->  GroupAggregate
+-                     Group Key: pagg_tab_ml_5.a
+-                     Filter: (avg(pagg_tab_ml_5.b) < '3'::numeric)
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml_5.a, pagg_tab_ml_5.c
+-                           ->  Append
+-                                 ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_5
+-                                 ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_6
+-               ->  GroupAggregate
+-                     Group Key: pagg_tab_ml_2.a
+-                     Filter: (avg(pagg_tab_ml_2.b) < '3'::numeric)
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml_2.a, pagg_tab_ml_2.c
+-                           ->  Append
+-                                 ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_2
+-                                 ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_3
+-(27 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), array_agg(distinct c), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+- a  | sum  |  array_agg  | count 
+-----+------+-------------+-------
+-  0 |    0 | {0000,0002} |  1000
+-  1 | 1000 | {0001,0003} |  1000
+-  2 | 2000 | {0000,0002} |  1000
+- 10 |    0 | {0000,0002} |  1000
+- 11 | 1000 | {0001,0003} |  1000
+- 12 | 2000 | {0000,0002} |  1000
+- 20 |    0 | {0000,0002} |  1000
+- 21 | 1000 | {0001,0003} |  1000
+- 22 | 2000 | {0000,0002} |  1000
+-(9 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Without ORDER BY clause, to test Gather at top-most path
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), array_agg(distinct c), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3;
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Gather
+-   Workers Planned: 2
+-   ->  Parallel Append
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_ml.a
+-               Filter: (avg(pagg_tab_ml.b) < '3'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml.a, pagg_tab_ml.c
+-                     ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_ml_5.a
+-               Filter: (avg(pagg_tab_ml_5.b) < '3'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml_5.a, pagg_tab_ml_5.c
+-                     ->  Append
+-                           ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_5
+-                           ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_6
+-         ->  GroupAggregate
+-               Group Key: pagg_tab_ml_2.a
+-               Filter: (avg(pagg_tab_ml_2.b) < '3'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml_2.a, pagg_tab_ml_2.c
+-                     ->  Append
+-                           ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_2
+-                           ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_3
+-(25 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ RESET parallel_setup_cost;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Full aggregation at level 1 as GROUP BY clause matches with PARTITION KEY
+ -- for level 1 only. For subpartitions, GROUP BY clause does not match with
+ -- PARTITION KEY, thus we will have a partial aggregation for them.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+-                                   QUERY PLAN                                    
+----------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.a, (sum(pagg_tab_ml.b)), (count(*))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml.a
+-               Filter: (avg(pagg_tab_ml.b) < '3'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-         ->  Finalize GroupAggregate
+-               Group Key: pagg_tab_ml_2.a
+-               Filter: (avg(pagg_tab_ml_2.b) < '3'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml_2.a
+-                     ->  Append
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_2.a
+-                                 ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_2
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_3.a
+-                                 ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_3
+-         ->  Finalize GroupAggregate
+-               Group Key: pagg_tab_ml_5.a
+-               Filter: (avg(pagg_tab_ml_5.b) < '3'::numeric)
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml_5.a
+-                     ->  Append
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_5.a
+-                                 ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_5
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_6.a
+-                                 ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_6
+-(31 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+- a  | sum  | count 
+-----+------+-------
+-  0 |    0 |  1000
+-  1 | 1000 |  1000
+-  2 | 2000 |  1000
+- 10 |    0 |  1000
+- 11 | 1000 |  1000
+- 12 | 2000 |  1000
+- 20 |    0 |  1000
+- 21 | 1000 |  1000
+- 22 | 2000 |  1000
+-(9 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Partial aggregation at all levels as GROUP BY clause does not match with
+ -- PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT b, sum(a), count(*) FROM pagg_tab_ml GROUP BY b ORDER BY 1, 2, 3;
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.b, (sum(pagg_tab_ml.a)), (count(*))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_ml.b
+-         ->  Sort
+-               Sort Key: pagg_tab_ml.b
+-               ->  Append
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_ml.b
+-                           ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_ml_1.b
+-                           ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_1
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_ml_2.b
+-                           ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_2
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_ml_3.b
+-                           ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_3
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_ml_4.b
+-                           ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_4
+-(22 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT b, sum(a), count(*) FROM pagg_tab_ml GROUP BY b HAVING avg(a) < 15 ORDER BY 1, 2, 3;
+- b |  sum  | count 
+----+-------+-------
+- 0 | 30000 |  3000
+- 1 | 33000 |  3000
+- 2 | 36000 |  3000
+- 3 | 39000 |  3000
+- 4 | 42000 |  3000
+-(5 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Full aggregation at all levels as GROUP BY clause matches with PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a, b, c HAVING avg(b) > 7 ORDER BY 1, 2, 3;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.a, (sum(pagg_tab_ml.b)), (count(*))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml.a, pagg_tab_ml.b, pagg_tab_ml.c
+-               Filter: (avg(pagg_tab_ml.b) > '7'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml_1.a, pagg_tab_ml_1.b, pagg_tab_ml_1.c
+-               Filter: (avg(pagg_tab_ml_1.b) > '7'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_1
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml_2.a, pagg_tab_ml_2.b, pagg_tab_ml_2.c
+-               Filter: (avg(pagg_tab_ml_2.b) > '7'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_2
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml_3.a, pagg_tab_ml_3.b, pagg_tab_ml_3.c
+-               Filter: (avg(pagg_tab_ml_3.b) > '7'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_3
+-         ->  HashAggregate
+-               Group Key: pagg_tab_ml_4.a, pagg_tab_ml_4.b, pagg_tab_ml_4.c
+-               Filter: (avg(pagg_tab_ml_4.b) > '7'::numeric)
+-               ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_4
+-(23 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a, b, c HAVING avg(b) > 7 ORDER BY 1, 2, 3;
+- a  | sum  | count 
+-----+------+-------
+-  8 | 4000 |   500
+-  8 | 4000 |   500
+-  9 | 4500 |   500
+-  9 | 4500 |   500
+- 18 | 4000 |   500
+- 18 | 4000 |   500
+- 19 | 4500 |   500
+- 19 | 4500 |   500
+- 28 | 4000 |   500
+- 28 | 4000 |   500
+- 29 | 4500 |   500
+- 29 | 4500 |   500
+-(12 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Parallelism within partitionwise aggregates
+ SET min_parallel_table_scan_size TO '8kB';
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_setup_cost TO 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Full aggregation at level 1 as GROUP BY clause matches with PARTITION KEY
+ -- for level 1 only. For subpartitions, GROUP BY clause does not match with
+ -- PARTITION KEY, thus we will have a partial aggregation for them.
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+-                                           QUERY PLAN                                           
+-------------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.a, (sum(pagg_tab_ml.b)), (count(*))
+-   ->  Append
+-         ->  Finalize GroupAggregate
+-               Group Key: pagg_tab_ml.a
+-               Filter: (avg(pagg_tab_ml.b) < '3'::numeric)
+-               ->  Gather Merge
+-                     Workers Planned: 2
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml.a
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml.a
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-         ->  Finalize GroupAggregate
+-               Group Key: pagg_tab_ml_2.a
+-               Filter: (avg(pagg_tab_ml_2.b) < '3'::numeric)
+-               ->  Gather Merge
+-                     Workers Planned: 2
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml_2.a
+-                           ->  Parallel Append
+-                                 ->  Partial HashAggregate
+-                                       Group Key: pagg_tab_ml_2.a
+-                                       ->  Parallel Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_2
+-                                 ->  Partial HashAggregate
+-                                       Group Key: pagg_tab_ml_3.a
+-                                       ->  Parallel Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_3
+-         ->  Finalize GroupAggregate
+-               Group Key: pagg_tab_ml_5.a
+-               Filter: (avg(pagg_tab_ml_5.b) < '3'::numeric)
+-               ->  Gather Merge
+-                     Workers Planned: 2
+-                     ->  Sort
+-                           Sort Key: pagg_tab_ml_5.a
+-                           ->  Parallel Append
+-                                 ->  Partial HashAggregate
+-                                       Group Key: pagg_tab_ml_5.a
+-                                       ->  Parallel Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_5
+-                                 ->  Partial HashAggregate
+-                                       Group Key: pagg_tab_ml_6.a
+-                                       ->  Parallel Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_6
+-(41 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a HAVING avg(b) < 3 ORDER BY 1, 2, 3;
+- a  | sum  | count 
+-----+------+-------
+-  0 |    0 |  1000
+-  1 | 1000 |  1000
+-  2 | 2000 |  1000
+- 10 |    0 |  1000
+- 11 | 1000 |  1000
+- 12 | 2000 |  1000
+- 20 |    0 |  1000
+- 21 | 1000 |  1000
+- 22 | 2000 |  1000
+-(9 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Partial aggregation at all levels as GROUP BY clause does not match with
+ -- PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT b, sum(a), count(*) FROM pagg_tab_ml GROUP BY b ORDER BY 1, 2, 3;
+-                                        QUERY PLAN                                        
+-------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_ml.b, (sum(pagg_tab_ml.a)), (count(*))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_ml.b
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: pagg_tab_ml.b
+-                     ->  Parallel Append
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml.b
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_3.b
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_3
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_1.b
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_1
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_4.b
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_4
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_ml_2.b
+-                                 ->  Parallel Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_2
+-(24 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT b, sum(a), count(*) FROM pagg_tab_ml GROUP BY b HAVING avg(a) < 15 ORDER BY 1, 2, 3;
+- b |  sum  | count 
+----+-------+-------
+- 0 | 30000 |  3000
+- 1 | 33000 |  3000
+- 2 | 36000 |  3000
+- 3 | 39000 |  3000
+- 4 | 42000 |  3000
+-(5 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Full aggregation at all levels as GROUP BY clause matches with PARTITION KEY
+ EXPLAIN (COSTS OFF)
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a, b, c HAVING avg(b) > 7 ORDER BY 1, 2, 3;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Gather Merge
+-   Workers Planned: 2
+-   ->  Sort
+-         Sort Key: pagg_tab_ml.a, (sum(pagg_tab_ml.b)), (count(*))
+-         ->  Parallel Append
+-               ->  HashAggregate
+-                     Group Key: pagg_tab_ml.a, pagg_tab_ml.b, pagg_tab_ml.c
+-                     Filter: (avg(pagg_tab_ml.b) > '7'::numeric)
+-                     ->  Seq Scan on pagg_tab_ml_p1 pagg_tab_ml
+-               ->  HashAggregate
+-                     Group Key: pagg_tab_ml_3.a, pagg_tab_ml_3.b, pagg_tab_ml_3.c
+-                     Filter: (avg(pagg_tab_ml_3.b) > '7'::numeric)
+-                     ->  Seq Scan on pagg_tab_ml_p3_s1 pagg_tab_ml_3
+-               ->  HashAggregate
+-                     Group Key: pagg_tab_ml_1.a, pagg_tab_ml_1.b, pagg_tab_ml_1.c
+-                     Filter: (avg(pagg_tab_ml_1.b) > '7'::numeric)
+-                     ->  Seq Scan on pagg_tab_ml_p2_s1 pagg_tab_ml_1
+-               ->  HashAggregate
+-                     Group Key: pagg_tab_ml_4.a, pagg_tab_ml_4.b, pagg_tab_ml_4.c
+-                     Filter: (avg(pagg_tab_ml_4.b) > '7'::numeric)
+-                     ->  Seq Scan on pagg_tab_ml_p3_s2 pagg_tab_ml_4
+-               ->  HashAggregate
+-                     Group Key: pagg_tab_ml_2.a, pagg_tab_ml_2.b, pagg_tab_ml_2.c
+-                     Filter: (avg(pagg_tab_ml_2.b) > '7'::numeric)
+-                     ->  Seq Scan on pagg_tab_ml_p2_s2 pagg_tab_ml_2
+-(25 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, sum(b), count(*) FROM pagg_tab_ml GROUP BY a, b, c HAVING avg(b) > 7 ORDER BY 1, 2, 3;
+- a  | sum  | count 
+-----+------+-------
+-  8 | 4000 |   500
+-  8 | 4000 |   500
+-  9 | 4500 |   500
+-  9 | 4500 |   500
+- 18 | 4000 |   500
+- 18 | 4000 |   500
+- 19 | 4500 |   500
+- 19 | 4500 |   500
+- 28 | 4000 |   500
+- 28 | 4000 |   500
+- 29 | 4500 |   500
+- 29 | 4500 |   500
+-(12 rows)
+-
++ERROR:  relation "pagg_tab_ml" does not exist
+ -- Parallelism within partitionwise aggregates (single level)
+ -- Add few parallel setup cost, so that we will see a plan which gathers
+ -- partially created paths even for full aggregation and sticks a single Gather
+@@ -1334,187 +693,129 @@
+ -- wins as we add it first. This parallel_setup_cost plays a vital role in
+ -- costing such plans.
+ SET parallel_setup_cost TO 10;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE pagg_tab_para(x int, y int) PARTITION BY RANGE(x);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_para(x int, y int) PARTITION BY RANGE(x)
++                                                              ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_para_p1 PARTITION OF pagg_tab_para FOR VALUES FROM (0) TO (12);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_para_p1 PARTITION OF pagg_tab_para FOR VALUES FROM (0) TO (12)
++                              ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_para_p2 PARTITION OF pagg_tab_para FOR VALUES FROM (12) TO (22);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_para_p2 PARTITION OF pagg_tab_para FOR VALUES FROM (12) TO (22)
++                              ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pagg_tab_para_p3 PARTITION OF pagg_tab_para FOR VALUES FROM (22) TO (30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pagg_tab_para_p3 PARTITION OF pagg_tab_para FOR VALUES FROM (22) TO (30)
++                              ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO pagg_tab_para SELECT i % 30, i % 20 FROM generate_series(0, 29999) i;
++ERROR:  relation "pagg_tab_para" does not exist
+ ANALYZE pagg_tab_para;
++ERROR:  relation "pagg_tab_para" does not exist
+ -- When GROUP BY clause matches; full aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT x, sum(y), avg(y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_para.x, (sum(pagg_tab_para.y)), (avg(pagg_tab_para.y))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_para.x
+-         Filter: (avg(pagg_tab_para.y) < '7'::numeric)
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: pagg_tab_para.x
+-                     ->  Parallel Append
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para.x
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p1 pagg_tab_para
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para_1.x
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p2 pagg_tab_para_1
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para_2.x
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p3 pagg_tab_para_2
+-(19 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT x, sum(y), avg(y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+- x  | sum  |        avg         | count 
+-----+------+--------------------+-------
+-  0 | 5000 | 5.0000000000000000 |  1000
+-  1 | 6000 | 6.0000000000000000 |  1000
+- 10 | 5000 | 5.0000000000000000 |  1000
+- 11 | 6000 | 6.0000000000000000 |  1000
+- 20 | 5000 | 5.0000000000000000 |  1000
+- 21 | 6000 | 6.0000000000000000 |  1000
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_para" does not exist
+ -- When GROUP BY clause does not match; partial aggregation is performed for each partition.
+ EXPLAIN (COSTS OFF)
+ SELECT y, sum(x), avg(x), count(*) FROM pagg_tab_para GROUP BY y HAVING avg(x) < 12 ORDER BY 1, 2, 3;
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_para.y, (sum(pagg_tab_para.x)), (avg(pagg_tab_para.x))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_para.y
+-         Filter: (avg(pagg_tab_para.x) < '12'::numeric)
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: pagg_tab_para.y
+-                     ->  Parallel Append
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para.y
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p1 pagg_tab_para
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para_1.y
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p2 pagg_tab_para_1
+-                           ->  Partial HashAggregate
+-                                 Group Key: pagg_tab_para_2.y
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p3 pagg_tab_para_2
+-(19 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT y, sum(x), avg(x), count(*) FROM pagg_tab_para GROUP BY y HAVING avg(x) < 12 ORDER BY 1, 2, 3;
+- y  |  sum  |         avg         | count 
+-----+-------+---------------------+-------
+-  0 | 15000 | 10.0000000000000000 |  1500
+-  1 | 16500 | 11.0000000000000000 |  1500
+- 10 | 15000 | 10.0000000000000000 |  1500
+- 11 | 16500 | 11.0000000000000000 |  1500
+-(4 rows)
+-
++ERROR:  relation "pagg_tab_para" does not exist
+ -- Test when parent can produce parallel paths but not any (or some) of its children
+ -- (Use one more aggregate to tilt the cost estimates for the plan we want)
+ ALTER TABLE pagg_tab_para_p1 SET (parallel_workers = 0);
++ERROR:  relation "pagg_tab_para_p1" does not exist
+ ALTER TABLE pagg_tab_para_p3 SET (parallel_workers = 0);
++ERROR:  relation "pagg_tab_para_p3" does not exist
+ ANALYZE pagg_tab_para;
++ERROR:  relation "pagg_tab_para" does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT x, sum(y), avg(y), sum(x+y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_para.x, (sum(pagg_tab_para.y)), (avg(pagg_tab_para.y))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_para.x
+-         Filter: (avg(pagg_tab_para.y) < '7'::numeric)
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: pagg_tab_para.x
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_para.x
+-                           ->  Parallel Append
+-                                 ->  Seq Scan on pagg_tab_para_p1 pagg_tab_para_1
+-                                 ->  Seq Scan on pagg_tab_para_p3 pagg_tab_para_3
+-                                 ->  Parallel Seq Scan on pagg_tab_para_p2 pagg_tab_para_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT x, sum(y), avg(y), sum(x+y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+- x  | sum  |        avg         |  sum  | count 
+-----+------+--------------------+-------+-------
+-  0 | 5000 | 5.0000000000000000 |  5000 |  1000
+-  1 | 6000 | 6.0000000000000000 |  7000 |  1000
+- 10 | 5000 | 5.0000000000000000 | 15000 |  1000
+- 11 | 6000 | 6.0000000000000000 | 17000 |  1000
+- 20 | 5000 | 5.0000000000000000 | 25000 |  1000
+- 21 | 6000 | 6.0000000000000000 | 27000 |  1000
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_para" does not exist
+ ALTER TABLE pagg_tab_para_p2 SET (parallel_workers = 0);
++ERROR:  relation "pagg_tab_para_p2" does not exist
+ ANALYZE pagg_tab_para;
++ERROR:  relation "pagg_tab_para" does not exist
+ EXPLAIN (COSTS OFF)
+ SELECT x, sum(y), avg(y), sum(x+y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_para.x, (sum(pagg_tab_para.y)), (avg(pagg_tab_para.y))
+-   ->  Finalize GroupAggregate
+-         Group Key: pagg_tab_para.x
+-         Filter: (avg(pagg_tab_para.y) < '7'::numeric)
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: pagg_tab_para.x
+-                     ->  Partial HashAggregate
+-                           Group Key: pagg_tab_para.x
+-                           ->  Parallel Append
+-                                 ->  Seq Scan on pagg_tab_para_p1 pagg_tab_para_1
+-                                 ->  Seq Scan on pagg_tab_para_p2 pagg_tab_para_2
+-                                 ->  Seq Scan on pagg_tab_para_p3 pagg_tab_para_3
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT x, sum(y), avg(y), sum(x+y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+- x  | sum  |        avg         |  sum  | count 
+-----+------+--------------------+-------+-------
+-  0 | 5000 | 5.0000000000000000 |  5000 |  1000
+-  1 | 6000 | 6.0000000000000000 |  7000 |  1000
+- 10 | 5000 | 5.0000000000000000 | 15000 |  1000
+- 11 | 6000 | 6.0000000000000000 | 17000 |  1000
+- 20 | 5000 | 5.0000000000000000 | 25000 |  1000
+- 21 | 6000 | 6.0000000000000000 | 27000 |  1000
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_para" does not exist
+ -- Reset parallelism parameters to get partitionwise aggregation plan.
+ RESET min_parallel_table_scan_size;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET parallel_setup_cost;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (COSTS OFF)
+ SELECT x, sum(y), avg(y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+-                                 QUERY PLAN                                  
+------------------------------------------------------------------------------
+- Sort
+-   Sort Key: pagg_tab_para.x, (sum(pagg_tab_para.y)), (avg(pagg_tab_para.y))
+-   ->  Append
+-         ->  HashAggregate
+-               Group Key: pagg_tab_para.x
+-               Filter: (avg(pagg_tab_para.y) < '7'::numeric)
+-               ->  Seq Scan on pagg_tab_para_p1 pagg_tab_para
+-         ->  HashAggregate
+-               Group Key: pagg_tab_para_1.x
+-               Filter: (avg(pagg_tab_para_1.y) < '7'::numeric)
+-               ->  Seq Scan on pagg_tab_para_p2 pagg_tab_para_1
+-         ->  HashAggregate
+-               Group Key: pagg_tab_para_2.x
+-               Filter: (avg(pagg_tab_para_2.y) < '7'::numeric)
+-               ->  Seq Scan on pagg_tab_para_p3 pagg_tab_para_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT x, sum(y), avg(y), count(*) FROM pagg_tab_para GROUP BY x HAVING avg(y) < 7 ORDER BY 1, 2, 3;
+- x  | sum  |        avg         | count 
+-----+------+--------------------+-------
+-  0 | 5000 | 5.0000000000000000 |  1000
+-  1 | 6000 | 6.0000000000000000 |  1000
+- 10 | 5000 | 5.0000000000000000 |  1000
+- 11 | 6000 | 6.0000000000000000 |  1000
+- 20 | 5000 | 5.0000000000000000 |  1000
+- 21 | 6000 | 6.0000000000000000 |  1000
+-(6 rows)
+-
++ERROR:  relation "pagg_tab_para" does not exist

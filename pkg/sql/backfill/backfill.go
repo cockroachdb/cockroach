@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -27,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -293,17 +296,15 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	requestedCols = append(requestedCols, cb.added...)
 	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
-		ctx,
-		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
 		nil, /* uniqueWithTombstoneIndexes */
+		nil, /* lockedIndexes */
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
-		&cb.alloc,
+		cb.evalCtx.SessionData(),
 		&cb.evalCtx.Settings.SV,
-		cb.evalCtx.SessionData().Internal,
 		cb.rowMetrics,
 	)
 	if err != nil {
@@ -395,12 +396,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		}
 		copy(oldValues, fetchedValues)
 
-		// No existing secondary indexes will be updated by adding or dropping a
-		// column. It is safe to use an empty PartialIndexUpdateHelper in this
-		// case.
+		// No existing secondary indexes will be updated by adding or dropping a column.
+		// It is safe to use an empty PartialIndexUpdateHelper and
+		// VectorIndexUpdateHelper in this case.
 		var pm row.PartialIndexUpdateHelper
+		var vh row.VectorIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, nil, traceKV,
+			ctx, b, oldValues, updateValues, pm, vh, nil, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -476,6 +478,14 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// sourceIndex the primary index that should be used to execute this
+	// backfill.
+	sourceIndex catalog.Index
+
+	// keyPrefixes is a slice of key prefixes for each index in indexesToEncode.
+	// indexesToEncode and keyPrefixes should both have the same ordering.
+	keyPrefixes [][]byte
+
 	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
@@ -486,7 +496,7 @@ type IndexBackfiller struct {
 // ContainsInvertedIndex returns true if backfilling an inverted index.
 func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	for _, idx := range ib.added {
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == idxtype.INVERTED {
 			return true
 		}
 	}
@@ -505,7 +515,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(desc, nil /* allowList */)
+	ib.initIndexes(evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/)
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -641,20 +651,21 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	flowCtx *execinfra.FlowCtx,
 	desc catalog.TableDescriptor,
 	allowList []catid.IndexID,
+	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
 ) error {
+	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
+	// to make a copy.
+	evalCtx := flowCtx.NewEvalCtx()
 
 	// Initialize ib.added.
-	ib.initIndexes(desc, allowList)
+	ib.initIndexes(evalCtx.Codec, desc, allowList, sourceIndexID)
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
 		return err
 	}
 
-	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
-	// to make a copy.
-	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
 	var colExprs map[descpb.ColumnID]tree.TypedExpr
 	var referencedColumns catalog.TableColSet
@@ -726,16 +737,23 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 	ib.indexBackfillerCols, err = makeIndexBackfillColumns(
-		desc.DeletableColumns(), desc.GetPrimaryIndex(), ib.added,
+		desc, desc.DeletableColumns(), ib.sourceIndex, ib.added,
 	)
 	return err
 }
 
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
-// populates the added field to be all adding index mutations.
+// populates the added field to be all adding index mutations, along with the
+// keyPrefixes field to be the respective keyPrefixes (these slices should
+// maintain the same ordering).
 // If `allowList` is non-nil, we only add those in this list.
 // If `allowList` is nil, we add all adding index mutations.
-func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, allowList []catid.IndexID) {
+func (ib *IndexBackfiller) initIndexes(
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
+	allowList []catid.IndexID,
+	sourceIndexID catid.IndexID,
+) {
 	var allowListAsSet catid.IndexSet
 	if len(allowList) > 0 {
 		allowListAsSet = catid.MakeIndexIDSet(allowList...)
@@ -743,6 +761,12 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, allowList [
 
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
+	if sourceIndexID != 0 {
+		ib.sourceIndex = catalog.FindIndexByID(desc, sourceIndexID)
+	} else {
+		ib.sourceIndex = desc.GetPrimaryIndex()
+	}
+	ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
 	for _, m := range mutations {
@@ -753,6 +777,8 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, allowList [
 			(allowListAsSet.Empty() || allowListAsSet.Contains(m.AsIndex().GetID())) {
 			idx := m.AsIndex()
 			ib.added = append(ib.added, idx)
+			keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), idx.GetID())
+			ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 		}
 	}
 }
@@ -775,6 +801,7 @@ func (ib *IndexBackfiller) init(
 	ib.indexesToEncode = ib.added
 	if len(ib.predicates) > 0 {
 		ib.indexesToEncode = make([]catalog.Index, 0, len(ib.added))
+		ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	}
 
 	ib.types = make([]*types.T, len(ib.cols))
@@ -844,7 +871,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// read or used
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
+		&spec, ib.evalCtx.Codec, tableDesc, ib.sourceIndex, fetcherCols,
 	); err != nil {
 		return nil, nil, memUsedPerChunk, err
 	}
@@ -899,6 +926,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 					// evaluation context as the default value for backfill.
 					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 				}
+				// Explicitly mark with user errors for codes that we know
+				// cannot be retried.
+				if code := pgerror.GetPGCode(err); code == pgcode.FeatureNotSupported ||
+					code == pgcode.InvalidParameterValue {
+					return scerrors.SchemaChangerUserError(err)
+				}
 				return err
 			}
 			colIdx, ok := ib.colIdxMap.Get(colID)
@@ -917,6 +950,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
+
 	for i := int64(0); i < chunkSize; i++ {
 		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
@@ -942,11 +976,14 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes that the current row should be added to.
 		if len(ib.predicates) > 0 {
 			ib.indexesToEncode = ib.indexesToEncode[:0]
+			ib.keyPrefixes = ib.keyPrefixes[:0]
 			for _, idx := range ib.added {
 				if !idx.IsPartial() {
 					// If the index is not a partial index, all rows should have
 					// an entry.
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
+					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
+					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 					continue
 				}
 
@@ -961,9 +998,15 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				if val == tree.DBoolTrue {
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
+					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
+					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 				}
 			}
 		}
+
+		// TODO(drewk, mw5h): perform a vector search for each affected vector index, and
+		// fill out the helper.
+		var vh rowenc.VectorIndexEncodingHelper
 
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
@@ -982,8 +1025,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.evalCtx.Codec,
 				tableDesc,
 				ib.indexesToEncode,
+				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
+				vh,
 				buffer,
 				false, /* includeEmpty */
 				&ib.muBoundAccount.boundAccount,

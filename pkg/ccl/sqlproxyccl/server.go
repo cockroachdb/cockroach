@@ -149,7 +149,7 @@ func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	scrape := func(pm *metric.PrometheusExporter) {
-		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
+		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/, true /* includeAggregateMetrics */)
 	}
 	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)

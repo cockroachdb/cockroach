@@ -1,0 +1,213 @@
+{
+  "name": "foo-bar",
+  "user": "baz",
+  "created_at": "2025-02-04T16:02:50.788732Z",
+  "lifetime": 43200000000000,
+  "vms": [
+    {
+      "name": "foo-bar-0001",
+      "created_at": "2025-02-04T08:02:52.385-08:00",
+      "errors": null,
+      "lifetime": 43200000000000,
+      "preemptible": false,
+      "labels": {
+        "cluster": "foo-bar",
+        "created": "2025-02-04t16_02_50z",
+        "lifetime": "12h0m0s",
+        "roachprod": "true",
+        "usage": "roachprod"
+      },
+      "dns": "foo-bar-0001.us-east1-d.unit-test",
+      "public_dns": "foo-bar-0001.roachprod.crdb.io",
+      "dns_provider": "gce",
+      "provider": "gce",
+      "provider_id": "foo-bar-0001",
+      "private_ip": "10.142.1.1",
+      "public_ip": "35.196.120.1",
+      "remote_user": "ubuntu",
+      "vpc": "default",
+      "machine_type": "n2-standard-4",
+      "cpu_architecture": "amd64",
+      "cpu_family": "ice lake",
+      "zone": "us-east1-d",
+      "project": "unit-test",
+      "non_bootable_volumes": null,
+      "bootable_volume": {
+        "ProviderResourceID": "foo-bar-0001",
+        "ProviderVolumeType": "pd-ssd",
+        "Zone": "us-east1-d",
+        "Encrypted": false,
+        "Name": "foo-bar-0001",
+        "Labels": null,
+        "Size": 10
+      },
+      "local_disks": [
+        {
+          "ProviderResourceID": "",
+          "ProviderVolumeType": "local-ssd",
+          "Zone": "",
+          "Encrypted": false,
+          "Name": "",
+          "Labels": null,
+          "Size": 375
+        }
+      ],
+      "CostPerHour": 0,
+      "EmptyCluster": false
+    },
+    {
+      "name": "foo-bar-0002",
+      "created_at": "2025-02-04T08:02:52.633-08:00",
+      "errors": null,
+      "lifetime": 43200000000000,
+      "preemptible": false,
+      "labels": {
+        "cluster": "foo-bar",
+        "created": "2025-02-04t16_02_50z",
+        "lifetime": "12h0m0s",
+        "roachprod": "true",
+        "usage": "roachprod"
+      },
+      "dns": "foo-bar-0002.us-east1-d.unit-test",
+      "public_dns": "foo-bar-0002.roachprod.crdb.io",
+      "dns_provider": "gce",
+      "provider": "gce",
+      "provider_id": "foo-bar-0002",
+      "private_ip": "10.142.1.2",
+      "public_ip": "35.227.25.2",
+      "remote_user": "ubuntu",
+      "vpc": "default",
+      "machine_type": "n2-standard-4",
+      "cpu_architecture": "amd64",
+      "cpu_family": "ice lake",
+      "zone": "us-east1-d",
+      "project": "unit-test",
+      "non_bootable_volumes": null,
+      "bootable_volume": {
+        "ProviderResourceID": "foo-bar-0002",
+        "ProviderVolumeType": "pd-ssd",
+        "Zone": "us-east1-d",
+        "Encrypted": false,
+        "Name": "foo-bar-0002",
+        "Labels": null,
+        "Size": 10
+      },
+      "local_disks": [
+        {
+          "ProviderResourceID": "",
+          "ProviderVolumeType": "local-ssd",
+          "Zone": "",
+          "Encrypted": false,
+          "Name": "",
+          "Labels": null,
+          "Size": 375
+        }
+      ],
+      "CostPerHour": 0,
+      "EmptyCluster": false
+    },
+    {
+      "name": "foo-bar-0003",
+      "created_at": "2025-02-04T08:02:52.516-08:00",
+      "errors": null,
+      "lifetime": 43200000000000,
+      "preemptible": false,
+      "labels": {
+        "cluster": "foo-bar",
+        "created": "2025-02-04t16_02_50z",
+        "lifetime": "12h0m0s",
+        "roachprod": "true",
+        "usage": "roachprod"
+      },
+      "dns": "foo-bar-0003.us-east1-d.unit-test",
+      "public_dns": "foo-bar-0003.roachprod.crdb.io",
+      "dns_provider": "gce",
+      "provider": "gce",
+      "provider_id": "foo-bar-0003",
+      "private_ip": "10.142.1.3",
+      "public_ip": "34.75.95.3",
+      "remote_user": "ubuntu",
+      "vpc": "default",
+      "machine_type": "n2-standard-4",
+      "cpu_architecture": "amd64",
+      "cpu_family": "ice lake",
+      "zone": "us-east1-d",
+      "project": "unit-test",
+      "non_bootable_volumes": null,
+      "bootable_volume": {
+        "ProviderResourceID": "foo-bar-0003",
+        "ProviderVolumeType": "pd-ssd",
+        "Zone": "us-east1-d",
+        "Encrypted": false,
+        "Name": "foo-bar-0003",
+        "Labels": null,
+        "Size": 10
+      },
+      "local_disks": [
+        {
+          "ProviderResourceID": "",
+          "ProviderVolumeType": "local-ssd",
+          "Zone": "",
+          "Encrypted": false,
+          "Name": "",
+          "Labels": null,
+          "Size": 375
+        }
+      ],
+      "CostPerHour": 0,
+      "EmptyCluster": false
+    },
+    {
+      "name": "foo-bar-0004",
+      "created_at": "2025-02-04T08:02:52.54-08:00",
+      "errors": null,
+      "lifetime": 43200000000000,
+      "preemptible": false,
+      "labels": {
+        "cluster": "foo-bar",
+        "created": "2025-02-04t16_02_50z",
+        "lifetime": "12h0m0s",
+        "roachprod": "true",
+        "usage": "roachprod"
+      },
+      "dns": "foo-bar-0004.us-east1-d.unit-test",
+      "public_dns": "foo-bar-0004.roachprod.crdb.io",
+      "dns_provider": "gce",
+      "provider": "gce",
+      "provider_id": "foo-bar-0004",
+      "private_ip": "10.142.1.4",
+      "public_ip": "34.139.54.4",
+      "remote_user": "ubuntu",
+      "vpc": "default",
+      "machine_type": "n2-standard-4",
+      "cpu_architecture": "amd64",
+      "cpu_family": "ice lake",
+      "zone": "us-east1-d",
+      "project": "unit-testl",
+      "non_bootable_volumes": null,
+      "bootable_volume": {
+        "ProviderResourceID": "foo-bar-0004",
+        "ProviderVolumeType": "pd-ssd",
+        "Zone": "us-east1-d",
+        "Encrypted": false,
+        "Name": "foo-bar-0004",
+        "Labels": null,
+        "Size": 10
+      },
+      "local_disks": [
+        {
+          "ProviderResourceID": "",
+          "ProviderVolumeType": "local-ssd",
+          "Zone": "",
+          "Encrypted": false,
+          "Name": "",
+          "Labels": null,
+          "Size": 375
+        }
+      ],
+      "CostPerHour": 0,
+      "EmptyCluster": false
+    }
+  ],
+  "CostPerHour": 0
+}

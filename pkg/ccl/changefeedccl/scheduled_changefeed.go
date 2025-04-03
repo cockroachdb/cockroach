@@ -90,12 +90,12 @@ func (s *scheduledChangefeedExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobState jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StatusSucceeded {
+	if jobState == jobs.StateSucceeded {
 		s.metrics.NumSucceeded.Inc(1)
 		log.Infof(ctx, "changefeed job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
 		return nil
@@ -104,7 +104,7 @@ func (s *scheduledChangefeedExecutor) NotifyJobTermination(
 	s.metrics.NumFailed.Inc(1)
 	err := errors.Errorf(
 		"changefeed job %d scheduled by %d failed with status %s",
-		jobID, schedule.ScheduleID(), jobStatus)
+		jobID, schedule.ScheduleID(), jobState)
 	log.Errorf(ctx, "changefeed error: %v	", err)
 	jobs.DefaultHandleFailedRun(schedule, "changefeed job %d failed with err=%v", jobID, err)
 	return nil

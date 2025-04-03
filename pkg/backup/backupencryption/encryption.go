@@ -176,6 +176,7 @@ func ValidateKMSURIsAgainstFullBackup(
 			return nil, err
 		}
 
+		//nolint:deferloop TODO(#137605)
 		defer func() {
 			_ = kms.Close()
 		}()
@@ -205,8 +206,11 @@ func ValidateKMSURIsAgainstFullBackup(
 // MakeNewEncryptionOptions returns a new jobspb.BackupEncryptionOptions based
 // on the passed in encryption parameters.
 func MakeNewEncryptionOptions(
-	ctx context.Context, encryptionParams jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
+	ctx context.Context, encryptionParams *jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+		return nil, nil, nil
+	}
 	var encryptionOptions *jobspb.BackupEncryptionOptions
 	var encryptionInfo *jobspb.EncryptionInfo
 	switch encryptionParams.Mode {
@@ -338,42 +342,56 @@ func GetEncryptionFromBase(
 	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	baseBackupURI string,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	var encryptionOptions *jobspb.BackupEncryptionOptions
-	if encryptionParams.Mode != jobspb.EncryptionMode_None {
-		exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
-		if err != nil {
-			return nil, err
-		}
-		defer exportStore.Close()
-		opts, err := ReadEncryptionOptions(ctx, exportStore)
-		if err != nil {
-			return nil, err
-		}
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+		return nil, nil
+	}
+	exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
+	if err != nil {
+		return nil, err
+	}
+	defer exportStore.Close()
+	return GetEncryptionFromBaseStore(ctx, exportStore, encryptionParams, kmsEnv)
+}
 
-		switch encryptionParams.Mode {
-		case jobspb.EncryptionMode_Passphrase:
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), opts[0].Salt),
+// GetEncryptionFromBaseStore retrieves the encryption options of a base backup store.
+func GetEncryptionFromBaseStore(
+	ctx context.Context,
+	baseStore cloud.ExternalStorage,
+	encryptionParams *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (*jobspb.BackupEncryptionOptions, error) {
+	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
+		return nil, nil
+	}
+	opts, err := ReadEncryptionOptions(ctx, baseStore)
+	if err != nil {
+		return nil, err
+	}
+	var encryptionOptions *jobspb.BackupEncryptionOptions
+	switch encryptionParams.Mode {
+	case jobspb.EncryptionMode_Passphrase:
+		encryptionOptions = &jobspb.BackupEncryptionOptions{
+			Mode: jobspb.EncryptionMode_Passphrase,
+			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), opts[0].Salt),
+		}
+	case jobspb.EncryptionMode_KMS:
+		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+		for _, encFile := range opts {
+			defaultKMSInfo, err = ValidateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
+				NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+			if err == nil {
+				break
 			}
-		case jobspb.EncryptionMode_KMS:
-			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
-			for _, encFile := range opts {
-				defaultKMSInfo, err = ValidateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
-					NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				return nil, err
-			}
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode:    jobspb.EncryptionMode_KMS,
-				KMSInfo: defaultKMSInfo}
+		}
+		if err != nil {
+			return nil, err
+		}
+		encryptionOptions = &jobspb.BackupEncryptionOptions{
+			Mode:    jobspb.EncryptionMode_KMS,
+			KMSInfo: defaultKMSInfo,
 		}
 	}
 	return encryptionOptions, nil
@@ -439,6 +457,7 @@ func ReadEncryptionOptions(
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
+		//nolint:deferloop TODO(#137605)
 		defer r.Close(ctx)
 
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)

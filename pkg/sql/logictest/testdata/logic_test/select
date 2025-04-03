@@ -783,7 +783,7 @@ SET disallow_full_table_scans = true;
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of partial indexes are allowed.
@@ -823,7 +823,7 @@ ALTER TABLE t_disallow_scans INJECT STATISTICS '[
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of virtual tables are still allowed with this setting (#123783).
@@ -835,7 +835,7 @@ SELECT * FROM crdb_internal.jobs
 
 # Tests for 'large_full_scan_rows'.
 statement ok
-SET large_full_scan_rows = 1000
+SET large_full_scan_rows = 4
 
 # These queries succeed because the full table/index scans aren't considered
 # "large".
@@ -851,7 +851,13 @@ SET large_full_scan_rows = 2
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
+SELECT * FROM t_disallow_scans@b_idx
+
+statement ok
+SET large_full_scan_rows = 3
+
+statement error pq: query `.*` contains a full table\/index scan which is explicitly disallowed\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
 SELECT * FROM t_disallow_scans@b_idx
 
 # Cleanup

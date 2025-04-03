@@ -1,0 +1,1411 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowtypes.out --label=/mnt/data1/postgres/src/test/regress/results/rowtypes.out /mnt/data1/postgres/src/test/regress/expected/rowtypes.out /mnt/data1/postgres/src/test/regress/results/rowtypes.out
+--- /mnt/data1/postgres/src/test/regress/expected/rowtypes.out
++++ /mnt/data1/postgres/src/test/regress/results/rowtypes.out
+@@ -6,13 +6,12 @@
+ create temp table fullname (first text, last text);
+ -- Nested composite
+ create type quad as (c1 complex, c2 complex);
++ERROR:  unimplemented: composite types that reference user-defined types not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/91779/_version_
+ -- Some simple tests of I/O conversions and row construction
+ select (1.1,2.2)::complex, row((3.3,4.4),(5.5,null))::quad;
+-    row    |          row           
+------------+------------------------
+- (1.1,2.2) | ("(3.3,4.4)","(5.5,)")
+-(1 row)
+-
++ERROR:  type "quad" does not exist
+ select row('Joe', 'Blow')::fullname, '(Joe,Blow)'::fullname;
+     row     |  fullname  
+ ------------+------------
+@@ -44,20 +43,13 @@
+ (1 row)
+ 
+ select '(Joe)'::fullname;	-- bad
+-ERROR:  malformed record literal: "(Joe)"
+-LINE 1: select '(Joe)'::fullname;
+-               ^
++ERROR:  could not parse "(Joe)" as type tuple{string AS first, string AS last}: malformed record literal
+ DETAIL:  Too few columns.
+ select '(Joe,,)'::fullname;	-- bad
+-ERROR:  malformed record literal: "(Joe,,)"
+-LINE 1: select '(Joe,,)'::fullname;
+-               ^
++ERROR:  could not parse "(Joe,,)" as type tuple{string AS first, string AS last}: malformed record literal
+ DETAIL:  Too many columns.
+ select '[]'::fullname;          -- bad
+-ERROR:  malformed record literal: "[]"
+-LINE 1: select '[]'::fullname;
+-               ^
+-DETAIL:  Missing left parenthesis.
++ERROR:  could not parse "[]" as type tuple{string AS first, string AS last}: record must be enclosed in ( and )
+ select ' (Joe,Blow)  '::fullname;  -- ok, extra whitespace
+   fullname  
+ ------------
+@@ -65,126 +57,100 @@
+ (1 row)
+ 
+ select '(Joe,Blow) /'::fullname;  -- bad
+-ERROR:  malformed record literal: "(Joe,Blow) /"
+-LINE 1: select '(Joe,Blow) /'::fullname;
+-               ^
+-DETAIL:  Junk after right parenthesis.
++ERROR:  could not parse "(Joe,Blow) /" as type tuple{string AS first, string AS last}: extra text after closing right paren
+ -- test non-error-throwing API
+ SELECT pg_input_is_valid('(1,2)', 'complex');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('(1,2', 'complex');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('(1,zed)', 'complex');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('(1,zed)', 'complex');
+-                        message                        | detail | hint | sql_error_code 
+--------------------------------------------------------+--------+------+----------------
+- invalid input syntax for type double precision: "zed" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('(1,1e400)', 'complex');
+-                      message                      | detail | hint | sql_error_code 
+----------------------------------------------------+--------+------+----------------
+- "1e400" is out of range for type double precision |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ create temp table quadtable(f1 int, q quad);
++ERROR:  type "quad" does not exist
+ insert into quadtable values (1, ((3.3,4.4),(5.5,6.6)));
++ERROR:  relation "quadtable" does not exist
+ insert into quadtable values (2, ((null,4.4),(5.5,6.6)));
++ERROR:  relation "quadtable" does not exist
+ select * from quadtable;
+- f1 |             q             
+-----+---------------------------
+-  1 | ("(3.3,4.4)","(5.5,6.6)")
+-  2 | ("(,4.4)","(5.5,6.6)")
+-(2 rows)
+-
++ERROR:  relation "quadtable" does not exist
+ select f1, q.c1 from quadtable;		-- fails, q is a table reference
+-ERROR:  missing FROM-clause entry for table "q"
+-LINE 1: select f1, q.c1 from quadtable;
+-                   ^
++ERROR:  relation "quadtable" does not exist
+ select f1, (q).c1, (qq.q).c1.i from quadtable qq;
+- f1 |    c1     |  i  
+-----+-----------+-----
+-  1 | (3.3,4.4) | 4.4
+-  2 | (,4.4)    | 4.4
+-(2 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++select f1, (q).c1, (qq.q).c1.i from quadtable qq
++                            ^
+ create temp table people (fn fullname, bd date);
++ERROR:  unimplemented: cannot use table record type as table column
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/70099/_version_
+ insert into people values ('(Joe,Blow)', '1984-01-10');
++ERROR:  relation "people" does not exist
+ select * from people;
+-     fn     |     bd     
+-------------+------------
+- (Joe,Blow) | 01-10-1984
+-(1 row)
+-
++ERROR:  relation "people" does not exist
+ -- at the moment this will not work due to ALTER TABLE inadequacy:
+ alter table fullname add column suffix text default '';
+-ERROR:  cannot alter table "fullname" because column "people.fn" uses its row type
+ -- but this should work:
+ alter table fullname add column suffix text default null;
++ERROR:  column "suffix" of relation "fullname" already exists
+ select * from people;
+-     fn      |     bd     
+--------------+------------
+- (Joe,Blow,) | 01-10-1984
+-(1 row)
+-
++ERROR:  relation "people" does not exist
+ -- test insertion/updating of subfields
+ update people set fn.suffix = 'Jr';
++ERROR:  at or near "suffix": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update people set fn.suffix = 'Jr'
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select * from people;
+-      fn       |     bd     
+----------------+------------
+- (Joe,Blow,Jr) | 01-10-1984
+-(1 row)
+-
++ERROR:  relation "people" does not exist
+ insert into quadtable (f1, q.c1.r, q.c2.i) values(44,55,66);
++ERROR:  at or near "c1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++insert into quadtable (f1, q.c1.r, q.c2.i) values(44,55,66)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ update quadtable set q.c1.r = 12 where f1 = 2;
++ERROR:  at or near "c1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update quadtable set q.c1.r = 12 where f1 = 2
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ update quadtable set q.c1 = 12;  -- error, type mismatch
+-ERROR:  subfield "c1" is of type complex but expression is of type integer
+-LINE 1: update quadtable set q.c1 = 12;
+-                             ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  at or near "c1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update quadtable set q.c1 = 12
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select * from quadtable;
+- f1 |             q             
+-----+---------------------------
+-  1 | ("(3.3,4.4)","(5.5,6.6)")
+- 44 | ("(55,)","(,66)")
+-  2 | ("(12,4.4)","(5.5,6.6)")
+-(3 rows)
+-
++ERROR:  relation "quadtable" does not exist
+ -- The object here is to ensure that toasted references inside
+ -- composite values don't cause problems.  The large f1 value will
+ -- be toasted inside pp, it must still work after being copied to people.
+ create temp table pp (f1 text);
+ insert into pp values (repeat('abcdefghijkl', 100000));
+ insert into people select ('Jim', f1, null)::fullname, current_date from pp;
++ERROR:  relation "people" does not exist
+ select (fn).first, substr((fn).last, 1, 20), length((fn).last) from people;
+- first |        substr        | length  
+--------+----------------------+---------
+- Joe   | Blow                 |       4
+- Jim   | abcdefghijklabcdefgh | 1200000
+-(2 rows)
+-
++ERROR:  relation "people" does not exist
+ -- try an update on a toasted composite value, too
+ update people set fn.first = 'Jack';
++ERROR:  at or near "first": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update people set fn.first = 'Jack'
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select (fn).first, substr((fn).last, 1, 20), length((fn).last) from people;
+- first |        substr        | length  
+--------+----------------------+---------
+- Jack  | Blow                 |       4
+- Jack  | abcdefghijklabcdefgh | 1200000
+-(2 rows)
+-
++ERROR:  relation "people" does not exist
+ -- Test row comparison semantics.  Prior to PG 8.2 we did this in a totally
+ -- non-spec-compliant way.
+ select ROW(1,2) < ROW(1,3) as true;
+@@ -251,22 +217,17 @@
+ -- We allow operators beyond the six standard ones, if they have btree
+ -- operator classes.
+ select ROW('ABC','DEF') ~<=~ ROW('DEF','ABC') as true;
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select ROW('ABC','DEF') ~<=~ ROW('DEF','ABC') as true
++                         ^
+ select ROW('ABC','DEF') ~>=~ ROW('DEF','ABC') as false;
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select ROW('ABC','DEF') ~>=~ ROW('DEF','ABC') as false
++                         ^
+ select ROW('ABC','DEF') ~~ ROW('DEF','ABC') as fail;
+-ERROR:  could not determine interpretation of row comparison operator ~~
+-LINE 1: select ROW('ABC','DEF') ~~ ROW('DEF','ABC') as fail;
+-                                ^
+-HINT:  Row comparison operators must be associated with btree operator families.
++ERROR:  unsupported unary operator: ~ <tuple{string, string}>
+ -- Comparisons of ROW() expressions can cope with some type mismatches
+ select ROW(1,2) = ROW(1,2::int8);
+  ?column? 
+@@ -302,12 +263,11 @@
+ select thousand, tenthous from tenk1
+ where (thousand, tenthous) >= (997, 5000)
+ order by thousand, tenthous;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Index Only Scan using tenk1_thous_tenthous on tenk1
+-   Index Cond: (ROW(thousand, tenthous) >= ROW(997, 5000))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select thousand, tenthous from tenk1
+ where (thousand, tenthous) >= (997, 5000)
+ order by thousand, tenthous;
+@@ -344,16 +304,11 @@
+ select thousand, tenthous, four from tenk1
+ where (thousand, tenthous, four) > (998, 5000, 3)
+ order by thousand, tenthous;
+-                              QUERY PLAN                               
+------------------------------------------------------------------------
+- Sort
+-   Sort Key: thousand, tenthous
+-   ->  Bitmap Heap Scan on tenk1
+-         Filter: (ROW(thousand, tenthous, four) > ROW(998, 5000, 3))
+-         ->  Bitmap Index Scan on tenk1_thous_tenthous
+-               Index Cond: (ROW(thousand, tenthous) >= ROW(998, 5000))
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select thousand, tenthous, four from tenk1
+ where (thousand, tenthous, four) > (998, 5000, 3)
+ order by thousand, tenthous;
+@@ -380,12 +335,11 @@
+ select thousand, tenthous from tenk1
+ where (998, 5000) < (thousand, tenthous)
+ order by thousand, tenthous;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Index Only Scan using tenk1_thous_tenthous on tenk1
+-   Index Cond: (ROW(thousand, tenthous) > ROW(998, 5000))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select thousand, tenthous from tenk1
+ where (998, 5000) < (thousand, tenthous)
+ order by thousand, tenthous;
+@@ -412,16 +366,11 @@
+ select thousand, hundred from tenk1
+ where (998, 5000) < (thousand, hundred)
+ order by thousand, hundred;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Sort
+-   Sort Key: thousand, hundred
+-   ->  Bitmap Heap Scan on tenk1
+-         Filter: (ROW(998, 5000) < ROW(thousand, hundred))
+-         ->  Bitmap Index Scan on tenk1_thous_tenthous
+-               Index Cond: (thousand >= 998)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select thousand, hundred from tenk1
+ where (998, 5000) < (thousand, hundred)
+ order by thousand, hundred;
+@@ -446,14 +395,25 @@
+ insert into test_table values ('b', 'a');
+ create index on test_table (a,b);
+ set enable_sort = off;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select a,b from test_table where (a,b) > ('a','a') order by a,b;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Index Only Scan using test_table_a_b_idx on test_table
+-   Index Cond: (ROW(a, b) > ROW('a'::text, 'a'::text))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select a,b from test_table where (a,b) > ('a','a') order by a,b;
+  a | b 
+ ---+---
+@@ -462,63 +422,57 @@
+ (2 rows)
+ 
+ reset enable_sort;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Check row comparisons with IN
+ select * from int8_tbl i8 where i8 in (row(123,456));  -- fail, type mismatch
+-ERROR:  cannot compare dissimilar column types bigint and integer at record column 1
++ q1  | q2  
++-----+-----
++ 123 | 456
++(1 row)
++
+ explain (costs off)
+ select * from int8_tbl i8
+ where i8 in (row(123,456)::int8_tbl, '(4567890123456789,123)');
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Seq Scan on int8_tbl i8
+-   Filter: (i8.* = ANY ('{"(123,456)","(4567890123456789,123)"}'::int8_tbl[]))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from int8_tbl i8
+ where i8 in (row(123,456)::int8_tbl, '(4567890123456789,123)');
+-        q1        | q2  
+-------------------+-----
+-              123 | 456
+- 4567890123456789 | 123
+-(2 rows)
+-
++ERROR:  unsupported comparison operator: ((q1, q2) AS q1, q2) IN ((123, 456)::int8_tbl, '(4567890123456789,123)'): expected '(4567890123456789,123)' to be of type tuple, found type string
+ -- Check ability to select columns from an anonymous rowtype
+ select (row(1, 2.0)).f1;
+- f1 
+-----
+-  1
+-(1 row)
+-
++ERROR:  could not identify column "f1" in record data type
+ select (row(1, 2.0)).f2;
+- f2  
+------
+- 2.0
+-(1 row)
+-
++ERROR:  could not identify column "f2" in record data type
+ select (row(1, 2.0)).nosuch;  -- fail
+ ERROR:  could not identify column "nosuch" in record data type
+-LINE 1: select (row(1, 2.0)).nosuch;
+-                ^
+ select (row(1, 2.0)).*;
+- f1 | f2  
+-----+-----
+-  1 | 2.0
++ ?column? | ?column? 
++----------+----------
++        1 |      2.0
+ (1 row)
+ 
+ select (r).f1 from (select row(1, 2.0) as r) ss;
+- f1 
+-----
+-  1
+-(1 row)
+-
++ERROR:  could not identify column "f1" in record data type
+ select (r).f3 from (select row(1, 2.0) as r) ss;  -- fail
+ ERROR:  could not identify column "f3" in record data type
+-LINE 1: select (r).f3 from (select row(1, 2.0) as r) ss;
+-                ^
+ select (r).* from (select row(1, 2.0) as r) ss;
+- f1 | f2  
+-----+-----
+-  1 | 2.0
++ ?column? | ?column? 
++----------+----------
++        1 |      2.0
+ (1 row)
+ 
+ -- Check some corner cases involving empty rowtypes
+@@ -535,9 +489,11 @@
+ (1 row)
+ 
+ select ROW() = ROW();
+-ERROR:  cannot compare rows of zero length
+-LINE 1: select ROW() = ROW();
+-                     ^
++ ?column? 
++----------
++ t
++(1 row)
++
+ -- Check ability to create arrays of anonymous rowtypes
+ select array[ row(1,2), row(3,4), row(5,6) ];
+            array           
+@@ -560,14 +516,20 @@
+ 
+ -- Check behavior with a non-comparable rowtype
+ create type cantcompare as (p point, r float8);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type cantcompare as (p point, r float8)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ create temp table cc (f1 cantcompare);
++ERROR:  type "cantcompare" does not exist
+ insert into cc values('("(1,2)",3)');
++ERROR:  relation "cc" does not exist
+ insert into cc values('("(4,5)",6)');
++ERROR:  relation "cc" does not exist
+ select * from cc order by f1; -- fail, but should complain about cantcompare
+-ERROR:  could not identify an ordering operator for type cantcompare
+-LINE 1: select * from cc order by f1;
+-                                  ^
+-HINT:  Use an explicit ordering operator or modify the query.
++ERROR:  relation "cc" does not exist
+ --
+ -- Tests for record_{eq,cmp}
+ --
+@@ -656,213 +618,215 @@
+ -- mismatches
+ create type testtype3 as (a int, b text);
+ select row(1, 2)::testtype1 < row(1, 'abc')::testtype3;
+-ERROR:  cannot compare dissimilar column types integer and text at record column 2
++ERROR:  unsupported comparison: int to string
+ select row(1, 2)::testtype1 <> row(1, 'abc')::testtype3;
+-ERROR:  cannot compare dissimilar column types integer and text at record column 2
++ERROR:  unsupported comparison: int to string
+ create type testtype5 as (a int);
+-select row(1, 2)::testtype1 < row(1)::testtype5;
+-ERROR:  cannot compare record types with different numbers of columns
+-select row(1, 2)::testtype1 <> row(1)::testtype5;
+-ERROR:  cannot compare record types with different numbers of columns
++-- select row(1, 2)::testtype1 < row(1)::testtype5;
++-- select row(1, 2)::testtype1 <> row(1)::testtype5;
+ -- non-comparable types
+ create type testtype6 as (a int, b point);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type testtype6 as (a int, b point)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ select row(1, '(1,2)')::testtype6 < row(1, '(1,3)')::testtype6;
+-ERROR:  could not identify a comparison function for type point
++ERROR:  type "testtype6" does not exist
+ select row(1, '(1,2)')::testtype6 <> row(1, '(1,3)')::testtype6;
+-ERROR:  could not identify an equality operator for type point
++ERROR:  type "testtype6" does not exist
+ drop type testtype1, testtype3, testtype5, testtype6;
++ERROR:  type "testtype6" does not exist
+ --
+ -- Tests for record_image_{eq,cmp}
+ --
+ create type testtype1 as (a int, b int);
++ERROR:  type "root.public.testtype1" already exists
+ -- all true
+ select row(1, 2)::testtype1 *< row(1, 3)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *< row(1, 3)::testtype1
++                             ^
+ select row(1, 2)::testtype1 *<= row(1, 3)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *<= row(1, 3)::testtype1
++                             ^
+ select row(1, 2)::testtype1 *= row(1, 2)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "=": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *= row(1, 2)::testtype1
++                             ^
+ select row(1, 2)::testtype1 *<> row(1, 3)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *<> row(1, 3)::testtype1
++                             ^
+ select row(1, 3)::testtype1 *>= row(1, 2)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, 3)::testtype1 *>= row(1, 2)::testtype1
++                             ^
+ select row(1, 3)::testtype1 *> row(1, 2)::testtype1;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, 3)::testtype1 *> row(1, 2)::testtype1
++                             ^
+ -- all false
+ select row(1, -2)::testtype1 *< row(1, -3)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, -2)::testtype1 *< row(1, -3)::testtype1
++                              ^
+ select row(1, -2)::testtype1 *<= row(1, -3)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, -2)::testtype1 *<= row(1, -3)::testtype1
++                              ^
+ select row(1, -2)::testtype1 *= row(1, -3)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "=": syntax error
++DETAIL:  source SQL:
++select row(1, -2)::testtype1 *= row(1, -3)::testtype1
++                              ^
+ select row(1, -2)::testtype1 *<> row(1, -2)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, -2)::testtype1 *<> row(1, -2)::testtype1
++                              ^
+ select row(1, -3)::testtype1 *>= row(1, -2)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, -3)::testtype1 *>= row(1, -2)::testtype1
++                              ^
+ select row(1, -3)::testtype1 *> row(1, -2)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, -3)::testtype1 *> row(1, -2)::testtype1
++                              ^
+ -- This returns the "wrong" order because record_image_cmp works on
+ -- unsigned datums without knowing about the actual data type.
+ select row(1, -2)::testtype1 *< row(1, 3)::testtype1;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, -2)::testtype1 *< row(1, 3)::testtype1
++                              ^
+ -- other types
+ create type testtype2 as (a smallint, b bool);  -- byval different sizes
+ select row(1, true)::testtype2 *< row(2, true)::testtype2;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, true)::testtype2 *< row(2, true)::testtype2
++                                ^
+ select row(-2, true)::testtype2 *< row(-1, true)::testtype2;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(-2, true)::testtype2 *< row(-1, true)::testtype2
++                                 ^
+ select row(0, false)::testtype2 *< row(0, true)::testtype2;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(0, false)::testtype2 *< row(0, true)::testtype2
++                                 ^
+ select row(0, false)::testtype2 *<> row(0, true)::testtype2;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(0, false)::testtype2 *<> row(0, true)::testtype2
++                                 ^
+ create type testtype3 as (a int, b text);  -- variable length
++ERROR:  type "root.public.testtype3" already exists
+ select row(1, 'abc')::testtype3 *< row(1, 'abd')::testtype3;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 'abc')::testtype3 *< row(1, 'abd')::testtype3
++                                 ^
+ select row(1, 'abc')::testtype3 *< row(1, 'abcd')::testtype3;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 'abc')::testtype3 *< row(1, 'abcd')::testtype3
++                                 ^
+ select row(1, 'abc')::testtype3 *> row(1, 'abd')::testtype3;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, 'abc')::testtype3 *> row(1, 'abd')::testtype3
++                                 ^
+ select row(1, 'abc')::testtype3 *<> row(1, 'abd')::testtype3;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 'abc')::testtype3 *<> row(1, 'abd')::testtype3
++                                 ^
+ create type testtype4 as (a int, b point);  -- by ref, fixed length
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type testtype4 as (a int, b point)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ select row(1, '(1,2)')::testtype4 *< row(1, '(1,3)')::testtype4;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, '(1,2)')::testtype4 *< row(1, '(1,3)')::testtype4
++                                   ^
+ select row(1, '(1,2)')::testtype4 *<> row(1, '(1,3)')::testtype4;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, '(1,2)')::testtype4 *<> row(1, '(1,3)')::testtype4
++                                   ^
+ -- mismatches
+ select row(1, 2)::testtype1 *< row(1, 'abc')::testtype3;
+-ERROR:  cannot compare dissimilar column types integer and text at record column 2
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *< row(1, 'abc')::testtype3
++                             ^
+ select row(1, 2)::testtype1 *<> row(1, 'abc')::testtype3;
+-ERROR:  cannot compare dissimilar column types integer and text at record column 2
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *<> row(1, 'abc')::testtype3
++                             ^
+ create type testtype5 as (a int);
++ERROR:  type "root.public.testtype5" already exists
+ select row(1, 2)::testtype1 *< row(1)::testtype5;
+-ERROR:  cannot compare record types with different numbers of columns
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *< row(1)::testtype5
++                             ^
+ select row(1, 2)::testtype1 *<> row(1)::testtype5;
+-ERROR:  cannot compare record types with different numbers of columns
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, 2)::testtype1 *<> row(1)::testtype5
++                             ^
+ -- non-comparable types
+ create type testtype6 as (a int, b point);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type testtype6 as (a int, b point)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ select row(1, '(1,2)')::testtype6 *< row(1, '(1,3)')::testtype6;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, '(1,2)')::testtype6 *< row(1, '(1,3)')::testtype6
++                                   ^
+ select row(1, '(1,2)')::testtype6 *>= row(1, '(1,3)')::testtype6;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select row(1, '(1,2)')::testtype6 *>= row(1, '(1,3)')::testtype6
++                                   ^
+ select row(1, '(1,2)')::testtype6 *<> row(1, '(1,3)')::testtype6;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select row(1, '(1,2)')::testtype6 *<> row(1, '(1,3)')::testtype6
++                                   ^
+ -- anonymous rowtypes in coldeflists
+ select q.a, q.b = row(2), q.c = array[row(3)], q.d = row(row(4)) from
+     unnest(array[row(1, row(2), array[row(3)], row(row(4))),
+                  row(2, row(3), array[row(4)], row(row(5)))])
+       as q(a int, b record, c record[], d record);
+- a | ?column? | ?column? | ?column? 
+----+----------+----------+----------
+- 1 | t        | t        | t
+- 2 | f        | f        | f
+-(2 rows)
+-
++ERROR:  a column definition list is redundant for a function returning a named composite type
+ drop type testtype1, testtype2, testtype3, testtype4, testtype5, testtype6;
++ERROR:  type "testtype4" does not exist
+ --
+ -- Test case derived from bug #5716: check multiple uses of a rowtype result
+ --
+@@ -872,6 +836,8 @@
+     active BOOLEAN NOT NULL,
+     price NUMERIC
+ );
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ CREATE TYPE price_input AS (
+     id INTEGER,
+     price NUMERIC
+@@ -882,23 +848,33 @@
+ CREATE FUNCTION price_key_from_table(price) RETURNS price_key AS $$
+     SELECT $1.id
+ $$ LANGUAGE SQL;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT $1.id
++         ^
+ CREATE FUNCTION price_key_from_input(price_input) RETURNS price_key AS $$
+     SELECT $1.id
+ $$ LANGUAGE SQL;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT $1.id
++         ^
+ insert into price values (1,false,42), (10,false,100), (11,true,17.99);
+ UPDATE price
+     SET active = true, price = input_prices.price
+     FROM unnest(ARRAY[(10, 123.00), (11, 99.99)]::price_input[]) input_prices
+     WHERE price_key_from_table(price.*) = price_key_from_input(input_prices.*);
++ERROR:  unknown function: price_key_from_table()
+ select * from price;
+- id | active | price  
+-----+--------+--------
+-  1 | f      |     42
+- 10 | t      | 123.00
+- 11 | t      |  99.99
++ id | active | price 
++----+--------+-------
++  1 | f      |    42
++ 10 | f      |   100
++ 11 | t      | 17.99
+ (3 rows)
+ 
+ rollback;
++WARNING:  there is no transaction in progress
+ --
+ -- Test case derived from bug #9085: check * qualification of composite
+ -- parameters for SQL functions
+@@ -907,44 +883,30 @@
+ create function fcompos1(v compos) returns void as $$
+ insert into compos values (v);  -- fail
+ $$ language sql;
+-ERROR:  column "f1" is of type integer but expression is of type compos
+-LINE 2: insert into compos values (v);  -- fail
+-                                   ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  value type tuple{int AS f1, string AS f2} doesn't match type int of column "f1"
++HINT:  you will need to rewrite or cast the expression
+ create function fcompos1(v compos) returns void as $$
+ insert into compos values (v.*);
+ $$ language sql;
++ERROR:  no data source matches pattern: v.*
+ create function fcompos2(v compos) returns void as $$
+ select fcompos1(v);
+ $$ language sql;
++ERROR:  unknown function: fcompos1()
+ create function fcompos3(v compos) returns void as $$
+ select fcompos1(fcompos3.v.*);
+ $$ language sql;
++ERROR:  unknown function: fcompos1()
+ select fcompos1(row(1,'one'));
+- fcompos1 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: fcompos1()
+ select fcompos2(row(2,'two'));
+- fcompos2 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: fcompos2()
+ select fcompos3(row(3,'three'));
+- fcompos3 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: fcompos3()
+ select * from compos;
+- f1 |  f2   
+-----+-------
+-  1 | one
+-  2 | two
+-  3 | three
+-(3 rows)
++ f1 | f2 
++----+----
++(0 rows)
+ 
+ --
+ -- We allow I/O conversion casts from composite types to strings to be
+@@ -962,14 +924,12 @@
+ (0 rows)
+ 
+ select text(fullname) from fullname;  -- error
+-ERROR:  function text(fullname) does not exist
+-LINE 1: select text(fullname) from fullname;
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ text 
++------
++(0 rows)
++
+ select fullname.text from fullname;  -- error
+-ERROR:  column fullname.text does not exist
+-LINE 1: select fullname.text from fullname;
+-               ^
++ERROR:  column "fullname.text" does not exist
+ -- same, but RECORD instead of named composite type:
+ select cast (row('Jim', 'Beam') as text);
+     row     
+@@ -984,14 +944,13 @@
+ (1 row)
+ 
+ select text(row('Jim', 'Beam'));  -- error
+-ERROR:  function text(record) does not exist
+-LINE 1: select text(row('Jim', 'Beam'));
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++    text    
++------------
++ (Jim,Beam)
++(1 row)
++
+ select (row('Jim', 'Beam')).text;  -- error
+ ERROR:  could not identify column "text" in record data type
+-LINE 1: select (row('Jim', 'Beam')).text;
+-                ^
+ --
+ -- Check the equivalence of functional and column notation
+ --
+@@ -1003,25 +962,17 @@
+ (1 row)
+ 
+ select last(f) from fullname f;
+- last 
+-------
+- Blow
+-(1 row)
+-
++ERROR:  unknown function: last()
+ create function longname(fullname) returns text language sql
+ as $$select $1.first || ' ' || $1.last$$;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++select $1.first || ' ' || $1.last
++         ^
+ select f.longname from fullname f;
+- longname 
+-----------
+- Joe Blow
+-(1 row)
+-
++ERROR:  column "f.longname" does not exist
+ select longname(f) from fullname f;
+- longname 
+-----------
+- Joe Blow
+-(1 row)
+-
++ERROR:  unknown function: longname()
+ -- Starting in v11, the notational form does matter if there's ambiguity
+ alter table fullname add column longname text;
+ select f.longname from fullname f;
+@@ -1031,159 +982,165 @@
+ (1 row)
+ 
+ select longname(f) from fullname f;
+- longname 
+-----------
+- Joe Blow
+-(1 row)
+-
++ERROR:  unknown function: longname()
+ --
+ -- Test that composite values are seen to have the correct column names
+ -- (bug #11210 and other reports)
+ --
+ select row_to_json(i) from int8_tbl i;
+-                  row_to_json                   
+-------------------------------------------------
+- {"q1":123,"q2":456}
+- {"q1":123,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":123}
+- {"q1":4567890123456789,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":-4567890123456789}
++                    row_to_json                    
++---------------------------------------------------
++ {"q1": 123, "q2": 456}
++ {"q1": 123, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": 123}
++ {"q1": 4567890123456789, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": -4567890123456789}
+ (5 rows)
+ 
+ -- since "i" is of type "int8_tbl", attaching aliases doesn't change anything:
+ select row_to_json(i) from int8_tbl i(x,y);
+-                  row_to_json                   
+-------------------------------------------------
+- {"q1":123,"q2":456}
+- {"q1":123,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":123}
+- {"q1":4567890123456789,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":-4567890123456789}
++                   row_to_json                   
++-------------------------------------------------
++ {"x": 123, "y": 456}
++ {"x": 123, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": 123}
++ {"x": 4567890123456789, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": -4567890123456789}
+ (5 rows)
+ 
+ -- in these examples, we'll report the exposed column names of the subselect:
+ select row_to_json(ss) from
+   (select q1, q2 from int8_tbl) as ss;
+-                  row_to_json                   
+-------------------------------------------------
+- {"q1":123,"q2":456}
+- {"q1":123,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":123}
+- {"q1":4567890123456789,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":-4567890123456789}
++                    row_to_json                    
++---------------------------------------------------
++ {"q1": 123, "q2": 456}
++ {"q1": 123, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": 123}
++ {"q1": 4567890123456789, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": -4567890123456789}
+ (5 rows)
+ 
+ select row_to_json(ss) from
+   (select q1, q2 from int8_tbl offset 0) as ss;
+-                  row_to_json                   
+-------------------------------------------------
+- {"q1":123,"q2":456}
+- {"q1":123,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":123}
+- {"q1":4567890123456789,"q2":4567890123456789}
+- {"q1":4567890123456789,"q2":-4567890123456789}
++                    row_to_json                    
++---------------------------------------------------
++ {"q1": 123, "q2": 456}
++ {"q1": 123, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": 123}
++ {"q1": 4567890123456789, "q2": 4567890123456789}
++ {"q1": 4567890123456789, "q2": -4567890123456789}
+ (5 rows)
+ 
+ select row_to_json(ss) from
+   (select q1 as a, q2 as b from int8_tbl) as ss;
+-                 row_to_json                  
+-----------------------------------------------
+- {"a":123,"b":456}
+- {"a":123,"b":4567890123456789}
+- {"a":4567890123456789,"b":123}
+- {"a":4567890123456789,"b":4567890123456789}
+- {"a":4567890123456789,"b":-4567890123456789}
++                   row_to_json                   
++-------------------------------------------------
++ {"a": 123, "b": 456}
++ {"a": 123, "b": 4567890123456789}
++ {"a": 4567890123456789, "b": 123}
++ {"a": 4567890123456789, "b": 4567890123456789}
++ {"a": 4567890123456789, "b": -4567890123456789}
+ (5 rows)
+ 
+ select row_to_json(ss) from
+   (select q1 as a, q2 as b from int8_tbl offset 0) as ss;
+-                 row_to_json                  
+-----------------------------------------------
+- {"a":123,"b":456}
+- {"a":123,"b":4567890123456789}
+- {"a":4567890123456789,"b":123}
+- {"a":4567890123456789,"b":4567890123456789}
+- {"a":4567890123456789,"b":-4567890123456789}
++                   row_to_json                   
++-------------------------------------------------
++ {"a": 123, "b": 456}
++ {"a": 123, "b": 4567890123456789}
++ {"a": 4567890123456789, "b": 123}
++ {"a": 4567890123456789, "b": 4567890123456789}
++ {"a": 4567890123456789, "b": -4567890123456789}
+ (5 rows)
+ 
+ select row_to_json(ss) from
+   (select q1 as a, q2 as b from int8_tbl) as ss(x,y);
+-                 row_to_json                  
+-----------------------------------------------
+- {"x":123,"y":456}
+- {"x":123,"y":4567890123456789}
+- {"x":4567890123456789,"y":123}
+- {"x":4567890123456789,"y":4567890123456789}
+- {"x":4567890123456789,"y":-4567890123456789}
++                   row_to_json                   
++-------------------------------------------------
++ {"x": 123, "y": 456}
++ {"x": 123, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": 123}
++ {"x": 4567890123456789, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": -4567890123456789}
+ (5 rows)
+ 
+ select row_to_json(ss) from
+   (select q1 as a, q2 as b from int8_tbl offset 0) as ss(x,y);
+-                 row_to_json                  
+-----------------------------------------------
+- {"x":123,"y":456}
+- {"x":123,"y":4567890123456789}
+- {"x":4567890123456789,"y":123}
+- {"x":4567890123456789,"y":4567890123456789}
+- {"x":4567890123456789,"y":-4567890123456789}
++                   row_to_json                   
++-------------------------------------------------
++ {"x": 123, "y": 456}
++ {"x": 123, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": 123}
++ {"x": 4567890123456789, "y": 4567890123456789}
++ {"x": 4567890123456789, "y": -4567890123456789}
+ (5 rows)
+ 
+ explain (costs off)
+ select row_to_json(q) from
+   (select thousand, tenthous from tenk1
+    where thousand = 42 and tenthous < 2000 offset 0) q;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Subquery Scan on q
+-   ->  Index Only Scan using tenk1_thous_tenthous on tenk1
+-         Index Cond: ((thousand = 42) AND (tenthous < 2000))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select row_to_json(q) from
+   (select thousand, tenthous from tenk1
+    where thousand = 42 and tenthous < 2000 offset 0) q;
+-           row_to_json           
+----------------------------------
+- {"thousand":42,"tenthous":42}
+- {"thousand":42,"tenthous":1042}
++            row_to_json             
++------------------------------------
++ {"tenthous": 42, "thousand": 42}
++ {"tenthous": 1042, "thousand": 42}
+ (2 rows)
+ 
+ select row_to_json(q) from
+   (select thousand as x, tenthous as y from tenk1
+    where thousand = 42 and tenthous < 2000 offset 0) q;
+-    row_to_json    
+--------------------
+- {"x":42,"y":42}
+- {"x":42,"y":1042}
++     row_to_json      
++----------------------
++ {"x": 42, "y": 42}
++ {"x": 42, "y": 1042}
+ (2 rows)
+ 
+ select row_to_json(q) from
+   (select thousand as x, tenthous as y from tenk1
+    where thousand = 42 and tenthous < 2000 offset 0) q(a,b);
+-    row_to_json    
+--------------------
+- {"a":42,"b":42}
+- {"a":42,"b":1042}
++     row_to_json      
++----------------------
++ {"a": 42, "b": 42}
++ {"a": 42, "b": 1042}
+ (2 rows)
+ 
+ create temp table tt1 as select * from int8_tbl limit 2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create temp table tt2 () inherits(tt1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table tt2 () inherits(tt1)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into tt2 values(0,0);
+ select row_to_json(r) from (select q2,q1 from tt1 offset 0) r;
+-           row_to_json            
+-----------------------------------
+- {"q2":456,"q1":123}
+- {"q2":4567890123456789,"q1":123}
+- {"q2":0,"q1":0}
+-(3 rows)
++             row_to_json             
++-------------------------------------
++ {"q1": 123, "q2": 456}
++ {"q1": 123, "q2": 4567890123456789}
++(2 rows)
+ 
+ -- check no-op rowtype conversions
+ create temp table tt3 () inherits(tt2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table tt3 () inherits(tt2)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into tt3 values(33,44);
+ select row_to_json(tt3::tt2::tt1) from tt3;
+-    row_to_json    
+--------------------
+- {"q1":33,"q2":44}
++     row_to_json      
++----------------------
++ {"q1": 33, "q2": 44}
+ (1 row)
+ 
+ --
+@@ -1193,53 +1150,30 @@
+ select r, r is null as isnull, r is not null as isnotnull
+ from (values (1,row(1,2)), (1,row(null,null)), (1,null),
+              (null,row(1,2)), (null,row(null,null)), (null,null) ) r(a,b);
+-                                                                                                         QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Values Scan on "*VALUES*"
+-   Output: ROW("*VALUES*".column1, "*VALUES*".column2), (("*VALUES*".column1 IS NULL) AND ("*VALUES*".column2 IS NOT DISTINCT FROM NULL)), (("*VALUES*".column1 IS NOT NULL) AND ("*VALUES*".column2 IS DISTINCT FROM NULL))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select r, r is null as isnull, r is not null as isnotnull
+ from (values (1,row(1,2)), (1,row(null,null)), (1,null),
+              (null,row(1,2)), (null,row(null,null)), (null,null) ) r(a,b);
+-      r      | isnull | isnotnull 
+--------------+--------+-----------
+- (1,"(1,2)") | f      | t
+- (1,"(,)")   | f      | t
+- (1,)        | f      | f
+- (,"(1,2)")  | f      | f
+- (,"(,)")    | f      | f
+- (,)         | t      | f
+-(6 rows)
+-
++ERROR:  VALUES types tuple{unknown, unknown} and tuple{int, int} cannot be matched
+ explain (verbose, costs off)
+ with r(a,b) as materialized
+   (values (1,row(1,2)), (1,row(null,null)), (1,null),
+           (null,row(1,2)), (null,row(null,null)), (null,null) )
+ select r, r is null as isnull, r is not null as isnotnull from r;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- CTE Scan on r
+-   Output: r.*, (r.* IS NULL), (r.* IS NOT NULL)
+-   CTE r
+-     ->  Values Scan on "*VALUES*"
+-           Output: "*VALUES*".column1, "*VALUES*".column2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ with r(a,b) as materialized
+   (values (1,row(1,2)), (1,row(null,null)), (1,null),
+           (null,row(1,2)), (null,row(null,null)), (null,null) )
+ select r, r is null as isnull, r is not null as isnotnull from r;
+-      r      | isnull | isnotnull 
+--------------+--------+-----------
+- (1,"(1,2)") | f      | t
+- (1,"(,)")   | f      | t
+- (1,)        | f      | f
+- (,"(1,2)")  | f      | f
+- (,"(,)")    | f      | f
+- (,)         | t      | f
+-(6 rows)
+-
++ERROR:  VALUES types tuple{unknown, unknown} and tuple{int, int} cannot be matched
+ --
+ -- Tests for component access / FieldSelect
+ --
+@@ -1247,9 +1181,10 @@
+ INSERT INTO compositetable(a, b) VALUES('fa', 'fb');
+ -- composite type columns can't directly be accessed (error)
+ SELECT d.a FROM (SELECT compositetable AS d FROM compositetable) s;
+-ERROR:  missing FROM-clause entry for table "d"
+-LINE 1: SELECT d.a FROM (SELECT compositetable AS d FROM compositeta...
+-               ^
++ERROR:  no data source matches prefix: d in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ -- but can be accessed with proper parens
+ SELECT (d).a, (d).b FROM (SELECT compositetable AS d FROM compositetable) s;
+  a  | b  
+@@ -1259,14 +1194,10 @@
+ 
+ -- system columns can't be accessed in composite types (error)
+ SELECT (d).ctid FROM (SELECT compositetable AS d FROM compositetable) s;
+-ERROR:  column "ctid" not found in data type compositetable
+-LINE 1: SELECT (d).ctid FROM (SELECT compositetable AS d FROM compos...
+-                ^
++ERROR:  could not identify column "ctid" in tuple{string AS a, string AS b}
+ -- accessing non-existing column in NULL datum errors out
+ SELECT (NULL::compositetable).nonexistent;
+-ERROR:  column "nonexistent" not found in data type compositetable
+-LINE 1: SELECT (NULL::compositetable).nonexistent;
+-                ^
++ERROR:  could not identify column "nonexistent" in tuple{string AS a, string AS b}
+ -- existing column in a NULL composite yield NULL
+ SELECT (NULL::compositetable).a;
+  a 
+@@ -1276,7 +1207,5 @@
+ 
+ -- oids can't be accessed in composite types (error)
+ SELECT (NULL::compositetable).oid;
+-ERROR:  column "oid" not found in data type compositetable
+-LINE 1: SELECT (NULL::compositetable).oid;
+-                ^
++ERROR:  could not identify column "oid" in tuple{string AS a, string AS b}
+ DROP TABLE compositetable;

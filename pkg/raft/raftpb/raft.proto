@@ -58,8 +58,6 @@ enum MessageType {
   MsgPreVoteResp       = 18;
   MsgStorageAppend     = 19;
   MsgStorageAppendResp = 20;
-  MsgStorageApply      = 21;
-  MsgStorageApplyResp  = 22;
   MsgForgetLeader      = 23;
   MsgFortifyLeader     = 24;
   MsgFortifyLeaderResp = 25;
@@ -68,7 +66,7 @@ enum MessageType {
   // isResponseMsg arrays in raft/util.go and update the corresponding tests in
   // raft/util_test.go.
 
-  reserved 12, 15, 16;
+  reserved 12, 15, 16, 21, 22;
 }
 
 message Message {
@@ -108,7 +106,7 @@ message Message {
   optional bytes       context     = 12 [(gogoproto.nullable) = true];
   // responses are populated by a raft node to instruct storage threads on how
   // to respond and who to respond to when the work associated with a message
-  // is complete. Populated for MsgStorageAppend and MsgStorageApply messages.
+  // is complete. Populated for MsgStorageAppend only.
   repeated Message     responses   = 14 [(gogoproto.nullable) = false];
 
   // match is the log index up to which the follower's log must persistently

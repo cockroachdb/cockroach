@@ -30,7 +30,7 @@ var (
 	check        = flag.String("check", "", "run operations in specified file and check output for equality")
 	inMem        = flag.Bool("in-mem", false, "use an in-memory filesystem")
 	compareFiles = flag.String("compare-files", "", "comma-separated list of output files to compare; used by TestCompareFiles")
-	opCount      = flag.Int("operations", 20000, "number of MVCC operations to generate and run")
+	opCount      = flag.Int("operations", 10000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {

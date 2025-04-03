@@ -37,7 +37,8 @@ type backupMetrics struct {
 	*jobs.ExecutorPTSMetrics
 	// TODO(rui): move this to the backup job so it can be controlled by the
 	// updates_cluster_monitoring_metrics option.
-	RpoMetric *metric.Gauge
+	RpoMetric       *metric.Gauge
+	RpoTenantMetric *metric.GaugeVec
 }
 
 var _ metric.Struct = &backupMetrics{}
@@ -180,12 +181,12 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobState jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StatusSucceeded {
+	if jobState == jobs.StateSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
 		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
@@ -193,8 +194,8 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 
 	e.metrics.NumFailed.Inc(1)
 	err := errors.Errorf(
-		"backup job %d scheduled by %d failed with status %s",
-		jobID, schedule.ScheduleID(), jobStatus)
+		"backup job %d scheduled by %d failed with state %s",
+		jobID, schedule.ScheduleID(), jobState)
 	log.Errorf(ctx, "backup error: %v	", err)
 	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
 	return nil
@@ -360,6 +361,12 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	// for monitoring an RPO SLA, update that metric.
 	if args.UpdatesLastBackupMetric {
 		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
+		if details.(jobspb.BackupDetails).SpecificTenantIds != nil {
+			for _, tenantID := range details.(jobspb.BackupDetails).SpecificTenantIds {
+				e.metrics.RpoTenantMetric.Update(map[string]string{"tenant_id": tenantID.String()},
+					details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
+			}
+		}
 	}
 
 	if args.UnpauseOnSuccess == jobspb.InvalidScheduleID {
@@ -578,6 +585,12 @@ func init() {
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 					}),
+					RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{
+						Name:        "schedules.BACKUP.last-completed-time-by-virtual_cluster",
+						Help:        "The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric",
+						Measurement: "Jobs",
+						Unit:        metric.Unit_TIMESTAMP_SEC,
+					}, []string{"tenant_id"}),
 				},
 			}, nil
 		})

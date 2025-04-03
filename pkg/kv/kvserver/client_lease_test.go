@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -1110,7 +1112,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	// clock jumps. Disable the suspect timer to prevent them becoming suspect
 	// when we bump the clocks.
 	liveness.TimeAfterNodeSuspect.Override(ctx, sv, 0)
+
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(sv)
+	// We'll jump the clock forward and don't accidentally want the watcher to
+	// fire.
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, sv, 5*timeUntilNodeDead)
 
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
@@ -1176,7 +1182,17 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			// allocator on server 0 may see everyone as temporarily dead due to the
 			// clock move above.
 			for _, i := range []int{0, 3, 4} {
-				require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
+				testutils.SucceedsSoon(t, func() error {
+					err := tc.Servers[i].HeartbeatNodeLiveness()
+					if err != nil {
+						if errors.Is(err, liveness.ErrEpochIncremented) {
+							t.Logf("retrying heartbeat after err %s", err)
+							return err
+						}
+						t.Fatalf("unexpected error heartbeating liveness record for server %d: %s", i, err)
+					}
+					return nil
+				})
 				require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 			}
 		}
@@ -1220,7 +1236,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Add(getArgs(key))
 	_, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
-	require.Nil(t, pErr)
+	require.NoError(t, pErr.GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		// Validate that the lease transferred to a preferred locality. n4 (us) and
@@ -1890,5 +1906,95 @@ func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *te
 			// If we disable the `expPromo` and branch in leases/build.go, this
 			// assertion fails.
 			require.True(t, expLease.Expiration().LessEq(curLeaseStatus.Expiration()))
+		})
+}
+
+// TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart tests that if a
+// node gets restarted, it will reacquire the lease but the start time of the
+// new lease will be larger than the end time of the previous lease. This is
+// important to avoid situations where we might accept a write operation that
+// violates a previously served future read before the restart (We lose the
+// timestamp cache after restarts).
+func TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			if leaseType == roachpb.LeaseEpoch {
+				// Doesn't work for epoch leases since the liveness record might not be
+				// found in cache.
+				skip.WithIssue(t, 59874)
+			}
+			storeReg := fs.NewStickyRegistry()
+			listenerReg := listenerutil.NewListenerRegistry()
+			defer listenerReg.Close()
+
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+
+			manualClock := hlc.NewHybridManualClock()
+			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+				ReplicationMode:     base.ReplicationManual,
+				ReusableListenerReg: listenerReg,
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					RaftConfig: base.RaftConfig{
+						RaftTickInterval: 100 * time.Millisecond, // speed up the test
+					},
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							StickyVFSRegistry: storeReg,
+							WallClock:         manualClock,
+						},
+					},
+					StoreSpecs: []base.StoreSpec{
+						{
+							InMemory:    true,
+							StickyVFSID: "test",
+						},
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+
+			// Split off a scratch range.
+			key := tc.ScratchRange(t)
+			desc := tc.LookupRangeOrFatal(t, key)
+			repl := tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
+			require.NotNil(t, repl)
+
+			// Wait for lease upgrade if it's needed.
+			tc.MaybeWaitForLeaseUpgrade(ctx, t, desc)
+
+			// Get current lease start and end times.
+			lease, _ := repl.GetLease()
+			leaseStartTime := lease.Start
+			leaseEndTime := repl.CurrentLeaseStatus(ctx).Expiration()
+
+			// Sanity check that the lease end time is after the lease start time.
+			require.True(t, leaseStartTime.ToTimestamp().Less(leaseEndTime))
+
+			// Restart the server and make sure that the lease start time is larger than
+			// the support end time.
+			tc.StopServer(0)
+			require.NoError(t, tc.RestartServer(0))
+
+			// Make sure that the lease is valid.
+			var curLease roachpb.Lease
+			testutils.SucceedsSoon(t, func() error {
+				repl = tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
+				if repl.CurrentLeaseStatus(ctx).State != kvserverpb.LeaseState_VALID {
+					return errors.Errorf("lease not valid")
+				}
+				return nil
+			})
+
+			// Make sure that the lease start time is larger than the prev lease end
+			// time.
+			curLease, _ = repl.GetLease()
+			newLeaseStart := curLease.Start
+			require.True(t, leaseEndTime.Less(newLeaseStart.ToTimestamp()))
 		})
 }

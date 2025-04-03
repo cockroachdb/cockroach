@@ -139,12 +139,12 @@ func TestCreatePostRequest(t *testing.T) {
 
 		ti := &testImpl{
 			spec:        testSpec,
-			l:           nilLogger(),
 			start:       time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
 			end:         time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			cockroach:   "cockroach",
 			cockroachEA: "cockroach-ea",
 		}
+		ti.ReplaceL(nilLogger())
 
 		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
 		vo := vm.DefaultCreateOpts()
@@ -293,6 +293,10 @@ func formatPostRequest(req issues.PostRequest) (string, error) {
 	q := u.Query()
 	q.Add("title", formatter.Title(data))
 	q.Add("body", post.String())
+	// Adding a template parameter is required to be able to view the rendered
+	// template on GitHub, otherwise it just takes you to the template selection
+	// page.
+	q.Add("template", "none")
 	u.RawQuery = q.Encode()
 	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 

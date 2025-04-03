@@ -53,7 +53,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Stop(context.Background())
 		ctx.ReCache = tree.NewRegexpCache(8)
-		typedExpr, err := tree.TypeCheck(context.Background(), expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(context.Background(), expr, nil, types.AnyElement)
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}

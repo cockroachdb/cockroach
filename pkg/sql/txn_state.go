@@ -35,9 +35,7 @@ import (
 // txnState contains state associated with an ongoing SQL txn; it constitutes
 // the ExtendedState of a connExecutor's state machine (defined in conn_fsm.go).
 // It contains fields that are mutated as side-effects of state transitions;
-// notably the kv.Txn. All mutations to txnState are performed through calling
-// fsm.Machine.Apply(event); see conn_fsm.go for the definition of the state
-// machine.
+// notably the kv.Txn.
 type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
@@ -77,6 +75,8 @@ type txnState struct {
 		// REPEATABLE READ and SERIALIZABLE. It's 0 whenever the transaction state
 		// is not stateOpen.
 		autoRetryCounter int32
+
+		hasSavepoints bool
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -157,30 +157,29 @@ const (
 // and returns the ID of the new transaction.
 //
 // connCtx: The context in which the new transaction is started (usually a
-//
-//	connection's context). ts.Ctx will be set to a child context and should be
-//	used for everything that happens within this SQL transaction.
+// connection's context). ts.Ctx will be set to a child context and should be
+// used for everything that happens within this SQL transaction.
 //
 // txnType: The type of the starting txn.
-// sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
-// historicalTimestamp: If non-nil indicates that the transaction is historical
 //
-//	and should be fixed to this timestamp.
+// sqlTimestamp: The timestamp to report for current_timestamp(), now() etc.
+//
+// historicalTimestamp: If non-nil indicates that the transaction is historical
+// and should be fixed to this timestamp.
 //
 // priority: The transaction's priority. Pass roachpb.UnspecifiedUserPriority if the txn arg is
-//
-//	not nil.
+// not nil.
 //
 // readOnly: The read-only character of the new txn.
-// txn: If not nil, this txn will be used instead of creating a new txn. If so,
 //
-//	all the other arguments need to correspond to the attributes of this txn
-//	(unless otherwise specified).
+// txn: If not nil, this txn will be used instead of creating a new txn. If so,
+// all the other arguments need to correspond to the attributes of this txn
+// (unless otherwise specified).
 //
 // tranCtx: A bag of extra execution context.
-// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
 //
-//	transaction for use in admission queues.
+// qualityOfService: If txn is nil, the QoSLevel/WorkPriority to assign the new
+// transaction for use in admission queues.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
@@ -193,6 +192,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
+	bufferedWritesEnabled bool,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -243,6 +243,9 @@ func (ts *txnState) resetForNewSQLTxn(
 			if err := ts.setIsolationLevelLocked(isoLevel); err != nil {
 				panic(err)
 			}
+			if bufferedWritesEnabled {
+				ts.mu.txn.SetBufferedWritesEnabled(true /* enabled */)
+			}
 		} else {
 			if priority != roachpb.UnspecifiedUserPriority {
 				panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
@@ -276,9 +279,6 @@ func (ts *txnState) resetForNewSQLTxn(
 func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timestamp) {
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
-	if sp == nil {
-		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
-	}
 
 	if ts.recordingThreshold > 0 {
 		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {

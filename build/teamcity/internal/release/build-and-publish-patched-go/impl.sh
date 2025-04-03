@@ -9,13 +9,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.22.8
-GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=df12c23ebf19dea0f4bf46a22cbeda4a3eca6f474f318390ce774974278440b8
+GOVERS=1.23.7
+GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 # We use this for bootstrapping (this is NOT re-published). Note the version
 # matches the version we're publishing, although it doesn't technically have to.
 GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
-LINUXSHASUM=5f467d29fc67c7ae6468cb6ad5b047a274bae8180cac5e0b7ddbfeba3e47e18f
+LINUXSHASUM=4741525e69841f2e22f9992af25df0c1112b07501f61f741c12c6389fcb119f3
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -58,21 +57,19 @@ curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/cros
 echo '5f79da0a9e580bc0a869ca32c2e5a21990676ec567aabf54ccc1dec4c3f2c827 x86_64-unknown-linux-gnu.tar.gz' | sha256sum -c -
 curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/x86_64-w64-mingw32.tar.gz -o x86_64-w64-mingw32.tar.gz
 echo '94e64e0e8de05706dfd5ab2f1fee6e7f75280e35b09b5628980805d27939b418 x86_64-w64-mingw32.tar.gz' | sha256sum -c -
+curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/s390x-ibm-linux-gnu.tar.gz -o s390x-ibm-linux-gnu.tar.gz
+echo '027d7d3b89d0c9745243610b9c12aa26f5605884b058934645cb344927228dab s390x-ibm-linux-gnu.tar.gz' | sha256sum -c -
 echo *.tar.gz | xargs -n1 tar -xzf
 rm *.tar.gz
 
-curl -fsSL $GOLINK -o golang.tar.gz
-echo "$SRCSHASUM  golang.tar.gz" | sha256sum -c -
 mkdir -p /tmp/go$GOVERS
-tar -C /tmp/go$GOVERS -xzf golang.tar.gz
-rm golang.tar.gz
-cd /tmp/go$GOVERS/go
-# NB: we apply a patch to the Go runtime to keep track of running time on a
-# per-goroutine basis. See #82356 and #82625.
-git apply /bootstrap/diff.patch
+cd /tmp/go$GOVERS
+git clone 'https://github.com/cockroachdb/go.git'
+cd go
+git checkout $GOCOMMIT
 cd ..
 
-CONFIGS="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64"
+CONFIGS="linux_amd64 linux_arm64 linux_s390x darwin_amd64 darwin_arm64 windows_amd64"
 
 for CONFIG in $CONFIGS; do
     case $CONFIG in
@@ -83,6 +80,10 @@ for CONFIG in $CONFIGS; do
         linux_arm64)
             CC_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-c++
+            ;;
+        linux_s390x)
+            CC_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-cc
+            CXX_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-c++
         ;;
         darwin_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-cc

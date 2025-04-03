@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -63,12 +64,6 @@ type pebbleIterator struct {
 	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
 	reusable bool
 	inuse    bool
-	// Set to true if the underlying Pebble Iterator was created through
-	// pebble.NewExternalIter, and so the iterator is iterating over files
-	// external to the storage engine. This is used to avoid panicking on
-	// corruption errors that should be non-fatal if encountered from external
-	// sources of sstables.
-	external bool
 	// mvccDirIsReverse and mvccDone are used only for the methods implementing
 	// MVCCIterator. They are used to prevent the iterator from iterating into
 	// the lock table key space.
@@ -142,7 +137,6 @@ func newPebbleSSTIterator(
 		return nil, err
 	}
 	p.iter = pebbleiter.MaybeWrap(iter)
-	p.external = true
 	return p, nil
 }
 
@@ -253,7 +247,7 @@ func (p *pebbleIterator) setOptions(
 		p.options.UpperBound = p.upperBoundBuf
 	}
 	if opts.RangeKeyMaskingBelow.IsSet() {
-		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
+		p.rangeKeyMaskingBuf = mvccencoding.EncodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
 		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, MVCCBlockIntervalSuffixReplacer{})
@@ -551,7 +545,7 @@ func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 		valLen = lv.Len()
 	} else {
 		// Must be an in-place value, since it did not have a short attribute.
-		val := lv.InPlaceValue()
+		val := lv.ValueOrHandle
 		var err error
 		isTombstone, err = EncodedMVCCValueIsTombstone(val)
 		if err != nil {
@@ -732,7 +726,7 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	}
 
 	for _, rangeKey := range rangeKeys {
-		timestamp, err := DecodeMVCCTimestampSuffix(rangeKey.Suffix)
+		timestamp, err := mvccencoding.DecodeMVCCTimestampSuffix(rangeKey.Suffix)
 		if err != nil {
 			// TODO(erikgrinaker): We should surface this error somehow, but for now
 			// we follow UnsafeKey()'s example and silently skip them.
@@ -996,26 +990,10 @@ func (p *pebbleIterator) destroy() {
 		// potentially through a defer) and so we don't want to re-surface the
 		// error.
 		//
-		// TODO(jackson): In addition to errors accumulated during iteration, Close
-		// also returns errors encountered during the act of closing the iterator.
-		// Currently, most of these errors are swallowed. The error returned by
-		// iter.Close() may be an ephemeral error, or it may a misuse of the
-		// Iterator or corruption. Only swallow ephemeral errors (eg,
-		// DeadlineExceeded, etc), panic-ing on Close errors that are not known to
-		// be ephemeral/retriable. While these ephemeral error types are enumerated,
-		// we panic on the error types we know to be NOT ephemeral.
-		//
-		// See cockroachdb/pebble#1811.
-		//
-		// NB: The panic is omitted if the error is encountered on an external
-		// iterator which is iterating over uncommitted sstables.
-
-		if err := p.iter.Close(); !p.external && errors.Is(err, pebble.ErrCorruption) {
-			if p.parent != nil {
-				p.parent.writePreventStartupFile(context.Background(), err)
-			}
-			panic(err)
-		}
+		// Note that any corruption errors (including those encountered during the
+		// act of closing the iterator) are reported out-of-band via the
+		// EventListener.
+		_ = p.iter.Close()
 		p.iter = nil
 	}
 	// Reset all fields except for the key and option buffers. Holding onto their

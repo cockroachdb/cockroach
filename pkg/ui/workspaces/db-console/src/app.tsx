@@ -14,7 +14,6 @@ import {
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
-import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
@@ -119,8 +118,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
           <TimezoneProvider>
             {/* Apply CRL theme twice, with ConfigProvider instance from Db Console and
              imported instance from Cluster UI as it applies theme imported components only. */}
-            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
-              <ConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
+            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
+              <ConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
                 <Switch>
                   {/* login */}
                   {createLoginRoute()}

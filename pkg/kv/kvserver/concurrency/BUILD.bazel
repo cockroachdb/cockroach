@@ -16,6 +16,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
@@ -36,6 +37,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -99,7 +101,6 @@ go_test(
         "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
 )

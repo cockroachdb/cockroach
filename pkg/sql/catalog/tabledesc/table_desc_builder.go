@@ -842,7 +842,10 @@ func maybeUpgradePrimaryIndexFormatVersion(builder *tableDescriptorBuilder) (has
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
-		if idx.Type == descpb.IndexDescriptor_INVERTED {
+		// If the index type does not support STORING columns, then it's not
+		// encoded differently based on whether column families are in use, so
+		// nothing to do.
+		if !idx.Type.SupportsStoring() {
 			return false
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:

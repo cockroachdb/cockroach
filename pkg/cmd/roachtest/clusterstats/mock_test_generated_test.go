@@ -9,8 +9,9 @@ import (
 	reflect "reflect"
 
 	task "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	test "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	version "github.com/cockroachdb/cockroach/pkg/util/version"
+	version "github.com/cockroachdb/version"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -329,6 +330,20 @@ func (mr *MockTestMockRecorder) L() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "L", reflect.TypeOf((*MockTest)(nil).L))
 }
 
+// Monitor mocks base method.
+func (m *MockTest) Monitor() test.Monitor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Monitor")
+	ret0, _ := ret[0].(test.Monitor)
+	return ret0
+}
+
+// Monitor indicates an expected call of Monitor.
+func (mr *MockTestMockRecorder) Monitor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Monitor", reflect.TypeOf((*MockTest)(nil).Monitor))
+}
+
 // Name mocks base method.
 func (m *MockTest) Name() string {
 	m.ctrl.T.Helper()
@@ -377,6 +392,20 @@ func (m *MockTest) NewGroup(arg0 ...task.Option) task.Group {
 func (mr *MockTestMockRecorder) NewGroup(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewGroup", reflect.TypeOf((*MockTest)(nil).NewGroup), arg0...)
+}
+
+// Owner mocks base method.
+func (m *MockTest) Owner() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Owner")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Owner indicates an expected call of Owner.
+func (mr *MockTestMockRecorder) Owner() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Owner", reflect.TypeOf((*MockTest)(nil).Owner))
 }
 
 // PerfArtifactsDir mocks base method.

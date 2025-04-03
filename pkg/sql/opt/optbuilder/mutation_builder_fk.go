@@ -669,6 +669,7 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
+		cat.PolicyScopeExempt,
 	), otherTabMeta
 }
 

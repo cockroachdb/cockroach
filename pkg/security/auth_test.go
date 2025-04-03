@@ -506,12 +506,13 @@ func TestAuthenticationHook(t *testing.T) {
 				tc.insecure,
 				makeFakeTLSState(t, tc.tlsSpec),
 				tc.tenantID,
+				"",
 				nil, /* certManager */
 				roleSubject,
 				tc.subjectRequired,
 			)
 			if (err == nil) != tc.buildHookSuccess {
-				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
+				t.Fatalf("expected success=%t, got err=%v expected err=%s", tc.buildHookSuccess, err, tc.expectedErr)
 			}
 			if err != nil {
 				require.Regexp(t, tc.expectedErr, err.Error())
@@ -519,7 +520,7 @@ func TestAuthenticationHook(t *testing.T) {
 			}
 			err = hook(ctx, tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
-				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
+				t.Fatalf("expected success=%t, got err=%v expected err=%s", tc.publicHookSuccess, err, tc.expectedErr)
 			}
 			if err != nil {
 				require.Regexp(t, tc.expectedErr, err.Error())
@@ -527,7 +528,7 @@ func TestAuthenticationHook(t *testing.T) {
 			}
 			err = hook(ctx, tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
-				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
+				t.Fatalf("expected success=%t, got err=%v, expected err=%s", tc.privateHookSuccess, err, tc.expectedErr)
 			}
 			if err != nil {
 				require.Regexp(t, tc.expectedErr, err.Error())

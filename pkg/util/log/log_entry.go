@@ -336,7 +336,7 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	messages = append(messages,
 		makeStartLine(f, "file created at: %s", redact.Safe(now.Format("2006/01/02 15:04:05"))),
 		makeStartLine(f, "running on machine: %s", SafeManaged(fullHostName)),
-		makeStartLine(f, "binary: %s", redact.Safe(build.GetInfo().Short())),
+		makeStartLine(f, "binary: %s", build.GetInfo().Short()),
 		makeStartLine(f, "arguments: %s", SafeManaged(os.Args)),
 	)
 

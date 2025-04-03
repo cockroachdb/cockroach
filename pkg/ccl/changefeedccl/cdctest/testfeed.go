@@ -27,12 +27,31 @@ type TestFeedFactory interface {
 	AsUser(user string, fn func(runner *sqlutils.SQLRunner)) error
 }
 
+type Header struct {
+	K string
+	V []byte
+}
+
+type Headers []Header
+
+func (h Headers) String() string {
+	if len(h) == 0 {
+		return ""
+	}
+	s := "("
+	for _, v := range h {
+		s += fmt.Sprintf("%s: %s, ", v.K, v.V)
+	}
+	return s[:len(s)-2] + ")"
+}
+
 // TestFeedMessage represents one row update or resolved timestamp message from
 // a changefeed.
 type TestFeedMessage struct {
 	Topic, Partition string
 	Key, Value       []byte
 	Resolved         []byte
+	Headers          Headers
 
 	// RawMessage is the sink-specific message type.
 	RawMessage interface{}
@@ -42,7 +61,7 @@ func (m TestFeedMessage) String() string {
 	if m.Resolved != nil {
 		return string(m.Resolved)
 	}
-	return fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value)
+	return fmt.Sprintf(`%s: %s%s->%s`, m.Topic, m.Key, m.Headers.String(), m.Value)
 }
 
 // TestFeed abstracts over reading from the various types of
@@ -74,14 +93,14 @@ type EnterpriseTestFeed interface {
 	Pause() error
 	// Resume restarts the feed from the last changefeed-wide resolved timestamp.
 	Resume() error
-	// WaitForStatus waits for the provided func to return true, or returns an error.
-	WaitForStatus(func(s jobs.Status) bool) error
-	// WaitDurationForStatus waits for a specified time for the provided func to return true, or returns an error.
-	WaitDurationForStatus(dur time.Duration, statusPred func(status jobs.Status) bool) error
+	// WaitForState waits for the provided func to return true, or returns an error.
+	WaitForState(func(s jobs.State) bool) error
+	// WaitDurationForState waits for a specified time for the provided func to return true, or returns an error.
+	WaitDurationForState(dur time.Duration, statusPred func(state jobs.State) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
-	// FetchRunningStatus retrieves running status from changefeed job.
-	FetchRunningStatus() (string, error)
+	// FetchStatus retrieves running status from changefeed job.
+	FetchStatusMessage() (string, error)
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
 	// Progress returns the changefeed progress for this feed.

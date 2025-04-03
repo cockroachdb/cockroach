@@ -21,6 +21,16 @@ environment:
   NUM_WORKERS: 500
   MAX_RATE: 500
 
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/create_decommission_node.sh
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh
+
 targets:
   - target_name: $CLUSTER
     steps:

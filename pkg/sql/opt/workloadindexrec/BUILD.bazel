@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/sql/parser",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "@com_github_cockroachdb_errors//:errors",

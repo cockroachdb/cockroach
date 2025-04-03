@@ -1,0 +1,16 @@
+/* setup */
+create table t (i int primary key, j int not null AS (i +32) STORED);
+
+/* test */
+EXPLAIN (DDL, SHAPE) alter table t drop column j;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (i)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ └── execute 3 system table mutations transactions

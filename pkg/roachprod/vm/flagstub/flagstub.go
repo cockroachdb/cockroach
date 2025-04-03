@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 )
 
 // New wraps a delegate vm.Provider to only return its name and
@@ -25,6 +26,14 @@ func New(delegate vm.Provider, unimplemented string) vm.Provider {
 type provider struct {
 	delegate      vm.Provider
 	unimplemented string
+}
+
+// ConfigureProviderFlags implements vm.Provider.
+func (p *provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
+}
+
+func (p *provider) ConfigureClusterCleanupFlags(*pflag.FlagSet) {
+
 }
 
 func (p *provider) SupportsSpotVMs() bool {

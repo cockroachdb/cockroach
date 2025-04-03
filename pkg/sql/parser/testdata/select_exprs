@@ -2138,3 +2138,11 @@ SELECT "[2,2]" < (-"[3,4]") -- normalized!
 SELECT (("[2,2]") < ((-("[3,4]")))) -- fully parenthesized
 SELECT "[2,2]" < (-"[3,4]") -- literals removed
 SELECT _ < (-_) -- identifiers removed
+
+parse
+SELECT '$'::JSONPATH;
+----
+SELECT '$'::JSONPATH -- normalized!
+SELECT (('$')::JSONPATH) -- fully parenthesized
+SELECT '_'::JSONPATH -- literals removed
+SELECT '$'::JSONPATH -- identifiers removed

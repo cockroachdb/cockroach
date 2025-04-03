@@ -858,7 +858,7 @@ func checkMutationInput(
 			"mismatched check constraint columns: expected %d, got %d", checkOrds.Len(), len(checkVals))
 	}
 
-	checks := tabDesc.EnforcedCheckConstraints()
+	checks := tabDesc.EnforcedCheckValidators()
 	colIdx := 0
 	for i := range checks {
 		if !checkOrds.Contains(i) {
@@ -867,7 +867,7 @@ func checkMutationInput(
 
 		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
 			return err
-		} else if !res && checkVals[colIdx] != tree.DNull {
+		} else if checks[i].IsCheckFailed(res == tree.DBool(true), checkVals[colIdx] == tree.DNull) {
 			return row.CheckFailed(ctx, evalCtx, semaCtx, sessionData, tabDesc, checks[i])
 		}
 		colIdx++

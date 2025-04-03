@@ -1,0 +1,245 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/advisory_lock.out --label=/mnt/data1/postgres/src/test/regress/results/advisory_lock.out /mnt/data1/postgres/src/test/regress/expected/advisory_lock.out /mnt/data1/postgres/src/test/regress/results/advisory_lock.out
+--- /mnt/data1/postgres/src/test/regress/expected/advisory_lock.out
++++ /mnt/data1/postgres/src/test/regress/results/advisory_lock.out
+@@ -6,48 +6,21 @@
+ SELECT
+ 	pg_advisory_xact_lock(1), pg_advisory_xact_lock_shared(2),
+ 	pg_advisory_xact_lock(1, 1), pg_advisory_xact_lock_shared(2, 2);
+- pg_advisory_xact_lock | pg_advisory_xact_lock_shared | pg_advisory_xact_lock | pg_advisory_xact_lock_shared 
+------------------------+------------------------------+-----------------------+------------------------------
+-                       |                              |                       | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_xact_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- pg_advisory_unlock_all() shouldn't release xact locks
+ SELECT pg_advisory_unlock_all();
+- pg_advisory_unlock_all 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid;
+- count 
+--------
+-     4
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- can't unlock xact locks
+ SELECT
+ 	pg_advisory_unlock(1), pg_advisory_unlock_shared(2),
+ 	pg_advisory_unlock(1, 1), pg_advisory_unlock_shared(2, 2);
+-WARNING:  you don't own a lock of type ExclusiveLock
+-WARNING:  you don't own a lock of type ShareLock
+-WARNING:  you don't own a lock of type ExclusiveLock
+-WARNING:  you don't own a lock of type ShareLock
+- pg_advisory_unlock | pg_advisory_unlock_shared | pg_advisory_unlock | pg_advisory_unlock_shared 
+---------------------+---------------------------+--------------------+---------------------------
+- f                  | f                         | f                  | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- automatically release xact locks at commit
+ COMMIT;
+ SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid;
+@@ -61,41 +34,22 @@
+ SELECT
+ 	pg_advisory_xact_lock(1), pg_advisory_xact_lock_shared(2),
+ 	pg_advisory_xact_lock(1, 1), pg_advisory_xact_lock_shared(2, 2);
+- pg_advisory_xact_lock | pg_advisory_xact_lock_shared | pg_advisory_xact_lock | pg_advisory_xact_lock_shared 
+------------------------+------------------------------+-----------------------+------------------------------
+-                       |                              |                       | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_xact_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT
+ 	pg_advisory_lock(1), pg_advisory_lock_shared(2),
+ 	pg_advisory_lock(1, 1), pg_advisory_lock_shared(2, 2);
+- pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock | pg_advisory_lock_shared 
+-------------------+-------------------------+------------------+-------------------------
+-                  |                         |                  | 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
++ locktype | classid | objid | objsubid | mode | granted 
++----------+---------+-------+----------+------+---------
++(0 rows)
+ 
+ -- unlocking session locks
+ SELECT
+@@ -103,13 +57,9 @@
+ 	pg_advisory_unlock_shared(2), pg_advisory_unlock_shared(2),
+ 	pg_advisory_unlock(1, 1), pg_advisory_unlock(1, 1),
+ 	pg_advisory_unlock_shared(2, 2), pg_advisory_unlock_shared(2, 2);
+-WARNING:  you don't own a lock of type ExclusiveLock
+-WARNING:  you don't own a lock of type ShareLock
+-WARNING:  you don't own a lock of type ExclusiveLock
+-WARNING:  you don't own a lock of type ShareLock
+  pg_advisory_unlock | pg_advisory_unlock | pg_advisory_unlock_shared | pg_advisory_unlock_shared | pg_advisory_unlock | pg_advisory_unlock | pg_advisory_unlock_shared | pg_advisory_unlock_shared 
+ --------------------+--------------------+---------------------------+---------------------------+--------------------+--------------------+---------------------------+---------------------------
+- t                  | f                  | t                         | f                         | t                  | f                  | t                         | f
++ t                  | t                  | t                         | t                         | t                  | t                  | t                         | t
+ (1 row)
+ 
+ SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid;
+@@ -123,41 +73,22 @@
+ SELECT
+ 	pg_advisory_lock(1), pg_advisory_lock_shared(2),
+ 	pg_advisory_lock(1, 1), pg_advisory_lock_shared(2, 2);
+- pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock | pg_advisory_lock_shared 
+-------------------+-------------------------+------------------+-------------------------
+-                  |                         |                  | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT
+ 	pg_advisory_xact_lock(1), pg_advisory_xact_lock_shared(2),
+ 	pg_advisory_xact_lock(1, 1), pg_advisory_xact_lock_shared(2, 2);
+- pg_advisory_xact_lock | pg_advisory_xact_lock_shared | pg_advisory_xact_lock | pg_advisory_xact_lock_shared 
+------------------------+------------------------------+-----------------------+------------------------------
+-                       |                              |                       | 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
++ locktype | classid | objid | objsubid | mode | granted 
++----------+---------+-------+----------+------+---------
++(0 rows)
+ 
+ -- releasing all session locks
+ SELECT pg_advisory_unlock_all();
+@@ -179,22 +110,11 @@
+ 	pg_advisory_xact_lock_shared(2), pg_advisory_xact_lock_shared(2),
+ 	pg_advisory_xact_lock(1, 1), pg_advisory_xact_lock(1, 1),
+ 	pg_advisory_xact_lock_shared(2, 2), pg_advisory_xact_lock_shared(2, 2);
+- pg_advisory_xact_lock | pg_advisory_xact_lock | pg_advisory_xact_lock_shared | pg_advisory_xact_lock_shared | pg_advisory_xact_lock | pg_advisory_xact_lock | pg_advisory_xact_lock_shared | pg_advisory_xact_lock_shared 
+------------------------+-----------------------+------------------------------+------------------------------+-----------------------+-----------------------+------------------------------+------------------------------
+-                       |                       |                              |                              |                       |                       |                              | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_xact_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid;
+  count 
+@@ -208,21 +128,13 @@
+ 	pg_advisory_lock_shared(2), pg_advisory_lock_shared(2),
+ 	pg_advisory_lock(1, 1), pg_advisory_lock(1, 1),
+ 	pg_advisory_lock_shared(2, 2), pg_advisory_lock_shared(2, 2);
+- pg_advisory_lock | pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock_shared | pg_advisory_lock | pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock_shared 
+-------------------+------------------+-------------------------+-------------------------+------------------+------------------+-------------------------+-------------------------
+-                  |                  |                         |                         |                  |                  |                         | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
++ locktype | classid | objid | objsubid | mode | granted 
++----------+---------+-------+----------+------+---------
++(0 rows)
+ 
+ SELECT
+ 	pg_advisory_unlock(1), pg_advisory_unlock(1),
+@@ -246,21 +158,13 @@
+ 	pg_advisory_lock_shared(2), pg_advisory_lock_shared(2),
+ 	pg_advisory_lock(1, 1), pg_advisory_lock(1, 1),
+ 	pg_advisory_lock_shared(2, 2), pg_advisory_lock_shared(2, 2);
+- pg_advisory_lock | pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock_shared | pg_advisory_lock | pg_advisory_lock | pg_advisory_lock_shared | pg_advisory_lock_shared 
+-------------------+------------------+-------------------------+-------------------------+------------------+------------------+-------------------------+-------------------------
+-                  |                  |                         |                         |                  |                  |                         | 
+-(1 row)
+-
++ERROR:  unknown function: pg_advisory_lock()
+ SELECT locktype, classid, objid, objsubid, mode, granted
+ 	FROM pg_locks WHERE locktype = 'advisory' AND database = :datoid
+ 	ORDER BY classid, objid, objsubid;
+- locktype | classid | objid | objsubid |     mode      | granted 
+-----------+---------+-------+----------+---------------+---------
+- advisory |       0 |     1 |        1 | ExclusiveLock | t
+- advisory |       0 |     2 |        1 | ShareLock     | t
+- advisory |       1 |     1 |        2 | ExclusiveLock | t
+- advisory |       2 |     2 |        2 | ShareLock     | t
+-(4 rows)
++ locktype | classid | objid | objsubid | mode | granted 
++----------+---------+-------+----------+------+---------
++(0 rows)
+ 
+ SELECT pg_advisory_unlock_all();
+  pg_advisory_unlock_all 

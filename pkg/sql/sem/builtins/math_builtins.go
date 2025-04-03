@@ -8,7 +8,6 @@ package builtins
 import (
 	"context"
 	"math"
-	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -17,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -566,17 +564,30 @@ var mathBuiltins = map[string]builtinDefinition{
 				operand, _ := args[0].(*tree.DDecimal).Float64()
 				b1, _ := args[1].(*tree.DDecimal).Float64()
 				b2, _ := args[2].(*tree.DDecimal).Float64()
-				if math.IsInf(operand, 0) || math.IsInf(b1, 0) || math.IsInf(b2, 0) {
+				count := int(tree.MustBeDInt(args[3]))
+				// See postgres/src/backend/utils/adp/numeric.c:width_bucket_numeric.
+				if math.IsNaN(operand) || math.IsNaN(b1) || math.IsNaN(b2) {
 					return nil, pgerror.New(
-						pgcode.InvalidParameterValue,
-						"operand, lower bound, and upper bound cannot be infinity",
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"operand, lower bound, and upper bound cannot be NaN",
 					)
 				}
-				count := int(tree.MustBeDInt(args[3]))
+				if math.IsInf(b1, 0) || math.IsInf(b2, 0) {
+					return nil, pgerror.New(
+						pgcode.InvalidArgumentForWidthBucketFunction,
+						"lower and upper bounds must be finite",
+					)
+				}
+				if math.IsInf(operand, 1) {
+					return tree.NewDInt(tree.DInt(count + 1)), nil
+				}
+				if math.IsInf(operand, -1) {
+					return tree.NewDInt(tree.DInt(0)), nil
+				}
 				return tree.NewDInt(tree.DInt(widthBucket(operand, b1, b2, count))), nil
 			},
 			Info: "return the bucket number to which operand would be assigned in a histogram having count " +
-				"equal-width buckets spanning the range b1 to b2.",
+				"equal-width buckets spanning the range b1 to b2. Returns 0 or count+1 for an input outside that range.",
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
@@ -595,7 +606,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "operand", Typ: types.Any}, {Name: "thresholds", Typ: types.AnyArray}},
+			Types:      tree.ParamTypes{{Name: "operand", Typ: types.AnyElement}, {Name: "thresholds", Typ: types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := args[0]
@@ -655,7 +666,7 @@ func powImpls() builtinDefinition {
 		}, "Calculates `x`^`y`.", volatility.Immutable),
 		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			dd := &tree.DDecimal{}
-			_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
+			err := eval.DecimalPow(tree.DecimalCtx, &dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates `x`^`y`.", volatility.Immutable),
 		tree.Overload{
@@ -771,13 +782,6 @@ func roundDecimal(x *apd.Decimal, scale int32) (tree.Datum, error) {
 	}
 	return dd, err
 }
-
-var uniqueIntState struct {
-	syncutil.Mutex
-	timestamp uint64
-}
-
-var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
 // widthBucket returns the bucket number to which operand would be assigned in a histogram having count
 // equal-width buckets spanning the range b1 to b2

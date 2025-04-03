@@ -109,6 +109,18 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagCheckContainsLocking) {
 		res.flags.Set(planFlagCheckContainsLocking)
 	}
+	if flags.IsSet(exec.PlanFlagContainsDelete) {
+		res.flags.Set(planFlagContainsDelete)
+	}
+	if flags.IsSet(exec.PlanFlagContainsInsert) {
+		res.flags.Set(planFlagContainsInsert)
+	}
+	if flags.IsSet(exec.PlanFlagContainsUpdate) {
+		res.flags.Set(planFlagContainsUpdate)
+	}
+	if flags.IsSet(exec.PlanFlagContainsUpsert) {
+		res.flags.Set(planFlagContainsUpsert)
+	}
 
 	return res, nil
 }
@@ -307,15 +319,6 @@ func constructVirtualScan(
 		}
 	}
 	return n, nil
-}
-
-func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
-	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(id) {
-			return true
-		}
-	}
-	return false
 }
 
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {

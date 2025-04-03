@@ -1,0 +1,245 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json_encoding_2.out --label=/mnt/data1/postgres/src/test/regress/results/json_encoding.out /mnt/data1/postgres/src/test/regress/expected/json_encoding_2.out /mnt/data1/postgres/src/test/regress/results/json_encoding.out
+--- /mnt/data1/postgres/src/test/regress/expected/json_encoding_2.out
++++ /mnt/data1/postgres/src/test/regress/results/json_encoding.out
+@@ -7,3 +7,241 @@
+        AS skip_test \gset
+ \if :skip_test
+ \quit
++\endif
++SELECT getdatabaseencoding();           -- just to label the results files
++ getdatabaseencoding 
++---------------------
++ UTF8
++(1 row)
++
++-- first json
++-- basic unicode input
++SELECT '"\u"'::json;			-- ERROR, incomplete escape
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 1:
++...|"\u"|...
++...|.^..|...: invalid JSON token
++SELECT '"\u00"'::json;			-- ERROR, incomplete escape
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 6 bytes at offset 1:
++...|"\u00"|...
++...|.^....|...: invalid JSON token
++SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 8 bytes at offset 1:
++...|"\u000g"|...
++...|.^......|...: invalid JSON token
++SELECT '"\u0000"'::json;		-- OK, legal escape
++  jsonb   
++----------
++ "\u0000"
++(1 row)
++
++SELECT '"\uaBcD"'::json;		-- OK, uppercase and lower case both OK
++ jsonb 
++-------
++ "ꯍ"
++(1 row)
++
++-- handling of unicode surrogate pairs
++select json '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' as correct_in_utf8;
++ correct_in_utf8 
++-----------------
++ "😄🐶"
++(1 row)
++
++select json '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 24 bytes at offset 9:
++...|{ "a":  "\ud83d\ud83d" }|...
++...|.........^..............|...: invalid JSON token
++select json '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 24 bytes at offset 9:
++...|{ "a":  "\ude04\ud83d" }|...
++...|.........^..............|...: invalid JSON token
++select json '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 19 bytes at offset 9:
++...|{ "a":  "\ud83dX" }|...
++...|.........^.........|...: invalid JSON token
++select json '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 19 bytes at offset 9:
++...|{ "a":  "\ude04X" }|...
++...|.........^.........|...: invalid JSON token
++--handling of simple unicode escapes
++select json '{ "a":  "the Copyright \u00a9 sign" }' as correct_in_utf8;
++        correct_in_utf8        
++-------------------------------
++ {"a": "the Copyright © sign"}
++(1 row)
++
++select json '{ "a":  "dollar \u0024 character" }' as correct_everywhere;
++     correct_everywhere      
++-----------------------------
++ {"a": "dollar $ character"}
++(1 row)
++
++select json '{ "a":  "dollar \\u0024 character" }' as not_an_escape;
++           not_an_escape           
++-----------------------------------
++ {"a": "dollar \\u0024 character"}
++(1 row)
++
++select json '{ "a":  "null \u0000 escape" }' as not_unescaped;
++        not_unescaped        
++-----------------------------
++ {"a": "null \u0000 escape"}
++(1 row)
++
++select json '{ "a":  "null \\u0000 escape" }' as not_an_escape;
++        not_an_escape         
++------------------------------
++ {"a": "null \\u0000 escape"}
++(1 row)
++
++select json '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' as correct_in_utf8;
++   correct_in_utf8    
++----------------------
++ the Copyright © sign
++(1 row)
++
++select json '{ "a":  "dollar \u0024 character" }' ->> 'a' as correct_everywhere;
++ correct_everywhere 
++--------------------
++ dollar $ character
++(1 row)
++
++select json '{ "a":  "dollar \\u0024 character" }' ->> 'a' as not_an_escape;
++      not_an_escape      
++-------------------------
++ dollar \u0024 character
++(1 row)
++
++select json '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
++ fails 
++-------
++ null 
++(1 row)
++
++select json '{ "a":  "null \\u0000 escape" }' ->> 'a' as not_an_escape;
++   not_an_escape    
++--------------------
++ null \u0000 escape
++(1 row)
++
++-- then jsonb
++-- basic unicode input
++SELECT '"\u"'::jsonb;			-- ERROR, incomplete escape
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 4 bytes at offset 1:
++...|"\u"|...
++...|.^..|...: invalid JSON token
++SELECT '"\u00"'::jsonb;			-- ERROR, incomplete escape
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 6 bytes at offset 1:
++...|"\u00"|...
++...|.^....|...: invalid JSON token
++SELECT '"\u000g"'::jsonb;		-- ERROR, g is not a hex digit
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 8 bytes at offset 1:
++...|"\u000g"|...
++...|.^......|...: invalid JSON token
++SELECT '"\u0045"'::jsonb;		-- OK, legal escape
++ jsonb 
++-------
++ "E"
++(1 row)
++
++SELECT '"\u0000"'::jsonb;		-- ERROR, we don't support U+0000
++  jsonb   
++----------
++ "\u0000"
++(1 row)
++
++-- use octet_length here so we don't get an odd unicode char in the
++-- output
++SELECT octet_length('"\uaBcD"'::jsonb::text); -- OK, uppercase and lower case both OK
++ octet_length 
++--------------
++            5
++(1 row)
++
++-- handling of unicode surrogate pairs
++SELECT octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text) AS correct_in_utf8;
++ correct_in_utf8 
++-----------------
++              10
++(1 row)
++
++SELECT jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 24 bytes at offset 9:
++...|{ "a":  "\ud83d\ud83d" }|...
++...|.........^..............|...: invalid JSON token
++SELECT jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 24 bytes at offset 9:
++...|{ "a":  "\ude04\ud83d" }|...
++...|.........^..............|...: invalid JSON token
++SELECT jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 19 bytes at offset 9:
++...|{ "a":  "\ud83dX" }|...
++...|.........^.........|...: invalid JSON token
++SELECT jsonb '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
++ERROR:  could not parse JSON: unable to decode JSON: while decoding 19 bytes at offset 9:
++...|{ "a":  "\ude04X" }|...
++...|.........^.........|...: invalid JSON token
++-- handling of simple unicode escapes
++SELECT jsonb '{ "a":  "the Copyright \u00a9 sign" }' as correct_in_utf8;
++        correct_in_utf8        
++-------------------------------
++ {"a": "the Copyright © sign"}
++(1 row)
++
++SELECT jsonb '{ "a":  "dollar \u0024 character" }' as correct_everywhere;
++     correct_everywhere      
++-----------------------------
++ {"a": "dollar $ character"}
++(1 row)
++
++SELECT jsonb '{ "a":  "dollar \\u0024 character" }' as not_an_escape;
++           not_an_escape           
++-----------------------------------
++ {"a": "dollar \\u0024 character"}
++(1 row)
++
++SELECT jsonb '{ "a":  "null \u0000 escape" }' as fails;
++            fails            
++-----------------------------
++ {"a": "null \u0000 escape"}
++(1 row)
++
++SELECT jsonb '{ "a":  "null \\u0000 escape" }' as not_an_escape;
++        not_an_escape         
++------------------------------
++ {"a": "null \\u0000 escape"}
++(1 row)
++
++SELECT jsonb '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' as correct_in_utf8;
++   correct_in_utf8    
++----------------------
++ the Copyright © sign
++(1 row)
++
++SELECT jsonb '{ "a":  "dollar \u0024 character" }' ->> 'a' as correct_everywhere;
++ correct_everywhere 
++--------------------
++ dollar $ character
++(1 row)
++
++SELECT jsonb '{ "a":  "dollar \\u0024 character" }' ->> 'a' as not_an_escape;
++      not_an_escape      
++-------------------------
++ dollar \u0024 character
++(1 row)
++
++SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
++ fails 
++-------
++ null 
++(1 row)
++
++SELECT jsonb '{ "a":  "null \\u0000 escape" }' ->> 'a' as not_an_escape;
++   not_an_escape    
++--------------------
++ null \u0000 escape
++(1 row)
++
++-- soft error for input-time failure
++select * from pg_input_error_info('{ "a":  "\ud83d\ude04\ud83d\udc36" }', 'jsonb');
++ERROR:  unknown function: pg_input_error_info()

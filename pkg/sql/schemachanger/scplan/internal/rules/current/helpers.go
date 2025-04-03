@@ -20,8 +20,7 @@ const (
 )
 
 // rulesVersionKey version of elements used by this rule set.
-// TODO(spilchen): Need to update this to V25_2 when it is available.
-var rulesVersionKey = clusterversion.V25_1
+var rulesVersionKey = clusterversion.V25_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
@@ -90,7 +89,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	}
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
-		*scpb.ColumnNotNull:
+		*scpb.ColumnNotNull, *scpb.TableSchemaLocked:
 		return true
 	}
 	return false
@@ -114,6 +113,11 @@ func isIndexColumn(e scpb.Element) bool {
 
 func isColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
+	return ok
+}
+
+func isTableSchemaLocked(e scpb.Element) bool {
+	_, ok := e.(*scpb.TableSchemaLocked)
 	return ok
 }
 
@@ -180,6 +184,16 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 		}
 		return &e.Expression, nil
 	case *scpb.CheckConstraintUnvalidated:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
+	case *scpb.PolicyUsingExpr:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
+	case *scpb.PolicyWithCheckExpr:
 		if e == nil {
 			return nil, nil
 		}
@@ -319,7 +333,8 @@ func isTriggerDependent(e scpb.Element) bool {
 
 func isPolicyDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.PolicyName, *scpb.PolicyRole:
+	case *scpb.PolicyName, *scpb.PolicyRole, *scpb.PolicyUsingExpr,
+		*scpb.PolicyWithCheckExpr, *scpb.PolicyDeps:
 		return true
 	}
 	return false
@@ -348,6 +363,14 @@ func isDescriptorParentReference(e scpb.Element) bool {
 func isOwner(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Owner:
+		return true
+	}
+	return false
+}
+
+func isSchemaLocked(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.TableSchemaLocked:
 		return true
 	}
 	return false

@@ -9,11 +9,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -49,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -386,7 +390,7 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 // DistSQLReceiver with the error and cancels the gateway flow.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *eval.Context,
 	planCtx *PlanningCtx,
 	leafInputState *roachpb.LeafTxnInputState,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
@@ -395,7 +399,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	statementSQL string,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
-	_, ok := flows[thisNodeID]
+	thisNodeSpec, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("missing gateway flow")
 	}
@@ -403,18 +407,55 @@ func (dsp *DistSQLPlanner) setupFlows(
 		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
+	if buildutil.CrdbTestBuild && len(flows) > 1 {
+		// Ensure that we don't have memory aliasing of some fields between the
+		// local flow and the remote ones. At the time of writing only
+		// TableReaderSpec.Spans is known to be problematic.
+		gatewayFlowSpans := make(map[uintptr]int32)
+		for _, p := range thisNodeSpec.Processors {
+			if tr := p.Core.TableReader; tr != nil {
+				//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+				ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+				gatewayFlowSpans[ptr.Data] = p.ProcessorID
+			}
+		}
+		for sqlInstanceID, flow := range flows {
+			if sqlInstanceID == thisNodeID {
+				continue
+			}
+			for _, p := range flow.Processors {
+				if tr := p.Core.TableReader; tr != nil {
+					//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
+					ptr := (*reflect.SliceHeader)(unsafe.Pointer(&tr.Spans))
+					if procID, found := gatewayFlowSpans[ptr.Data]; found {
+						return nil, nil, errors.AssertionFailedf(
+							"found TableReaderSpec.Spans memory aliasing between local and remote flows\n"+
+								"statement: %s, local proc ID %d, remote proc ID %d\n%v",
+							statementSQL, procID, p.ProcessorID, flows,
+						)
+					}
+				}
+			}
+		}
+	}
+
 	const setupFlowRequestStmtMaxLength = 500
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	execVersion := execversion.V24_3
-	if dsp.st.Version.IsActive(ctx, clusterversion.V25_1) {
-		execVersion = execversion.V25_1
+	var v execversion.V
+	switch {
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_2):
+		v = execversion.V25_2
+	case dsp.st.Version.IsActive(ctx, clusterversion.V25_1):
+		v = execversion.V25_1
+	default:
+		v = execversion.V24_3
 	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           execVersion,
-		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
+		Version:           v,
+		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
 	}
@@ -424,7 +465,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
 	} else {
 		// In distributed plans populate some extra state.
-		setupReq.EvalContext = execinfrapb.MakeEvalContext(&evalCtx.Context)
+		setupReq.EvalContext = execinfrapb.MakeEvalContext(evalCtx)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
 			setupReq.JobTag = jobTag.ValueStr()
 		}
@@ -456,7 +497,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	// First, set up the flow on this node.
-	setupReq.Flow = *flows[thisNodeID]
+	setupReq.Flow = *thisNodeSpec
 	var batchReceiver execinfra.BatchReceiver
 	if recv.batchWriter != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
@@ -490,7 +531,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// issued (either by the current goroutine directly or delegated to the
 	// DistSQL workers).
 	var numIssuedRequests int
-	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
+	if sp := tracing.SpanFromContext(origCtx); sp != nil {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
 	resultChan := make(chan runnerResult, len(flows)-1)
@@ -672,10 +713,11 @@ func (dsp *DistSQLPlanner) Run(
 	txn *kv.Txn,
 	plan *PhysicalPlan,
 	recv *DistSQLReceiver,
-	evalCtx *extendedEvalContext,
+	evalCtx *eval.Context,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
-	flows := plan.GenerateFlowSpecs()
+	// Ignore the cleanup function since we will release each spec separately.
+	flows, _ := plan.GenerateFlowSpecs()
 	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
 	if !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
@@ -690,9 +732,9 @@ func (dsp *DistSQLPlanner) Run(
 		localState     distsql.LocalState
 		leafInputState *roachpb.LeafTxnInputState
 	)
-	// NB: putting part of evalCtx in localState means it might be mutated down
+	// NB: putting eval.Context into localState means it might be mutated down
 	// the line.
-	localState.EvalContext = &evalCtx.Context
+	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
 	localState.MustUseLeaf = planCtx.mustUseLeafTxn
 	localState.Txn = txn
@@ -709,8 +751,10 @@ func (dsp *DistSQLPlanner) Run(
 	// then we are ignorant of the details of the execution plan, so we choose
 	// to be on the safe side and mark 'noMutations' as 'false'.
 	noMutations := planCtx.planner != nil && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+	log.VEventf(ctx, 3, "noMutations = %t", noMutations)
 
 	if txn == nil {
+		log.VEventf(ctx, 3, "nil txn")
 		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
@@ -753,6 +797,7 @@ func (dsp *DistSQLPlanner) Run(
 			// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
 			// txns and remove this check. See #94290.
 			containsLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
+			log.VEventf(ctx, 3, "containsLocking = %t", containsLocking)
 
 			// We also currently disable the usage of the Streamer API whenever
 			// we have a wrapped planNode. This is done to prevent scenarios
@@ -767,8 +812,15 @@ func (dsp *DistSQLPlanner) Run(
 			// cases.
 			mustUseRootTxn := func() bool {
 				for _, p := range plan.Processors {
-					if p.Spec.Core.LocalPlanNode != nil {
-						return true
+					if n := p.Spec.Core.LocalPlanNode; n != nil {
+						switch n.Name {
+						case "scan buffer", "buffer":
+							// scanBufferNode and bufferNode don't interact with
+							// txns directly, so they are safe.
+						default:
+							log.VEventf(ctx, 3, "must use root txn due to %q wrapped planNode", n.Name)
+							return true
+						}
 					}
 				}
 				return false
@@ -1890,7 +1942,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlans[planIdx].started = true
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
-	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, finishedSetupFn)
+	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, &evalCtx.Context, finishedSetupFn)
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -2015,7 +2067,7 @@ var distributedQueryRerunAsLocalEnabled = settings.RegisterBoolSetting(
 // execution, then finishedSetupFn will be called twice.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	extEvalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	plan planMaybePhysical,
@@ -2033,7 +2085,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
+		dsp.Run(ctx, planCtx, txn, physPlan, recv, &extEvalCtx.Context, finishedSetupFn)
 	}
 	if planCtx.isLocal {
 		// If the plan was local, then we're done regardless of whether an error
@@ -2094,7 +2146,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		// is no point in providing the locality filter since it will be ignored
 		// anyway, so we don't use NewPlanningCtxWithOracle constructor.
 		localPlanCtx := dsp.NewPlanningCtx(
-			ctx, evalCtx, planCtx.planner, evalCtx.Txn, LocalDistribution,
+			ctx, extEvalCtx, planCtx.planner, extEvalCtx.Txn, LocalDistribution,
 		)
 		localPlanCtx.setUpForMainQuery(ctx, planCtx.planner, recv)
 		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)
@@ -2107,7 +2159,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.expectedRowsRead = int64(localPhysPlan.TotalEstimatedScannedRows)
 		// We already called finishedSetupFn in the previous call to Run, since we
 		// only got here if we got a distributed error, not an error during setup.
-		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, &extEvalCtx.Context, nil /* finishedSetupFn */)
 	}
 }
 
@@ -2479,7 +2531,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryRecv.batchWriter = postqueryResultWriter
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
-	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, finishedSetupFn)
+	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, &evalCtx.Context, finishedSetupFn)
 	return postqueryRecv.resultWriter.Err()
 }
 
@@ -2507,24 +2559,29 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// For parallel checks we must make all `scanBufferNode`s in the plans
 	// concurrency-safe. (The need to be able to walk the planNode tree is why
 	// we currently disable the usage of the new DistSQL spec factory.)
-	observer := planObserver{
-		enterNode: func(_ context.Context, _ string, plan planNode) (bool, error) {
-			if s, ok := plan.(*scanBufferNode); ok {
-				s.makeConcurrencySafe(&mu)
+	var makeScanBuffersConcurrencySafe func(p planNode) error
+	makeScanBuffersConcurrencySafe = func(p planNode) error {
+		if s, ok := p.(*scanBufferNode); ok {
+			s.makeConcurrencySafe(&mu)
+		}
+		for i, n := 0, p.InputCount(); i < n; i++ {
+			input, err := p.Input(i)
+			if err != nil {
+				return err
 			}
-			return true, nil
-		},
+			if err := makeScanBuffersConcurrencySafe(input); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	for i := range checkPlans {
 		if checkPlans[i].plan.isPhysicalPlan() {
 			return errors.AssertionFailedf("unexpectedly physical plan is used for a parallel CHECK")
 		}
-		// Ignore the error since our observer never returns an error.
-		_ = walkPlan(
-			ctx,
-			checkPlans[i].plan.planNode,
-			observer,
-		)
+		if err := makeScanBuffersConcurrencySafe(checkPlans[i].plan.planNode); err != nil {
+			return err
+		}
 	}
 	var getSaveFlowsFunc func() SaveFlowsFunc
 	if planner.instrumentation.ShouldSaveFlows() {
@@ -2584,13 +2641,17 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	if quota := int(dsp.parallelChecksSem.ApproximateQuota()); numParallelChecks > quota {
 		numParallelChecks = quota
 	}
+	var alloc *quotapool.IntAlloc
 	for numParallelChecks > 0 {
-		alloc, err := dsp.parallelLocalScansSem.TryAcquire(ctx, uint64(numParallelChecks))
+		var err error
+		alloc, err = dsp.parallelLocalScansSem.TryAcquire(ctx, uint64(numParallelChecks))
 		if err == nil {
-			defer alloc.Release()
 			break
 		}
 		numParallelChecks--
+	}
+	if alloc != nil {
+		defer alloc.Release()
 	}
 
 	log.VEventf(

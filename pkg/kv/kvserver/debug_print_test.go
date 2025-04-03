@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,7 +56,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	require.NoError(t, batch.RangeKeySet(
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db1")),
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db2")),
-		storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1}),
+		mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1}),
 		[]byte{},
 		nil,
 	))
@@ -66,7 +67,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	require.NoError(t, batch.RangeKeySet(
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db1")),
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db2")),
-		storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 2}),
+		mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 2}),
 		valueRaw,
 		nil,
 	))
@@ -81,13 +82,13 @@ func TestStringifyWriteBatch(t *testing.T) {
 	require.NoError(t, batch.RangeKeyUnset(
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db1")),
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db2")),
-		storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1}),
+		mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1}),
 		nil,
 	))
 	require.NoError(t, batch.RangeKeyUnset(
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db1")),
 		storage.EncodeMVCCKeyPrefix(roachpb.Key("/db2")),
-		storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 2}),
+		mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 2}),
 		nil,
 	))
 	wb.Data = batch.Repr()

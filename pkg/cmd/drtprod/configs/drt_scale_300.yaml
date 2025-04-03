@@ -8,8 +8,19 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-scale-300
   WORKLOAD_CLUSTER: workload-scale-300
-  CLUSTER_NODES: 300
-  WORKLOAD_NODES: 20
+  CLUSTER_NODES: 150
+  TOTAL_PARTITIONS: 30
+  WORKLOAD_NODES: 15
+
+dependent_file_locations:
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/ycsb_init.sh
+  - pkg/cmd/drtprod/scripts/generate_ycsb_run.sh
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
+  - pkg/cmd/drtprod/scripts/ycsb_init.sh
+  - pkg/cmd/drtprod/scripts/generate_ycsb_run.sh
 
 targets:
   # crdb cluster specs
@@ -22,11 +33,11 @@ targets:
           clouds: gce
           gce-managed: true
           gce-enable-multiple-stores: true
-          gce-zones: "us-central1-a:150,us-central1-b:150"
+          gce-zones: "us-central1-a:50,us-central1-b:50,us-central1-c:50"
           nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
           local-ssd: false
-          gce-pd-volume-size: 375
+          gce-pd-volume-size: 1024
           gce-pd-volume-type: pd-ssd
           gce-pd-volume-count: 4
           os-volume-size: 100
@@ -39,7 +50,8 @@ targets:
       - command: stage
         args:
           - $CLUSTER
-          - cockroach
+          - release
+          - v25.1.1
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
         args:
@@ -58,6 +70,12 @@ targets:
           - $CLUSTER
           - --
           - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='256 MB'"
   # workload cluster specs
   - target_name: $WORKLOAD_CLUSTER
     steps:
@@ -66,7 +84,7 @@ targets:
           - $WORKLOAD_CLUSTER
         flags:
           clouds: gce
-          gce-zones: "us-central1-a,us-central1-b"
+          gce-zones: "us-central1-f"
           nodes: $WORKLOAD_NODES
           gce-machine-type: n2-standard-8
           os-volume-size: 100
@@ -84,10 +102,6 @@ targets:
         args:
           - $WORKLOAD_CLUSTER
           - cockroach
-      - command: stage
-        args:
-          - $WORKLOAD_CLUSTER
-          - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
     dependent_targets:
@@ -118,13 +132,34 @@ targets:
       - command: put
         args:
           - $WORKLOAD_CLUSTER
-          - artifacts/roachprod
-          - roachprod
-      - command: put
+          - artifacts/drtprod
+          - drtprod
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         args:
-          - $WORKLOAD_CLUSTER
-          - artifacts/roachtest
-          - roachtest-operations
+          - cct_tpcc_6M
+          - false
+        flags:
+          warehouses: 6000000
+          db: cct_tpcc_6M
+  - target_name: tpcc_run
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc_6M # suffix added to script name tpcc_run_400k.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          db: cct_tpcc_6M
+          warehouses: 6000000
+          active-warehouses: 500000
+          conns: 33333
+          max-rate: 2500
+          workers: 166666
+          duration: 12h
+          ramp: 1h
+          wait: 0
       - script: "pkg/cmd/drtprod/scripts/ycsb_init.sh"
         args:
           - 20M

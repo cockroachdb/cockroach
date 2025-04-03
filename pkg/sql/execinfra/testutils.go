@@ -82,7 +82,7 @@ func (r *RepeatableRowSource) ConsumerClosed() {}
 // moved).
 func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
 	memMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-mem"),
+		Name:     mon.MakeName("test-mem"),
 		Settings: st,
 	})
 	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
@@ -93,7 +93,7 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 // tests.
 func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
 	diskMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-disk"),
+		Name:     mon.MakeName("test-disk"),
 		Res:      mon.DiskResource,
 		Settings: st,
 	})

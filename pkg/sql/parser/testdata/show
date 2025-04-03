@@ -1973,6 +1973,14 @@ SHOW CREATE t WITH REDACT -- literals removed
 SHOW CREATE _ WITH REDACT -- identifiers removed
 
 parse
+SHOW CREATE TABLE t WITH IGNORE_FOREIGN_KEYS
+----
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- normalized!
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- fully parenthesized
+SHOW CREATE t WITH IGNORE_FOREIGN_KEYS -- literals removed
+SHOW CREATE _ WITH IGNORE_FOREIGN_KEYS -- identifiers removed
+
+parse
 SHOW CREATE VIEW t
 ----
 SHOW CREATE t -- normalized!

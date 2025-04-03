@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -237,6 +237,14 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
 
+		// Configs with large (64kb only) block sizes and pre-splits. These examine
+		// the impact of large block sizes without range splits occurring during
+		// the workload run. +100 replicas per-node, with RF=3 and 3 nodes.
+		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+
 		// Configs with large batch sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, batchSize: 16},
 		{nodes: 3, cpus: 8, readPercent: 95, batchSize: 16},
@@ -355,6 +363,13 @@ func registerKV(r registry.Registry) {
 			tags["weekly"] = struct{}{}
 		}
 
+		var skipPostValidations registry.PostValidation
+		if opts.blockSize == 1<<16 {
+			// Large block size variations may timeout waiting for replica divergence
+			// post-test validation due to high write volume, see #141007.
+			skipPostValidations = registry.PostValidationReplicaDivergence
+		}
+
 		r.Add(registry.TestSpec{
 			Name:      strings.Join(nameParts, "/"),
 			Owner:     owner,
@@ -363,9 +378,10 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			CompatibleClouds:  clouds,
-			Suites:            suites,
-			EncryptionSupport: encryption,
+			CompatibleClouds:    clouds,
+			Suites:              suites,
+			EncryptionSupport:   encryption,
+			SkipPostValidations: skipPostValidations,
 		})
 	}
 }
@@ -544,7 +560,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			dbs := make([]*gosql.DB, nodes-1)
 			for i := range dbs {
 				dbs[i] = c.Conn(ctx, t.L(), i+1)
-				defer dbs[i].Close()
+				defer dbs[i].Close() //nolint:deferloop
 			}
 
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), dbs[0])
@@ -723,31 +739,47 @@ func registerKVSplits(r registry.Registry) {
 		splits  int
 		leases  registry.LeaseType
 		timeout time.Duration
+		envVars []string
 	}{
 		// NB: with 500000 splits, this test sometimes fails since it's pushing
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300_000, registry.EpochLeases, 2 * time.Hour},
+		{true, 300_000, registry.EpochLeases, 2 * time.Hour, nil},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30_000, registry.EpochLeases, 2 * time.Hour},
+		{false, 30_000, registry.EpochLeases, 2 * time.Hour, nil},
 		// Expiration-based leases prevent quiescence, and are also more expensive
 		// to keep alive. Again, just verify that 30k ranges is ok.
-		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour},
-		// Leader leases don't need quiescence, as they use store liveness for
-		// failure detection and lease extension, so they don't issue raft
-		// heartbeats or periodic lease extensions. However, the cost of raft
-		// ticking is not entirely negligible (see #133885), so each range isn't
-		// completely free. Currently, they should be able to support 80k ranges in
-		// this cluster configuration.
-		{false, 80_000, registry.LeaderLeases, 2 * time.Hour},
+		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour, nil},
+		// Leader leases without quiescence perform similarly to epoch leases
+		// without quiescence. Even though epoch leases are set to reach 30k, they
+		// also reach 60k reliably.
+		{false, 60_000, registry.LeaderLeases, 2 * time.Hour, nil},
+		// Leader leases with quiescence don't quite match epoch leases with
+		// quiescence because in leader leases only the followers ever quiesce.
+		{true, 80_000, registry.LeaderLeases, 2 * time.Hour, nil},
+		// With some additional tuning, leader leases can do even better. The extended interval allow
+		// for more flexibility in extending store liveness support, and prevent support withdrawals at
+		// higher CPU utilization when goroutine scheduling latency is high.
+		{
+			true, 100_000, registry.LeaderLeases, 2 * time.Hour,
+			[]string{
+				"COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL=1s",
+				"COCKROACH_STORE_LIVENESS_HEARTBEAT_INTERVAL=3s",
+				"COCKROACH_STORE_LIVENESS_SUPPORT_DURATION=6s",
+			},
+		},
 	} {
 		item := item // for use in closure below
+		name := fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases)
+		if item.envVars != nil {
+			name += "/tuned"
+		}
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
+			Name:    name,
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
@@ -761,6 +793,10 @@ func registerKVSplits(r registry.Registry) {
 
 				settings := install.MakeClusterSettings()
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
+				settings.Env = append(settings.Env, item.envVars...)
+				if !item.quiesce {
+					settings.ClusterSettings["kv.raft.store_liveness.quiescence.enabled"] = "false"
+				}
 				startOpts := option.NewStartOpts(option.NoBackupSchedule)
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
 				c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
@@ -916,7 +952,7 @@ func registerKVRangeLookups(r registry.Registry) {
 							EXPERIMENTAL_RELOCATE
 								SELECT ARRAY[$1, $2, $3], CAST(floor(random() * 9223372036854775808) AS INT)
 						`, newReplicas[0]+1, newReplicas[1]+1, newReplicas[2]+1)
-						if err != nil && !pgerror.IsSQLRetryableError(err) && !kv.IsExpectedRelocateError(err) {
+						if err != nil && !pgerror.IsSQLRetryableError(err) && !kvtestutils.IsExpectedRelocateError(err) {
 							return err
 						}
 					default:

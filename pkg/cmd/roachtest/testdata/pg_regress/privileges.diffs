@@ -1,0 +1,4930 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --label=/mnt/data1/postgres/src/test/regress/results/privileges.out /mnt/data1/postgres/src/test/regress/expected/privileges.out /mnt/data1/postgres/src/test/regress/results/privileges.out
+--- /mnt/data1/postgres/src/test/regress/expected/privileges.out
++++ /mnt/data1/postgres/src/test/regress/results/privileges.out
+@@ -14,10 +14,7 @@
+ DROP ROLE IF EXISTS regress_priv_user6;
+ DROP ROLE IF EXISTS regress_priv_user7;
+ SELECT lo_unlink(oid) FROM pg_largeobject_metadata WHERE oid >= 1000 AND oid < 3000 ORDER BY oid;
+- lo_unlink 
+------------
+-(0 rows)
+-
++ERROR:  unknown function: lo_unlink()
+ RESET client_min_messages;
+ -- test proper begins here
+ CREATE USER regress_priv_user1;
+@@ -26,7 +23,7 @@
+ CREATE USER regress_priv_user4;
+ CREATE USER regress_priv_user5;
+ CREATE USER regress_priv_user5;	-- duplicate
+-ERROR:  role "regress_priv_user5" already exists
++ERROR:  a role/user named regress_priv_user5 already exists
+ CREATE USER regress_priv_user6;
+ CREATE USER regress_priv_user7;
+ CREATE USER regress_priv_user8;
+@@ -36,32 +33,37 @@
+ -- circular ADMIN OPTION grants should be disallowed
+ GRANT regress_priv_user1 TO regress_priv_user2 WITH ADMIN OPTION;
+ GRANT regress_priv_user1 TO regress_priv_user3 WITH ADMIN OPTION GRANTED BY regress_priv_user2;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_user1 TO regress_priv_user3 WITH ADMIN OPTION GRANTED BY regress_priv_user2
++                                                                 ^
+ GRANT regress_priv_user1 TO regress_priv_user2 WITH ADMIN OPTION GRANTED BY regress_priv_user3;
+-ERROR:  ADMIN option cannot be granted back to your own grantor
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_user1 TO regress_priv_user2 WITH ADMIN OPTION GRANTED BY regress_priv_user3
++                                                                 ^
+ -- need CASCADE to revoke grant or admin option if dependent grants exist
+ REVOKE ADMIN OPTION FOR regress_priv_user1 FROM regress_priv_user2; -- fail
+-ERROR:  dependent privileges exist
+-HINT:  Use CASCADE to revoke them too.
+ REVOKE regress_priv_user1 FROM regress_priv_user2; -- fail
+-ERROR:  dependent privileges exist
+-HINT:  Use CASCADE to revoke them too.
+ SELECT member::regrole, admin_option FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole;
+-       member       | admin_option 
+---------------------+--------------
+- regress_priv_user2 | t
+- regress_priv_user3 | t
+-(2 rows)
++ member | admin_option 
++--------+--------------
++(0 rows)
+ 
+ BEGIN;
+ REVOKE ADMIN OPTION FOR regress_priv_user1 FROM regress_priv_user2 CASCADE;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE ADMIN OPTION FOR regress_priv_user1 FROM regress_priv_user2 CASCADE
++                                                                   ^
+ SELECT member::regrole, admin_option FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole;
+-       member       | admin_option 
+---------------------+--------------
+- regress_priv_user2 | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ REVOKE regress_priv_user1 FROM regress_priv_user2 CASCADE;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE regress_priv_user1 FROM regress_priv_user2 CASCADE
++                                                  ^
+ SELECT member::regrole, admin_option FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole;
+  member | admin_option 
+ --------+--------------
+@@ -73,117 +75,271 @@
+ SET ROLE regress_priv_user3;
+ GRANT regress_priv_user1 TO regress_priv_user4;
+ SELECT grantor::regrole FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole and member = 'regress_priv_user4'::regrole;
+-      grantor       
+---------------------
+- regress_priv_user2
++ grantor 
++---------
++ 
+ (1 row)
+ 
+ RESET ROLE;
+ REVOKE regress_priv_user2 FROM regress_priv_user3;
+ REVOKE regress_priv_user1 FROM regress_priv_user2 CASCADE;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE regress_priv_user1 FROM regress_priv_user2 CASCADE
++                                                  ^
+ -- test GRANTED BY with DROP OWNED and REASSIGN OWNED
+ GRANT regress_priv_user1 TO regress_priv_user2 WITH ADMIN OPTION;
+ GRANT regress_priv_user1 TO regress_priv_user3 GRANTED BY regress_priv_user2;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_user1 TO regress_priv_user3 GRANTED BY regress_priv_user2
++                                               ^
+ DROP ROLE regress_priv_user2; -- fail, dependency
+-ERROR:  role "regress_priv_user2" cannot be dropped because some objects depend on it
+-DETAIL:  privileges for membership of role regress_priv_user3 in role regress_priv_user1
+ REASSIGN OWNED BY regress_priv_user2 TO regress_priv_user4;
++ERROR:  role/user "regress_priv_user2" does not exist
+ DROP ROLE regress_priv_user2; -- still fail, REASSIGN OWNED doesn't help
+-ERROR:  role "regress_priv_user2" cannot be dropped because some objects depend on it
+-DETAIL:  privileges for membership of role regress_priv_user3 in role regress_priv_user1
++ERROR:  role/user "regress_priv_user2" does not exist
+ DROP OWNED BY regress_priv_user2;
+ DROP ROLE regress_priv_user2; -- ok now, DROP OWNED does the job
++ERROR:  role/user "regress_priv_user2" does not exist
+ -- test that removing granted role or grantee role removes dependency
+ GRANT regress_priv_user1 TO regress_priv_user3 WITH ADMIN OPTION;
+ GRANT regress_priv_user1 TO regress_priv_user4 GRANTED BY regress_priv_user3;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_user1 TO regress_priv_user4 GRANTED BY regress_priv_user3
++                                               ^
+ DROP ROLE regress_priv_user3; -- should fail, dependency
+-ERROR:  role "regress_priv_user3" cannot be dropped because some objects depend on it
+-DETAIL:  privileges for membership of role regress_priv_user4 in role regress_priv_user1
+ DROP ROLE regress_priv_user4; -- ok
+ DROP ROLE regress_priv_user3; -- ok now
++ERROR:  role/user "regress_priv_user3" does not exist
+ GRANT regress_priv_user1 TO regress_priv_user5 WITH ADMIN OPTION;
+ GRANT regress_priv_user1 TO regress_priv_user6 GRANTED BY regress_priv_user5;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_user1 TO regress_priv_user6 GRANTED BY regress_priv_user5
++                                               ^
+ DROP ROLE regress_priv_user5; -- should fail, dependency
+-ERROR:  role "regress_priv_user5" cannot be dropped because some objects depend on it
+-DETAIL:  privileges for membership of role regress_priv_user6 in role regress_priv_user1
+ DROP ROLE regress_priv_user1, regress_priv_user5; -- ok, despite order
++ERROR:  role/user "regress_priv_user5" does not exist
+ -- recreate the roles we just dropped
+ CREATE USER regress_priv_user1;
++ERROR:  a role/user named regress_priv_user1 already exists
+ CREATE USER regress_priv_user2;
+ CREATE USER regress_priv_user3;
+ CREATE USER regress_priv_user4;
+ CREATE USER regress_priv_user5;
+ GRANT pg_read_all_data TO regress_priv_user6;
++ERROR:  role/user "pg_read_all_data" does not exist
+ GRANT pg_write_all_data TO regress_priv_user7;
++ERROR:  role/user "pg_write_all_data" does not exist
+ GRANT pg_read_all_settings TO regress_priv_user8 WITH ADMIN OPTION;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ GRANT regress_priv_user9 TO regress_priv_user8;
+ SET SESSION AUTHORIZATION regress_priv_user8;
++ERROR:  at or near "regress_priv_user8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user8
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT pg_read_all_settings TO regress_priv_user9 WITH ADMIN OPTION;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user9;
++ERROR:  at or near "regress_priv_user9": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user9
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT pg_read_all_settings TO regress_priv_user10;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user8;
++ERROR:  at or near "regress_priv_user8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user8
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE pg_read_all_settings FROM regress_priv_user10 GRANTED BY regress_priv_user9;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++REVOKE pg_read_all_settings FROM regress_priv_user10 GRANTED BY regress_priv_user9
++                                                     ^
+ REVOKE ADMIN OPTION FOR pg_read_all_settings FROM regress_priv_user9;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ REVOKE pg_read_all_settings FROM regress_priv_user9;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE regress_priv_user9 FROM regress_priv_user8;
+ REVOKE ADMIN OPTION FOR pg_read_all_settings FROM regress_priv_user8;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user8;
++ERROR:  at or near "regress_priv_user8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user8
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SET ROLE pg_read_all_settings;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ RESET ROLE;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE SET OPTION FOR pg_read_all_settings FROM regress_priv_user8;
++ERROR:  at or near "option": syntax error: not a valid privilege: "set"
++DETAIL:  source SQL:
++REVOKE SET OPTION FOR pg_read_all_settings FROM regress_priv_user8
++           ^
+ GRANT pg_read_all_stats TO regress_priv_user8 WITH SET FALSE;
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++GRANT pg_read_all_stats TO regress_priv_user8 WITH SET FALSE
++                                                   ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user8;
++ERROR:  at or near "regress_priv_user8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user8
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SET ROLE pg_read_all_settings;  -- fail, no SET option any more
+-ERROR:  permission denied to set role "pg_read_all_settings"
++ERROR:  role/user "pg_read_all_settings" does not exist
+ SET ROLE pg_read_all_stats;     -- fail, granted without SET option
+-ERROR:  permission denied to set role "pg_read_all_stats"
++ERROR:  role/user "pg_read_all_stats" does not exist
+ RESET ROLE;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE pg_read_all_settings FROM regress_priv_user8;
++ERROR:  role/user "pg_read_all_settings" does not exist
+ DROP USER regress_priv_user10;
+ DROP USER regress_priv_user9;
+ DROP USER regress_priv_user8;
+ CREATE GROUP regress_priv_group1;
+ CREATE GROUP regress_priv_group2 WITH ADMIN regress_priv_user1 USER regress_priv_user2;
++ERROR:  at or near "admin": syntax error
++DETAIL:  source SQL:
++CREATE GROUP regress_priv_group2 WITH ADMIN regress_priv_user1 USER regress_priv_user2
++                                      ^
++HINT:  try \h CREATE ROLE
+ ALTER GROUP regress_priv_group1 ADD USER regress_priv_user4;
++ERROR:  at or near "add": syntax error
++DETAIL:  source SQL:
++ALTER GROUP regress_priv_group1 ADD USER regress_priv_user4
++                                ^
++HINT:  try \h ALTER ROLE
+ GRANT regress_priv_group2 TO regress_priv_user2 GRANTED BY regress_priv_user1;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_group2 TO regress_priv_user2 GRANTED BY regress_priv_user1
++                                                ^
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ ALTER GROUP regress_priv_group2 ADD USER regress_priv_user2;
+-NOTICE:  role "regress_priv_user2" has already been granted membership in role "regress_priv_group2" by role "regress_priv_user1"
++ERROR:  at or near "add": syntax error
++DETAIL:  source SQL:
++ALTER GROUP regress_priv_group2 ADD USER regress_priv_user2
++                                ^
++HINT:  try \h ALTER ROLE
+ ALTER GROUP regress_priv_group2 ADD USER regress_priv_user2;	-- duplicate
+-NOTICE:  role "regress_priv_user2" has already been granted membership in role "regress_priv_group2" by role "regress_priv_user1"
++ERROR:  at or near "add": syntax error
++DETAIL:  source SQL:
++ALTER GROUP regress_priv_group2 ADD USER regress_priv_user2
++                                ^
++HINT:  try \h ALTER ROLE
+ ALTER GROUP regress_priv_group2 DROP USER regress_priv_user2;
++ERROR:  at or near "drop": syntax error
++DETAIL:  source SQL:
++ALTER GROUP regress_priv_group2 DROP USER regress_priv_user2
++                                ^
++HINT:  try \h ALTER ROLE
+ ALTER USER regress_priv_user2 PASSWORD 'verysecret'; -- not permitted
+-ERROR:  permission denied to alter role
+-DETAIL:  To change another role's password, the current user must have the CREATEROLE attribute and the ADMIN option on the role.
++ERROR:  setting or updating a password is not supported in insecure mode
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ ALTER GROUP regress_priv_group2 DROP USER regress_priv_user2;
++ERROR:  at or near "drop": syntax error
++DETAIL:  source SQL:
++ALTER GROUP regress_priv_group2 DROP USER regress_priv_user2
++                                ^
++HINT:  try \h ALTER ROLE
+ REVOKE ADMIN OPTION FOR regress_priv_group2 FROM regress_priv_user1;
++ERROR:  role/user "regress_priv_group2" does not exist
+ GRANT regress_priv_group2 TO regress_priv_user4 WITH ADMIN OPTION;
++ERROR:  role/user "regress_priv_group2" does not exist
+ -- prepare non-leakproof function for later
+ CREATE FUNCTION leak(integer,integer) RETURNS boolean
+   AS 'int4lt'
+   LANGUAGE internal IMMUTABLE STRICT;  -- but deliberately not LEAKPROOF
++ERROR:  language "internal" does not exist
+ ALTER FUNCTION leak(integer,integer) OWNER TO regress_priv_user1;
++ERROR:  unknown function: leak()
+ -- test owner privileges
+ GRANT regress_priv_role TO regress_priv_user1 WITH ADMIN OPTION GRANTED BY regress_priv_role; -- error, doesn't have ADMIN OPTION
+-ERROR:  permission denied to grant privileges as role "regress_priv_role"
+-DETAIL:  The grantor must have the ADMIN option on role "regress_priv_role".
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_role TO regress_priv_user1 WITH ADMIN OPTION GRANTED BY regress_priv_role
++                                                                ^
+ GRANT regress_priv_role TO regress_priv_user1 WITH ADMIN OPTION GRANTED BY CURRENT_ROLE;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_role TO regress_priv_user1 WITH ADMIN OPTION GRANTED BY CURRENT_ROLE
++                                                                ^
+ REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY foo; -- error
+-ERROR:  role "foo" does not exist
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY foo
++                                                                  ^
+ REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY regress_priv_user2; -- warning, noop
+-WARNING:  role "regress_priv_user1" has not been granted membership in role "regress_priv_role" by role "regress_priv_user2"
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY regress_priv_user2
++                                                                  ^
+ REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY CURRENT_USER;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++REVOKE ADMIN OPTION FOR regress_priv_role FROM regress_priv_user1 GRANTED BY CURRENT_USER
++                                                                  ^
+ REVOKE regress_priv_role FROM regress_priv_user1 GRANTED BY CURRENT_ROLE;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++REVOKE regress_priv_role FROM regress_priv_user1 GRANTED BY CURRENT_ROLE
++                                                 ^
+ DROP ROLE regress_priv_role;
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT session_user, current_user;
+-    session_user    |    current_user    
+---------------------+--------------------
+- regress_priv_user1 | regress_priv_user1
++ session_user | current_user 
++--------------+--------------
++ test_admin   | test_admin
+ (1 row)
+ 
+ CREATE TABLE atest1 ( a int, b text );
+@@ -198,6 +354,10 @@
+ TRUNCATE atest1;
+ BEGIN;
+ LOCK atest1 IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK atest1 IN ACCESS EXCLUSIVE MODE
++^
+ COMMIT;
+ REVOKE ALL ON atest1 FROM PUBLIC;
+ SELECT * FROM atest1;
+@@ -216,14 +376,31 @@
+ GRANT SELECT ON atest2 TO regress_priv_user2;
+ GRANT UPDATE ON atest2 TO regress_priv_user3;
+ GRANT INSERT ON atest2 TO regress_priv_user4 GRANTED BY CURRENT_USER;
++ERROR:  at or near "granted": syntax error
++DETAIL:  source SQL:
++GRANT INSERT ON atest2 TO regress_priv_user4 GRANTED BY CURRENT_USER
++                                             ^
+ GRANT TRUNCATE ON atest2 TO regress_priv_user5 GRANTED BY CURRENT_ROLE;
++ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++DETAIL:  source SQL:
++GRANT TRUNCATE ON atest2 TO regress_priv_user5 GRANTED BY CURRENT_ROLE
++               ^
+ GRANT TRUNCATE ON atest2 TO regress_priv_user4 GRANTED BY regress_priv_user5;  -- error
+-ERROR:  grantor must be current user
++ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++DETAIL:  source SQL:
++GRANT TRUNCATE ON atest2 TO regress_priv_user4 GRANTED BY regress_priv_user5
++               ^
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT session_user, current_user;
+-    session_user    |    current_user    
+---------------------+--------------------
+- regress_priv_user2 | regress_priv_user2
++ session_user | current_user 
++--------------+--------------
++ test_admin   | test_admin
+ (1 row)
+ 
+ -- try various combinations of queries on atest1 and atest2
+@@ -239,11 +416,9 @@
+ 
+ INSERT INTO atest1 VALUES (2, 'two'); -- ok
+ INSERT INTO atest2 VALUES ('foo', true); -- fail
+-ERROR:  permission denied for table atest2
+ INSERT INTO atest1 SELECT 1, b FROM atest1; -- ok
+ UPDATE atest1 SET a = 1 WHERE a = 2; -- ok
+ UPDATE atest2 SET col2 = NOT col2; -- fail
+-ERROR:  permission denied for table atest2
+ SELECT * FROM atest1 FOR UPDATE; -- ok
+  a |  b  
+ ---+-----
+@@ -252,108 +427,22 @@
+ (2 rows)
+ 
+ SELECT * FROM atest2 FOR UPDATE; -- fail
+-ERROR:  permission denied for table atest2
+-DELETE FROM atest2; -- fail
+-ERROR:  permission denied for table atest2
+-TRUNCATE atest2; -- fail
+-ERROR:  permission denied for table atest2
+-BEGIN;
+-LOCK atest2 IN ACCESS EXCLUSIVE MODE; -- fail
+-ERROR:  permission denied for table atest2
+-COMMIT;
+-COPY atest2 FROM stdin; -- fail
+-ERROR:  permission denied for table atest2
+-GRANT ALL ON atest1 TO PUBLIC; -- fail
+-WARNING:  no privileges were granted for "atest1"
+--- checks in subquery, both ok
+-SELECT * FROM atest1 WHERE ( b IN ( SELECT col1 FROM atest2 ) );
+- a | b 
+----+---
+-(0 rows)
+-
+-SELECT * FROM atest2 WHERE ( col1 IN ( SELECT b FROM atest1 ) );
+- col1 | col2 
+-------+------
+-(0 rows)
+-
+-SET SESSION AUTHORIZATION regress_priv_user6;
+-SELECT * FROM atest1; -- ok
+- a |  b  
+----+-----
+- 1 | two
+- 1 | two
+-(2 rows)
+-
+-SELECT * FROM atest2; -- ok
+  col1 | col2 
+ ------+------
+-(0 rows)
+-
+-INSERT INTO atest2 VALUES ('foo', true); -- fail
+-ERROR:  permission denied for table atest2
+-SET SESSION AUTHORIZATION regress_priv_user7;
+-SELECT * FROM atest1; -- fail
+-ERROR:  permission denied for table atest1
+-SELECT * FROM atest2; -- fail
+-ERROR:  permission denied for table atest2
+-INSERT INTO atest2 VALUES ('foo', true); -- ok
+-UPDATE atest2 SET col2 = true; -- ok
+-DELETE FROM atest2; -- ok
+--- Make sure we are not able to modify system catalogs
+-UPDATE pg_catalog.pg_class SET relname = '123'; -- fail
+-ERROR:  permission denied for table pg_class
+-DELETE FROM pg_catalog.pg_class; -- fail
+-ERROR:  permission denied for table pg_class
+-UPDATE pg_toast.pg_toast_1213 SET chunk_id = 1; -- fail
+-ERROR:  permission denied for table pg_toast_1213
+-SET SESSION AUTHORIZATION regress_priv_user3;
+-SELECT session_user, current_user;
+-    session_user    |    current_user    
+---------------------+--------------------
+- regress_priv_user3 | regress_priv_user3
++ foo  | f
+ (1 row)
+ 
+-SELECT * FROM atest1; -- ok
+- a |  b  
+----+-----
+- 1 | two
+- 1 | two
+-(2 rows)
+-
+-SELECT * FROM atest2; -- fail
+-ERROR:  permission denied for table atest2
+-INSERT INTO atest1 VALUES (2, 'two'); -- fail
+-ERROR:  permission denied for table atest1
+-INSERT INTO atest2 VALUES ('foo', true); -- fail
+-ERROR:  permission denied for table atest2
+-INSERT INTO atest1 SELECT 1, b FROM atest1; -- fail
+-ERROR:  permission denied for table atest1
+-UPDATE atest1 SET a = 1 WHERE a = 2; -- fail
+-ERROR:  permission denied for table atest1
+-UPDATE atest2 SET col2 = NULL; -- ok
+-UPDATE atest2 SET col2 = NOT col2; -- fails; requires SELECT on atest2
+-ERROR:  permission denied for table atest2
+-UPDATE atest2 SET col2 = true FROM atest1 WHERE atest1.a = 5; -- ok
+-SELECT * FROM atest1 FOR UPDATE; -- fail
+-ERROR:  permission denied for table atest1
+-SELECT * FROM atest2 FOR UPDATE; -- fail
+-ERROR:  permission denied for table atest2
+ DELETE FROM atest2; -- fail
+-ERROR:  permission denied for table atest2
+ TRUNCATE atest2; -- fail
+-ERROR:  permission denied for table atest2
+ BEGIN;
+-LOCK atest2 IN ACCESS EXCLUSIVE MODE; -- ok
++LOCK atest2 IN ACCESS EXCLUSIVE MODE; -- fail
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK atest2 IN ACCESS EXCLUSIVE MODE
++^
+ COMMIT;
+ COPY atest2 FROM stdin; -- fail
+-ERROR:  permission denied for table atest2
+--- checks in subquery, both fail
+-SELECT * FROM atest1 WHERE ( b IN ( SELECT col1 FROM atest2 ) );
+-ERROR:  permission denied for table atest2
+-SELECT * FROM atest2 WHERE ( col1 IN ( SELECT b FROM atest1 ) );
+-ERROR:  permission denied for table atest2
+-SET SESSION AUTHORIZATION regress_priv_user4;
+-COPY atest2 FROM stdin; -- ok
++ERROR:  expected 2 values, got 1
+ SELECT * FROM atest1; -- ok
+  a |  b  
+ ---+-----
+@@ -364,187 +453,316 @@
+ -- test leaky-function protections in selfuncs
+ -- regress_priv_user1 will own a table and provide views for it.
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE atest12 as
+   SELECT x AS a, 10001 - x AS b FROM generate_series(1,10000) x;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ CREATE INDEX ON atest12 (a);
+ CREATE INDEX ON atest12 (abs(a));
+ -- results below depend on having quite accurate stats for atest12, so...
+ ALTER TABLE atest12 SET (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ SET default_statistics_target = 10000;
++ERROR:  unimplemented: the configuration setting "default_statistics_target" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ VACUUM ANALYZE atest12;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE atest12
++^
+ RESET default_statistics_target;
++ERROR:  unimplemented: the configuration setting "default_statistics_target" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE OPERATOR <<< (procedure = leak, leftarg = integer, rightarg = integer,
+                      restrict = scalarltsel);
++ERROR:  at or near "<": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR <<< (procedure = leak, leftarg = integer, rightarg = integer,
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ -- views with leaky operator
+ CREATE VIEW atest12v AS
+   SELECT * FROM atest12 WHERE b <<< 5;
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++CREATE VIEW atest12v AS
++  SELECT * FROM atest12 WHERE b <<< 5
++                                  ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW atest12sbv WITH (security_barrier=true) AS
+   SELECT * FROM atest12 WHERE b <<< 5;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW atest12sbv WITH (security_barrier=true) AS
++                       ^
++HINT:  try \h CREATE VIEW
+ GRANT SELECT ON atest12v TO PUBLIC;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "atest12v" does not exist
+ GRANT SELECT ON atest12sbv TO PUBLIC;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "atest12sbv" does not exist
+ -- This plan should use nestloop, knowing that few rows will be selected.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on atest12 atest12_1
+-         Filter: (b <<< 5)
+-   ->  Index Scan using atest12_a_idx on atest12
+-         Index Cond: (a = atest12_1.b)
+-         Filter: (b <<< 5)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- And this one.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12 x, atest12 y
+   WHERE x.a = y.b and abs(y.a) <<< 5;
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on atest12 y
+-         Filter: (abs(a) <<< 5)
+-   ->  Index Scan using atest12_a_idx on atest12 x
+-         Index Cond: (a = y.b)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12 x, atest12 y
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- This should also be a nestloop, but the security barrier forces the inner
+ -- scan to be materialized
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y WHERE x.a = y.b;
+-                QUERY PLAN                 
+--------------------------------------------
+- Nested Loop
+-   Join Filter: (atest12.a = atest12_1.b)
+-   ->  Seq Scan on atest12
+-         Filter: (b <<< 5)
+-   ->  Materialize
+-         ->  Seq Scan on atest12 atest12_1
+-               Filter: (b <<< 5)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y WHERE x.a = y.b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Check if regress_priv_user2 can break security.
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE FUNCTION leak2(integer,integer) RETURNS boolean
+   AS $$begin raise notice 'leak % %', $1, $2; return $1 > $2; end$$
+   LANGUAGE plpgsql immutable;
++ERROR:  no value provided for placeholder: $1
+ CREATE OPERATOR >>> (procedure = leak2, leftarg = integer, rightarg = integer,
+                      restrict = scalargtsel);
++ERROR:  at or near ">": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR >>> (procedure = leak2, leftarg = integer, rightarg = integer,
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ -- This should not show any "leak" notices before failing.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12 WHERE a >>> 0;
+-ERROR:  permission denied for table atest12
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12 WHERE a >>> 0
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- These plans should continue to use a nestloop, since they execute with the
+ -- privileges of the view owner.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on atest12 atest12_1
+-         Filter: (b <<< 5)
+-   ->  Index Scan using atest12_a_idx on atest12
+-         Index Cond: (a = atest12_1.b)
+-         Filter: (b <<< 5)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y WHERE x.a = y.b;
+-                QUERY PLAN                 
+--------------------------------------------
+- Nested Loop
+-   Join Filter: (atest12.a = atest12_1.b)
+-   ->  Seq Scan on atest12
+-         Filter: (b <<< 5)
+-   ->  Materialize
+-         ->  Seq Scan on atest12 atest12_1
+-               Filter: (b <<< 5)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y WHERE x.a = y.b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- A non-security barrier view does not guard against information leakage.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y
+   WHERE x.a = y.b and abs(y.a) <<< 5;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on atest12 atest12_1
+-         Filter: ((b <<< 5) AND (abs(a) <<< 5))
+-   ->  Index Scan using atest12_a_idx on atest12
+-         Index Cond: (a = atest12_1.b)
+-         Filter: (b <<< 5)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- But a security barrier view isolates the leaky operator.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y
+   WHERE x.a = y.b and abs(y.a) <<< 5;
+-             QUERY PLAN              
+--------------------------------------
+- Nested Loop
+-   Join Filter: (atest12_1.a = y.b)
+-   ->  Subquery Scan on y
+-         Filter: (abs(y.a) <<< 5)
+-         ->  Seq Scan on atest12
+-               Filter: (b <<< 5)
+-   ->  Seq Scan on atest12 atest12_1
+-         Filter: (b <<< 5)
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12sbv x, atest12sbv y
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Now regress_priv_user1 grants sufficient access to regress_priv_user2.
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT (a, b) ON atest12 TO PUBLIC;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (a, b) ON atest12 TO PUBLIC
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- regress_priv_user2 should continue to get a good row estimate.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Nested Loop
+-   ->  Seq Scan on atest12 atest12_1
+-         Filter: (b <<< 5)
+-   ->  Index Scan using atest12_a_idx on atest12
+-         Index Cond: (a = atest12_1.b)
+-         Filter: (b <<< 5)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12v x, atest12v y WHERE x.a = y.b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- But not for this, due to lack of table-wide permissions needed
+ -- to make use of the expression index's statistics.
+ EXPLAIN (COSTS OFF) SELECT * FROM atest12 x, atest12 y
+   WHERE x.a = y.b and abs(y.a) <<< 5;
+-              QUERY PLAN              
+---------------------------------------
+- Hash Join
+-   Hash Cond: (x.a = y.b)
+-   ->  Seq Scan on atest12 x
+-   ->  Hash
+-         ->  Seq Scan on atest12 y
+-               Filter: (abs(a) <<< 5)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM atest12 x, atest12 y
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- clean up (regress_priv_user1's objects are all dropped later)
+ DROP FUNCTION leak2(integer, integer) CASCADE;
+-NOTICE:  drop cascades to operator >>>(integer,integer)
++ERROR:  unimplemented: drop function cascade not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- groups
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE atest3 (one int, two int, three int);
+ GRANT DELETE ON atest3 TO GROUP regress_priv_group2;
++ERROR:  at or near "group": syntax error
++DETAIL:  source SQL:
++GRANT DELETE ON atest3 TO GROUP regress_priv_group2
++                          ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM atest3; -- fail
+-ERROR:  permission denied for table atest3
++ one | two | three 
++-----+-----+-------
++(0 rows)
++
+ DELETE FROM atest3; -- ok
+ BEGIN;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ ALTER ROLE regress_priv_user1 NOINHERIT;
++ERROR:  at or near "noinherit": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_priv_user1 NOINHERIT
++                              ^
++HINT:  try \h ALTER ROLE
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SAVEPOINT s1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DELETE FROM atest3; -- ok because grant-level option is unchanged
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO s1;
++ERROR:  savepoint "s1" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT regress_priv_group2 TO regress_priv_user1 WITH INHERIT FALSE;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++GRANT regress_priv_group2 TO regress_priv_user1 WITH INHERIT FALSE
++                                                     ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DELETE FROM atest3; -- fail
+-ERROR:  permission denied for table atest3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO s1;
++ERROR:  savepoint "s1" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE INHERIT OPTION FOR regress_priv_group2 FROM regress_priv_user1;
++ERROR:  at or near "option": syntax error: not a valid privilege: "inherit"
++DETAIL:  source SQL:
++REVOKE INHERIT OPTION FOR regress_priv_group2 FROM regress_priv_user1
++               ^
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DELETE FROM atest3; -- also fail
+-ERROR:  permission denied for table atest3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- views
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW atestv1 AS SELECT * FROM atest1; -- ok
+ /* The next *should* fail, but it's not implemented that way yet. */
+ CREATE VIEW atestv2 AS SELECT * FROM atest2;
+@@ -559,10 +777,19 @@
+ (2 rows)
+ 
+ SELECT * FROM atestv2; -- fail
+-ERROR:  permission denied for table atest2
++ col1 | col2 
++------+------
++(0 rows)
++
+ GRANT SELECT ON atestv1, atestv3 TO regress_priv_user4;
+ GRANT SELECT ON atestv2 TO regress_priv_user2;
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM atestv1; -- ok
+  a |  b  
+ ---+-----
+@@ -571,29 +798,65 @@
+ (2 rows)
+ 
+ SELECT * FROM atestv2; -- fail
+-ERROR:  permission denied for view atestv2
++ col1 | col2 
++------+------
++(0 rows)
++
+ SELECT * FROM atestv3; -- ok
+  one | two | three 
+ -----+-----+-------
+ (0 rows)
+ 
+ SELECT * FROM atestv0; -- fail
+-ERROR:  permission denied for view atestv0
++ x 
++---
++(0 rows)
++
+ -- Appendrels excluded by constraints failed to check permissions in 8.4-9.2.
+ select * from
+   ((select a.q1 as x from int8_tbl a offset 0)
+    union all
+    (select b.q2 as x from int8_tbl b offset 0)) ss
+ where false;
+-ERROR:  permission denied for table int8_tbl
++ x 
++---
++(0 rows)
++
+ set constraint_exclusion = on;
++ERROR:  unimplemented: the configuration setting "constraint_exclusion" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from
+   ((select a.q1 as x, random() from int8_tbl a where q1 > 0)
+    union all
+    (select b.q2 as x, random() from int8_tbl b where q2 > 0)) ss
+ where x < 0;
+-ERROR:  permission denied for table int8_tbl
++ x | random 
++---+--------
++(0 rows)
++
+ reset constraint_exclusion;
++ERROR:  unimplemented: the configuration setting "constraint_exclusion" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE VIEW atestv4 AS SELECT * FROM atestv3; -- nested view
+ SELECT * FROM atestv4; -- ok
+  one | two | three 
+@@ -602,9 +865,18 @@
+ 
+ GRANT SELECT ON atestv4 TO regress_priv_user2;
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- Two complex cases:
+ SELECT * FROM atestv3; -- fail
+-ERROR:  permission denied for view atestv3
++ one | two | three 
++-----+-----+-------
++(0 rows)
++
+ SELECT * FROM atestv4; -- ok (even though regress_priv_user2 cannot access underlying atestv3)
+  one | two | three 
+ -----+-----+-------
+@@ -613,21 +885,49 @@
+ SELECT * FROM atest2; -- ok
+  col1 | col2 
+ ------+------
+- bar  | t
+-(1 row)
++(0 rows)
+ 
+ SELECT * FROM atestv2; -- fail (even though regress_priv_user2 can access underlying atest2)
+-ERROR:  permission denied for table atest2
++ col1 | col2 
++------+------
++(0 rows)
++
+ -- Test column level permissions
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE atest5 (one int, two int unique, three int, four int unique);
+ CREATE TABLE atest6 (one int, two int, blue int);
+ GRANT SELECT (one), INSERT (two), UPDATE (three) ON atest5 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (one), INSERT (two), UPDATE (three) ON atest5 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ GRANT ALL (one) ON atest5 TO regress_priv_user3;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT ALL (one) ON atest5 TO regress_priv_user3
++          ^
++HINT:  try \h GRANT
+ INSERT INTO atest5 VALUES (1,2,3);
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM atest5; -- fail
+-ERROR:  permission denied for table atest5
++ one | two | three | four 
++-----+-----+-------+------
++   1 |   2 |     3 |     
++(1 row)
++
+ SELECT one FROM atest5; -- ok
+  one 
+ -----
+@@ -637,13 +937,21 @@
+ COPY atest5 (one) TO stdout; -- ok
+ 1
+ SELECT two FROM atest5; -- fail
+-ERROR:  permission denied for table atest5
++ two 
++-----
++   2
++(1 row)
++
+ COPY atest5 (two) TO stdout; -- fail
+-ERROR:  permission denied for table atest5
++2
+ SELECT atest5 FROM atest5; -- fail
+-ERROR:  permission denied for table atest5
++  atest5  
++----------
++ (1,2,3,)
++(1 row)
++
+ COPY atest5 (one,two) TO stdout; -- fail
+-ERROR:  permission denied for table atest5
++1	2
+ SELECT 1 FROM atest5; -- ok
+  ?column? 
+ ----------
+@@ -657,15 +965,34 @@
+ (1 row)
+ 
+ SELECT 1 FROM atest5 a JOIN atest5 b USING (two); -- fail
+-ERROR:  permission denied for table atest5
++ ?column? 
++----------
++        1
++(1 row)
++
+ SELECT 1 FROM atest5 a NATURAL JOIN atest5 b; -- fail
+-ERROR:  permission denied for table atest5
++ ?column? 
++----------
++(0 rows)
++
+ SELECT * FROM (atest5 a JOIN atest5 b USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ one | two | three | four | two | three | four 
++-----+-----+-------+------+-----+-------+------
++   1 |   2 |     3 |      |   2 |     3 |     
++(1 row)
++
+ SELECT j.* FROM (atest5 a JOIN atest5 b USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ one | one | two | three | four | one | two | three | four 
++-----+-----+-----+-------+------+-----+-----+-------+------
++   1 |   1 |   2 |     3 |      |   1 |   2 |     3 |     
++(1 row)
++
+ SELECT (j.*) IS NULL FROM (atest5 a JOIN atest5 b USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ ?column? 
++----------
++ f
++(1 row)
++
+ SELECT one FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- ok
+  one 
+ -----
+@@ -679,39 +1006,108 @@
+ (1 row)
+ 
+ SELECT two FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ two 
++-----
++   2
++(1 row)
++
+ SELECT j.two FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ two 
++-----
++   2
++(1 row)
++
+ SELECT y FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT j.y FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT * FROM (atest5 a JOIN atest5 b USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ one | two | three | four | two | three | four 
++-----+-----+-------+------+-----+-------+------
++   1 |   2 |     3 |      |   2 |     3 |     
++(1 row)
++
+ SELECT a.* FROM (atest5 a JOIN atest5 b USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ one | two | three | four 
++-----+-----+-------+------
++   1 |   2 |     3 |     
++(1 row)
++
+ SELECT (a.*) IS NULL FROM (atest5 a JOIN atest5 b USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ ?column? 
++----------
++ f
++(1 row)
++
+ SELECT two FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ two 
++-----
++   2
++(1 row)
++
+ SELECT a.two FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ two 
++-----
++   2
++(1 row)
++
+ SELECT y FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT b.y FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT y FROM (atest5 a LEFT JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT b.y FROM (atest5 a LEFT JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT y FROM (atest5 a FULL JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT b.y FROM (atest5 a FULL JOIN atest5 b(one,x,y,z) USING (one)); -- fail
+-ERROR:  permission denied for table atest5
++ y 
++---
++ 3
++(1 row)
++
+ SELECT 1 FROM atest5 WHERE two = 2; -- fail
+-ERROR:  permission denied for table atest5
++ ?column? 
++----------
++        1
++(1 row)
++
+ SELECT * FROM atest1, atest5; -- fail
+-ERROR:  permission denied for table atest5
++ a |  b  | one | two | three | four 
++---+-----+-----+-----+-------+------
++ 1 | two |   1 |   2 |     3 |     
++ 1 | two |   1 |   2 |     3 |     
++(2 rows)
++
+ SELECT atest1.* FROM atest1, atest5; -- ok
+  a |  b  
+ ---+-----
+@@ -727,7 +1123,10 @@
+ (2 rows)
+ 
+ SELECT atest1.*,atest5.one FROM atest1 JOIN atest5 ON (atest1.a = atest5.two); -- fail
+-ERROR:  permission denied for table atest5
++ a | b | one 
++---+---+-----
++(0 rows)
++
+ SELECT atest1.*,atest5.one FROM atest1 JOIN atest5 ON (atest1.a = atest5.one); -- ok
+  a |  b  | one 
+ ---+-----+-----
+@@ -736,15 +1135,56 @@
+ (2 rows)
+ 
+ SELECT one, two FROM atest5; -- fail
+-ERROR:  permission denied for table atest5
++ one | two 
++-----+-----
++   1 |   2
++(1 row)
++
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT (one,two) ON atest6 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (one,two) ON atest6 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT one, two FROM atest5 NATURAL JOIN atest6; -- fail still
+-ERROR:  permission denied for table atest5
++ one | two 
++-----+-----
++(0 rows)
++
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT (two) ON atest5 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (two) ON atest5 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT one, two FROM atest5 NATURAL JOIN atest6; -- ok now
+  one | two 
+ -----+-----
+@@ -753,23 +1193,22 @@
+ -- test column-level privileges for INSERT and UPDATE
+ INSERT INTO atest5 (two) VALUES (3); -- ok
+ COPY atest5 FROM stdin; -- fail
+-ERROR:  permission denied for table atest5
+-COPY atest5 (two) FROM stdin; -- ok
++ERROR:  expected 4 values, got 1
+ INSERT INTO atest5 (three) VALUES (4); -- fail
+-ERROR:  permission denied for table atest5
+ INSERT INTO atest5 VALUES (5,5,5); -- fail
+-ERROR:  permission denied for table atest5
+ UPDATE atest5 SET three = 10; -- ok
+ UPDATE atest5 SET one = 8; -- fail
+-ERROR:  permission denied for table atest5
+ UPDATE atest5 SET three = 5, one = 2; -- fail
+-ERROR:  permission denied for table atest5
+ -- Check that column level privs are enforced in RETURNING
+ -- Ok.
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = 10;
+ -- Error. No SELECT on column three.
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = 10 RETURNING atest5.three;
+-ERROR:  permission denied for table atest5
++ three 
++-------
++    10
++(1 row)
++
+ -- Ok.  May SELECT on column "one":
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = 10 RETURNING atest5.one;
+  one 
+@@ -782,35 +1221,96 @@
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = EXCLUDED.one;
+ -- Error. No select rights on three
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = EXCLUDED.three;
+-ERROR:  permission denied for table atest5
+ INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set one = 8; -- fails (due to UPDATE)
+-ERROR:  permission denied for table atest5
+ INSERT INTO atest5(three) VALUES (4) ON CONFLICT (two) DO UPDATE set three = 10; -- fails (due to INSERT)
+-ERROR:  permission denied for table atest5
+ -- Check that the columns in the inference require select privileges
+ INSERT INTO atest5(four) VALUES (4); -- fail
+-ERROR:  permission denied for table atest5
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT INSERT (four) ON atest5 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT INSERT (four) ON atest5 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO atest5(four) VALUES (4) ON CONFLICT (four) DO UPDATE set three = 3; -- fails (due to SELECT)
+-ERROR:  permission denied for table atest5
+ INSERT INTO atest5(four) VALUES (4) ON CONFLICT ON CONSTRAINT atest5_four_key DO UPDATE set three = 3; -- fails (due to SELECT)
+-ERROR:  permission denied for table atest5
+ INSERT INTO atest5(four) VALUES (4); -- ok
++ERROR:  duplicate key value violates unique constraint "atest5_four_key"
++DETAIL:  Key (four)=(4) already exists.
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT (four) ON atest5 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (four) ON atest5 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO atest5(four) VALUES (4) ON CONFLICT (four) DO UPDATE set three = 3; -- ok
+ INSERT INTO atest5(four) VALUES (4) ON CONFLICT ON CONSTRAINT atest5_four_key DO UPDATE set three = 3; -- ok
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE ALL (one) ON atest5 FROM regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++REVOKE ALL (one) ON atest5 FROM regress_priv_user4
++           ^
++HINT:  try \h REVOKE
+ GRANT SELECT (one,two,blue) ON atest6 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (one,two,blue) ON atest6 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT one FROM atest5; -- fail
+-ERROR:  permission denied for table atest5
++ one 
++-----
++   2
++   2
++   2
++   2
++   8
++    
++    
++(7 rows)
++
+ UPDATE atest5 SET one = 1; -- fail
+-ERROR:  permission denied for table atest5
+ SELECT atest6 FROM atest6; -- ok
+  atest6 
+ --------
+@@ -819,15 +1319,47 @@
+ COPY atest6 TO stdout; -- ok
+ -- test column privileges with MERGE
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE mtarget (a int, b text);
+ CREATE TABLE msource (a int, b text);
+ INSERT INTO mtarget VALUES (1, 'init1'), (2, 'init2');
+ INSERT INTO msource VALUES (1, 'source1'), (2, 'source2'), (3, 'source3');
+ GRANT SELECT (a) ON msource TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (a) ON msource TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ GRANT SELECT (a) ON mtarget TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (a) ON mtarget TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ GRANT INSERT (a,b) ON mtarget TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT INSERT (a,b) ON mtarget TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ GRANT UPDATE (b) ON mtarget TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (b) ON mtarget TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ --
+ -- test source privileges
+ --
+@@ -837,21 +1369,30 @@
+ 	UPDATE SET b = s.b
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, NULL);
+-ERROR:  permission denied for table msource
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- fail (s.b used in the INSERTed values)
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED THEN
+ 	UPDATE SET b = 'x'
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, b);
+-ERROR:  permission denied for table msource
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- fail (s.b used in the WHEN quals)
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED AND s.b = 'x' THEN
+ 	UPDATE SET b = 'x'
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, NULL);
+-ERROR:  permission denied for table msource
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- this should be ok since only s.a is accessed
+ BEGIN;
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+@@ -859,10 +1400,31 @@
+ 	UPDATE SET b = 'ok'
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, NULL);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ ROLLBACK;
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT (b) ON msource TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (b) ON msource TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- should now be ok
+ BEGIN;
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+@@ -870,6 +1432,10 @@
+ 	UPDATE SET b = s.b
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ ROLLBACK;
+ --
+ -- test target privileges
+@@ -880,47 +1446,94 @@
+ 	UPDATE SET b = t.b
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, NULL);
+-ERROR:  permission denied for table mtarget
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- fail (no UPDATE on t.a)
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED THEN
+ 	UPDATE SET b = s.b, a = t.a + 1
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, b);
+-ERROR:  permission denied for table mtarget
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- fail (no SELECT on t.b)
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED AND t.b IS NOT NULL THEN
+ 	UPDATE SET b = s.b
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (a, b);
+-ERROR:  permission denied for table mtarget
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- ok
+ BEGIN;
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED THEN
+ 	UPDATE SET b = s.b;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ ROLLBACK;
+ -- fail (no DELETE)
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED AND t.b IS NOT NULL THEN
+ 	DELETE;
+-ERROR:  permission denied for table mtarget
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ -- grant delete privileges
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT DELETE ON mtarget TO regress_priv_user4;
+ -- should be ok now
+ BEGIN;
+ MERGE INTO mtarget t USING msource s ON t.a = s.a
+ WHEN MATCHED AND t.b IS NOT NULL THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mtarget t USING msource s ON t.a = s.a
++^
+ ROLLBACK;
+ -- check error reporting with column privs
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE t1 (c1 int, c2 int, c3 int check (c3 < 5), primary key (c1, c2));
+ GRANT SELECT (c1) ON t1 TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (c1) ON t1 TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ GRANT INSERT (c1, c2, c3) ON t1 TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT INSERT (c1, c2, c3) ON t1 TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ GRANT UPDATE (c1, c2, c3) ON t1 TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (c1, c2, c3) ON t1 TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ -- seed data
+ INSERT INTO t1 VALUES (1, 1, 1);
+ INSERT INTO t1 VALUES (1, 2, 1);
+@@ -928,78 +1541,171 @@
+ INSERT INTO t1 VALUES (2, 2, 2);
+ INSERT INTO t1 VALUES (3, 1, 3);
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO t1 (c1, c2) VALUES (1, 1); -- fail, but row not shown
+ ERROR:  duplicate key value violates unique constraint "t1_pkey"
++DETAIL:  Key (c1, c2)=(1, 1) already exists.
+ UPDATE t1 SET c2 = 1; -- fail, but row not shown
+ ERROR:  duplicate key value violates unique constraint "t1_pkey"
++DETAIL:  Key (c1, c2)=(1, 1) already exists.
+ INSERT INTO t1 (c1, c2) VALUES (null, null); -- fail, but see columns being inserted
+-ERROR:  null value in column "c1" of relation "t1" violates not-null constraint
+-DETAIL:  Failing row contains (c1, c2) = (null, null).
++ERROR:  null value in column "c1" violates not-null constraint
+ INSERT INTO t1 (c3) VALUES (null); -- fail, but see columns being inserted or have SELECT
+-ERROR:  null value in column "c1" of relation "t1" violates not-null constraint
+-DETAIL:  Failing row contains (c1, c3) = (null, null).
++ERROR:  missing "c1" primary key column
+ INSERT INTO t1 (c1) VALUES (5); -- fail, but see columns being inserted or have SELECT
+-ERROR:  null value in column "c2" of relation "t1" violates not-null constraint
+-DETAIL:  Failing row contains (c1) = (5).
++ERROR:  missing "c2" primary key column
+ UPDATE t1 SET c3 = 10; -- fail, but see columns with SELECT rights, or being modified
+-ERROR:  new row for relation "t1" violates check constraint "t1_c3_check"
+-DETAIL:  Failing row contains (c1, c3) = (1, 10).
++ERROR:  failed to satisfy CHECK constraint (c3 < 5:::INT8)
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DROP TABLE t1;
+ -- check error reporting with column privs on a partitioned table
+ CREATE TABLE errtst(a text, b text NOT NULL, c text, secret1 text, secret2 text) PARTITION BY LIST (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE errtst(a text, b text NOT NULL, c text, secret1 text, secret2 text) PARTITION BY LIST (a)
++                                                                                                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE errtst_part_1(secret2 text, c text, a text, b text NOT NULL, secret1 text);
+ CREATE TABLE errtst_part_2(secret1 text, secret2 text, a text, c text, b text NOT NULL);
+ ALTER TABLE errtst ATTACH PARTITION errtst_part_1 FOR VALUES IN ('aaa');
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE errtst ATTACH PARTITION errtst_part_1 FOR VALUES IN ('aaa')
++                   ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE errtst ATTACH PARTITION errtst_part_2 FOR VALUES IN ('aaaa');
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE errtst ATTACH PARTITION errtst_part_2 FOR VALUES IN ('aaaa')
++                   ^
++HINT:  try \h ALTER TABLE
+ GRANT SELECT (a, b, c) ON TABLE errtst TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (a, b, c) ON TABLE errtst TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ GRANT UPDATE (a, b, c) ON TABLE errtst TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a, b, c) ON TABLE errtst TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ GRANT INSERT (a, b, c) ON TABLE errtst TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT INSERT (a, b, c) ON TABLE errtst TO regress_priv_user2
++             ^
++HINT:  try \h GRANT
+ INSERT INTO errtst_part_1 (a, b, c, secret1, secret2)
+ VALUES ('aaa', 'bbb', 'ccc', 'the body', 'is in the attic');
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- Perform a few updates that violate the NOT NULL constraint. Make sure
+ -- the error messages don't leak the secret fields.
+ -- simple insert.
+ INSERT INTO errtst (a, b) VALUES ('aaa', NULL);
+-ERROR:  null value in column "b" of relation "errtst_part_1" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, c) = (aaa, null, null).
++ERROR:  relation "errtst" does not exist
+ -- simple update.
+ UPDATE errtst SET b = NULL;
+-ERROR:  null value in column "b" of relation "errtst_part_1" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, c) = (aaa, null, ccc).
++ERROR:  relation "errtst" does not exist
+ -- partitioning key is updated, doesn't move the row.
+ UPDATE errtst SET a = 'aaa', b = NULL;
+-ERROR:  null value in column "b" of relation "errtst_part_1" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, c) = (aaa, null, ccc).
++ERROR:  relation "errtst" does not exist
+ -- row is moved to another partition.
+ UPDATE errtst SET a = 'aaaa', b = NULL;
+-ERROR:  null value in column "b" of relation "errtst_part_2" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, c) = (aaaa, null, ccc).
++ERROR:  relation "errtst" does not exist
+ -- row is moved to another partition. This differs from the previous case in
+ -- that the new partition is excluded by constraint exclusion, so its
+ -- ResultRelInfo is not created at ExecInitModifyTable, but needs to be
+ -- constructed on the fly when the updated tuple is routed to it.
+ UPDATE errtst SET a = 'aaaa', b = NULL WHERE a = 'aaa';
+-ERROR:  null value in column "b" of relation "errtst_part_2" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, c) = (aaaa, null, ccc).
++ERROR:  relation "errtst" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DROP TABLE errtst;
++ERROR:  relation "errtst" does not exist
+ -- test column-level privileges when involved with DELETE
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ ALTER TABLE atest6 ADD COLUMN three integer;
+ GRANT DELETE ON atest5 TO regress_priv_user3;
+ GRANT SELECT (two) ON atest5 TO regress_priv_user3;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (two) ON atest5 TO regress_priv_user3
++             ^
++HINT:  try \h GRANT
+ REVOKE ALL (one) ON atest5 FROM regress_priv_user3;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++REVOKE ALL (one) ON atest5 FROM regress_priv_user3
++           ^
++HINT:  try \h REVOKE
+ GRANT SELECT (one) ON atest5 TO regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (one) ON atest5 TO regress_priv_user4
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT atest6 FROM atest6; -- fail
+-ERROR:  permission denied for table atest6
++ atest6 
++--------
++(0 rows)
++
+ SELECT one FROM atest5 NATURAL JOIN atest6; -- fail
+-ERROR:  permission denied for table atest5
++ one 
++-----
++(0 rows)
++
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ ALTER TABLE atest6 DROP COLUMN three;
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT atest6 FROM atest6; -- ok
+  atest6 
+ --------
+@@ -1011,25 +1717,81 @@
+ (0 rows)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ ALTER TABLE atest6 DROP COLUMN two;
+ REVOKE SELECT (one,blue) ON atest6 FROM regress_priv_user4;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++REVOKE SELECT (one,blue) ON atest6 FROM regress_priv_user4
++              ^
++HINT:  try \h REVOKE
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM atest6; -- fail
+-ERROR:  permission denied for table atest6
++ one | blue 
++-----+------
++(0 rows)
++
+ SELECT 1 FROM atest6; -- fail
+-ERROR:  permission denied for table atest6
++ ?column? 
++----------
++(0 rows)
++
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DELETE FROM atest5 WHERE one = 1; -- fail
+-ERROR:  permission denied for table atest5
+ DELETE FROM atest5 WHERE two = 2; -- ok
+ -- check inheritance cases
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE atestp1 (f1 int, f2 int);
+ CREATE TABLE atestp2 (fx int, fy int);
+ CREATE TABLE atestc (fz int) INHERITS (atestp1, atestp2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE atestc (fz int) INHERITS (atestp1, atestp2)
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ GRANT SELECT(fx,fy,tableoid) ON atestp2 TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT(fx,fy,tableoid) ON atestp2 TO regress_priv_user2
++            ^
++HINT:  try \h GRANT
+ GRANT SELECT(fx) ON atestc TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT(fx) ON atestc TO regress_priv_user2
++            ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT fx FROM atestp2; -- ok
+  fx 
+ ----
+@@ -1051,10 +1813,27 @@
+ (0 rows)
+ 
+ SELECT fy FROM atestc; -- fail
+-ERROR:  permission denied for table atestc
++ERROR:  relation "atestc" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT(fy,tableoid) ON atestc TO regress_priv_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT(fy,tableoid) ON atestc TO regress_priv_user2
++            ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT fx FROM atestp2; -- still ok
+  fx 
+ ----
+@@ -1077,69 +1856,127 @@
+ 
+ -- child's permissions do not apply when operating on parent
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE ALL ON atestc FROM regress_priv_user2;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "atestc" does not exist
+ GRANT ALL ON atestp1 TO regress_priv_user2;
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT f2 FROM atestp1; -- ok
+  f2 
+ ----
+ (0 rows)
+ 
+ SELECT f2 FROM atestc; -- fail
+-ERROR:  permission denied for table atestc
++ERROR:  relation "atestc" does not exist
+ DELETE FROM atestp1; -- ok
+ DELETE FROM atestc; -- fail
+-ERROR:  permission denied for table atestc
++ERROR:  relation "atestc" does not exist
+ UPDATE atestp1 SET f1 = 1; -- ok
+ UPDATE atestc SET f1 = 1; -- fail
+-ERROR:  permission denied for table atestc
++ERROR:  relation "atestc" does not exist
+ TRUNCATE atestp1; -- ok
+ TRUNCATE atestc; -- fail
+-ERROR:  permission denied for table atestc
++ERROR:  relation "atestc" does not exist
+ BEGIN;
+ LOCK atestp1;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK atestp1
++^
+ END;
+ BEGIN;
+ LOCK atestc;
+-ERROR:  permission denied for table atestc
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK atestc
++^
+ END;
+ -- privileges on functions, languages
+ -- switch to superuser
+ \c -
+ REVOKE ALL PRIVILEGES ON LANGUAGE sql FROM PUBLIC;
++ERROR:  at or near "sql": syntax error
++DETAIL:  source SQL:
++REVOKE ALL PRIVILEGES ON LANGUAGE sql FROM PUBLIC
++                                  ^
++HINT:  try \h REVOKE
+ GRANT USAGE ON LANGUAGE sql TO regress_priv_user1; -- ok
++ERROR:  at or near "sql": syntax error
++DETAIL:  source SQL:
++GRANT USAGE ON LANGUAGE sql TO regress_priv_user1
++                        ^
++HINT:  try \h GRANT
+ GRANT USAGE ON LANGUAGE c TO PUBLIC; -- fail
+-ERROR:  language "c" is not trusted
+-DETAIL:  GRANT and REVOKE are not allowed on untrusted languages, because only superusers can use untrusted languages.
++ERROR:  at or near "c": syntax error
++DETAIL:  source SQL:
++GRANT USAGE ON LANGUAGE c TO PUBLIC
++                        ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT USAGE ON LANGUAGE sql TO regress_priv_user2; -- fail
+-WARNING:  no privileges were granted for "sql"
++ERROR:  at or near "sql": syntax error
++DETAIL:  source SQL:
++GRANT USAGE ON LANGUAGE sql TO regress_priv_user2
++                        ^
++HINT:  try \h GRANT
+ CREATE FUNCTION priv_testfunc1(int) RETURNS int AS 'select 2 * $1;' LANGUAGE sql;
+ CREATE FUNCTION priv_testfunc2(int) RETURNS int AS 'select 3 * $1;' LANGUAGE sql;
+ CREATE AGGREGATE priv_testagg1(int) (sfunc = int4pl, stype = int4);
++ERROR:  at or near "priv_testagg1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE priv_testagg1(int) (sfunc = int4pl, stype = int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE PROCEDURE priv_testproc1(int) AS 'select $1;' LANGUAGE sql;
+ REVOKE ALL ON FUNCTION priv_testfunc1(int), priv_testfunc2(int), priv_testagg1(int) FROM PUBLIC;
++ERROR:  unknown function: priv_testagg1()
+ GRANT EXECUTE ON FUNCTION priv_testfunc1(int), priv_testfunc2(int), priv_testagg1(int) TO regress_priv_user2;
++ERROR:  unknown function: priv_testagg1()
+ REVOKE ALL ON FUNCTION priv_testproc1(int) FROM PUBLIC; -- fail, not a function
+-ERROR:  priv_testproc1(integer) is not a function
++ERROR:  priv_testproc1(int) is not a function
+ REVOKE ALL ON PROCEDURE priv_testproc1(int) FROM PUBLIC;
+ GRANT EXECUTE ON PROCEDURE priv_testproc1(int) TO regress_priv_user2;
+ GRANT USAGE ON FUNCTION priv_testfunc1(int) TO regress_priv_user3; -- semantic error
+-ERROR:  invalid privilege type USAGE for function
++ERROR:  invalid privilege type USAGE for routine
+ GRANT USAGE ON FUNCTION priv_testagg1(int) TO regress_priv_user3; -- semantic error
+-ERROR:  invalid privilege type USAGE for function
++ERROR:  invalid privilege type USAGE for routine
+ GRANT USAGE ON PROCEDURE priv_testproc1(int) TO regress_priv_user3; -- semantic error
+-ERROR:  invalid privilege type USAGE for procedure
++ERROR:  invalid privilege type USAGE for routine
+ GRANT ALL PRIVILEGES ON FUNCTION priv_testfunc1(int) TO regress_priv_user4;
+ GRANT ALL PRIVILEGES ON FUNCTION priv_testfunc_nosuch(int) TO regress_priv_user4;
+-ERROR:  function priv_testfunc_nosuch(integer) does not exist
++ERROR:  unknown function: priv_testfunc_nosuch()
+ GRANT ALL PRIVILEGES ON FUNCTION priv_testagg1(int) TO regress_priv_user4;
++ERROR:  unknown function: priv_testagg1()
+ GRANT ALL PRIVILEGES ON PROCEDURE priv_testproc1(int) TO regress_priv_user4;
+ CREATE FUNCTION priv_testfunc4(boolean) RETURNS text
+   AS 'select col1 from atest2 where col2 = $1;'
+   LANGUAGE sql SECURITY DEFINER;
+ GRANT EXECUTE ON FUNCTION priv_testfunc4(boolean) TO regress_priv_user3;
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT priv_testfunc1(5), priv_testfunc2(5); -- ok
+  priv_testfunc1 | priv_testfunc2 
+ ----------------+----------------
+@@ -1147,30 +1984,49 @@
+ (1 row)
+ 
+ CREATE FUNCTION priv_testfunc3(int) RETURNS int AS 'select 2 * $1;' LANGUAGE sql; -- fail
+-ERROR:  permission denied for language sql
+ SELECT priv_testagg1(x) FROM (VALUES (1), (2), (3)) _(x); -- ok
+- priv_testagg1 
+----------------
+-             6
+-(1 row)
+-
++ERROR:  unknown function: priv_testagg1()
+ CALL priv_testproc1(6); -- ok
++--
++(0 rows)
++
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT priv_testfunc1(5); -- fail
+-ERROR:  permission denied for function priv_testfunc1
++ priv_testfunc1 
++----------------
++             10
++(1 row)
++
+ SELECT priv_testagg1(x) FROM (VALUES (1), (2), (3)) _(x); -- fail
+-ERROR:  permission denied for aggregate priv_testagg1
++ERROR:  unknown function: priv_testagg1()
+ CALL priv_testproc1(6); -- fail
+-ERROR:  permission denied for procedure priv_testproc1
++--
++(0 rows)
++
+ SELECT col1 FROM atest2 WHERE col2 = true; -- fail
+-ERROR:  permission denied for table atest2
++ col1 
++------
++(0 rows)
++
+ SELECT priv_testfunc4(true); -- ok
+  priv_testfunc4 
+ ----------------
+- bar
++ 
+ (1 row)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT priv_testfunc1(5); -- ok
+  priv_testfunc1 
+ ----------------
+@@ -1178,22 +2034,30 @@
+ (1 row)
+ 
+ SELECT priv_testagg1(x) FROM (VALUES (1), (2), (3)) _(x); -- ok
+- priv_testagg1 
+----------------
+-             6
+-(1 row)
+-
++ERROR:  unknown function: priv_testagg1()
+ CALL priv_testproc1(6); -- ok
++--
++(0 rows)
++
+ DROP FUNCTION priv_testfunc1(int); -- fail
+-ERROR:  must be owner of function priv_testfunc1
+ DROP AGGREGATE priv_testagg1(int); -- fail
+-ERROR:  must be owner of aggregate priv_testagg1
++ERROR:  at or near "priv_testagg1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE priv_testagg1(int)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ DROP PROCEDURE priv_testproc1(int); -- fail
+-ERROR:  must be owner of procedure priv_testproc1
+ \c -
+ DROP FUNCTION priv_testfunc1(int); -- ok
++ERROR:  unknown function: priv_testfunc1()
+ -- restore to sanity
+ GRANT ALL PRIVILEGES ON LANGUAGE sql TO PUBLIC;
++ERROR:  at or near "sql": syntax error
++DETAIL:  source SQL:
++GRANT ALL PRIVILEGES ON LANGUAGE sql TO PUBLIC
++                                 ^
++HINT:  try \h GRANT
+ -- verify privilege checks on array-element coercions
+ BEGIN;
+ SELECT '{1}'::int4[]::int8[];
+@@ -1203,6 +2067,8 @@
+ (1 row)
+ 
+ REVOKE ALL ON FUNCTION int8(integer) FROM PUBLIC;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  int8(int) is not a function
+ SELECT '{1}'::int4[]::int8[]; --superuser, succeed
+  int8 
+ ------
+@@ -1210,9 +2076,20 @@
+ (1 row)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT '{1}'::int4[]::int8[]; --other user, fail
+-ERROR:  permission denied for function int8
++ int8 
++------
++ {1}
++(1 row)
++
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- privileges on types
+ -- switch to superuser
+ \c -
+@@ -1220,101 +2097,338 @@
+ REVOKE USAGE ON TYPE priv_testtype1 FROM PUBLIC;
+ GRANT USAGE ON TYPE priv_testtype1 TO regress_priv_user2;
+ GRANT USAGE ON TYPE _priv_testtype1 TO regress_priv_user2; -- fail
+-ERROR:  cannot set privileges of array types
+-HINT:  Set the privileges of the element type instead.
+ GRANT USAGE ON DOMAIN priv_testtype1 TO regress_priv_user2; -- fail
+-ERROR:  "priv_testtype1" is not a domain
++ERROR:  at or near "priv_testtype1": syntax error
++DETAIL:  source SQL:
++GRANT USAGE ON DOMAIN priv_testtype1 TO regress_priv_user2
++                      ^
++HINT:  try \h GRANT
+ CREATE DOMAIN priv_testdomain1 AS int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN priv_testdomain1 AS int
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ REVOKE USAGE on DOMAIN priv_testdomain1 FROM PUBLIC;
++ERROR:  at or near "priv_testdomain1": syntax error
++DETAIL:  source SQL:
++REVOKE USAGE on DOMAIN priv_testdomain1 FROM PUBLIC
++                       ^
++HINT:  try \h REVOKE
+ GRANT USAGE ON DOMAIN priv_testdomain1 TO regress_priv_user2;
++ERROR:  at or near "priv_testdomain1": syntax error
++DETAIL:  source SQL:
++GRANT USAGE ON DOMAIN priv_testdomain1 TO regress_priv_user2
++                      ^
++HINT:  try \h GRANT
+ GRANT USAGE ON TYPE priv_testdomain1 TO regress_priv_user2; -- ok
++ERROR:  type "priv_testdomain1" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- commands that should fail
+ CREATE AGGREGATE priv_testagg1a(priv_testdomain1) (sfunc = int4_sum, stype = bigint);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "priv_testagg1a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE priv_testagg1a(priv_testdomain1) (sfunc = int4_sum, stype = bigint)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE DOMAIN priv_testdomain2a AS priv_testdomain1;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN priv_testdomain2a AS priv_testdomain1
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN priv_testdomain3a AS int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN priv_testdomain3a AS int
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE FUNCTION castfunc(int) RETURNS priv_testdomain3a AS $$ SELECT $1::priv_testdomain3a $$ LANGUAGE SQL;
++ERROR:  type "priv_testdomain3a" does not exist
+ CREATE CAST (priv_testdomain1 AS priv_testdomain3a) WITH FUNCTION castfunc(int);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE CAST (priv_testdomain1 AS priv_testdomain3a) WITH FUNCTION castfunc(int)
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP FUNCTION castfunc(int) CASCADE;
++ERROR:  unimplemented: drop function cascade not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP DOMAIN priv_testdomain3a;
++ERROR:  at or near "priv_testdomain3a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN priv_testdomain3a
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE FUNCTION priv_testfunc5a(a priv_testdomain1) RETURNS int LANGUAGE SQL AS $$ SELECT $1 $$;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE FUNCTION priv_testfunc6a(b int) RETURNS priv_testdomain1 LANGUAGE SQL AS $$ SELECT $1::priv_testdomain1 $$;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE OPERATOR !+! (PROCEDURE = int4pl, LEFTARG = priv_testdomain1, RIGHTARG = priv_testdomain1);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "!": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR !+! (PROCEDURE = int4pl, LEFTARG = priv_testdomain1, RIGHTARG = priv_testdomain1)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ CREATE TABLE test5a (a int, b priv_testdomain1);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TABLE test6a OF priv_testtype1;
+-ERROR:  permission denied for type priv_testtype1
++ERROR:  at or near "of": syntax error
++DETAIL:  source SQL:
++CREATE TABLE test6a OF priv_testtype1
++                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE test10a (a int[], b priv_testtype1[]);
+-ERROR:  permission denied for type priv_testtype1
+ CREATE TABLE test9a (a int, b int);
+ ALTER TABLE test9a ADD COLUMN c priv_testdomain1;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ ALTER TABLE test9a ALTER COLUMN b TYPE priv_testdomain1;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TYPE test7a AS (a int, b priv_testdomain1);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TYPE test8a AS (a int, b int);
+ ALTER TYPE test8a ADD ATTRIBUTE c priv_testdomain1;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TYPE test8a ADD ATTRIBUTE c priv_testdomain1
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ ALTER TYPE test8a ALTER ATTRIBUTE b TYPE priv_testdomain1;
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TYPE test8a ALTER ATTRIBUTE b TYPE priv_testdomain1
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ CREATE TABLE test11a AS (SELECT 1::priv_testdomain1 AS a);
+-ERROR:  permission denied for type priv_testdomain1
++ERROR:  type "priv_testdomain1" does not exist
+ REVOKE ALL ON TYPE priv_testtype1 FROM PUBLIC;
+-ERROR:  permission denied for type priv_testtype1
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- commands that should succeed
+ CREATE AGGREGATE priv_testagg1b(priv_testdomain1) (sfunc = int4_sum, stype = bigint);
++ERROR:  at or near "priv_testagg1b": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE priv_testagg1b(priv_testdomain1) (sfunc = int4_sum, stype = bigint)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE DOMAIN priv_testdomain2b AS priv_testdomain1;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN priv_testdomain2b AS priv_testdomain1
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN priv_testdomain3b AS int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN priv_testdomain3b AS int
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE FUNCTION castfunc(int) RETURNS priv_testdomain3b AS $$ SELECT $1::priv_testdomain3b $$ LANGUAGE SQL;
++ERROR:  type "priv_testdomain3b" does not exist
+ CREATE CAST (priv_testdomain1 AS priv_testdomain3b) WITH FUNCTION castfunc(int);
+-WARNING:  cast will be ignored because the source data type is a domain
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE CAST (priv_testdomain1 AS priv_testdomain3b) WITH FUNCTION castfunc(int)
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE FUNCTION priv_testfunc5b(a priv_testdomain1) RETURNS int LANGUAGE SQL AS $$ SELECT $1 $$;
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE FUNCTION priv_testfunc6b(b int) RETURNS priv_testdomain1 LANGUAGE SQL AS $$ SELECT $1::priv_testdomain1 $$;
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE OPERATOR !! (PROCEDURE = priv_testfunc5b, RIGHTARG = priv_testdomain1);
++ERROR:  at or near "!": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR !! (PROCEDURE = priv_testfunc5b, RIGHTARG = priv_testdomain1)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ CREATE TABLE test5b (a int, b priv_testdomain1);
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TABLE test6b OF priv_testtype1;
++ERROR:  at or near "of": syntax error
++DETAIL:  source SQL:
++CREATE TABLE test6b OF priv_testtype1
++                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE test10b (a int[], b priv_testtype1[]);
+ CREATE TABLE test9b (a int, b int);
+ ALTER TABLE test9b ADD COLUMN c priv_testdomain1;
++ERROR:  type "priv_testdomain1" does not exist
+ ALTER TABLE test9b ALTER COLUMN b TYPE priv_testdomain1;
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TYPE test7b AS (a int, b priv_testdomain1);
++ERROR:  type "priv_testdomain1" does not exist
+ CREATE TYPE test8b AS (a int, b int);
+ ALTER TYPE test8b ADD ATTRIBUTE c priv_testdomain1;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TYPE test8b ADD ATTRIBUTE c priv_testdomain1
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ ALTER TYPE test8b ALTER ATTRIBUTE b TYPE priv_testdomain1;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TYPE test8b ALTER ATTRIBUTE b TYPE priv_testdomain1
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ CREATE TABLE test11b AS (SELECT 1::priv_testdomain1 AS a);
++ERROR:  type "priv_testdomain1" does not exist
+ REVOKE ALL ON TYPE priv_testtype1 FROM PUBLIC;
+-WARNING:  no privileges could be revoked for "priv_testtype1"
+ \c -
+ DROP AGGREGATE priv_testagg1b(priv_testdomain1);
++ERROR:  at or near "priv_testagg1b": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE priv_testagg1b(priv_testdomain1)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ DROP DOMAIN priv_testdomain2b;
++ERROR:  at or near "priv_testdomain2b": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN priv_testdomain2b
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP OPERATOR !! (NONE, priv_testdomain1);
++ERROR:  at or near "!": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP OPERATOR !! (NONE, priv_testdomain1)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP FUNCTION priv_testfunc5b(a priv_testdomain1);
++ERROR:  unknown function: priv_testfunc5b()
+ DROP FUNCTION priv_testfunc6b(b int);
++ERROR:  unknown function: priv_testfunc6b()
+ DROP TABLE test5b;
++ERROR:  relation "test5b" does not exist
+ DROP TABLE test6b;
++ERROR:  relation "test6b" does not exist
+ DROP TABLE test9b;
+ DROP TABLE test10b;
+ DROP TYPE test7b;
++ERROR:  type "test7b" does not exist
+ DROP TYPE test8b;
+ DROP CAST (priv_testdomain1 AS priv_testdomain3b);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP CAST (priv_testdomain1 AS priv_testdomain3b)
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP FUNCTION castfunc(int) CASCADE;
++ERROR:  unimplemented: drop function cascade not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP DOMAIN priv_testdomain3b;
++ERROR:  at or near "priv_testdomain3b": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN priv_testdomain3b
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP TABLE test11b;
++ERROR:  relation "test11b" does not exist
+ DROP TYPE priv_testtype1; -- ok
++ERROR:  cannot drop type "priv_testtype1" because other objects ([root.public.test10a]) still depend on it
+ DROP DOMAIN priv_testdomain1; -- ok
++ERROR:  at or near "priv_testdomain1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN priv_testdomain1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- truncate
+ SET SESSION AUTHORIZATION regress_priv_user5;
++ERROR:  at or near "regress_priv_user5": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user5
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ TRUNCATE atest2; -- ok
+ TRUNCATE atest3; -- fail
+-ERROR:  permission denied for table atest3
+ -- has_table_privilege function
+ -- bad-input checks
+ select has_table_privilege(NULL,'pg_authid','select');
+@@ -1324,11 +2438,11 @@
+ (1 row)
+ 
+ select has_table_privilege('pg_shad','select');
+-ERROR:  relation "pg_shad" does not exist
++ERROR:  has_table_privilege(): relation "pg_shad" does not exist
+ select has_table_privilege('nosuchuser','pg_authid','select');
+-ERROR:  role "nosuchuser" does not exist
++ERROR:  has_table_privilege(): role 'nosuchuser' does not exist
+ select has_table_privilege('pg_authid','sel');
+-ERROR:  unrecognized privilege type: "sel"
++ERROR:  has_table_privilege(): unrecognized privilege type: "SEL"
+ select has_table_privilege(-999999,'pg_authid','update');
+  has_table_privilege 
+ ---------------------
+@@ -1352,21 +2466,21 @@
+ select has_table_privilege(current_user,'pg_authid','insert');
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,'pg_authid','update')
+ from (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,'pg_authid','delete')
+ from (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ -- 'rule' privilege no longer exists, but for backwards compatibility
+@@ -1398,25 +2512,25 @@
+   (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege('pg_authid','update');
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege('pg_authid','delete');
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege('pg_authid','truncate');
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ select has_table_privilege(t1.oid,'select')
+@@ -1430,11 +2544,17 @@
+ from (select oid from pg_class where relname = 'pg_authid') as t1;
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ -- non-superuser
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ select has_table_privilege(current_user,'pg_class','select');
+  has_table_privilege 
+ ---------------------
+@@ -1465,7 +2585,7 @@
+ from (select oid from pg_class where relname = 'pg_class') as t1;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,t1.oid,'select')
+@@ -1525,28 +2645,28 @@
+ select has_table_privilege(current_user,'atest1','insert');
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,'atest1','update')
+ from (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,'atest1','delete')
+ from (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(current_user,t1.oid,'references')
+ from (select oid from pg_class where relname = 'atest1') as t1;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(t2.oid,t1.oid,'select')
+@@ -1562,25 +2682,25 @@
+   (select oid from pg_roles where rolname = current_user) as t2;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege('atest1','update');
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege('atest1','delete');
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege('atest1','truncate');
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ select has_table_privilege(t1.oid,'select')
+@@ -1594,7 +2714,7 @@
+ from (select oid from pg_class where relname = 'atest1') as t1;
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ -- has_column_privilege function
+@@ -1606,7 +2726,7 @@
+ (1 row)
+ 
+ select has_column_privilege('pg_authid','nosuchcol','select');
+-ERROR:  column "nosuchcol" of relation "pg_authid" does not exist
++ERROR:  has_column_privilege(): column "nosuchcol" does not exist
+ select has_column_privilege(9999,'nosuchcol','select');
+  has_column_privilege 
+ ----------------------
+@@ -1620,11 +2740,7 @@
+ (1 row)
+ 
+ select has_column_privilege('pg_authid',99::int2,'select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column 99 of relation pg_authid does not exist
+ select has_column_privilege(9999,99::int2,'select');
+  has_column_privilege 
+ ----------------------
+@@ -1634,65 +2750,69 @@
+ create temp table mytable(f1 int, f2 int, f3 int);
+ alter table mytable drop column f2;
+ select has_column_privilege('mytable','f2','select');
+-ERROR:  column "f2" of relation "mytable" does not exist
++ERROR:  has_column_privilege(): column "f2" does not exist
+ select has_column_privilege('mytable','........pg.dropped.2........','select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column "........pg.dropped.2........" does not exist
+ select has_column_privilege('mytable',2::int2,'select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column 2 of relation mytable does not exist
+ select has_column_privilege('mytable',99::int2,'select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column 99 of relation mytable does not exist
+ revoke select on table mytable from regress_priv_user3;
+ select has_column_privilege('mytable',2::int2,'select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column 2 of relation mytable does not exist
+ select has_column_privilege('mytable',99::int2,'select');
+- has_column_privilege 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  has_column_privilege(): column 99 of relation mytable does not exist
+ drop table mytable;
+ -- Grant options
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE atest4 (a int);
+ GRANT SELECT ON atest4 TO regress_priv_user2 WITH GRANT OPTION;
+ GRANT UPDATE ON atest4 TO regress_priv_user2;
+ GRANT SELECT ON atest4 TO GROUP regress_priv_group1 WITH GRANT OPTION;
++ERROR:  at or near "group": syntax error
++DETAIL:  source SQL:
++GRANT SELECT ON atest4 TO GROUP regress_priv_group1 WITH GRANT OPTION
++                          ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT ON atest4 TO regress_priv_user3;
+ GRANT UPDATE ON atest4 TO regress_priv_user3; -- fail
+-WARNING:  no privileges were granted for "atest4"
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE SELECT ON atest4 FROM regress_priv_user3; -- does nothing
+ SELECT has_table_privilege('regress_priv_user3', 'atest4', 'SELECT'); -- true
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ REVOKE SELECT ON atest4 FROM regress_priv_user2; -- fail
+-ERROR:  dependent privileges exist
+-HINT:  Use CASCADE to revoke them too.
+ REVOKE GRANT OPTION FOR SELECT ON atest4 FROM regress_priv_user2 CASCADE; -- ok
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++REVOKE GRANT OPTION FOR SELECT ON atest4 FROM regress_priv_user2 CASCADE
++                                                                 ^
+ SELECT has_table_privilege('regress_priv_user2', 'atest4', 'SELECT'); -- true
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ SELECT has_table_privilege('regress_priv_user3', 'atest4', 'SELECT'); -- false
+@@ -1704,7 +2824,7 @@
+ SELECT has_table_privilege('regress_priv_user1', 'atest4', 'SELECT WITH GRANT OPTION'); -- true
+  has_table_privilege 
+ ---------------------
+- t
++ f
+ (1 row)
+ 
+ -- security-restricted operations
+@@ -1720,6 +2840,19 @@
+ 	RETURN $1;
+ END;
+ $$ LANGUAGE plpgsql IMMUTABLE;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_assert is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Create a table owned by regress_sro_user
+ CREATE TABLE sro_tab (a int);
+ ALTER TABLE sro_tab OWNER TO regress_sro_user;
+@@ -1727,84 +2860,202 @@
+ -- Create an expression index with a predicate
+ CREATE INDEX sro_idx ON sro_tab ((sro_ifun(a) + sro_ifun(0)))
+ 	WHERE sro_ifun(a + 10) > sro_ifun(10);
++ERROR:  unknown function: sro_ifun()
+ DROP INDEX sro_idx;
++ERROR:  index "sro_idx" does not exist
+ -- Do the same concurrently
+ CREATE INDEX CONCURRENTLY sro_idx ON sro_tab ((sro_ifun(a) + sro_ifun(0)))
+ 	WHERE sro_ifun(a + 10) > sro_ifun(10);
++ERROR:  unknown function: sro_ifun()
+ -- REINDEX
+ REINDEX TABLE sro_tab;
++ERROR:  at or near "sro_tab": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX TABLE sro_tab
++              ^
++HINT:  CockroachDB does not require reindexing.
+ REINDEX INDEX sro_idx;
++ERROR:  at or near "sro_idx": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX INDEX sro_idx
++              ^
++HINT:  CockroachDB does not require reindexing.
+ REINDEX TABLE CONCURRENTLY sro_tab;
++ERROR:  at or near "concurrently": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX TABLE CONCURRENTLY sro_tab
++              ^
++HINT:  CockroachDB does not require reindexing.
+ DROP INDEX sro_idx;
++ERROR:  index "sro_idx" does not exist
+ -- CLUSTER
+ CREATE INDEX sro_cluster_idx ON sro_tab ((sro_ifun(a) + sro_ifun(0)));
++ERROR:  unknown function: sro_ifun()
+ CLUSTER sro_tab USING sro_cluster_idx;
++ERROR:  at or near "cluster": syntax error
++DETAIL:  source SQL:
++CLUSTER sro_tab USING sro_cluster_idx
++^
+ DROP INDEX sro_cluster_idx;
++ERROR:  index "sro_cluster_idx" does not exist
+ -- BRIN index
+ CREATE INDEX sro_brin ON sro_tab USING brin ((sro_ifun(a) + sro_ifun(0)));
+-SELECT brin_desummarize_range('sro_brin', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX sro_brin ON sro_tab USING brin ((sro_ifun(a) + sro_ifun(0)))
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-SELECT brin_summarize_range('sro_brin', 0);
+- brin_summarize_range 
+-----------------------
+-                    1
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++SELECT brin_desummarize_range('sro_brin', 0);
++ERROR:  unknown function: brin_desummarize_range()
++SELECT brin_summarize_range('sro_brin', 0);
++ERROR:  unknown function: brin_summarize_range()
+ DROP TABLE sro_tab;
+ -- Check with a partitioned table
+ CREATE TABLE sro_ptab (a int) PARTITION BY RANGE (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE sro_ptab (a int) PARTITION BY RANGE (a)
++                                                    ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE sro_ptab OWNER TO regress_sro_user;
++ERROR:  relation "sro_ptab" does not exist
+ CREATE TABLE sro_part PARTITION OF sro_ptab FOR VALUES FROM (1) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE sro_part PARTITION OF sro_ptab FOR VALUES FROM (1) TO (10)
++                      ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE sro_part OWNER TO regress_sro_user;
++ERROR:  relation "sro_part" does not exist
+ INSERT INTO sro_ptab VALUES (1), (2), (3);
++ERROR:  relation "sro_ptab" does not exist
+ CREATE INDEX sro_pidx ON sro_ptab ((sro_ifun(a) + sro_ifun(0)))
+ 	WHERE sro_ifun(a + 10) > sro_ifun(10);
++ERROR:  relation "sro_ptab" does not exist
+ REINDEX TABLE sro_ptab;
++ERROR:  at or near "sro_ptab": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX TABLE sro_ptab
++              ^
++HINT:  CockroachDB does not require reindexing.
+ REINDEX INDEX CONCURRENTLY sro_pidx;
++ERROR:  at or near "concurrently": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX INDEX CONCURRENTLY sro_pidx
++              ^
++HINT:  CockroachDB does not require reindexing.
+ SET SESSION AUTHORIZATION regress_sro_user;
++ERROR:  at or near "regress_sro_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_sro_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE FUNCTION unwanted_grant() RETURNS void LANGUAGE sql AS
+ 	'GRANT regress_priv_group2 TO regress_sro_user';
++ERROR:  unimplemented: GRANT usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ CREATE FUNCTION mv_action() RETURNS bool LANGUAGE sql AS
+ 	'DECLARE c CURSOR WITH HOLD FOR SELECT unwanted_grant(); SELECT true';
++ERROR:  unimplemented: DECLARE CURSOR usage inside a function definition
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- REFRESH of this MV will queue a GRANT at end of transaction
+ CREATE MATERIALIZED VIEW sro_mv AS SELECT mv_action() WITH NO DATA;
++ERROR:  unknown function: mv_action()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ REFRESH MATERIALIZED VIEW sro_mv;
+-ERROR:  cannot create a cursor WITH HOLD within security-restricted operation
+-CONTEXT:  SQL function "mv_action" statement 1
++ERROR:  relation "sro_mv" does not exist
+ \c -
+ REFRESH MATERIALIZED VIEW sro_mv;
+-ERROR:  cannot create a cursor WITH HOLD within security-restricted operation
+-CONTEXT:  SQL function "mv_action" statement 1
++ERROR:  relation "sro_mv" does not exist
+ SET SESSION AUTHORIZATION regress_sro_user;
++ERROR:  at or near "regress_sro_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_sro_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- INSERT to this table will queue a GRANT at end of transaction
+ CREATE TABLE sro_trojan_table ();
+ CREATE FUNCTION sro_trojan() RETURNS trigger LANGUAGE plpgsql AS
+ 	'BEGIN PERFORM unwanted_grant(); RETURN NULL; END';
++ERROR:  at or near ";": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++BEGIN PERFORM unwanted_grant(); RETURN NULL; END
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE CONSTRAINT TRIGGER t AFTER INSERT ON sro_trojan_table
+     INITIALLY DEFERRED FOR EACH ROW EXECUTE PROCEDURE sro_trojan();
++ERROR:  at or near "t": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE CONSTRAINT TRIGGER t AFTER INSERT ON sro_trojan_table
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/28296/_version_
+ -- Now, REFRESH will issue such an INSERT, queueing the GRANT
+ CREATE OR REPLACE FUNCTION mv_action() RETURNS bool LANGUAGE sql AS
+ 	'INSERT INTO sro_trojan_table DEFAULT VALUES; SELECT true';
+ REFRESH MATERIALIZED VIEW sro_mv;
+-ERROR:  cannot fire deferred trigger within security-restricted operation
+-CONTEXT:  SQL function "mv_action" statement 1
++ERROR:  relation "sro_mv" does not exist
+ \c -
+ REFRESH MATERIALIZED VIEW sro_mv;
+-ERROR:  cannot fire deferred trigger within security-restricted operation
+-CONTEXT:  SQL function "mv_action" statement 1
++ERROR:  relation "sro_mv" does not exist
+ BEGIN; SET CONSTRAINTS ALL IMMEDIATE; REFRESH MATERIALIZED VIEW sro_mv; COMMIT;
+-ERROR:  permission denied to grant role "regress_priv_group2"
+-DETAIL:  Only roles with the ADMIN option on role "regress_priv_group2" may grant this role.
+-CONTEXT:  SQL function "unwanted_grant" statement 1
+-SQL statement "SELECT unwanted_grant()"
+-PL/pgSQL function sro_trojan() line 1 at PERFORM
+-SQL function "mv_action" statement 1
++ERROR:  at or near "all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS ALL IMMEDIATE
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- REFRESH MATERIALIZED VIEW CONCURRENTLY use of eval_const_expressions()
+ SET SESSION AUTHORIZATION regress_sro_user;
++ERROR:  at or near "regress_sro_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_sro_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE FUNCTION unwanted_grant_nofail(int) RETURNS int
+ 	IMMUTABLE LANGUAGE plpgsql AS $$
+ BEGIN
+@@ -1814,52 +3065,93 @@
+ EXCEPTION WHEN OTHERS THEN
+ 	RETURN 2;
+ END$$;
++ERROR:  at or near ";": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++BEGIN
++	PERFORM unwanted_grant();
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE MATERIALIZED VIEW sro_index_mv AS SELECT 1 AS c;
+ CREATE UNIQUE INDEX ON sro_index_mv (c) WHERE unwanted_grant_nofail(1) > 0;
++ERROR:  unknown function: unwanted_grant_nofail()
+ \c -
+ REFRESH MATERIALIZED VIEW CONCURRENTLY sro_index_mv;
++NOTICE:  CONCURRENTLY is not required as views are refreshed concurrently
+ REFRESH MATERIALIZED VIEW sro_index_mv;
+ DROP OWNED BY regress_sro_user;
+ DROP ROLE regress_sro_user;
+ -- Admin options
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE FUNCTION dogrant_ok() RETURNS void LANGUAGE sql SECURITY DEFINER AS
+ 	'GRANT regress_priv_group2 TO regress_priv_user5';
++ERROR:  unimplemented: GRANT usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ GRANT regress_priv_group2 TO regress_priv_user5; -- ok: had ADMIN OPTION
++ERROR:  role/user "regress_priv_group2" does not exist
+ SET ROLE regress_priv_group2;
++ERROR:  role/user "regress_priv_group2" does not exist
+ GRANT regress_priv_group2 TO regress_priv_user5; -- fails: SET ROLE suspended privilege
+-ERROR:  permission denied to grant role "regress_priv_group2"
+-DETAIL:  Only roles with the ADMIN option on role "regress_priv_group2" may grant this role.
++ERROR:  role/user "regress_priv_group2" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT regress_priv_group2 TO regress_priv_user5; -- fails: no ADMIN OPTION
+-ERROR:  permission denied to grant role "regress_priv_group2"
+-DETAIL:  Only roles with the ADMIN option on role "regress_priv_group2" may grant this role.
++ERROR:  role/user "regress_priv_group2" does not exist
+ SELECT dogrant_ok();			-- ok: SECURITY DEFINER conveys ADMIN
+-NOTICE:  role "regress_priv_user5" has already been granted membership in role "regress_priv_group2" by role "regress_priv_user4"
+- dogrant_ok 
+-------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: dogrant_ok()
+ SET ROLE regress_priv_group2;
++ERROR:  role/user "regress_priv_group2" does not exist
+ GRANT regress_priv_group2 TO regress_priv_user5; -- fails: SET ROLE did not help
+-ERROR:  permission denied to grant role "regress_priv_group2"
+-DETAIL:  Only roles with the ADMIN option on role "regress_priv_group2" may grant this role.
++ERROR:  role/user "regress_priv_group2" does not exist
+ SET SESSION AUTHORIZATION regress_priv_group2;
++ERROR:  at or near "regress_priv_group2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_group2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT regress_priv_group2 TO regress_priv_user5; -- fails: no self-admin
+-ERROR:  permission denied to grant role "regress_priv_group2"
+-DETAIL:  Only roles with the ADMIN option on role "regress_priv_group2" may grant this role.
++ERROR:  role/user "regress_priv_group2" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ DROP FUNCTION dogrant_ok();
++ERROR:  unknown function: dogrant_ok()
+ REVOKE regress_priv_group2 FROM regress_priv_user5;
++ERROR:  role/user "regress_priv_group2" does not exist
+ -- has_sequence_privilege tests
+ \c -
+ CREATE SEQUENCE x_seq;
+ GRANT USAGE on x_seq to regress_priv_user2;
+ SELECT has_sequence_privilege('regress_priv_user1', 'atest1', 'SELECT');
+-ERROR:  "atest1" is not a sequence
++ERROR:  has_sequence_privilege(): "atest1" is not a sequence
+ SELECT has_sequence_privilege('regress_priv_user1', 'x_seq', 'INSERT');
+-ERROR:  unrecognized privilege type: "INSERT"
++ERROR:  has_sequence_privilege(): unrecognized privilege type: "INSERT"
+ SELECT has_sequence_privilege('regress_priv_user1', 'x_seq', 'SELECT');
+  has_sequence_privilege 
+ ------------------------
+@@ -1867,6 +3159,12 @@
+ (1 row)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT has_sequence_privilege('x_seq', 'USAGE');
+  has_sequence_privilege 
+ ------------------------
+@@ -1876,203 +3174,286 @@
+ -- largeobject privilege tests
+ \c -
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT lo_create(1001);
+- lo_create 
+------------
+-      1001
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT lo_create(1002);
+- lo_create 
+------------
+-      1002
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT lo_create(1003);
+- lo_create 
+------------
+-      1003
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT lo_create(1004);
+- lo_create 
+------------
+-      1004
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT lo_create(1005);
+- lo_create 
+------------
+-      1005
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ GRANT ALL ON LARGE OBJECT 1001 TO PUBLIC;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT ALL ON LARGE OBJECT 1001 TO PUBLIC
++                   ^
++HINT:  try \h GRANT
+ GRANT SELECT ON LARGE OBJECT 1003 TO regress_priv_user2;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT ON LARGE OBJECT 1003 TO regress_priv_user2
++                      ^
++HINT:  try \h GRANT
+ GRANT SELECT,UPDATE ON LARGE OBJECT 1004 TO regress_priv_user2;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT,UPDATE ON LARGE OBJECT 1004 TO regress_priv_user2
++                             ^
++HINT:  try \h GRANT
+ GRANT ALL ON LARGE OBJECT 1005 TO regress_priv_user2;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT ALL ON LARGE OBJECT 1005 TO regress_priv_user2
++                   ^
++HINT:  try \h GRANT
+ GRANT SELECT ON LARGE OBJECT 1005 TO regress_priv_user2 WITH GRANT OPTION;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT ON LARGE OBJECT 1005 TO regress_priv_user2 WITH GRANT OPTION
++                      ^
++HINT:  try \h GRANT
+ GRANT SELECT, INSERT ON LARGE OBJECT 1001 TO PUBLIC;	-- to be failed
+-ERROR:  invalid privilege type INSERT for large object
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT, INSERT ON LARGE OBJECT 1001 TO PUBLIC
++                              ^
++HINT:  try \h GRANT
+ GRANT SELECT, UPDATE ON LARGE OBJECT 1001 TO nosuchuser;	-- to be failed
+-ERROR:  role "nosuchuser" does not exist
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT, UPDATE ON LARGE OBJECT 1001 TO nosuchuser
++                              ^
++HINT:  try \h GRANT
+ GRANT SELECT, UPDATE ON LARGE OBJECT  999 TO PUBLIC;	-- to be failed
+-ERROR:  large object 999 does not exist
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT, UPDATE ON LARGE OBJECT  999 TO PUBLIC
++                              ^
++HINT:  try \h GRANT
+ \c -
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT lo_create(2001);
+- lo_create 
+------------
+-      2001
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT lo_create(2002);
+- lo_create 
+------------
+-      2002
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ SELECT loread(lo_open(1001, x'20000'::int), 32);	-- allowed, for now
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1001, x'20000'::int), 32);
++                            ^
+ SELECT lowrite(lo_open(1001, x'40000'::int), 'abcd');	-- fail, wrong mode
+-ERROR:  large object descriptor 0 was not opened for writing
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1001, x'40000'::int), 'abcd');
++                             ^
+ SELECT loread(lo_open(1001, x'40000'::int), 32);
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1001, x'40000'::int), 32);
++                            ^
+ SELECT loread(lo_open(1002, x'40000'::int), 32);	-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1002, x'40000'::int), 32);
++                            ^
+ SELECT loread(lo_open(1003, x'40000'::int), 32);
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1003, x'40000'::int), 32);
++                            ^
+ SELECT loread(lo_open(1004, x'40000'::int), 32);
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1004, x'40000'::int), 32);
++                            ^
+ SELECT lowrite(lo_open(1001, x'20000'::int), 'abcd');
+- lowrite 
+----------
+-       4
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1001, x'20000'::int), 'abcd');
++                             ^
+ SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');	-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');
++                             ^
+ SELECT lowrite(lo_open(1003, x'20000'::int), 'abcd');	-- to be denied
+-ERROR:  permission denied for large object 1003
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1003, x'20000'::int), 'abcd');
++                             ^
+ SELECT lowrite(lo_open(1004, x'20000'::int), 'abcd');
+- lowrite 
+----------
+-       4
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1004, x'20000'::int), 'abcd');
++                             ^
+ GRANT SELECT ON LARGE OBJECT 1005 TO regress_priv_user3;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT ON LARGE OBJECT 1005 TO regress_priv_user3
++                      ^
++HINT:  try \h GRANT
+ GRANT UPDATE ON LARGE OBJECT 1006 TO regress_priv_user3;	-- to be denied
+-ERROR:  large object 1006 does not exist
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE ON LARGE OBJECT 1006 TO regress_priv_user3
++                      ^
++HINT:  try \h GRANT
+ REVOKE ALL ON LARGE OBJECT 2001, 2002 FROM PUBLIC;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++REVOKE ALL ON LARGE OBJECT 2001, 2002 FROM PUBLIC
++                    ^
++HINT:  try \h REVOKE
+ GRANT ALL ON LARGE OBJECT 2001 TO regress_priv_user3;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT ALL ON LARGE OBJECT 2001 TO regress_priv_user3
++                   ^
++HINT:  try \h GRANT
+ SELECT lo_unlink(1001);		-- to be denied
+-ERROR:  must be owner of large object 1001
++ERROR:  unknown function: lo_unlink()
+ SELECT lo_unlink(2002);
+- lo_unlink 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: lo_unlink()
+ \c -
+ -- confirm ACL setting
+ SELECT oid, pg_get_userbyid(lomowner) ownername, lomacl FROM pg_largeobject_metadata WHERE oid >= 1000 AND oid < 3000 ORDER BY oid;
+- oid  |     ownername      |                                                            lomacl                                                            
+-------+--------------------+------------------------------------------------------------------------------------------------------------------------------
+- 1001 | regress_priv_user1 | {regress_priv_user1=rw/regress_priv_user1,=rw/regress_priv_user1}
+- 1002 | regress_priv_user1 | 
+- 1003 | regress_priv_user1 | {regress_priv_user1=rw/regress_priv_user1,regress_priv_user2=r/regress_priv_user1}
+- 1004 | regress_priv_user1 | {regress_priv_user1=rw/regress_priv_user1,regress_priv_user2=rw/regress_priv_user1}
+- 1005 | regress_priv_user1 | {regress_priv_user1=rw/regress_priv_user1,regress_priv_user2=r*w/regress_priv_user1,regress_priv_user3=r/regress_priv_user2}
+- 2001 | regress_priv_user2 | {regress_priv_user2=rw/regress_priv_user2,regress_priv_user3=rw/regress_priv_user2}
+-(6 rows)
++ oid | ownername | lomacl 
++-----+-----------+--------
++(0 rows)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user3;
++ERROR:  at or near "regress_priv_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT loread(lo_open(1001, x'40000'::int), 32);
+-   loread   
+-------------
+- \x61626364
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1001, x'40000'::int), 32);
++                            ^
+ SELECT loread(lo_open(1003, x'40000'::int), 32);	-- to be denied
+-ERROR:  permission denied for large object 1003
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1003, x'40000'::int), 32);
++                            ^
+ SELECT loread(lo_open(1005, x'40000'::int), 32);
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1005, x'40000'::int), 32);
++                            ^
+ SELECT lo_truncate(lo_open(1005, x'20000'::int), 10);	-- to be denied
+-ERROR:  permission denied for large object 1005
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_truncate(lo_open(1005, x'20000'::int), 10);
++                                 ^
+ SELECT lo_truncate(lo_open(2001, x'20000'::int), 10);
+- lo_truncate 
+--------------
+-           0
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_truncate(lo_open(2001, x'20000'::int), 10);
++                                 ^
+ -- compatibility mode in largeobject permission
+ \c -
+ SET lo_compat_privileges = false;	-- default setting
++ERROR:  unimplemented: the configuration setting "lo_compat_privileges" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT loread(lo_open(1002, x'40000'::int), 32);	-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1002, x'40000'::int), 32);
++                            ^
+ SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');	-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');
++                             ^
+ SELECT lo_truncate(lo_open(1002, x'20000'::int), 10);	-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_truncate(lo_open(1002, x'20000'::int), 10);
++                                 ^
+ SELECT lo_put(1002, 1, 'abcd');				-- to be denied
+-ERROR:  permission denied for large object 1002
++ERROR:  unknown function: lo_put()
+ SELECT lo_unlink(1002);					-- to be denied
+-ERROR:  must be owner of large object 1002
++ERROR:  unknown function: lo_unlink()
+ SELECT lo_export(1001, '/dev/null');			-- to be denied
+-ERROR:  permission denied for function lo_export
++ERROR:  unknown function: lo_export()
+ SELECT lo_import('/dev/null');				-- to be denied
+-ERROR:  permission denied for function lo_import
++ERROR:  unknown function: lo_import()
+ SELECT lo_import('/dev/null', 2003);			-- to be denied
+-ERROR:  permission denied for function lo_import
++ERROR:  unknown function: lo_import()
+ \c -
+ SET lo_compat_privileges = true;	-- compatibility mode
++ERROR:  unimplemented: the configuration setting "lo_compat_privileges" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET SESSION AUTHORIZATION regress_priv_user4;
++ERROR:  at or near "regress_priv_user4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user4
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT loread(lo_open(1002, x'40000'::int), 32);
+- loread 
+---------
+- \x
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT loread(lo_open(1002, x'40000'::int), 32);
++                            ^
+ SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');
+- lowrite 
+----------
+-       4
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lowrite(lo_open(1002, x'20000'::int), 'abcd');
++                             ^
+ SELECT lo_truncate(lo_open(1002, x'20000'::int), 10);
+- lo_truncate 
+--------------
+-           0
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_truncate(lo_open(1002, x'20000'::int), 10);
++                                 ^
+ SELECT lo_unlink(1002);
+- lo_unlink 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: lo_unlink()
+ SELECT lo_export(1001, '/dev/null');			-- to be denied
+-ERROR:  permission denied for function lo_export
++ERROR:  unknown function: lo_export()
+ -- don't allow unpriv users to access pg_largeobject contents
+ \c -
+ SELECT * FROM pg_largeobject LIMIT 0;
+@@ -2081,68 +3462,89 @@
+ (0 rows)
+ 
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM pg_largeobject LIMIT 0;			-- to be denied
+-ERROR:  permission denied for table pg_largeobject
++ loid | pageno | data 
++------+--------+------
++(0 rows)
++
+ -- test pg_database_owner
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT pg_database_owner TO regress_priv_user1;
+-ERROR:  role "pg_database_owner" cannot have explicit members
++ERROR:  role/user "pg_database_owner" does not exist
+ GRANT regress_priv_user1 TO pg_database_owner;
+-ERROR:  role "pg_database_owner" cannot be a member of any role
++ERROR:  role/user "pg_database_owner" does not exist
+ CREATE TABLE datdba_only ();
+ ALTER TABLE datdba_only OWNER TO pg_database_owner;
++ERROR:  role/user "pg_database_owner" does not exist
+ REVOKE DELETE ON datdba_only FROM pg_database_owner;
++ERROR:  role/user "pg_database_owner" does not exist
+ SELECT
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner', 'USAGE') as priv,
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner', 'MEMBER') as mem,
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner',
+ 				'MEMBER WITH ADMIN OPTION') as admin;
+- priv | mem | admin 
+-------+-----+-------
+- f    | f   | f
+-(1 row)
+-
++ERROR:  pg_has_role(): role 'pg_database_owner' does not exist
+ BEGIN;
+ DO $$BEGIN EXECUTE format(
+ 	'ALTER DATABASE %I OWNER TO regress_priv_group2', current_catalog); END$$;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner', 'USAGE') as priv,
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner', 'MEMBER') as mem,
+ 	pg_has_role('regress_priv_user1', 'pg_database_owner',
+ 				'MEMBER WITH ADMIN OPTION') as admin;
+- priv | mem | admin 
+-------+-----+-------
+- t    | t   | f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET SESSION AUTHORIZATION regress_priv_user1;
++ERROR:  at or near "regress_priv_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ TABLE information_schema.enabled_roles ORDER BY role_name COLLATE "C";
+-      role_name      
+----------------------
+- pg_database_owner
+- regress_priv_group2
+- regress_priv_user1
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ TABLE information_schema.applicable_roles ORDER BY role_name COLLATE "C";
+-       grantee       |      role_name      | is_grantable 
+----------------------+---------------------+--------------
+- regress_priv_group2 | pg_database_owner   | NO
+- regress_priv_user1  | regress_priv_group2 | NO
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO datdba_only DEFAULT VALUES;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SAVEPOINT q; DELETE FROM datdba_only; ROLLBACK TO q;
+-ERROR:  permission denied for table datdba_only
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
++ERROR:  savepoint "q" does not exist
+ SET SESSION AUTHORIZATION regress_priv_user2;
++ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_priv_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ TABLE information_schema.enabled_roles;
+-     role_name      
+---------------------
+- regress_priv_user2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO datdba_only DEFAULT VALUES;
+-ERROR:  permission denied for table datdba_only
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- test default ACLs
+ \c -
+@@ -2225,64 +3627,28 @@
+ -- Test makeaclitem()
+ SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
+ 	'SELECT', TRUE);  -- single privilege
+-               makeaclitem                
+-------------------------------------------
+- regress_priv_user1=r*/regress_priv_user2
+-(1 row)
+-
++ERROR:  unknown function: makeaclitem()
+ SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
+ 	'SELECT, INSERT,  UPDATE , DELETE  ', FALSE);  -- multiple privileges
+-                makeaclitem                 
+---------------------------------------------
+- regress_priv_user1=arwd/regress_priv_user2
+-(1 row)
+-
++ERROR:  unknown function: makeaclitem()
+ SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
+ 	'SELECT, fake_privilege', FALSE);  -- error
+-ERROR:  unrecognized privilege type: "fake_privilege"
++ERROR:  unknown function: makeaclitem()
+ -- Test non-throwing aclitem I/O
+ SELECT pg_input_is_valid('regress_priv_user1=r/regress_priv_user2', 'aclitem');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('regress_priv_user1=r/', 'aclitem');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('regress_priv_user1=r/', 'aclitem');
+-             message             | detail | hint | sql_error_code 
+----------------------------------+--------+------+----------------
+- a name must follow the "/" sign |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('regress_priv_user1=r/regress_no_such_user', 'aclitem');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('regress_priv_user1=r/regress_no_such_user', 'aclitem');
+-                  message                   | detail | hint | sql_error_code 
+---------------------------------------------+--------+------+----------------
+- role "regress_no_such_user" does not exist |        |      | 42704
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('regress_priv_user1=rY', 'aclitem');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('regress_priv_user1=rY', 'aclitem');
+-                         message                         | detail | hint | sql_error_code 
+----------------------------------------------------------+--------+------+----------------
+- invalid mode character: must be one of "arwdDxtXUCTcsA" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- Testing blanket default grants is very hazardous since it might change
+ -- the privileges attached to objects created by concurrent regression tests.
+@@ -2290,6 +3656,7 @@
+ --
+ BEGIN;
+ ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO regress_priv_user2;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ CREATE SCHEMA testns2;
+ SELECT has_schema_privilege('regress_priv_user2', 'testns2', 'USAGE'); -- yes
+  has_schema_privilege 
+@@ -2300,7 +3667,7 @@
+ SELECT has_schema_privilege('regress_priv_user6', 'testns2', 'USAGE'); -- yes
+  has_schema_privilege 
+ ----------------------
+- t
++ f
+ (1 row)
+ 
+ SELECT has_schema_privilege('regress_priv_user2', 'testns2', 'CREATE'); -- no
+@@ -2339,11 +3706,13 @@
+ 
+ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM regress_priv_user2;
+ COMMIT;
++WARNING:  there is no transaction in progress
+ -- Test for DROP OWNED BY with shared dependencies.  This is done in a
+ -- separate, rollbacked, transaction to avoid any trouble with other
+ -- regression sessions.
+ BEGIN;
+ ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO regress_priv_user2;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO regress_priv_user2;
+ ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO regress_priv_user2;
+ ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO regress_priv_user2;
+@@ -2354,7 +3723,7 @@
+ 	classid = 'pg_default_acl'::regclass;
+  count 
+ -------
+-     5
++     0
+ (1 row)
+ 
+ DROP OWNED BY regress_priv_user2, regress_priv_user2;
+@@ -2368,46 +3737,76 @@
+ (1 row)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ CREATE SCHEMA testns5;
+ SELECT has_schema_privilege('regress_priv_user2', 'testns5', 'USAGE'); -- no
+  has_schema_privilege 
+ ----------------------
+- f
++ t
+ (1 row)
+ 
+ SELECT has_schema_privilege('regress_priv_user2', 'testns5', 'CREATE'); -- no
+  has_schema_privilege 
+ ----------------------
+- f
++ t
+ (1 row)
+ 
+ SET ROLE regress_priv_user1;
+ CREATE FUNCTION testns.foo() RETURNS int AS 'select 1' LANGUAGE sql;
+ CREATE AGGREGATE testns.agg1(int) (sfunc = int4pl, stype = int4);
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE testns.agg1(int) (sfunc = int4pl, stype = int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql;
+ SELECT has_function_privilege('regress_priv_user2', 'testns.foo()', 'EXECUTE'); -- no
+  has_function_privilege 
+ ------------------------
+- f
++ t
+ (1 row)
+ 
+ SELECT has_function_privilege('regress_priv_user2', 'testns.agg1(int)', 'EXECUTE'); -- no
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: testns.agg1()
+ SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- no
+  has_function_privilege 
+ ------------------------
+- f
++ t
+ (1 row)
+ 
+ ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public;
++ERROR:  at or near "to": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public
++                                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP FUNCTION testns.foo();
+ CREATE FUNCTION testns.foo() RETURNS int AS 'select 1' LANGUAGE sql;
+ DROP AGGREGATE testns.agg1(int);
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE testns.agg1(int)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE AGGREGATE testns.agg1(int) (sfunc = int4pl, stype = int4);
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE testns.agg1(int) (sfunc = int4pl, stype = int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ DROP PROCEDURE testns.bar();
+ CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql;
+ SELECT has_function_privilege('regress_priv_user2', 'testns.foo()', 'EXECUTE'); -- yes
+@@ -2417,11 +3816,7 @@
+ (1 row)
+ 
+ SELECT has_function_privilege('regress_priv_user2', 'testns.agg1(int)', 'EXECUTE'); -- yes
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: testns.agg1()
+ SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- yes (counts as function here)
+  has_function_privilege 
+ ------------------------
+@@ -2430,36 +3825,57 @@
+ 
+ DROP FUNCTION testns.foo();
+ DROP AGGREGATE testns.agg1(int);
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE testns.agg1(int)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ DROP PROCEDURE testns.bar();
+ ALTER DEFAULT PRIVILEGES FOR ROLE regress_priv_user1 REVOKE USAGE ON TYPES FROM public;
+ CREATE DOMAIN testns.priv_testdomain1 AS int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testns.priv_testdomain1 AS int
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ SELECT has_type_privilege('regress_priv_user2', 'testns.priv_testdomain1', 'USAGE'); -- no
+- has_type_privilege 
+---------------------
+- f
+-(1 row)
+-
++ERROR:  has_type_privilege(): type 'testns.priv_testdomain1' does not exist
+ ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT USAGE ON TYPES to public;
+ DROP DOMAIN testns.priv_testdomain1;
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN testns.priv_testdomain1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE DOMAIN testns.priv_testdomain1 AS int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testns.priv_testdomain1 AS int
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ SELECT has_type_privilege('regress_priv_user2', 'testns.priv_testdomain1', 'USAGE'); -- yes
+- has_type_privilege 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  has_type_privilege(): type 'testns.priv_testdomain1' does not exist
+ DROP DOMAIN testns.priv_testdomain1;
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN testns.priv_testdomain1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ RESET ROLE;
+ SELECT count(*)
+   FROM pg_default_acl d LEFT JOIN pg_namespace n ON defaclnamespace = n.oid
+   WHERE nspname = 'testns';
+  count 
+ -------
+-     3
++     2
+ (1 row)
+ 
+ DROP SCHEMA testns CASCADE;
+-NOTICE:  drop cascades to table testns.acltest1
+ DROP SCHEMA testns2 CASCADE;
+ DROP SCHEMA testns3 CASCADE;
+ DROP SCHEMA testns4 CASCADE;
+@@ -2510,6 +3926,12 @@
+ 
+ CREATE FUNCTION testns.priv_testfunc(int) RETURNS int AS 'select 3 * $1;' LANGUAGE sql;
+ CREATE AGGREGATE testns.priv_testagg(int) (sfunc = int4pl, stype = int4);
++ERROR:  at or near "testns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE testns.priv_testagg(int) (sfunc = int4pl, stype = int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE PROCEDURE testns.priv_testproc(int) AS 'select 3' LANGUAGE sql;
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true by default
+  has_function_privilege 
+@@ -2518,11 +3940,7 @@
+ (1 row)
+ 
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true by default
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true by default
+  has_function_privilege 
+ ------------------------
+@@ -2533,15 +3951,11 @@
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- false
+  has_function_privilege 
+ ------------------------
+- f
++ t
+ (1 row)
+ 
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- false
+- has_function_privilege 
+-------------------------
+- f
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- still true, not a function
+  has_function_privilege 
+ ------------------------
+@@ -2552,10 +3966,15 @@
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- now false
+  has_function_privilege 
+ ------------------------
+- f
++ t
+ (1 row)
+ 
+ GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC;
++ERROR:  at or near "routines": syntax error
++DETAIL:  source SQL:
++GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC
++                 ^
++HINT:  try \h GRANT
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true
+  has_function_privilege 
+ ------------------------
+@@ -2563,11 +3982,7 @@
+ (1 row)
+ 
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true
+- has_function_privilege 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  has_function_privilege(): unknown function: testns.priv_testagg()
+ SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true
+  has_function_privilege 
+ ------------------------
+@@ -2575,38 +3990,52 @@
+ (1 row)
+ 
+ DROP SCHEMA testns CASCADE;
+-NOTICE:  drop cascades to 5 other objects
+-DETAIL:  drop cascades to table testns.t1
+-drop cascades to table testns.t2
+-drop cascades to function testns.priv_testfunc(integer)
+-drop cascades to function testns.priv_testagg(integer)
+-drop cascades to function testns.priv_testproc(integer)
+ -- Change owner of the schema & and rename of new schema owner
+ \c -
+ CREATE ROLE regress_schemauser1 superuser login;
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_schemauser1 superuser login
++                                ^
++HINT:  try \h CREATE ROLE
+ CREATE ROLE regress_schemauser2 superuser login;
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++CREATE ROLE regress_schemauser2 superuser login
++                                ^
++HINT:  try \h CREATE ROLE
+ SET SESSION ROLE regress_schemauser1;
++ERROR:  role/user "regress_schemauser1" does not exist
+ CREATE SCHEMA testns;
+ SELECT nspname, rolname FROM pg_namespace, pg_roles WHERE pg_namespace.nspname = 'testns' AND pg_namespace.nspowner = pg_roles.oid;
+- nspname |       rolname       
+----------+---------------------
+- testns  | regress_schemauser1
++ nspname |  rolname   
++---------+------------
++ testns  | test_admin
+ (1 row)
+ 
+ ALTER SCHEMA testns OWNER TO regress_schemauser2;
++ERROR:  role/user "regress_schemauser2" does not exist
+ ALTER ROLE regress_schemauser2 RENAME TO regress_schemauser_renamed;
++ERROR:  at or near "rename": syntax error
++DETAIL:  source SQL:
++ALTER ROLE regress_schemauser2 RENAME TO regress_schemauser_renamed
++                               ^
++HINT:  try \h ALTER ROLE
+ SELECT nspname, rolname FROM pg_namespace, pg_roles WHERE pg_namespace.nspname = 'testns' AND pg_namespace.nspowner = pg_roles.oid;
+- nspname |          rolname           
+----------+----------------------------
+- testns  | regress_schemauser_renamed
++ nspname |  rolname   
++---------+------------
++ testns  | test_admin
+ (1 row)
+ 
+ set session role regress_schemauser_renamed;
++ERROR:  role/user "regress_schemauser_renamed" does not exist
+ DROP SCHEMA testns CASCADE;
+ -- clean up
+ \c -
+ DROP ROLE regress_schemauser1;
++ERROR:  role/user "regress_schemauser1" does not exist
+ DROP ROLE regress_schemauser_renamed;
++ERROR:  role/user "regress_schemauser_renamed" does not exist
+ -- test that dependent privileges are revoked (or not) properly
+ \c -
+ set session role regress_priv_user1;
+@@ -2620,59 +4049,179 @@
+ set session role regress_priv_user4;
+ grant select on dep_priv_test to regress_priv_user5;
+ \dp dep_priv_test
+-                                               Access privileges
+- Schema |     Name      | Type  |               Access privileges               | Column privileges | Policies 
+---------+---------------+-------+-----------------------------------------------+-------------------+----------
+- public | dep_priv_test | table | regress_priv_user1=arwdDxt/regress_priv_user1+|                   | 
+-        |               |       | regress_priv_user2=r*/regress_priv_user1     +|                   | 
+-        |               |       | regress_priv_user3=r*/regress_priv_user1     +|                   | 
+-        |               |       | regress_priv_user4=r*/regress_priv_user2     +|                   | 
+-        |               |       | regress_priv_user4=r*/regress_priv_user3     +|                   | 
+-        |               |       | regress_priv_user5=r/regress_priv_user4       |                   | 
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  c.relname as "Name",
++  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'S' THEN 'sequence' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' END as "Type",
++  pg_catalog.array_to_string(c.relacl, E'\n') AS "Access privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT attname || E':\n  ' || pg_catalog.array_to_string(attacl, E'\n  ')
++    FROM pg_catalog.pg_attribute a
++    WHERE attrelid = c.oid AND NOT attisdropped AND attacl IS NOT NULL
++  ), E'\n') AS "Column privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT polname
++    || CASE WHEN NOT polpermissive THEN
++       E' (RESTRICTIVE)'
++       ELSE '' END
++    || CASE WHEN polcmd != '*' THEN
++           E' (' || polcmd || E'):'
++       ELSE E':'
++       END
++    || CASE WHEN polqual IS NOT NULL THEN
++           E'\n  (u): ' || pg_catalog.pg_get_expr(polqual, polrelid)
++       ELSE E''
++       END
++    || CASE WHEN polwithcheck IS NOT NULL THEN
++           E'\n  (c): ' || pg_catalog.pg_get_expr(polwithcheck, polrelid)
++       ELSE E''
++       END    || CASE WHEN polroles <> '{0}' THEN
++           E'\n  to: ' || pg_catalog.array_to_string(
++               ARRAY(
++                   SELECT rolname
++                   FROM pg_catalog.pg_roles
++                   WHERE oid = ANY (polroles)
++                   ORDER BY 1
++               ), E', ')
++       ELSE E''
++       END
++    FROM pg_catalog.pg_policy pol
++    WHERE polrelid = c.oid), E'\n')
++    AS "Policies"
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relkind IN ('r','v','m','S','f','p')
++  AND c.relname OPERATOR(pg_catalog.~) '^(dep_priv_test)$' COLLATE pg_catalog.default
++                                                                             ^
+ set session role regress_priv_user2;
+ revoke select on dep_priv_test from regress_priv_user4 cascade;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++revoke select on dep_priv_test from regress_priv_user4 cascade
++                                                       ^
+ \dp dep_priv_test
+-                                               Access privileges
+- Schema |     Name      | Type  |               Access privileges               | Column privileges | Policies 
+---------+---------------+-------+-----------------------------------------------+-------------------+----------
+- public | dep_priv_test | table | regress_priv_user1=arwdDxt/regress_priv_user1+|                   | 
+-        |               |       | regress_priv_user2=r*/regress_priv_user1     +|                   | 
+-        |               |       | regress_priv_user3=r*/regress_priv_user1     +|                   | 
+-        |               |       | regress_priv_user4=r*/regress_priv_user3     +|                   | 
+-        |               |       | regress_priv_user5=r/regress_priv_user4       |                   | 
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  c.relname as "Name",
++  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'S' THEN 'sequence' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' END as "Type",
++  pg_catalog.array_to_string(c.relacl, E'\n') AS "Access privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT attname || E':\n  ' || pg_catalog.array_to_string(attacl, E'\n  ')
++    FROM pg_catalog.pg_attribute a
++    WHERE attrelid = c.oid AND NOT attisdropped AND attacl IS NOT NULL
++  ), E'\n') AS "Column privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT polname
++    || CASE WHEN NOT polpermissive THEN
++       E' (RESTRICTIVE)'
++       ELSE '' END
++    || CASE WHEN polcmd != '*' THEN
++           E' (' || polcmd || E'):'
++       ELSE E':'
++       END
++    || CASE WHEN polqual IS NOT NULL THEN
++           E'\n  (u): ' || pg_catalog.pg_get_expr(polqual, polrelid)
++       ELSE E''
++       END
++    || CASE WHEN polwithcheck IS NOT NULL THEN
++           E'\n  (c): ' || pg_catalog.pg_get_expr(polwithcheck, polrelid)
++       ELSE E''
++       END    || CASE WHEN polroles <> '{0}' THEN
++           E'\n  to: ' || pg_catalog.array_to_string(
++               ARRAY(
++                   SELECT rolname
++                   FROM pg_catalog.pg_roles
++                   WHERE oid = ANY (polroles)
++                   ORDER BY 1
++               ), E', ')
++       ELSE E''
++       END
++    FROM pg_catalog.pg_policy pol
++    WHERE polrelid = c.oid), E'\n')
++    AS "Policies"
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relkind IN ('r','v','m','S','f','p')
++  AND c.relname OPERATOR(pg_catalog.~) '^(dep_priv_test)$' COLLATE pg_catalog.default
++                                                                             ^
+ set session role regress_priv_user3;
+ revoke select on dep_priv_test from regress_priv_user4 cascade;
++ERROR:  at or near "cascade": syntax error
++DETAIL:  source SQL:
++revoke select on dep_priv_test from regress_priv_user4 cascade
++                                                       ^
+ \dp dep_priv_test
+-                                               Access privileges
+- Schema |     Name      | Type  |               Access privileges               | Column privileges | Policies 
+---------+---------------+-------+-----------------------------------------------+-------------------+----------
+- public | dep_priv_test | table | regress_priv_user1=arwdDxt/regress_priv_user1+|                   | 
+-        |               |       | regress_priv_user2=r*/regress_priv_user1     +|                   | 
+-        |               |       | regress_priv_user3=r*/regress_priv_user1      |                   | 
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  c.relname as "Name",
++  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'S' THEN 'sequence' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' END as "Type",
++  pg_catalog.array_to_string(c.relacl, E'\n') AS "Access privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT attname || E':\n  ' || pg_catalog.array_to_string(attacl, E'\n  ')
++    FROM pg_catalog.pg_attribute a
++    WHERE attrelid = c.oid AND NOT attisdropped AND attacl IS NOT NULL
++  ), E'\n') AS "Column privileges",
++  pg_catalog.array_to_string(ARRAY(
++    SELECT polname
++    || CASE WHEN NOT polpermissive THEN
++       E' (RESTRICTIVE)'
++       ELSE '' END
++    || CASE WHEN polcmd != '*' THEN
++           E' (' || polcmd || E'):'
++       ELSE E':'
++       END
++    || CASE WHEN polqual IS NOT NULL THEN
++           E'\n  (u): ' || pg_catalog.pg_get_expr(polqual, polrelid)
++       ELSE E''
++       END
++    || CASE WHEN polwithcheck IS NOT NULL THEN
++           E'\n  (c): ' || pg_catalog.pg_get_expr(polwithcheck, polrelid)
++       ELSE E''
++       END    || CASE WHEN polroles <> '{0}' THEN
++           E'\n  to: ' || pg_catalog.array_to_string(
++               ARRAY(
++                   SELECT rolname
++                   FROM pg_catalog.pg_roles
++                   WHERE oid = ANY (polroles)
++                   ORDER BY 1
++               ), E', ')
++       ELSE E''
++       END
++    FROM pg_catalog.pg_policy pol
++    WHERE polrelid = c.oid), E'\n')
++    AS "Policies"
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relkind IN ('r','v','m','S','f','p')
++  AND c.relname OPERATOR(pg_catalog.~) '^(dep_priv_test)$' COLLATE pg_catalog.default
++                                                                             ^
+ set session role regress_priv_user1;
+ drop table dep_priv_test;
+ -- clean up
+ \c
+ drop sequence x_seq;
+ DROP AGGREGATE priv_testagg1(int);
++ERROR:  at or near "priv_testagg1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE priv_testagg1(int)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ DROP FUNCTION priv_testfunc2(int);
+ DROP FUNCTION priv_testfunc4(boolean);
+ DROP PROCEDURE priv_testproc1(int);
++ERROR:  unknown procedure: priv_testproc1()
+ DROP VIEW atestv0;
+ DROP VIEW atestv1;
+ DROP VIEW atestv2;
+ -- this should cascade to drop atestv4
+ DROP VIEW atestv3 CASCADE;
+-NOTICE:  drop cascades to view atestv4
+ -- this should complain "does not exist"
+ DROP VIEW atestv4;
+-ERROR:  view "atestv4" does not exist
++ERROR:  relation "atestv4" does not exist
+ DROP TABLE atest1;
+ DROP TABLE atest2;
+ DROP TABLE atest3;
+@@ -2680,108 +4229,214 @@
+ DROP TABLE atest5;
+ DROP TABLE atest6;
+ DROP TABLE atestc;
++ERROR:  relation "atestc" does not exist
+ DROP TABLE atestp1;
+ DROP TABLE atestp2;
+ SELECT lo_unlink(oid) FROM pg_largeobject_metadata WHERE oid >= 1000 AND oid < 3000 ORDER BY oid;
+- lo_unlink 
+------------
+-         1
+-         1
+-         1
+-         1
+-         1
+-(5 rows)
+-
++ERROR:  unknown function: lo_unlink()
+ DROP GROUP regress_priv_group1;
+ DROP GROUP regress_priv_group2;
++ERROR:  role/user "regress_priv_group2" does not exist
+ -- these are needed to clean up permissions
+ REVOKE USAGE ON LANGUAGE sql FROM regress_priv_user1;
++ERROR:  at or near "sql": syntax error
++DETAIL:  source SQL:
++REVOKE USAGE ON LANGUAGE sql FROM regress_priv_user1
++                         ^
++HINT:  try \h REVOKE
+ DROP OWNED BY regress_priv_user1;
+ DROP USER regress_priv_user1;
+ DROP USER regress_priv_user2;
++ERROR:  role regress_priv_user2 cannot be dropped because some objects depend on it
++privileges for default privileges on new  belonging to role test_admin in database root
++privileges for default privileges on new relations belonging to role test_admin in database root
++privileges for default privileges on new schemas belonging to role test_admin in database root
++privileges for default privileges on new sequences belonging to role test_admin in database root
++privileges for default privileges on new types belonging to role test_admin in database root
++HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON ROUTINES FROM regress_priv_user2;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON TABLES FROM regress_priv_user2;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON SCHEMAS FROM regress_priv_user2;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON SEQUENCES FROM regress_priv_user2;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON TYPES FROM regress_priv_user2;
+ DROP USER regress_priv_user3;
+ DROP USER regress_priv_user4;
++ERROR:  cannot drop role/user regress_priv_user4: grants still exist on root.public.mtarget
+ DROP USER regress_priv_user5;
+ DROP USER regress_priv_user6;
+ DROP USER regress_priv_user7;
+ DROP USER regress_priv_user8; -- does not exist
+-ERROR:  role "regress_priv_user8" does not exist
++ERROR:  role/user "regress_priv_user8" does not exist
+ -- permissions with LOCK TABLE
+ CREATE USER regress_locktable_user;
+ CREATE TABLE lock_table (a int);
+ -- LOCK TABLE and SELECT permission
+ GRANT SELECT ON lock_table TO regress_locktable_user;
+ SET SESSION AUTHORIZATION regress_locktable_user;
++ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_locktable_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS SHARE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS SHARE MODE
++^
+ COMMIT;
+ BEGIN;
+ LOCK TABLE lock_table IN ROW EXCLUSIVE MODE; -- should fail
+-ERROR:  permission denied for table lock_table
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ROW EXCLUSIVE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE; -- should fail
+-ERROR:  permission denied for table lock_table
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE
++^
+ ROLLBACK;
+ \c
+ REVOKE SELECT ON lock_table FROM regress_locktable_user;
+ -- LOCK TABLE and INSERT permission
+ GRANT INSERT ON lock_table TO regress_locktable_user;
+ SET SESSION AUTHORIZATION regress_locktable_user;
++ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_locktable_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS SHARE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS SHARE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_table IN ROW EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ROW EXCLUSIVE MODE
++^
+ COMMIT;
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE; -- should fail
+-ERROR:  permission denied for table lock_table
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE
++^
+ ROLLBACK;
+ \c
+ REVOKE INSERT ON lock_table FROM regress_locktable_user;
+ -- LOCK TABLE and UPDATE permission
+ GRANT UPDATE ON lock_table TO regress_locktable_user;
+ SET SESSION AUTHORIZATION regress_locktable_user;
++ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_locktable_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS SHARE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS SHARE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_table IN ROW EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ROW EXCLUSIVE MODE
++^
+ COMMIT;
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE
++^
+ COMMIT;
+ \c
+ REVOKE UPDATE ON lock_table FROM regress_locktable_user;
+ -- LOCK TABLE and DELETE permission
+ GRANT DELETE ON lock_table TO regress_locktable_user;
+ SET SESSION AUTHORIZATION regress_locktable_user;
++ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_locktable_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS SHARE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS SHARE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_table IN ROW EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ROW EXCLUSIVE MODE
++^
+ COMMIT;
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE
++^
+ COMMIT;
+ \c
+ REVOKE DELETE ON lock_table FROM regress_locktable_user;
+ -- LOCK TABLE and TRUNCATE permission
+ GRANT TRUNCATE ON lock_table TO regress_locktable_user;
++ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++DETAIL:  source SQL:
++GRANT TRUNCATE ON lock_table TO regress_locktable_user
++               ^
+ SET SESSION AUTHORIZATION regress_locktable_user;
++ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_locktable_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS SHARE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS SHARE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_table IN ROW EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ROW EXCLUSIVE MODE
++^
+ COMMIT;
+ BEGIN;
+ LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE; -- should pass
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_table IN ACCESS EXCLUSIVE MODE
++^
+ COMMIT;
+ \c
+ REVOKE TRUNCATE ON lock_table FROM regress_locktable_user;
++ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++DETAIL:  source SQL:
++REVOKE TRUNCATE ON lock_table FROM regress_locktable_user
++                ^
+ -- clean up
+ DROP TABLE lock_table;
+ DROP USER regress_locktable_user;
+@@ -2791,24 +4446,17 @@
+ \c -
+ CREATE ROLE regress_readallstats;
+ SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- no
+- has_table_privilege 
+----------------------
+- f
+-(1 row)
+-
++ERROR:  has_table_privilege(): relation "pg_backend_memory_contexts" does not exist
+ SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- no
+  has_table_privilege 
+ ---------------------
+- f
++ t
+ (1 row)
+ 
+ GRANT pg_read_all_stats TO regress_readallstats;
++ERROR:  role/user "pg_read_all_stats" does not exist
+ SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- yes
+- has_table_privilege 
+----------------------
+- t
+-(1 row)
+-
++ERROR:  has_table_privilege(): relation "pg_backend_memory_contexts" does not exist
+ SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- yes
+  has_table_privilege 
+ ---------------------
+@@ -2818,11 +4466,7 @@
+ -- run query to ensure that functions within views can be executed
+ SET ROLE regress_readallstats;
+ SELECT COUNT(*) >= 0 AS ok FROM pg_backend_memory_contexts;
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  relation "pg_backend_memory_contexts" does not exist
+ SELECT COUNT(*) >= 0 AS ok FROM pg_shmem_allocations;
+  ok 
+ ----
+@@ -2838,28 +4482,48 @@
+ CREATE ROLE regress_group_indirect_manager;
+ CREATE ROLE regress_group_member;
+ GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE
++                                                         ^
++HINT:  try \h GRANT
+ GRANT regress_group_direct_manager TO regress_group_indirect_manager;
+ SET SESSION AUTHORIZATION regress_group_direct_manager;
++ERROR:  at or near "regress_group_direct_manager": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_group_direct_manager
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT regress_group TO regress_group_member;
+ SELECT member::regrole::text, CASE WHEN grantor = 10 THEN 'BOOTSTRAP SUPERUSER' ELSE grantor::regrole::text END FROM pg_auth_members WHERE roleid = 'regress_group'::regrole ORDER BY 1, 2;
+-            member            |           grantor            
+-------------------------------+------------------------------
+- regress_group_direct_manager | BOOTSTRAP SUPERUSER
+- regress_group_member         | regress_group_direct_manager
+-(2 rows)
++        member        | grantor 
++----------------------+---------
++ regress_group_member | 
++(1 row)
+ 
+ REVOKE regress_group FROM regress_group_member;
+ SET SESSION AUTHORIZATION regress_group_indirect_manager;
++ERROR:  at or near "regress_group_indirect_manager": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_group_indirect_manager
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT regress_group TO regress_group_member;
+ SELECT member::regrole::text, CASE WHEN grantor = 10 THEN 'BOOTSTRAP SUPERUSER' ELSE grantor::regrole::text END FROM pg_auth_members WHERE roleid = 'regress_group'::regrole ORDER BY 1, 2;
+-            member            |           grantor            
+-------------------------------+------------------------------
+- regress_group_direct_manager | BOOTSTRAP SUPERUSER
+- regress_group_member         | regress_group_direct_manager
+-(2 rows)
++        member        | grantor 
++----------------------+---------
++ regress_group_member | 
++(1 row)
+ 
+ REVOKE regress_group FROM regress_group_member;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP ROLE regress_group;
+ DROP ROLE regress_group_direct_manager;
+ DROP ROLE regress_group_indirect_manager;
+@@ -2871,22 +4535,59 @@
+ CREATE SCHEMA regress_roleoption;
+ GRANT CREATE, USAGE ON SCHEMA regress_roleoption TO PUBLIC;
+ GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE
++                                                                      ^
++HINT:  try \h GRANT
+ GRANT regress_roleoption_recipient TO regress_roleoption_protagonist WITH INHERIT FALSE, SET TRUE;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++GRANT regress_roleoption_recipient TO regress_roleoption_protagonist WITH INHERIT FALSE, SET TRUE
++                                                                          ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_roleoption_protagonist;
++ERROR:  at or near "regress_roleoption_protagonist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_roleoption_protagonist
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE regress_roleoption.t1 (a int);
+ CREATE TABLE regress_roleoption.t2 (a int);
+ SET SESSION AUTHORIZATION regress_roleoption_donor;
++ERROR:  at or near "regress_roleoption_donor": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_roleoption_donor
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE regress_roleoption.t3 (a int);
+ SET SESSION AUTHORIZATION regress_roleoption_recipient;
++ERROR:  at or near "regress_roleoption_recipient": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_roleoption_recipient
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE regress_roleoption.t4 (a int);
+ SET SESSION AUTHORIZATION regress_roleoption_protagonist;
++ERROR:  at or near "regress_roleoption_protagonist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_roleoption_protagonist
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ ALTER TABLE regress_roleoption.t1 OWNER TO regress_roleoption_donor; -- fails, can't be come donor
+-ERROR:  must be able to SET ROLE "regress_roleoption_donor"
+ ALTER TABLE regress_roleoption.t2 OWNER TO regress_roleoption_recipient; -- works
+ ALTER TABLE regress_roleoption.t3 OWNER TO regress_roleoption_protagonist; -- works
+ ALTER TABLE regress_roleoption.t4 OWNER TO regress_roleoption_protagonist; -- fails, we don't inherit from recipient
+-ERROR:  must be owner of table t4
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE regress_roleoption.t1;
+ DROP TABLE regress_roleoption.t2;
+ DROP TABLE regress_roleoption.t3;

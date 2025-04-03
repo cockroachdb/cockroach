@@ -11,20 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,6 +73,10 @@ type testWrapper struct {
 
 func (t testWrapper) GetRunId() string {
 	return "mock-run-id"
+}
+
+func (t testWrapper) Owner() string {
+	return "mock-owner"
 }
 
 func (t testWrapper) ExportOpenmetrics() bool {
@@ -152,7 +154,11 @@ func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
 	panic("implement me")
 }
 
-var _ test2.Test = testWrapper{}
+func (t testWrapper) Monitor() test.Monitor {
+	panic("implement me")
+}
+
+var _ test.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
@@ -676,21 +682,6 @@ func TestMachineTypes(t *testing.T) {
 			return out.String()
 		})
 	})
-}
-
-func TestCmdLogFileName(t *testing.T) {
-	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
-
-	const exp = `run_150412.000000000_n1,3-4,9_cockroach-bla-foo-ba`
-	nodes := option.NodeListOption{1, 3, 4, 9}
-	assert.Equal(t,
-		exp,
-		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),
-	)
-	assert.Equal(t,
-		exp,
-		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
-	)
 }
 
 func TestVerifyLibraries(t *testing.T) {

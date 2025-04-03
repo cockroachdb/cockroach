@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,11 +51,10 @@ type Config struct {
 	Knobs *sqlstats.TestingKnobs
 }
 
-// PersistedSQLStats is a sqlstats.Provider that wraps a node-local in-memory
-// sslocal.SQLStats. It behaves similar to a sslocal.SQLStats. However, it
-// periodically writes the in-memory SQL stats into system table for
-// persistence. It also performs the flush operation if it detects memory
-// pressure.
+// PersistedSQLStats wraps a node-local in-memory sslocal.SQLStats. It
+// behaves similar to a sslocal.SQLStats. However, it periodically
+// writes the in-memory SQL stats into system table for persistence. It
+// also performs the flush operation if it detects memory pressure.
 type PersistedSQLStats struct {
 	*sslocal.SQLStats
 
@@ -84,12 +80,7 @@ type PersistedSQLStats struct {
 
 	// The last time the size was checked before doing a flush.
 	lastSizeCheck time.Time
-
-	upsertTxnStatsStmt  statements.Statement[tree.Statement]
-	upsertStmtStatsStmt statements.Statement[tree.Statement]
 }
-
-var _ sqlstats.Provider = &PersistedSQLStats{}
 
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
@@ -110,38 +101,9 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		p.jobMonitor.testingKnobs.updateCheckInterval = cfg.Knobs.JobMonitorUpdateCheckInterval
 	}
 
-	upsertTxnStatsStmt, err := parser.ParseOne(`
-INSERT INTO system.transaction_statistics as t
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
-DO UPDATE
-SET
-  statistics = crdb_internal.merge_transaction_stats(ARRAY(t.statistics, EXCLUDED.statistics))
-`)
-	if err != nil {
-		panic(err)
-	}
-	p.upsertTxnStatsStmt = upsertTxnStatsStmt
-
-	upsertStmtStatsStmt, err := parser.ParseOne(`
-INSERT INTO system.statement_statistics as s
-VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
-             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
-DO UPDATE
-SET
-  statistics = crdb_internal.merge_statement_stats(ARRAY(s.statistics, EXCLUDED.statistics)),
-  index_recommendations = EXCLUDED.index_recommendations
-`)
-	if err != nil {
-		panic(err)
-	}
-	p.upsertStmtStatsStmt = upsertStmtStatsStmt
-
 	return p
 }
 
-// Start implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
@@ -248,12 +210,6 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 		s.tasksDoneWG.Done()
 		log.Warningf(ctx, "failed to start sql-stats-worker: %v", err)
 	}
-}
-
-// GetLocalMemProvider returns a sqlstats.Provider that can only be used to
-// access local in-memory sql statistics.
-func (s *PersistedSQLStats) GetLocalMemProvider() sqlstats.Provider {
-	return s.SQLStats
 }
 
 // GetNextFlushAt returns the time next flush is going to happen.

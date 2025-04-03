@@ -7,6 +7,7 @@ go_test(
         "propagation_test.go",
         "settings_test.go",
     ],
+    exec_properties = {"test.Pool": "large"},
     shard_count = 6,
     deps = [
         "//pkg/base",

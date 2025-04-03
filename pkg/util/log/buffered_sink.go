@@ -325,6 +325,7 @@ func (bs *bufferedSink) exitCode() exit.Code {
 // See: https://github.com/cockroachdb/cockroach/issues/72458
 func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 	buf := &bs.mu.buf
+	loggingErr := Every(time.Minute)
 	for {
 		done := false
 		select {
@@ -353,7 +354,9 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 		if errC != nil {
 			errC <- err
 		} else if err != nil {
-			Ops.Errorf(context.Background(), "logging error from %T: %v", bs.child, err)
+			if loggingErr.ShouldLog() {
+				Ops.Errorf(context.Background(), "logging error from %T: %v", bs.child, err)
+			}
 			if bs.crashOnAsyncFlushFailure {
 				f := func() func(exit.Code, error) {
 					logging.mu.Lock()

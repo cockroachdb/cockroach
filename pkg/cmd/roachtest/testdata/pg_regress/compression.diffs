@@ -1,0 +1,635 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/compression_1.out --label=/mnt/data1/postgres/src/test/regress/results/compression.out /mnt/data1/postgres/src/test/regress/expected/compression_1.out /mnt/data1/postgres/src/test/regress/results/compression.out
+--- /mnt/data1/postgres/src/test/regress/expected/compression_1.out
++++ /mnt/data1/postgres/src/test/regress/results/compression.out
+@@ -1,356 +1,419 @@
+ \set HIDE_TOAST_COMPRESSION false
+ -- ensure we get stable results regardless of installation's default
+ SET default_toast_compression = 'pglz';
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ -- test creating table with compression method
+ CREATE TABLE cmdata(f1 text COMPRESSION pglz);
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata(f1 text COMPRESSION pglz)
++                            ^
++HINT:  try \h CREATE TABLE
+ CREATE INDEX idx ON cmdata(f1);
++ERROR:  relation "cmdata" does not exist
+ INSERT INTO cmdata VALUES(repeat('1234567890', 1000));
++ERROR:  relation "cmdata" does not exist
+ \d+ cmdata
+-                                        Table "public.cmdata"
+- Column | Type | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+---------+------+-----------+----------+---------+----------+-------------+--------------+-------------
+- f1     | text |           |          |         | extended | pglz        |              | 
+-Indexes:
+-    "idx" btree (f1)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata)$' COLLATE pg_catalog.default
++                                                                      ^
+ CREATE TABLE cmdata1(f1 TEXT COMPRESSION lz4);
+-ERROR:  compression method lz4 not supported
+-DETAIL:  This functionality requires the server to be built with lz4 support.
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata1(f1 TEXT COMPRESSION lz4)
++                             ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO cmdata1 VALUES(repeat('1234567890', 1004));
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: INSERT INTO cmdata1 VALUES(repeat('1234567890', 1004));
+-                    ^
+ \d+ cmdata1
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata1)$' COLLATE pg_catalog.default
++                                                                       ^
+ -- verify stored compression method in the data
+ SELECT pg_column_compression(f1) FROM cmdata;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmdata" does not exist
+ SELECT pg_column_compression(f1) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT pg_column_compression(f1) FROM cmdata1;
+-                                              ^
+ -- decompress data slice
+ SELECT SUBSTR(f1, 200, 5) FROM cmdata;
+- substr 
+---------
+- 01234
+-(1 row)
+-
++ERROR:  relation "cmdata" does not exist
+ SELECT SUBSTR(f1, 2000, 50) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT SUBSTR(f1, 2000, 50) FROM cmdata1;
+-                                         ^
+ -- copy with table creation
+ SELECT * INTO cmmove1 FROM cmdata;
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++SELECT * INTO cmmove1 FROM cmdata
++         ^
+ \d+ cmmove1
+-                                        Table "public.cmmove1"
+- Column | Type | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+---------+------+-----------+----------+---------+----------+-------------+--------------+-------------
+- f1     | text |           |          |         | extended |             |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmmove1)$' COLLATE pg_catalog.default
++                                                                       ^
+ SELECT pg_column_compression(f1) FROM cmmove1;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmmove1" does not exist
+ -- copy to existing table
+ CREATE TABLE cmmove3(f1 text COMPRESSION pglz);
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmmove3(f1 text COMPRESSION pglz)
++                             ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO cmmove3 SELECT * FROM cmdata;
++ERROR:  relation "cmmove3" does not exist
+ INSERT INTO cmmove3 SELECT * FROM cmdata1;
+-ERROR:  relation "cmdata1" does not exist
+-LINE 1: INSERT INTO cmmove3 SELECT * FROM cmdata1;
+-                                          ^
++ERROR:  relation "cmmove3" does not exist
+ SELECT pg_column_compression(f1) FROM cmmove3;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmmove3" does not exist
+ -- test LIKE INCLUDING COMPRESSION
+ CREATE TABLE cmdata2 (LIKE cmdata1 INCLUDING COMPRESSION);
+-ERROR:  relation "cmdata1" does not exist
+-LINE 1: CREATE TABLE cmdata2 (LIKE cmdata1 INCLUDING COMPRESSION);
+-                                   ^
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata2 (LIKE cmdata1 INCLUDING COMPRESSION)
++                                             ^
++HINT:  try \h CREATE TABLE
+ \d+ cmdata2
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ DROP TABLE cmdata2;
+-ERROR:  table "cmdata2" does not exist
++ERROR:  relation "cmdata2" does not exist
+ -- try setting compression for incompressible data type
+ CREATE TABLE cmdata2 (f1 int COMPRESSION pglz);
+-ERROR:  column data type integer does not support compression
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata2 (f1 int COMPRESSION pglz)
++                             ^
++HINT:  try \h CREATE TABLE
+ -- update using datum from different table
+ CREATE TABLE cmmove2(f1 text COMPRESSION pglz);
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmmove2(f1 text COMPRESSION pglz)
++                             ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO cmmove2 VALUES (repeat('1234567890', 1004));
++ERROR:  relation "cmmove2" does not exist
+ SELECT pg_column_compression(f1) FROM cmmove2;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmmove2" does not exist
+ UPDATE cmmove2 SET f1 = cmdata1.f1 FROM cmdata1;
+-ERROR:  relation "cmdata1" does not exist
+-LINE 1: UPDATE cmmove2 SET f1 = cmdata1.f1 FROM cmdata1;
+-                                                ^
++ERROR:  relation "cmmove2" does not exist
+ SELECT pg_column_compression(f1) FROM cmmove2;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmmove2" does not exist
+ -- test externally stored compressed data
+ CREATE OR REPLACE FUNCTION large_val() RETURNS TEXT LANGUAGE SQL AS
+ 'select array_agg(fipshash(g::text))::text from generate_series(1, 256) g';
++ERROR:  unknown function: fipshash()
+ CREATE TABLE cmdata2 (f1 text COMPRESSION pglz);
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata2 (f1 text COMPRESSION pglz)
++                              ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO cmdata2 SELECT large_val() || repeat('a', 4000);
++ERROR:  relation "cmdata2" does not exist
+ SELECT pg_column_compression(f1) FROM cmdata2;
+- pg_column_compression 
+------------------------
+- pglz
+-(1 row)
+-
++ERROR:  relation "cmdata2" does not exist
+ INSERT INTO cmdata1 SELECT large_val() || repeat('a', 4000);
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: INSERT INTO cmdata1 SELECT large_val() || repeat('a', 4000);
+-                    ^
+ SELECT pg_column_compression(f1) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT pg_column_compression(f1) FROM cmdata1;
+-                                              ^
+ SELECT SUBSTR(f1, 200, 5) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT SUBSTR(f1, 200, 5) FROM cmdata1;
+-                                       ^
+ SELECT SUBSTR(f1, 200, 5) FROM cmdata2;
+- substr 
+---------
+- 79026
+-(1 row)
+-
++ERROR:  relation "cmdata2" does not exist
+ DROP TABLE cmdata2;
++ERROR:  relation "cmdata2" does not exist
+ --test column type update varlena/non-varlena
+ CREATE TABLE cmdata2 (f1 int);
+ \d+ cmdata2
+-                                         Table "public.cmdata2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Compression | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
+- f1     | integer |           |          |         | plain   |             |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ ALTER TABLE cmdata2 ALTER COLUMN f1 TYPE varchar;
+ \d+ cmdata2
+-                                              Table "public.cmdata2"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+-------------+--------------+-------------
+- f1     | character varying |           |          |         | extended |             |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ ALTER TABLE cmdata2 ALTER COLUMN f1 TYPE int USING f1::integer;
+ \d+ cmdata2
+-                                         Table "public.cmdata2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Compression | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
+- f1     | integer |           |          |         | plain   |             |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ --changing column storage should not impact the compression method
+ --but the data should not be compressed
+ ALTER TABLE cmdata2 ALTER COLUMN f1 TYPE varchar;
+ ALTER TABLE cmdata2 ALTER COLUMN f1 SET COMPRESSION pglz;
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmdata2 ALTER COLUMN f1 SET COMPRESSION pglz
++                                        ^
++HINT:  try \h ALTER TABLE
+ \d+ cmdata2
+-                                              Table "public.cmdata2"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+-------------+--------------+-------------
+- f1     | character varying |           |          |         | extended | pglz        |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ ALTER TABLE cmdata2 ALTER COLUMN f1 SET STORAGE plain;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmdata2 ALTER COLUMN f1 SET STORAGE plain
++                                        ^
++HINT:  try \h ALTER TABLE
+ \d+ cmdata2
+-                                              Table "public.cmdata2"
+- Column |       Type        | Collation | Nullable | Default | Storage | Compression | Stats target | Description 
+---------+-------------------+-----------+----------+---------+---------+-------------+--------------+-------------
+- f1     | character varying |           |          |         | plain   | pglz        |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ INSERT INTO cmdata2 VALUES (repeat('123456789', 800));
+ SELECT pg_column_compression(f1) FROM cmdata2;
+- pg_column_compression 
+------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_column_compression()
+ -- test compression with materialized view
+ CREATE MATERIALIZED VIEW compressmv(x) AS SELECT * FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: ...TE MATERIALIZED VIEW compressmv(x) AS SELECT * FROM cmdata1;
+-                                                               ^
+ \d+ compressmv
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(compressmv)$' COLLATE pg_catalog.default
++                                                                          ^
+ SELECT pg_column_compression(f1) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT pg_column_compression(f1) FROM cmdata1;
+-                                              ^
+ SELECT pg_column_compression(x) FROM compressmv;
+ ERROR:  relation "compressmv" does not exist
+-LINE 1: SELECT pg_column_compression(x) FROM compressmv;
+-                                             ^
+ -- test compression with partition
+ CREATE TABLE cmpart(f1 text COMPRESSION lz4) PARTITION BY HASH(f1);
+-ERROR:  compression method lz4 not supported
+-DETAIL:  This functionality requires the server to be built with lz4 support.
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmpart(f1 text COMPRESSION lz4) PARTITION BY HASH(f1)
++                            ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE cmpart1 PARTITION OF cmpart FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+-ERROR:  relation "cmpart" does not exist
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmpart1 PARTITION OF cmpart FOR VALUES WITH (MODULUS 2, REMAINDER 0)
++                     ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE cmpart2(f1 text COMPRESSION pglz);
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmpart2(f1 text COMPRESSION pglz)
++                             ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE cmpart ATTACH PARTITION cmpart2 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+-ERROR:  relation "cmpart" does not exist
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmpart ATTACH PARTITION cmpart2 FOR VALUES WITH (MODULUS 2, REMAINDER 1)
++                   ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO cmpart VALUES (repeat('123456789', 1004));
+ ERROR:  relation "cmpart" does not exist
+-LINE 1: INSERT INTO cmpart VALUES (repeat('123456789', 1004));
+-                    ^
+ INSERT INTO cmpart VALUES (repeat('123456789', 4004));
+ ERROR:  relation "cmpart" does not exist
+-LINE 1: INSERT INTO cmpart VALUES (repeat('123456789', 4004));
+-                    ^
+ SELECT pg_column_compression(f1) FROM cmpart1;
+ ERROR:  relation "cmpart1" does not exist
+-LINE 1: SELECT pg_column_compression(f1) FROM cmpart1;
+-                                              ^
+ SELECT pg_column_compression(f1) FROM cmpart2;
+- pg_column_compression 
+------------------------
+-(0 rows)
+-
++ERROR:  relation "cmpart2" does not exist
+ -- test compression with inheritance, error
+ CREATE TABLE cminh() INHERITS(cmdata, cmdata1);
+-ERROR:  relation "cmdata1" does not exist
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE cminh() INHERITS(cmdata, cmdata1)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE cminh(f1 TEXT COMPRESSION lz4) INHERITS(cmdata);
+-NOTICE:  merging column "f1" with inherited definition
+-ERROR:  column "f1" has a compression method conflict
+-DETAIL:  pglz versus lz4
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cminh(f1 TEXT COMPRESSION lz4) INHERITS(cmdata)
++                           ^
++HINT:  try \h CREATE TABLE
+ -- test default_toast_compression GUC
+ SET default_toast_compression = '';
+-ERROR:  invalid value for parameter "default_toast_compression": ""
+-HINT:  Available values: pglz.
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ SET default_toast_compression = 'I do not exist compression';
+-ERROR:  invalid value for parameter "default_toast_compression": "I do not exist compression"
+-HINT:  Available values: pglz.
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ SET default_toast_compression = 'lz4';
+-ERROR:  invalid value for parameter "default_toast_compression": "lz4"
+-HINT:  Available values: pglz.
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ SET default_toast_compression = 'pglz';
++ERROR:  unrecognized configuration parameter "default_toast_compression"
+ -- test alter compression method
+ ALTER TABLE cmdata ALTER COLUMN f1 SET COMPRESSION lz4;
+-ERROR:  compression method lz4 not supported
+-DETAIL:  This functionality requires the server to be built with lz4 support.
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmdata ALTER COLUMN f1 SET COMPRESSION lz4
++                                       ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO cmdata VALUES (repeat('123456789', 4004));
++ERROR:  relation "cmdata" does not exist
+ \d+ cmdata
+-                                        Table "public.cmdata"
+- Column | Type | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+---------+------+-----------+----------+---------+----------+-------------+--------------+-------------
+- f1     | text |           |          |         | extended | pglz        |              | 
+-Indexes:
+-    "idx" btree (f1)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata)$' COLLATE pg_catalog.default
++                                                                      ^
+ SELECT pg_column_compression(f1) FROM cmdata;
+- pg_column_compression 
+------------------------
+- pglz
+- pglz
+-(2 rows)
+-
++ERROR:  relation "cmdata" does not exist
+ ALTER TABLE cmdata2 ALTER COLUMN f1 SET COMPRESSION default;
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmdata2 ALTER COLUMN f1 SET COMPRESSION default
++                                        ^
++HINT:  try \h ALTER TABLE
+ \d+ cmdata2
+-                                              Table "public.cmdata2"
+- Column |       Type        | Collation | Nullable | Default | Storage | Compression | Stats target | Description 
+---------+-------------------+-----------+----------+---------+---------+-------------+--------------+-------------
+- f1     | character varying |           |          |         | plain   |             |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cmdata2)$' COLLATE pg_catalog.default
++                                                                       ^
+ -- test alter compression method for materialized views
+ ALTER MATERIALIZED VIEW compressmv ALTER COLUMN x SET COMPRESSION lz4;
+-ERROR:  relation "compressmv" does not exist
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER MATERIALIZED VIEW compressmv ALTER COLUMN x SET COMPRESSION lz4
++                                   ^
++HINT:  try \h ALTER
+ \d+ compressmv
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(compressmv)$' COLLATE pg_catalog.default
++                                                                          ^
+ -- test alter compression method for partitioned tables
+ ALTER TABLE cmpart1 ALTER COLUMN f1 SET COMPRESSION pglz;
+-ERROR:  relation "cmpart1" does not exist
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmpart1 ALTER COLUMN f1 SET COMPRESSION pglz
++                                        ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE cmpart2 ALTER COLUMN f1 SET COMPRESSION lz4;
+-ERROR:  compression method lz4 not supported
+-DETAIL:  This functionality requires the server to be built with lz4 support.
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE cmpart2 ALTER COLUMN f1 SET COMPRESSION lz4
++                                        ^
++HINT:  try \h ALTER TABLE
+ -- new data should be compressed with the current compression method
+ INSERT INTO cmpart VALUES (repeat('123456789', 1004));
+ ERROR:  relation "cmpart" does not exist
+-LINE 1: INSERT INTO cmpart VALUES (repeat('123456789', 1004));
+-                    ^
+ INSERT INTO cmpart VALUES (repeat('123456789', 4004));
+ ERROR:  relation "cmpart" does not exist
+-LINE 1: INSERT INTO cmpart VALUES (repeat('123456789', 4004));
+-                    ^
+ SELECT pg_column_compression(f1) FROM cmpart1;
+ ERROR:  relation "cmpart1" does not exist
+-LINE 1: SELECT pg_column_compression(f1) FROM cmpart1;
+-                                              ^
+ SELECT pg_column_compression(f1) FROM cmpart2;
+- pg_column_compression 
+------------------------
+-(0 rows)
+-
++ERROR:  relation "cmpart2" does not exist
+ -- VACUUM FULL does not recompress
+ SELECT pg_column_compression(f1) FROM cmdata;
+- pg_column_compression 
+------------------------
+- pglz
+- pglz
+-(2 rows)
+-
++ERROR:  relation "cmdata" does not exist
+ VACUUM FULL cmdata;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM FULL cmdata
++^
+ SELECT pg_column_compression(f1) FROM cmdata;
+- pg_column_compression 
+------------------------
+- pglz
+- pglz
+-(2 rows)
+-
++ERROR:  relation "cmdata" does not exist
+ -- test expression index
+ DROP TABLE cmdata2;
+ CREATE TABLE cmdata2 (f1 TEXT COMPRESSION pglz, f2 TEXT COMPRESSION lz4);
+-ERROR:  compression method lz4 not supported
+-DETAIL:  This functionality requires the server to be built with lz4 support.
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE cmdata2 (f1 TEXT COMPRESSION pglz, f2 TEXT COMPRESSION lz4)
++                              ^
++HINT:  try \h CREATE TABLE
+ CREATE UNIQUE INDEX idx1 ON cmdata2 ((f1 || f2));
+ ERROR:  relation "cmdata2" does not exist
+ INSERT INTO cmdata2 VALUES((SELECT array_agg(fipshash(g::TEXT))::TEXT FROM
+ generate_series(1, 50) g), VERSION());
+ ERROR:  relation "cmdata2" does not exist
+-LINE 1: INSERT INTO cmdata2 VALUES((SELECT array_agg(fipshash(g::TEX...
+-                    ^
+ -- check data is ok
+ SELECT length(f1) FROM cmdata;
+- length 
+---------
+-  10000
+-  36036
+-(2 rows)
+-
++ERROR:  relation "cmdata" does not exist
+ SELECT length(f1) FROM cmdata1;
+ ERROR:  relation "cmdata1" does not exist
+-LINE 1: SELECT length(f1) FROM cmdata1;
+-                               ^
+ SELECT length(f1) FROM cmmove1;
+- length 
+---------
+-  10000
+-(1 row)
+-
++ERROR:  relation "cmmove1" does not exist
+ SELECT length(f1) FROM cmmove2;
+- length 
+---------
+-  10040
+-(1 row)
+-
++ERROR:  relation "cmmove2" does not exist
+ SELECT length(f1) FROM cmmove3;
+- length 
+---------
+-  10000
+-(1 row)
+-
++ERROR:  relation "cmmove3" does not exist
+ CREATE TABLE badcompresstbl (a text COMPRESSION I_Do_Not_Exist_Compression); -- fails
+-ERROR:  invalid compression method "i_do_not_exist_compression"
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++CREATE TABLE badcompresstbl (a text COMPRESSION I_Do_Not_Exist_Compression)
++                                    ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE badcompresstbl (a text);
+ ALTER TABLE badcompresstbl ALTER a SET COMPRESSION I_Do_Not_Exist_Compression; -- fails
+-ERROR:  invalid compression method "i_do_not_exist_compression"
++ERROR:  at or near "compression": syntax error
++DETAIL:  source SQL:
++ALTER TABLE badcompresstbl ALTER a SET COMPRESSION I_Do_Not_Exist_Compression
++                                       ^
++HINT:  try \h ALTER TABLE
+ DROP TABLE badcompresstbl;
+ \set HIDE_TOAST_COMPRESSION true

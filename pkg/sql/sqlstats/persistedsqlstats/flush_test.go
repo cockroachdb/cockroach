@@ -7,12 +7,13 @@ package persistedsqlstats_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -105,8 +108,11 @@ func TestSQLStatsFlush(t *testing.T) {
 	// pollute the in-memory stats of the other 2 servers.
 	observerConn := sqlutils.MakeSQLRunner(testCluster.Server(2).SQLConn(t))
 
-	firstServerSQLStats := firstServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-	secondServerSQLStats := secondServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	firstServerSQLStats := firstServer.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	secondServerSQLStats := secondServer.SQLServer().(*sql.Server).GetSQLStatsProvider()
+
+	firstServerLocalSS := firstServer.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+	secondServerLocalSS := secondServer.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
 
 	firstSQLConn.Exec(t, "SET application_name = 'flush_unit_test'")
 	secondSQLConn.Exec(t, "SET application_name = 'flush_unit_test'")
@@ -119,14 +125,14 @@ func TestSQLStatsFlush(t *testing.T) {
 			}
 		}
 
-		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		firstServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -150,14 +156,14 @@ func TestSQLStatsFlush(t *testing.T) {
 				firstSQLConn.Exec(t, testQueries[i].query)
 			}
 		}
-		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		firstServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -181,14 +187,14 @@ func TestSQLStatsFlush(t *testing.T) {
 				firstSQLConn.Exec(t, tc.query)
 			}
 		}
-		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsCorrectness(t, testQueries, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		firstServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		sqlInstanceId := base.SQLInstanceID(0)
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
@@ -209,14 +215,14 @@ func TestSQLStatsFlush(t *testing.T) {
 				secondSQLConn.Exec(t, tc.query)
 			}
 		}
-		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
-		verifyInMemoryStatsCorrectness(t, testQueries, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerLocalSS)
+		verifyInMemoryStatsCorrectness(t, testQueries, secondServerLocalSS)
 
 		firstServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(0).AppStopper())
 		secondServerSQLStats.MaybeFlush(ctx, testCluster.ApplicationLayer(1).AppStopper())
 
-		verifyInMemoryStatsEmpty(t, firstServerSQLStats)
-		verifyInMemoryStatsEmpty(t, secondServerSQLStats)
+		verifyInMemoryStatsEmpty(t, firstServerLocalSS)
+		verifyInMemoryStatsEmpty(t, secondServerLocalSS)
 
 		if sqlstats.GatewayNodeEnabled.Get(&testCluster.Server(0).ClusterSettings().SV) {
 			// Ensure that we encode the correct node_id for the new entry and did not
@@ -248,7 +254,7 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	initialNextFlushAt := s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).GetNextFlushAt()
+		GetSQLStatsProvider().GetNextFlushAt()
 
 	// Since we introduced jitter in our flush interval, the next flush time
 	// is not entirely deterministic. However, we can still have an upperbound
@@ -347,7 +353,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	sqlConn.Exec(t, "SELECT 1")
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -364,7 +370,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	// Since by default, the minimum flush interval is 10 minutes, a subsequent
 	// flush should be no-op.
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -383,7 +389,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	fakeTime.setTime(fakeTime.Now().Add(time.Hour))
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*) > 1
@@ -425,7 +431,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		`, [][]string{{"1"}})
 
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+			GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -457,7 +463,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		// First flush should flush everything into the system tables.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+			GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -476,7 +482,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		// Second flush should be aborted due to violating the minimum flush
 		// interval requirement. Though the data should still remain in-memory.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+			GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -520,7 +526,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_enabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	verifyNodeID(t, sqlConn, "SELECT _", true, "gateway_enabled")
 
@@ -530,7 +536,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_disabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, s.AppStopper())
+		GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
 }
@@ -559,7 +565,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	// 1. Flush then count to get the initial number of rows.
 	pss.MaybeFlush(ctx, s.AppStopper())
@@ -660,7 +666,7 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 	sqlConn.Exec(t, `INSERT INTO system.users VALUES ('node', NULL, true, 3); GRANT node TO root`)
 	waitForFollowerReadTimestamp(t, sqlConn)
-	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	// It should be false since nothing has flushed. The table will be empty.
 	limitReached, err := pss.StmtsLimitSizeReached(ctx)
@@ -749,21 +755,15 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	sqlConn.Exec(t, "COMMIT")
 }
 
-func TestSQLStatsPlanSampling(t *testing.T) {
+func TestSQLStatsStmtSampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stubTime := &stubTime{}
-	setTime := func(inputTime string) {
-		parsedTime, err := time.Parse(time.RFC3339, inputTime)
-		require.NoError(t, err)
-		stubTime.setTime(parsedTime)
-	}
-
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
-	sqlStatsKnobs.StubTimeNow = stubTime.Now
 	var params base.TestServerArgs
 	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
+	// We need to disable probabilistic sampling to ensure that this test is deterministic.
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{DisableProbabilisticSampling: true}
 
 	ctx := context.Background()
 	srv, conn, _ := serverutils.StartServer(t, params)
@@ -777,84 +777,56 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 	appName := fmt.Sprintf("TestSQLStatsPlanSampling_%s", uuid.MakeV4().String())
 	sqlRun.Exec(t, "SET application_name = $1", appName)
 
-	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	appStats := sqlStats.GetApplicationStats(appName)
 
-	sqlRun.Exec(t, `SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
-	sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;`)
+	checkSampled := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
 
-	validateSample := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool, expectedSavePlanForStatsState bool) {
-
-		previouslySampled, savePlanForStats := appStats.ShouldSample(
+		previouslySampled := appStats.StatementSampled(
 			fingerprint,
 			implicitTxn,
 			dbName,
 		)
 
-		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t, exptected save plan: %t actual save plan: %t\n",
-			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled, expectedSavePlanForStatsState, savePlanForStats)
-		require.Equal(t, expectedSavePlanForStatsState, savePlanForStats, errMessage)
+		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t\n",
+			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled)
 		require.Equal(t, expectedPreviouslySampledState, previouslySampled, errMessage)
 	}
 
-	setTime("2021-09-20T15:00:00Z")
+	t.Run("sampling off", func(t *testing.T) {
+		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;`)
+		// If the sampling rate is 0, we shouldn't trace any statements for sql stats.
+		sqlRun.Exec(t, "SELECT 1")
+		sqlRun.Exec(t, "SELECT 1, 2")
+		checkSampled("SELECT 1", true /* implicitTxn */, false /* sampled */)
+		checkSampled("SELECT 1, 2", true /* implicitTxn */, false /* sampled */)
+		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
+	})
 
-	// Logical plan should be sampled here, since we have not collected logical plan
-	// at all.
-	validateSample("SELECT _", true, false, true)
+	t.Run("sampling on", func(t *testing.T) {
+		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
+		// To start, we should not have any statements sampled.
+		checkSampled("SELECT _", true /* implicit */, false /* sampled */)
+		checkSampled("SELECT _, _", true /* implicit */, false /* sampled */)
+		// Execute each of the above statements to trigger a trace. We
+		// trace all statements the app hasn't seen before.
+		sqlRun.Exec(t, "SELECT 1")
+		sqlRun.Exec(t, "SELECT 1, 2")
+		checkSampled("SELECT _", true /* implicit */, true /* sampled */)
+		checkSampled("SELECT _, _", true /* implicit */, true /* sampled */)
 
-	// Execute the query to trigger a collection of logical plan.
-	// (db_name=defaultdb implicitTxn=true fingerprint=SELECT _)
-	_, err := conn.ExecContext(ctx, "SELECT 1")
-	require.NoError(t, err)
+		// Now we'll execute each of the above statements again in explicit transactions.
+		// These should be treated as new statements and should be sampled.
+		checkSampled("SELECT _", false /* implicit */, false /* sampled */)
+		checkSampled("SELECT _, _", false /* implicit */, false /* sampled */)
 
-	// Ensure that if a query is to be subsequently executed, it will not cause
-	// logical plan sampling.
-	validateSample("SELECT _", true, true, false)
+		sqlRun.Exec(t, "BEGIN; SELECT 1; COMMIT;")
+		sqlRun.Exec(t, "BEGIN; SELECT 1, 2; COMMIT;")
 
-	// However, if we are to execute the same statement but under explicit
-	// transaction, the plan will still need to be sampled.
-	validateSample("SELECT _", false, false, true)
+		checkSampled("SELECT _", false /* implicit */, true /* sampled */)
+		checkSampled("SELECT _, _", false /* implicit */, true /* sampled */)
+	})
 
-	// Execute the statement under explicit transaction.
-	// (db_name=defaultdb implicitTxn=false fingerprint=SELECT _)
-	tx, err := conn.BeginTx(ctx, &gosql.TxOptions{})
-	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, "SELECT 1")
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
-
-	// Ensure that the subsequent execution of the query will not cause logical plan
-	// collection.
-	validateSample("SELECT _", false, true, false)
-
-	// Set the time to the future and ensure we will resample the logical plan.
-	setTime("2021-09-20T15:05:01Z")
-
-	// If tracing is not enabled the statement will not be sampled. To update the
-	// save plan for stats last sampled time the statement must have tracing enabled.
-	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;")
-	require.NoError(t, err)
-
-	validateSample("SELECT _", true, true, true)
-
-	// implicit txn
-	_, err = conn.ExecContext(ctx, "SELECT 1")
-	require.NoError(t, err)
-	validateSample("SELECT _", true, true, false)
-
-	// explicit txn
-	validateSample("SELECT _", false, true, true)
-
-	tx, err = conn.BeginTx(ctx, &gosql.TxOptions{})
-	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, "SELECT 1")
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
-
-	// Ensure that the subsequent execution of the query will not cause logical plan
-	// collection.
-	validateSample("SELECT _", false, true, false)
 }
 
 func TestPersistedSQLStats_Flush(t *testing.T) {
@@ -886,17 +858,18 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					ConsumeStmtStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedStatementStatistics) error {
-						if stats.Key.App == appName {
-							flushedStmtStats++
+					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, aggregatedTs time.Time, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
+						for _, stmt := range stmtStats {
+							if stmt.Key.App == appName {
+								flushedStmtStats++
+							}
 						}
-						return nil
-					},
-					ConsumeTxnStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedTransactionStatistics) error {
-						if stats.App == appName {
-							flushedTxnStats++
+
+						for _, txn := range txnStats {
+							if txn.App == appName {
+								flushedTxnStats++
+							}
 						}
-						return nil
 					},
 					OnAfterClear: func() {
 						if init.Load() {
@@ -915,8 +888,8 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 		sqlConn.Exec(t,
 			"SET CLUSTER SETTING sql.stats.limit_table_size.enabled = 'false'")
 
-		sqlStats := srv.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-
+		sqlStats := srv.ApplicationLayer().SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+		pss := srv.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider()
 		{
 			// Add some stats for the first time. It should add one stmt and one txn stats to in-memory sql stats cache.
 			// Add stmt stats.
@@ -938,7 +911,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 
 		init.Store(true)
 		// Flush all available stats.
-		sqlStats.MaybeFlush(ctx, srv.AppStopper())
+		pss.MaybeFlush(ctx, srv.AppStopper())
 
 		require.Equal(t, 1, flushedStmtStats)
 		require.Equal(t, 1, flushedTxnStats)
@@ -967,7 +940,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 
 		// Flush all stats again. This time it should flush all of the stats that happen to be collected right
 		// before SQLStats.
-		sqlStats.MaybeFlush(ctx, srv.AppStopper())
+		pss.MaybeFlush(ctx, srv.AppStopper())
 
 		require.Equal(t, 2, flushedStmtStats)
 		require.Equal(t, 2, flushedTxnStats)
@@ -995,7 +968,6 @@ func (s *stubTime) getAggTimeTs() time.Time {
 	return s.t.Truncate(s.aggInterval)
 }
 
-// Now implements the testing knob interface for persistedsqlstats.Provider.
 func (s *stubTime) Now() time.Time {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
@@ -1094,11 +1066,9 @@ GROUP BY
 	require.Equal(t, expectedTxnEntryCnt, numOfInsertedTxnEntry, "fingerprint: %s", fingerprint)
 }
 
-func verifyInMemoryStatsCorrectness(
-	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
-) {
+func verifyInMemoryStatsCorrectness(t *testing.T, tcs []testCase, statsProvider *sslocal.SQLStats) {
 	for _, tc := range tcs {
-		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		err := statsProvider.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			if tc.stmtNoConst == statistics.Key.Query {
 				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.stmtNoConst)
 			}
@@ -1121,12 +1091,12 @@ func verifyInMemoryStatsCorrectness(
 	}
 }
 
-func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *persistedsqlstats.PersistedSQLStats) {
+func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *sslocal.SQLStats) {
 	// We could be inserting internal statements in the background, so we only check
 	// that we have no user queries left in the container.
 	fingerprintCount := statsProvider.GetTotalFingerprintCount()
 	var count int64
-	err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{},
+	err := statsProvider.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			// We should have cleared the sql stats containers on flush.
 			if statistics.Key.App != "" && !strings.HasPrefix(statistics.Key.App, catconstants.InternalAppNamePrefix) {
@@ -1138,7 +1108,7 @@ func verifyInMemoryStatsEmpty(t *testing.T, statsProvider *persistedsqlstats.Per
 		})
 	require.NoError(t, err)
 
-	err = statsProvider.SQLStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{},
+	err = statsProvider.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			// We should have cleared the sql stats containers on flush.
 			if statistics.App != "" && !strings.HasPrefix(statistics.App, catconstants.InternalAppNamePrefix) {
@@ -1243,7 +1213,7 @@ func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	ss := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	ss := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetSQLStatsProvider()
 	flushDoneCh := make(chan struct{})
 	ss.SetFlushDoneSignalCh(flushDoneCh)
 
@@ -1273,7 +1243,7 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	ctx := context.Background()
 	defer ts.Stopper().Stop(ctx)
 
-	ss := ts.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	ss := ts.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider()
 	flushDoneCh := make(chan struct{})
 	ss.SetFlushDoneSignalCh(flushDoneCh)
 
@@ -1289,6 +1259,43 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	}
 }
 
+type gen struct {
+	syncutil.Mutex
+
+	in  []string
+	rng *rand.Rand
+}
+
+func (g *gen) Next() string {
+	g.Lock()
+	defer g.Unlock()
+
+	g.shuffleLocked()
+
+	s := strings.Join(g.in, ", ")
+	return fmt.Sprintf(`
+		INSERT INTO sql_stats_workload
+		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, s)
+}
+
+func (g *gen) shuffleLocked() {
+	g.rng.Shuffle(len(g.in), func(i, j int) {
+		g.in[i], g.in[j] = g.in[j], g.in[i]
+	})
+}
+
+func genPermutations() *gen {
+	rng, _ := randutil.NewPseudoRand()
+	return &gen{
+		rng: rng,
+		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
+	}
+}
+
+// BenchmarkSQLStatsFlush benchmarks the performance of flushing SQL stats. It
+// runs the benchmark for clusters of various sizes and various fingerprint
+// cardinality.
 func BenchmarkSQLStatsFlush(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -1296,29 +1303,78 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 		aggInterval: time.Hour,
 	}
 	fakeTime.setTime(timeutil.Now())
-	ts, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				StubTimeNow: fakeTime.Now,
+	testutils.RunValues(b, "clusterSize", []int{1, 3, 6}, func(b *testing.B, numNodes int) {
+		tc := serverutils.StartCluster(b, numNodes, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						StubTimeNow: fakeTime.Now,
+					},
+				},
 			},
-		},
-	},
-	)
-	defer ts.Stop(context.Background())
-
-	sqlStats := ts.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-	runner := sqlutils.MakeSQLRunner(conn)
-
-	ctx := context.Background()
-	const QueryCountScale = int64(5000)
-	for iter := 0; iter < b.N; iter++ {
-		for _, tc := range testQueries {
-			for i := int64(0); i < QueryCountScale; i++ {
-				runner.Exec(b, tc.query)
-			}
+		})
+		defer tc.Stopper().Stop(context.Background())
+		ts := tc.Server(0)
+		conn := ts.SQLConn(b)
+		cp := []*sqlutils.SQLRunner{}
+		for i := range tc.NumServers() {
+			cp = append(cp, sqlutils.MakeSQLRunner(tc.Server(i).SQLConn(b)))
 		}
-		b.StartTimer()
-		sqlStats.MaybeFlush(ctx, ts.Stopper())
-		b.StartTimer()
-	}
+
+		runner := sqlutils.MakeSQLRunner(conn)
+		rng, _ := randutil.NewPseudoRand()
+
+		runner.Exec(b, `CREATE TABLE sql_stats_workload (
+		id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+		col1 INT,
+		col2 INT,
+		col3 INT,
+		col4 INT,
+		col5 INT,
+		col6 INT,
+		col7 INT,
+		col8 INT,
+		col9 INT,
+		col10 INT
+	)`)
+
+		gen := genPermutations()
+
+		testutils.RunValues(b, "fingerprintCardinality", []int64{10, 100, 1000, 7000}, func(b *testing.B, uniqueFingerprintCount int64) {
+			ctx := context.Background()
+			for iter := 0; iter < b.N; iter++ {
+				for i := int64(0); i < uniqueFingerprintCount; i++ {
+					query := gen.Next()
+					// Each query is executed on every node in the cluster to
+					// simulate a distributed workload where every query has
+					// been executed on every node at least once.
+					for _, c := range cp {
+						c.Exec(b, query, rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
+					}
+				}
+				b.StartTimer()
+				var wg sync.WaitGroup
+				wg.Add(tc.NumServers())
+				// Flush sql stats on all nodes in the cluster in parallel,
+				// simulating a real-world scenario where stats are flushed
+				// at the same time.
+				for i := range tc.NumServers() {
+					s := tc.Server(i)
+					provider := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+					provider.MaybeFlush(ctx, s.Stopper())
+					wg.Done()
+				}
+				b.StopTimer()
+				// Assert that the number of fingerprints in the system tables
+				// are greater than or equal to the number of unique fingerprints.
+				row := runner.QueryRow(b, "select count(distinct fingerprint_id) from system.statement_statistics;")
+				var fingerprints int64
+				row.Scan(&fingerprints)
+				require.GreaterOrEqual(b, fingerprints, uniqueFingerprintCount)
+				// Reset sql stats on all nodes before next iteration.
+				_, err := ts.ApplicationLayer().GetStatusClient(b).ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{ResetPersistedStats: true})
+				require.NoError(b, err)
+			}
+		})
+	})
 }

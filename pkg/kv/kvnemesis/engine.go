@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -55,7 +56,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 		// this low-level iterator, so we don't have to implement it manually
 		// a second time.
 		RangeKeyMasking: pebble.RangeKeyMasking{
-			Suffix: storage.EncodeMVCCTimestampSuffix(ts),
+			Suffix: mvccencoding.EncodeMVCCTimestampSuffix(ts),
 		},
 	}
 	iter, err := e.kvs.NewIter(&opts)
@@ -114,7 +115,7 @@ func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 }
 
 func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte) {
-	suffix := storage.EncodeMVCCTimestampSuffix(ts)
+	suffix := mvccencoding.EncodeMVCCTimestampSuffix(ts)
 	err := e.kvs.RangeKeySet(
 		storage.EngineKey{Key: from}.Encode(), storage.EngineKey{Key: to}.Encode(), suffix, val, nil)
 	if err != nil {
@@ -155,7 +156,7 @@ func (e *Engine) Iterate(
 			e.b, keyCopy = e.b.Copy(keyCopy, 0 /* extraCap */)
 			e.b, endKeyCopy = e.b.Copy(endKeyCopy, 0 /* extraCap */)
 			for _, rk := range iter.RangeKeys() {
-				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					fn(nil, nil, hlc.Timestamp{}, nil, err)
 					continue

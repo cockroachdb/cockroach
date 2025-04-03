@@ -104,7 +104,7 @@ type ShowBackup struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowBackup) Format(ctx *FmtCtx) {
-	if node.InCollection != nil && node.Path == nil {
+	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
 		return
@@ -124,13 +124,10 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FROM ")
 	}
 
-	if node.InCollection != nil {
-		ctx.FormatNode(node.Path)
-		ctx.WriteString(" IN ")
-		ctx.FormatURIs(node.InCollection)
-	} else {
-		ctx.FormatURI(node.Path)
-	}
+	ctx.FormatNode(node.Path)
+	ctx.WriteString(" IN ")
+	ctx.FormatURIs(node.InCollection)
+
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
@@ -811,6 +808,10 @@ type ShowCreateFormatOption int
 const (
 	ShowCreateFormatOptionNone ShowCreateFormatOption = iota
 	ShowCreateFormatOptionRedactedValues
+	ShowCreateFormatOptionIgnoreFKs
+	// TODO(yuzefovich): consider adding an option that both has redacted values
+	// and ignores the FKs. This will require addition of a new column to
+	// crdb_internal.create_statements virtual table.
 )
 
 // ShowCreate represents a SHOW CREATE statement.
@@ -837,6 +838,8 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	switch node.FmtOpt {
 	case ShowCreateFormatOptionRedactedValues:
 		ctx.WriteString(" WITH REDACT")
+	case ShowCreateFormatOptionIgnoreFKs:
+		ctx.WriteString(" WITH IGNORE_FOREIGN_KEYS")
 	}
 }
 

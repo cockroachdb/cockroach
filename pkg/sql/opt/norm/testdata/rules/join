@@ -10,7 +10,7 @@ CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 ----
 
 exec-ddl
-CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, UNIQUE (x,z))
+CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, INDEX (y), UNIQUE (x,z))
 ----
 
 exec-ddl
@@ -1926,31 +1926,31 @@ inner-join (hash)
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2 ON a.f=a2.f
 ----
-inner-join (hash)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,8)
- ├── fd: (8)-->(9-12), (1)-->(2-5), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (3)==(10,17), (10)==(3,17), (17)==(3,10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
- ├── project
- │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
- │    ├── key: (8)
- │    ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(17), (17)==(10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
+ ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10,17), (10)==(3,17), (17)==(3,10), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
+ ├── inner-join (hash)
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    ├── key: (1,8)
+ │    ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10), (10)==(3)
  │    ├── scan a
  │    │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9-12)
- │    └── projections
- │         ├── a.k:8 [as=a2.k:15, outer=(8)]
- │         ├── a.i:9 [as=a2.i:16, outer=(9)]
- │         ├── a.f:10 [as=a2.f:17, outer=(10)]
- │         ├── a.s:11 [as=a2.s:18, outer=(11)]
- │         └── a.j:12 [as=a2.j:19, outer=(12)]
- ├── scan a
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── a.f:3 = a.f:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+ │    ├── scan a
+ │    │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── a.f:3 = a.f:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+ └── projections
+      ├── a.k:8 [as=a2.k:15, outer=(8)]
+      ├── a.i:9 [as=a2.i:16, outer=(9)]
+      ├── a.f:10 [as=a2.f:17, outer=(10)]
+      ├── a.s:11 [as=a2.s:18, outer=(11)]
+      └── a.j:12 [as=a2.j:19, outer=(12)]
 
 # Left joins on a foreign key turn into inner joins.
 norm expect=SimplifyLeftJoin
@@ -2715,6 +2715,169 @@ project
       └── filters
            └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
+# Case with column-remapping projections.
+exprnorm expect=HoistJoinProjectRight
+(Root
+  (InnerJoin
+    (Scan [ (Table "a") (Cols "k") ])
+    (Project
+      (Scan [ (Table "c") (Cols "x") ])
+      [
+        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
+        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
+      ]
+      ""
+    )
+    [
+      (Eq (Var "foo") (Const 20 "int"))
+      (Eq (Var "foo") (Var "bar"))
+    ]
+    []
+  )
+  (Presentation "foo,bar")
+  (NoOrdering)
+)
+----
+project
+ ├── columns: foo:13!null bar:14!null  [hidden: k:1!null]
+ ├── key: (1)
+ ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null x:8!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(8)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── select
+ │    │    ├── columns: x:8!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan c
+ │    │    │    ├── columns: x:8!null
+ │    │    │    └── key: (8)
+ │    │    └── filters
+ │    │         └── x:8 = 20 [outer=(8), constraints=(/8: [/20 - /20]; tight), fd=()-->(8)]
+ │    └── filters (true)
+ └── projections
+      ├── x:8 [as=foo:13, outer=(8)]
+      └── x:8 [as=bar:14, outer=(8)]
+
+# No-opt because the column types aren't identical.
+exprnorm expect-not=HoistJoinProjectRight format=show-types
+(Root
+  (InnerJoin
+    (Scan [ (Table "a") (Cols "k") ])
+    (Project
+      (Scan [ (Table "c") (Cols "x") ])
+      [
+        (ProjectionsItem (Var "x") (NewColumn "foo" "int2"))
+        (ProjectionsItem (Var "x") (NewColumn "bar" "int4"))
+      ]
+      ""
+    )
+    [
+      (Eq (Var "foo") (Const 20 "int"))
+      (Eq (Var "foo") (Var "bar"))
+    ]
+    []
+  )
+  (Presentation "foo,bar")
+  (NoOrdering)
+)
+----
+inner-join (cross)
+ ├── columns: foo:13(int2!null) bar:14(int4!null)  [hidden: k:1(int!null)]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ ├── project
+ │    ├── columns: foo:13(int2!null) bar:14(int4!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
+ │    ├── select
+ │    │    ├── columns: x:8(int!null)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan c
+ │    │    │    ├── columns: x:8(int!null)
+ │    │    │    └── key: (8)
+ │    │    └── filters
+ │    │         └── x:8 = 20 [type=bool, outer=(8), constraints=(/8: [/20 - /20]; tight), fd=()-->(8)]
+ │    └── projections
+ │         ├── x:8 [as=foo:13, type=int, outer=(8)]
+ │         └── x:8 [as=bar:14, type=int, outer=(8)]
+ └── filters (true)
+
+# No-op case because the projection is not a simple column remapping.
+norm expect-not=HoistJoinProjectRight
+SELECT * FROM a INNER JOIN (SELECT x, (x + y * 2) AS foo FROM b) ON foo=k WHERE x=10
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null foo:12!null
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-5,8,12), (1)==(12), (12)==(1)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── project
+ │    ├── columns: foo:12 x:8!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(8,12)
+ │    ├── select
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8,9)
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── x:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+ │    └── projections
+ │         └── x:8 + (y:9 * 2) [as=foo:12, outer=(8,9), immutable]
+ └── filters
+      └── foo:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+
+# Regression test for #142251. Move the Project left by join elimination out
+# of the way so that a lookup join can be planned.
+opt expect=HoistJoinProjectRight
+SELECT * FROM b LEFT LOOKUP JOIN (
+  SELECT c.x, a.k FROM c LEFT JOIN a ON c.y = a.k
+) foo ON b.x = foo.k
+----
+project
+ ├── columns: x:1!null y:2 x:5 k:10
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(10)
+ ├── left-join (lookup c@c_y_idx)
+ │    ├── columns: b.x:1!null b.y:2 c.x:5 c.y:6
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [6]
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2), (5)-->(6)
+ │    ├── scan b
+ │    │    ├── columns: b.x:1!null b.y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters (true)
+ └── projections
+      └── c.y:6 [as=k:10, outer=(6)]
+
 # --------------------------------------------------
 # HoistJoinProjectLeft
 # --------------------------------------------------
@@ -2778,6 +2941,157 @@ project
       │    └── fd: (5)-->(6-9)
       └── filters
            └── x:1 = k:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# Case with column-remapping projections.
+exprnorm expect=HoistJoinProjectLeft
+(Root
+  (InnerJoin
+    (Project
+      (Scan [ (Table "c") (Cols "x") ])
+      [
+        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
+        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
+      ]
+      ""
+    )
+    (Scan [ (Table "a") (Cols "k") ])
+    [
+      (Eq (Var "foo") (Const 20 "int"))
+      (Eq (Var "foo") (Var "bar"))
+    ]
+    []
+  )
+  (Presentation "foo,bar")
+  (NoOrdering)
+)
+----
+project
+ ├── columns: foo:6!null bar:7!null  [hidden: k:8!null]
+ ├── key: (8)
+ ├── fd: ()-->(6,7), (6)==(7), (7)==(6)
+ ├── inner-join (cross)
+ │    ├── columns: x:1!null k:8!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    ├── key: (8)
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── columns: x:1!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── scan c
+ │    │    │    ├── columns: x:1!null
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         └── x:1 = 20 [outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
+ │    ├── scan a
+ │    │    ├── columns: k:8!null
+ │    │    └── key: (8)
+ │    └── filters (true)
+ └── projections
+      ├── x:1 [as=foo:6, outer=(1)]
+      └── x:1 [as=bar:7, outer=(1)]
+
+# No-op case because the projection is not a simple column remapping.
+norm expect-not=HoistJoinProjectLeft
+SELECT * FROM (SELECT x, (x + y * 2) AS foo FROM b) INNER JOIN a ON foo=k WHERE x=10
+----
+inner-join (hash)
+ ├── columns: x:1!null foo:5!null k:6!null i:7 f:8!null s:9 j:10
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,5-10), (5)==(6), (6)==(5)
+ ├── project
+ │    ├── columns: foo:5 x:1!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,5)
+ │    ├── select
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan b
+ │    │    │    ├── columns: x:1!null y:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── x:1 = 10 [outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+ │    └── projections
+ │         └── x:1 + (y:2 * 2) [as=foo:5, outer=(1,2), immutable]
+ ├── scan a
+ │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-10)
+ └── filters
+      └── foo:5 = k:6 [outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+
+# No-op case because the right input of the join references the projected
+# column. This is not an issue for HoistJoinProjectRight because references
+# from the left to the right input of the join are not allowed.
+exprnorm expect-not=HoistJoinProjectLeft disable=TryDecorrelateSelect
+(Root
+  (InnerJoinApply
+    (Project
+      (Scan [ (Table "c") (Cols "x,z") ])
+      [
+        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
+        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
+        (ProjectionsItem (Var "z") (NewColumn "baz" "int"))
+      ]
+      ""
+    )
+    (Select (Scan [ (Table "a") (Cols "k") ]) [ (Eq (Var "k") (Var "baz")) ])
+    [
+      (Eq (Var "foo") (Const 20 "int"))
+      (Eq (Var "foo") (Var "bar"))
+    ]
+    []
+  )
+  (Presentation "foo,bar,baz")
+  (NoOrdering)
+)
+----
+inner-join-apply
+ ├── columns: foo:6!null bar:7!null baz:8!null  [hidden: k:9!null]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6-9), (6)==(7), (7)==(6)
+ ├── project
+ │    ├── columns: foo:6!null bar:7!null baz:8!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6-8), (6)==(7), (7)==(6)
+ │    ├── select
+ │    │    ├── columns: x:1!null z:3!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,3)
+ │    │    ├── scan c
+ │    │    │    ├── columns: x:1!null z:3!null
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(3)
+ │    │    └── filters
+ │    │         └── x:1 = 20 [outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
+ │    └── projections
+ │         ├── x:1 [as=foo:6, outer=(1)]
+ │         ├── x:1 [as=bar:7, outer=(1)]
+ │         └── z:3 [as=baz:8, outer=(3)]
+ ├── select
+ │    ├── columns: k:9!null
+ │    ├── outer: (8)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(9)
+ │    ├── scan a
+ │    │    ├── columns: k:9!null
+ │    │    └── key: (9)
+ │    └── filters
+ │         └── k:9 = baz:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+ └── filters (true)
 
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality

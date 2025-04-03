@@ -11,7 +11,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -27,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -105,9 +106,10 @@ type RowHelper struct {
 	// Used to hold the row being written while writing tombstones.
 	tmpRow []tree.Datum
 
+	sd *sessiondata.SessionData
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
-	internal                     bool
 	metrics                      *rowinfra.Metrics
 }
 
@@ -116,8 +118,8 @@ func NewRowHelper(
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	uniqueWithTombstoneIndexes []catalog.Index,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
 	var uniqueWithTombstoneIndexesSet intsets.Fast
@@ -129,7 +131,7 @@ func NewRowHelper(
 		TableDesc:                  desc,
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
-		internal:                   internal,
+		sd:                         sd,
 		metrics:                    metrics,
 	}
 
@@ -156,6 +158,7 @@ func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (
@@ -167,7 +170,9 @@ func (rh *RowHelper) encodeIndexes(
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(
+		ctx, colIDtoRowPosition, values, vh, ignoreIndexes, includeEmpty,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,7 +245,7 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 	if !index.IsUnique() {
 		return nil, errors.AssertionFailedf("Expected index %s to be unique", index.GetName())
 	}
-	if index.GetType() != descpb.IndexDescriptor_FORWARD {
+	if index.GetType() != idxtype.FORWARD {
 		return nil, errors.AssertionFailedf("Expected index %s to be a forward index", index.GetName())
 	}
 
@@ -271,7 +276,15 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 			}
 			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
 		} else {
-			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(
+				ctx,
+				rh.Codec,
+				rh.TableDesc,
+				index,
+				colIDtoRowPosition,
+				values,
+				rowenc.EmptyVectorIndexEncodingHelper, /* we only place tombstones for forward indexes */
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -302,6 +315,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
@@ -317,7 +331,16 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(
+				ctx,
+				rh.Codec,
+				rh.TableDesc,
+				index,
+				colIDtoRowPosition,
+				values,
+				vh,
+				includeEmpty,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -411,7 +434,7 @@ func (rh *RowHelper) CheckRowSize(
 		FamilyID:   uint32(family),
 		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
 	}
-	if rh.internal && shouldErr {
+	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
 		shouldErr = false
 		shouldLog = true
@@ -421,7 +444,7 @@ func (rh *RowHelper) CheckRowSize(
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
 		var event logpb.EventPayload
-		if rh.internal {
+		if rh.sd.Internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
@@ -442,41 +465,71 @@ var deleteEncoding protoutil.Message = &rowencpb.IndexValueWrapper{
 	Deleted: true,
 }
 
-func (rh *RowHelper) deleteIndexEntry(
+func delFn(
 	ctx context.Context,
-	batch *kv.Batch,
-	index catalog.Index,
-	valDirs []encoding.Direction,
-	entry *rowenc.IndexEntry,
+	b Putter,
+	key *roachpb.Key,
+	needsLock bool,
 	traceKV bool,
-) error {
-	if index.UseDeletePreservingEncoding() {
+	keyEncodingDirs []encoding.Direction,
+) {
+	if needsLock {
 		if traceKV {
-			log.VEventf(ctx, 2, "Put (delete) %s", entry.Key)
-		}
-
-		batch.Put(entry.Key, deleteEncoding)
-	} else {
-		if traceKV {
-			if valDirs != nil {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(valDirs, entry.Key))
+			if keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del (locking) %s", keys.PrettyPrint(keyEncodingDirs, *key))
 			} else {
-				log.VEventf(ctx, 2, "Del %s", entry.Key)
+				log.VEventf(ctx, 2, "Del (locking) %s", *key)
 			}
 		}
+		b.DelMustAcquireExclusiveLock(key)
+	} else {
+		if traceKV {
+			if keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
+			} else {
+				log.VEventf(ctx, 2, "Del %s", *key)
+			}
+		}
+		b.Del(key)
+	}
+}
 
-		batch.Del(entry.Key)
+func (rh *RowHelper) deleteIndexEntry(
+	ctx context.Context,
+	b Putter,
+	index catalog.Index,
+	key *roachpb.Key,
+	alreadyLocked bool,
+	lockNonUnique bool,
+	traceKV bool,
+	valDirs []encoding.Direction,
+) error {
+	needsLock := !alreadyLocked && (index.IsUnique() || lockNonUnique)
+	if index.UseDeletePreservingEncoding() {
+		if traceKV {
+			var suffix string
+			if needsLock {
+				suffix = " (locking)"
+			}
+			log.VEventf(ctx, 2, "Put (delete)%s %s", suffix, *key)
+		}
+		if needsLock {
+			b.PutMustAcquireExclusiveLock(key, deleteEncoding)
+		} else {
+			b.Put(key, deleteEncoding)
+		}
+	} else {
+		delFn(ctx, b, key, needsLock, traceKV, valDirs)
 	}
 	return nil
 }
 
-// OriginTimetampCPutHelper is used by callers of Inserter, Updater,
+// OriginTimestampCPutHelper is used by callers of Inserter, Updater,
 // and Deleter when the caller wants updates to the primary key to be
 // constructed using ConditionalPutRequests with the OriginTimestamp
 // option set.
 type OriginTimestampCPutHelper struct {
 	OriginTimestamp hlc.Timestamp
-	ShouldWinTie    bool
 	// PreviousWasDeleted is used to indicate that the expected
 	// value is non-existent. This is helpful in Deleter to
 	// distinguish between a delete of a value that had no columns
@@ -499,7 +552,7 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
 	}
-	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
 }
 
 func (oh *OriginTimestampCPutHelper) DelWithCPut(
@@ -508,7 +561,7 @@ func (oh *OriginTimestampCPutHelper) DelWithCPut(
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
 	}
-	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp)
 }
 
 func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {

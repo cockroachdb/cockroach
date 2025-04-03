@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,7 +68,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	extractCatalog := func(tableNames ...string) (catalog externalpb.ExternalCatalog, err error) {
-		err = sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err = sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			opName := redact.SafeString("extractCatalog")
 			planner, close := sql.NewInternalPlanner(
 				opName,
@@ -88,7 +89,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	getDatabaseSchemaIDs := func(database string) (descpb.ID, descpb.ID) {
 		var parentID descpb.ID
 		var schemaID descpb.ID
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, database)
 			require.NoError(t, err)
 			parentID = dbDesc.GetID()
@@ -101,19 +102,21 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	defaultdbID, defaultdbpublicID := getDatabaseSchemaIDs("defaultdb")
 
 	t.Run("basic", func(t *testing.T) {
-		ingestableCatalog, err := extractCatalog("db1.sc1.tab1", "db1.sc1.tab2")
+		tableNames := []string{"db1.sc1.tab1", "db1.sc1.tab2"}
+		ingestedTableNames := []string{"tab1", "tab2_rename"}
+		ingestableCatalog, err := extractCatalog(tableNames...)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(ingestableCatalog.Tables))
 
 		var written externalpb.ExternalCatalog
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false, ingestedTableNames)
 			return err
 		}))
 		require.Equal(t, 2, len(written.Tables))
-		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
+		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2_rename"}})
 
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return DropIngestedExternalCatalog(ctx, &execCfg, sqlUser, written, txn, srv.JobRegistry().(*jobs.Registry), col, "test gc")
 		}))
 		var res int
@@ -128,23 +131,46 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 				[][]string{{"succeeded"}},
 			)
 		} else {
-			sqlDB.CheckQueryResults(t, "SELECT name FROM crdb_internal.tables WHERE state = 'DROP'", [][]string{{"tab1"}, {"tab2"}})
+			sqlDB.CheckQueryResults(t, "SELECT name FROM crdb_internal.tables WHERE state = 'DROP'", [][]string{{"tab1"}, {"tab2_rename"}})
 		}
+	})
+
+	t.Run("udt", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE TYPE db1.udt AS ENUM ('a', 'b', 'c')")
+		sqlDB.Exec(t, "CREATE TABLE db1.data (pk INT PRIMARY KEY, val1 db1.udt)")
+		udtCatalog, err := extractCatalog("db1.data")
+		require.NoError(t, err)
+		require.Equal(t, "udt", udtCatalog.Types[0].Name)
+		require.Equal(t, "_udt", udtCatalog.Types[1].Name)
+
+		// The ingest API will not allow cross database references to be written,
+		// since these are deprecated. So, any attempt to write these should hit
+		// an error.
+		require.ErrorContains(t,
+			sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				_, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, udtCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"data"})
+				return err
+			}),
+			"cross database type references are not supported",
+		)
+		var res int
+		sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW TABLES]").Scan(&res)
+		require.Zero(t, res)
 	})
 
 	t.Run("fk", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
 		sadCatalog, err := extractCatalog("db1.sc1.tab3")
 		require.NoError(t, err)
-		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab3"})
 			return err
 		}), "invalid outbound foreign key")
 
 		anotherSadCatalog, err := extractCatalog("db1.sc1.tab2")
 		require.NoError(t, err)
-		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab2"})
 			return err
 		}), "invalid inbound foreign key")
 	})

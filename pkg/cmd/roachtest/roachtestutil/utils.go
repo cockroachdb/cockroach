@@ -6,27 +6,26 @@
 package roachtestutil
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -69,100 +68,6 @@ func Every(n time.Duration) EveryN {
 // ShouldLog returns whether it's been more than N time since the last event.
 func (e *EveryN) ShouldLog() bool {
 	return e.ShouldProcess(timeutil.Now())
-}
-
-// GetWorkloadHistogramArgs creates a histogram flag string based on the roachtest to pass to workload binary
-// This is used to make use of t.ExportOpenmetrics() method and create appropriate exporter
-func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
-	var histogramArgs string
-	if t.ExportOpenmetrics() {
-		// Add openmetrics related labels and arguments
-		histogramArgs = fmt.Sprintf(" --histogram-export-format='openmetrics' --histograms=%s/%s --openmetrics-labels='%s'",
-			t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t), clusterstats.GetOpenmetricsLabelString(t, c, labels))
-	} else {
-		// Since default is json, no need to add --histogram-export-format flag in this case and also the labels
-		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t))
-	}
-
-	return histogramArgs
-}
-
-// GetBenchmarkMetricsFileName returns the file name to store the benchmark output
-func GetBenchmarkMetricsFileName(t test.Test) string {
-	if t.ExportOpenmetrics() {
-		return "stats.om"
-	}
-
-	return "stats.json"
-}
-
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
-func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
-	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
-}
-
-// CreateWorkloadHistogramExporterWithLabels creates a exporter.Exporter based on the roachtest parameters with additional labels
-func CreateWorkloadHistogramExporterWithLabels(
-	t test.Test, c cluster.Cluster, labelMap map[string]string,
-) exporter.Exporter {
-	var metricsExporter exporter.Exporter
-	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
-		openMetricsExporter := &exporter.OpenMetricsExporter{}
-		openMetricsExporter.SetLabels(&labels)
-		metricsExporter = openMetricsExporter
-
-	} else {
-		metricsExporter = &exporter.HdrJsonExporter{}
-	}
-
-	return metricsExporter
-}
-
-// UploadPerfStats creates stats file from buffer in the node
-func UploadPerfStats(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	perfBuf *bytes.Buffer,
-	node option.NodeListOption,
-	fileNamePrefix string,
-) error {
-
-	if perfBuf == nil {
-		return errors.New("perf buffer is nil")
-	}
-	destinationFileName := fmt.Sprintf("%s%s", fileNamePrefix, GetBenchmarkMetricsFileName(t))
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
-	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		return err
-	}
-	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
-		return err
-	}
-	return nil
-}
-
-// CloseExporter closes the exporter and also upload the metrics artifacts to a stats file in the node
-func CloseExporter(
-	ctx context.Context,
-	exporter exporter.Exporter,
-	t test.Test,
-	c cluster.Cluster,
-	perfBuf *bytes.Buffer,
-	node option.NodeListOption,
-	fileNamePrefix string,
-) {
-	if err := exporter.Close(func() error {
-		if err := UploadPerfStats(ctx, t, c, perfBuf, node, fileNamePrefix); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		t.Errorf("failed to export perf stats: %v", err)
-	}
 }
 
 // WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready
@@ -312,4 +217,74 @@ func IfLocal(c cluster.Cluster, trueVal, falseVal string) string {
 		return trueVal
 	}
 	return falseVal
+}
+
+// LoggerForCmd creates a logger to a file with quiet stdout and stderr.
+func LoggerForCmd(
+	l *logger.Logger, node option.NodeListOption, args ...string,
+) (*logger.Logger, string, error) {
+	logFile := cmdLogFileName(timeutil.Now(), node, args...)
+
+	// NB: we set no prefix because it's only going to a file anyway.
+	l, err := l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		return nil, "", err
+	}
+	return l, logFile, nil
+}
+
+// cmdLogFileName comes up with a log file to use for the given argument string.
+func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
+	logFile := fmt.Sprintf(
+		"run_%s_n%s_%s",
+		t.Format(`150405.000000000`),
+		nodes.String()[1:],
+		install.GenFilenameFromArgs(20, args...),
+	)
+	return logFile
+}
+
+// CheckPortBlocked returns true if a connection from a node to a port on another node
+// can be established. Requires nmap to be installed.
+func CheckPortBlocked(
+	ctx context.Context,
+	l *logger.Logger,
+	c cluster.Cluster,
+	fromNode, toNode option.NodeListOption,
+	port string,
+) (bool, error) {
+	// `nmap -oG` example output:
+	// Host: {IP} {HOST_NAME}	Status: Up
+	// Host: {IP} {HOST_NAME}	Ports: 26257/open/tcp//cockroach///
+	// We care about the port scan result and whether it is filtered or open.
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p %s {ip%s} -oG - | awk '/Ports:/{print $5}'", port, toNode))
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(res.Stdout, "filtered"), nil
+}
+
+// PortLatency returns the latency from one node to another port.
+// Requires nmap to be installed.
+func PortLatency(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, fromNode, toNode option.NodeListOption,
+) (time.Duration, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p {pgport%[1]s} -Pn {ip%[1]s} -oG - | grep 'scanned in' | awk '{print $(NF-1)}'", toNode))
+	if err != nil {
+		return 0, err
+	}
+	avgRTT, err := strconv.ParseFloat(strings.TrimSpace(res.Stdout), 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(avgRTT * float64(time.Second)), nil
+}
+
+// PrefixCmdOutputWithTimestamp wraps a remote command such that it pipes
+// stdout and stderr through awk and prepends the timestamp. Can be used to aid
+// debugging long-running commands that don't already prefix output with timestamps.
+func PrefixCmdOutputWithTimestamp(cmd string) string {
+	// Don't prefix blank lines with timestamps.
+	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
+	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
 }

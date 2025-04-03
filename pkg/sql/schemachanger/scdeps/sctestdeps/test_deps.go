@@ -184,6 +184,13 @@ func (s *TestState) HasOwnership(
 	return true, nil
 }
 
+// UserHasOwnership implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) UserHasOwnership(
+	context.Context, privilege.Object, username.SQLUsername,
+) (bool, error) {
+	return true, nil
+}
+
 // HasPrivilege implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) HasPrivilege(
 	ctx context.Context,
@@ -1107,7 +1114,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	oldProgress := jobspb.Progress{
 		Progress:       nil,
 		ModifiedMicros: 0,
-		RunningStatus:  "",
+		StatusMessage:  "",
 		Details:        jobspb.WrapProgressDetails(scJob.Progress),
 		TraceID:        0,
 	}
@@ -1128,13 +1135,13 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	oldJobMetadata := jobs.JobMetadata{
 		ID:       scJob.JobID,
-		Status:   jobs.StatusRunning,
+		State:    jobs.StateRunning,
 		Payload:  &oldPayload,
 		Progress: &oldProgress,
 	}
 	updateProgress := func(newProgress *jobspb.Progress) {
 		scJob.Progress = *newProgress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, newProgress.RunningStatus)
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, newProgress.StatusMessage)
 	}
 	updatePayload := func(newPayload *jobspb.Payload) {
 		if newPayload.Noncancelable {

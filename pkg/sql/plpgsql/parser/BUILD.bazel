@@ -5,7 +5,7 @@ sh_binary(
     srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
 )
 
-# Define the target to auto-generate sql.go from the grammar file.
+# Define the target to auto-generate plpgsql.go from the grammar file.
 genrule(
     name = "plpgsql-goyacc",
     srcs = [
@@ -16,7 +16,6 @@ genrule(
     export GOPATH=/nonexist-gopath
       $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc)
-
     """,
     tools = [
         ":plpgsql-gen",

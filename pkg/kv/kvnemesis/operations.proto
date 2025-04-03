@@ -119,6 +119,16 @@ message TransferLeaseOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+enum ChangeSettingType {
+  SetLeaseType = 0;
+}
+
+message ChangeSettingOperation {
+  ChangeSettingType type = 1;
+  int32 lease_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseType"];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 enum ChangeZoneType {
   ToggleGlobalReads = 0;
 }
@@ -165,12 +175,13 @@ message Operation {
   MergeOperation merge = 14;
   ChangeReplicasOperation change_replicas = 15;
   TransferLeaseOperation transfer_lease = 16;
-  ChangeZoneOperation change_zone = 17;
-  AddSSTableOperation add_sstable = 18 [(gogoproto.customname) = "AddSSTable"];
-  SavepointCreateOperation savepoint_create = 19;
-  SavepointReleaseOperation savepoint_release = 20;
-  SavepointRollbackOperation savepoint_rollback = 21;
-  BarrierOperation barrier = 22;
+  ChangeSettingOperation change_setting = 17;
+  ChangeZoneOperation change_zone = 18;
+  AddSSTableOperation add_sstable = 19 [(gogoproto.customname) = "AddSSTable"];
+  SavepointCreateOperation savepoint_create = 20;
+  SavepointReleaseOperation savepoint_release = 21;
+  SavepointRollbackOperation savepoint_rollback = 22;
+  BarrierOperation barrier = 23;
 }
 
 enum ResultType {

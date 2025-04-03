@@ -71,7 +71,7 @@ func NewClosedSessionCache(
 	st *cluster.Settings, parentMon *mon.BytesMonitor, timeSrc timeSource,
 ) *ClosedSessionCache {
 	monitor := mon.NewMonitorInheritWithLimit(
-		"closed-session-cache", 0 /* limit */, parentMon, true, /* longLiving */
+		mon.MakeName("closed-session-cache"), 0 /* limit */, parentMon, true, /* longLiving */
 	)
 
 	c := &ClosedSessionCache{st: st, timeSrc: timeSrc}

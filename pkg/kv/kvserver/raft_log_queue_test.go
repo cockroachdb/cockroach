@@ -52,8 +52,8 @@ func TestShouldTruncate(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			var d truncateDecision
 			d.Input.LogSize = c.raftLogSize
-			d.Input.FirstIndex = 123
-			d.NewFirstIndex = d.Input.FirstIndex + c.truncatableIndexes
+			d.Input.CompIndex = 122
+			d.NewCompIndex = d.Input.CompIndex + c.truncatableIndexes
 			v := d.ShouldTruncate()
 			if c.expected != v {
 				t.Fatalf("expected %v, but found %v", c.expected, v)
@@ -83,87 +83,92 @@ func TestComputeTruncateDecision(t *testing.T) {
 	}{
 		{
 			// Nothing to truncate.
+			1, []uint64{1, 1}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to compacted index 1 (chosen via: last index)]",
+		},
+		{
+			// Truncate the latest entry.
 			1, []uint64{1, 2}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			"should truncate: false [truncate 1 entries to compacted index 1 (chosen via: last index)]",
 		},
 		{
 			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
 			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
 			// own log asynchronously.
-			1, []uint64{1, 5, 5}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			1, []uint64{1, 5, 5}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to compacted index 1 (chosen via: last index)]",
 		},
 		{
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
 			2, []uint64{1, 5, 5}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			"should truncate: false [truncate 0 entries to compacted index 1 (chosen via: followers)]",
 		},
 		{
 			// The happy case.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 0,
-			"should truncate: false [truncate 3 entries to first index 5 (chosen via: last index)]",
+			"should truncate: false [truncate 4 entries to compacted index 5 (chosen via: last index)]",
 		},
 		{
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
 			// it was already obsolete before. (This example is also not one you could manufacture in
 			// a real system).
-			2, []uint64{5, 5, 5}, 100, 2, 2, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			3, []uint64{5, 5, 5}, 100, 3, 3, 1,
+			"should truncate: false [truncate 0 entries to compacted index 2 (chosen via: first index)]",
 		},
 		{
 			// Respecting the pending snapshot.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 3,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: pending snapshot)]",
+			"should truncate: false [truncate 2 entries to compacted index 3 (chosen via: pending snapshot)]",
 		},
 		{
 			// Log is below target size, so respecting the slowest follower.
 			3, []uint64{1, 2, 3, 4}, 100, 1, 5, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
+			"should truncate: false [truncate 1 entries to compacted index 1 (chosen via: followers)]",
 		},
 		{
-			// Truncating since local log starts at 2. One follower is already cut off without a pending
-			// snapshot.
-			2, []uint64{1, 2, 3, 4}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			// Truncating since local log starts at 3. One follower is already cut off
+			// without a pending snapshot.
+			3, []uint64{1, 3, 3, 4}, 100, 3, 3, 0,
+			"should truncate: false [truncate 0 entries to compacted index 2 (chosen via: first index)]",
 		},
 		// Don't truncate off active followers, even if over targetSize.
 		{
-			3, []uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
+			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			"should truncate: false [truncate 0 entries to compacted index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
 			100, []uint64{100, 100}, 2000, 1, 100, 50,
-			"should truncate: false [truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 50 entries to compacted index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to compacted index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to compacted index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Respecting the pending snapshot.
 		{
 			7, []uint64{4}, 2000, 1, 7, 1,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 1 entries to compacted index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Never truncate past the commit index.
 		{
-			3, []uint64{3, 3, 6}, 100, 2, 7, 0,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: commit)]",
+			3, []uint64{4, 4, 6}, 100, 2, 7, 0,
+			"should truncate: false [truncate 2 entries to compacted index 3 (chosen via: commit)]",
 		},
 		// Never truncate past the last index.
 		{
 			3, []uint64{5}, 100, 1, 3, 0,
-			"should truncate: false [truncate 2 entries to first index 3 (chosen via: last index)]",
+			"should truncate: false [truncate 3 entries to compacted index 3 (chosen via: last index)]",
 		},
 		// Never truncate "before the first index".
 		{
-			3, []uint64{5}, 100, 2, 3, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			4, []uint64{5}, 100, 3, 4, 1,
+			"should truncate: false [truncate 0 entries to compacted index 2 (chosen via: first index)]",
 		},
 	}
 	for i, c := range testCases {
@@ -185,7 +190,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 				LogSize:              c.raftLogSize,
 				MaxLogSize:           targetSize,
 				LogSizeTrusted:       true,
-				FirstIndex:           c.firstIndex,
+				CompIndex:            c.firstIndex - 1,
 				LastIndex:            c.lastIndex,
 				PendingSnapshotIndex: c.pendingSnapshot,
 			}
@@ -206,8 +211,9 @@ func TestComputeTruncateDecision(t *testing.T) {
 			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
 			input.LogSizeTrusted = false
 			input.RaftStatus.RaftState = raftpb.StateLeader
-			if input.LastIndex <= input.FirstIndex {
-				input.LastIndex = input.FirstIndex + 1
+			if input.LastIndex <= input.CompIndex+1 {
+				// TODO(pav-kv): what does this clause mean?
+				input.LastIndex = input.CompIndex + 2
 			}
 			decision = computeTruncateDecision(input)
 			should, recompute, prio = (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
@@ -230,12 +236,12 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	// the truncation threshold.
 	exp := map[bool]map[bool]string{ // (tooLarge, active)
 		false: {
-			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower)]",
-			false: "should truncate: false [truncate 0 entries to first index 10 (chosen via: first index)]",
+			true:  "should truncate: false [truncate 0 entries to compacted index 9 (chosen via: probing follower)]",
+			false: "should truncate: false [truncate 0 entries to compacted index 9 (chosen via: first index)]",
 		},
 		true: {
-			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
+			true:  "should truncate: false [truncate 0 entries to compacted index 9 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
+			false: "should truncate: true [truncate 191 entries to compacted index 200 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
 		},
 	}
 
@@ -274,7 +280,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			input := truncateDecisionInput{
 				RaftStatus:     status,
 				MaxLogSize:     1024,
-				FirstIndex:     10,
+				CompIndex:      9,
 				LastIndex:      lastIndex,
 				LogSizeTrusted: true,
 			}
@@ -298,7 +304,7 @@ func TestTruncateDecisionZeroValue(t *testing.T) {
 	assert.False(t, decision.ShouldTruncate())
 	assert.Zero(t, decision.NumNewRaftSnapshots())
 	assert.Zero(t, decision.NumTruncatableIndexes())
-	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 0 (chosen via: ); log size untrusted]", decision.String())
+	assert.Equal(t, "should truncate: false [truncate 0 entries to compacted index 0 (chosen via: ); log size untrusted]", decision.String())
 }
 
 func TestTruncateDecisionNumSnapshots(t *testing.T) {
@@ -319,10 +325,10 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 	}
 
 	decision := truncateDecision{Input: truncateDecisionInput{RaftStatus: status}}
+	assert.Equal(t, 0, decision.raftSnapshotsForIndex(9))
 	assert.Equal(t, 0, decision.raftSnapshotsForIndex(10))
 	assert.Equal(t, 1, decision.raftSnapshotsForIndex(11))
 	assert.Equal(t, 3, decision.raftSnapshotsForIndex(12))
-	assert.Equal(t, 3, decision.raftSnapshotsForIndex(13))
 }
 
 func verifyLogSizeInSync(t *testing.T, r *Replica) {
@@ -454,25 +460,18 @@ func TestNewTruncateDecision(t *testing.T) {
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	getIndexes := func() (kvpb.RaftIndex, int, kvpb.RaftIndex, error) {
 		d, err := newTruncateDecision(ctx, r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		return d.Input.FirstIndex, d.NumTruncatableIndexes(), d.NewFirstIndex, nil
+		return d.Input.CompIndex, d.NumTruncatableIndexes(), d.NewCompIndex, nil
 	}
 
-	aFirst, aTruncatable, aOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if aFirst == 0 {
-		t.Errorf("expected first index to be greater than 0, got %d", aFirst)
-	}
+	aComp, aTruncatable, aOldest, err := getIndexes()
+	require.NoError(t, err)
 
 	// Write a few keys to the range.
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
@@ -483,46 +482,32 @@ func TestNewTruncateDecision(t *testing.T) {
 		}
 	}
 
-	bFirst, bTruncatable, bOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if aFirst != bFirst {
-		t.Fatalf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
-	}
-	if aTruncatable >= bTruncatable {
-		t.Fatalf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
-	}
-	if aOldest >= bOldest {
-		t.Fatalf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
-	}
+	bComp, bTruncatable, bOldest, err := getIndexes()
+	require.NoError(t, err)
+	require.Equal(t, aComp, bComp, "expected compacted index to not change")
+	require.Greater(t, bTruncatable, aTruncatable, "expected truncatable indices to increase")
+	require.Greater(t, bOldest, aOldest, "expected oldest index to increase")
 
-	// Enable the raft log scanner and and force a truncation.
+	// Enable the raft log scanner and force a truncation.
 	store.SetRaftLogQueueActive(true)
 	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
-	var cFirst, cOldest kvpb.RaftIndex
-	var numTruncatable int
+	var cComp, cOldest kvpb.RaftIndex
+	var cTruncatable int
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		cFirst, numTruncatable, cOldest, err = getIndexes()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if bFirst == cFirst {
-			return errors.Errorf("truncation did not occur, expected firstIndex to change, instead it remained at %d", cFirst)
+		cComp, cTruncatable, cOldest, err = getIndexes()
+		require.NoError(t, err)
+		if cComp == bComp {
+			return errors.Errorf("expected compacted index to change, it remained at %d", bComp)
 		}
 		return nil
 	})
-	if bTruncatable < numTruncatable {
-		t.Errorf("expected numTruncatable to decrease, instead it changed from %d -> %d", bTruncatable, numTruncatable)
-	}
-	if bOldest >= cOldest {
-		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
-	}
+	require.LessOrEqual(t, cTruncatable, bTruncatable, "did not expect truncatable indices to increase")
+	require.Greater(t, cOldest, bOldest, "expected oldest index to increase")
 
 	verifyLogSizeInSync(t, r)
 
@@ -532,25 +517,17 @@ func TestNewTruncateDecision(t *testing.T) {
 	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
-	// Unlike the last iteration, where we expect a truncation and can wait on
-	// it with succeedsSoon, we can't do that here. This check is fragile in
-	// that the truncation triggered here may lose the race against the call to
-	// GetFirstIndex or newTruncateDecision, giving a false negative. Fixing
-	// this requires additional instrumentation of the queues, which was deemed
-	// to require too much work at the time of this writing.
-	dFirst, dTruncatable, dOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cFirst != dFirst {
-		t.Errorf("truncation should not have occurred, but firstIndex changed from %d -> %d", cFirst, dFirst)
-	}
-	if numTruncatable != dTruncatable {
-		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", numTruncatable, dTruncatable)
-	}
-	if cOldest != dOldest {
-		t.Errorf("truncation should not have occurred, but oldestIndex changed from %d -> %d", cOldest, dOldest)
-	}
+	// Unlike the last iteration, where we expect a truncation and can wait on it
+	// with succeedsSoon, we can't do that here. This check is fragile in that the
+	// truncation triggered here may lose the race against the call to
+	// GetCompactedIndex or newTruncateDecision, giving a false negative. Fixing
+	// this requires additional instrumentation of the queues, which was deemed to
+	// require too much work at the time of this writing.
+	dComp, dTruncatable, dOldest, err := getIndexes()
+	require.NoError(t, err)
+	require.Equal(t, cComp, dComp, "truncation should have not occurred")
+	require.Equal(t, dTruncatable, cTruncatable, "truncation should have not occurred")
+	require.Equal(t, dOldest, cOldest, "truncation should have not occurred")
 }
 
 // TestProactiveRaftLogTruncate verifies that we proactively truncate the raft
@@ -593,7 +570,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldFirstIndex := r.GetFirstIndex()
+			oldCompIndex := r.GetCompactedIndex()
 
 			for i := 0; i < c.count; i++ {
 				key := roachpb.Key(fmt.Sprintf("key%02d", i))
@@ -611,10 +588,9 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 					// Flush the engine to advance durability, which triggers truncation.
 					require.NoError(t, store.TODOEngine().Flush())
 				}
-				newFirstIndex := r.GetFirstIndex()
-				if newFirstIndex <= oldFirstIndex {
-					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
-						oldFirstIndex, newFirstIndex)
+				if newCompIndex := r.GetCompactedIndex(); newCompIndex <= oldCompIndex {
+					return errors.Errorf("log was not correctly truncated, old compacted index:%d, current:%d",
+						oldCompIndex, newCompIndex)
 				}
 				return nil
 			})
@@ -687,7 +663,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 }
 
 // TestTruncateLog verifies that the TruncateLog command removes a
-// prefix of the raft logs (modifying FirstIndex() and making them
+// prefix of the raft logs (modifying Compacted() and making them
 // inaccessible via Entries()).
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -801,8 +777,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	_ = rlq
 
 	// NB: Cases for which decision.ShouldTruncate() is true are tested in
-	// TestComputeTruncateDecision, so here the decision itself is never
-	// positive.
+	// TestComputeTruncateDecision, so here the decision itself is never positive.
 	var decision truncateDecision
 	decision.Input.LogSizeTrusted = true
 	decision.Input.LogSize = 12
@@ -821,7 +796,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	// Check all the boxes: unknown log size, leader, and non-empty log.
 	decision.Input.LogSize = 123
 	decision.Input.LogSizeTrusted = false
-	decision.Input.FirstIndex = 10
+	decision.Input.CompIndex = 9
 	decision.Input.LastIndex = 20
 
 	verify(true, true, 1+float64(decision.Input.MaxLogSize)/2)
@@ -830,7 +805,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	// Check all boxes except that log is empty.
 	decision = golden
-	decision.Input.LastIndex = decision.Input.FirstIndex
+	decision.Input.LastIndex = decision.Input.CompIndex
 	verify(false, false, 0)
 }
 
@@ -908,9 +883,8 @@ func waitForTruncationForTesting(
 			// Flush the engine to advance durability, which triggers truncation.
 			require.NoError(t, r.store.TODOEngine().Flush())
 		}
-		// FirstIndex should have changed.
-		firstIndex := r.GetFirstIndex()
-		if firstIndex != newFirstIndex {
+		// First index should have changed.
+		if firstIndex := r.GetCompactedIndex() + 1; firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
 		// Some low-level tests also look at the raftEntryCache or sideloaded

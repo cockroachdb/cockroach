@@ -297,9 +297,9 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 // store.mu must be held.
 func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachpb.RangeID) {
 	s.mu.AssertHeld()
-	s.unquiescedReplicas.Lock()
-	delete(s.unquiescedReplicas.m, rangeID)
-	s.unquiescedReplicas.Unlock()
+	s.unquiescedOrAwakeReplicas.Lock()
+	delete(s.unquiescedOrAwakeReplicas.m, rangeID)
+	s.unquiescedOrAwakeReplicas.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)

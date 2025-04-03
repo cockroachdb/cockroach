@@ -16,13 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,7 @@ func TestSessionMigration(t *testing.T) {
 		defer s.Stopper().Stop(ctx)
 
 		openConnFunc := func() *pgx.Conn {
-			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 				s.AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(username.RootUser),
@@ -54,7 +55,7 @@ func TestSessionMigration(t *testing.T) {
 
 			config, err := pgx.ParseConfig(pgURL.String())
 			require.NoError(t, err)
-			config.PreferSimpleProtocol = true
+			config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
@@ -73,7 +74,7 @@ func TestSessionMigration(t *testing.T) {
 		require.NoError(t, err)
 
 		openUserConnFunc := func(user string) *pgx.Conn {
-			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 				s.AdvSQLAddr(),
 				"StartServer", /* prefix */
 				url.User(user),
@@ -83,7 +84,7 @@ func TestSessionMigration(t *testing.T) {
 
 			config, err := pgx.ParseConfig(pgURL.String())
 			require.NoError(t, err)
-			config.PreferSimpleProtocol = true
+			config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 

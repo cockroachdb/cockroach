@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -671,7 +672,8 @@ func (c *CustomFuncs) FoldFunction(
 			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
 			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(private.Name)))
+			log.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
+			return nil, false
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}
 	} else {

@@ -77,7 +77,7 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: mon.MakeMonitorName("distsql"),
+			Name: mon.MakeName("distsql"),
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
@@ -239,13 +239,13 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorNameWithID("flow ", req.Flow.FlowID.Short()),
+		Name:     mon.MakeName("flow").WithUUID(req.Flow.FlowID.Short()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
-	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
+	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, mon.MakeName("flow-disk-monitor"))
 
 	makeLeaf := func(ctx context.Context) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
@@ -271,31 +271,36 @@ func (ds *ServerImpl) setupFlow(
 		// this allows us to avoid an unnecessary deserialization of the eval
 		// context proto.
 		evalCtx = localState.EvalContext
-		// We create an eval context variable scoped to this block and reference
-		// it in the onFlowCleanupEnd closure. If the closure referenced
-		// evalCtx, then the pointer would be heap allocated because it is
-		// modified in the other branch of the conditional, and Go's escape
-		// analysis cannot determine that the capture and modification are
-		// mutually exclusive.
-		localEvalCtx := evalCtx
-		// We're about to mutate the evalCtx and we want to restore its original
-		// state once the flow cleans up. Note that we could have made a copy of
-		// the whole evalContext, but that isn't free, so we choose to restore
-		// the original state in order to avoid performance regressions.
-		origTxn := localEvalCtx.Txn
-		onFlowCleanupEnd = func(ctx context.Context) {
-			localEvalCtx.Txn = origTxn
-			reserved.Close(ctx)
-		}
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf(ctx)
 			if err != nil {
 				return nil, nil, nil, err
 			}
+			// We create an eval context variable scoped to this block and
+			// reference it in the onFlowCleanupEnd closure. If the closure
+			// referenced evalCtx, then the pointer would be heap allocated
+			// because it is modified in the other branch of the conditional,
+			// and Go's escape analysis cannot determine that the capture and
+			// modification are mutually exclusive.
+			localEvalCtx := evalCtx
+			// We're about to mutate the evalCtx and we want to restore its
+			// original state once the flow cleans up. Note that we could have
+			// made a copy of the whole evalContext, but that isn't free, so we
+			// choose to restore the original state in order to avoid
+			// performance regressions.
+			origTxn := localEvalCtx.Txn
+			onFlowCleanupEnd = func(ctx context.Context) {
+				localEvalCtx.Txn = origTxn
+				reserved.Close(ctx)
+			}
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			localEvalCtx.Txn = leafTxn
+		} else {
+			onFlowCleanupEnd = func(ctx context.Context) {
+				reserved.Close(ctx)
+			}
 		}
 	} else {
 		onFlowCleanupEnd = func(ctx context.Context) {
@@ -340,6 +345,7 @@ func (ds *ServerImpl) setupFlow(
 			Regions:                   &faketreeeval.DummyRegionOperator{},
 			Txn:                       leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
+			BlockingSQLLivenessReader: ds.ServerConfig.BlockingSQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
 			SchemaTelemetryController: ds.ServerConfig.SchemaTelemetryController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,

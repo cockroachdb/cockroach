@@ -461,6 +461,11 @@ type TableDescriptor interface {
 	// produced by AllIndexes and removing indexes with empty expressions.
 	PartialIndexes() []Index
 
+	// VectorIndexes returns a slice of all vector indexes in the underlying
+	// proto, in their canonical order. This is equivalent to taking the slice
+	// produced by AllIndexes and removing indexes which are not vector indexes.
+	VectorIndexes() []Index
+
 	// PublicNonPrimaryIndexes returns a slice of all active secondary indexes,
 	// in their canonical order. This is equivalent to the Indexes array in the
 	// proto.
@@ -652,6 +657,10 @@ type TableDescriptor interface {
 	// functions referenced in this table.
 	GetAllReferencedFunctionIDs() (DescriptorIDSet, error)
 
+	// GetAllReferencedFunctionIDsInPolicy returns descriptor IDs of all user
+	// defined functions referenced in this policy.
+	GetAllReferencedFunctionIDsInPolicy(policyID descpb.PolicyID) DescriptorIDSet
+
 	// GetAllReferencedFunctionIDsInConstraint returns descriptor IDs of all user
 	// defined functions referenced in this check constraint.
 	GetAllReferencedFunctionIDsInConstraint(
@@ -709,6 +718,10 @@ type TableDescriptor interface {
 	// EnforcedCheckConstraints returns the subset of check constraints in
 	// EnforcedConstraints for this table, in the same order.
 	EnforcedCheckConstraints() []CheckConstraint
+	// EnforcedCheckValidators returns all check constraints that should
+	// be validated for violations, including both actual check constraints and
+	// any synthetic ones added (e.g., for row-level security).
+	EnforcedCheckValidators() []CheckConstraintValidator
 
 	// OutboundForeignKeys returns the subset of foreign key constraints in
 	// AllConstraints for this table, in the same order.
@@ -783,6 +796,9 @@ type TableDescriptor interface {
 	// AutoPartialStatsCollectionEnabled indicates if automatic partial statistics
 	// collection is explicitly enabled or disabled for this table.
 	AutoPartialStatsCollectionEnabled() catpb.AutoPartialStatsCollectionStatus
+	// AutoFullStatsCollectionEnabled indicates if automatic full statistics
+	// collection is explicitly enabled or disabled for this table.
+	AutoFullStatsCollectionEnabled() catpb.AutoFullStatsCollectionStatus
 	// AutoStatsMinStaleRows indicates the setting of
 	// sql_stats_automatic_collection_min_stale_rows for this table.
 	// If ok is true, then the minStaleRows value is valid, otherwise this has not
@@ -835,6 +851,13 @@ type TableDescriptor interface {
 	// GetNextPolicyID returns the next unused policy ID for this table.
 	// Policy IDs are unique per table.
 	GetNextPolicyID() descpb.PolicyID
+	// IsRowLevelSecurityEnabled returns true if we have enabled row level
+	// security for the table and false if it is disabled.
+	IsRowLevelSecurityEnabled() bool
+	// IsRowLevelSecurityForced returns true if we have forced row level
+	// security for the table and false if it is no force. When forced is
+	// set the table's RLS policies are enforced even on the table owner.
+	IsRowLevelSecurityForced() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

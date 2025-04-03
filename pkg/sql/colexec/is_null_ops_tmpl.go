@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for is_null_ops.eg.go. It's formatted

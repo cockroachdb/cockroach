@@ -1,40 +1,24 @@
 /* setup */
-CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j, k));
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j));
 
 /* test */
-EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›;
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›;
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
- │    └── into t_pkey~ (i; p+, j, k-)
+ │    └── into t_pkey~ (i; j, k-, p+)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[5] into t_pkey~
+ │    └── from t@[3] into t_pkey~
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey~ in relation t
- │    └── into t_pkey~ (j; i, k-, p+)
+ │    └── into t_pkey+ (i; j, p+)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[7] into t_pkey~
- ├── execute 1 system table mutations transaction
- ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
- ├── execute 2 system table mutations transactions
- ├── backfill using primary index t_pkey~ in relation t
- │    └── into t_pkey+ (j; i, p+)
- ├── execute 2 system table mutations transactions
- ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[9] into t_pkey+
+ │    └── from t@[5] into t_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
- ├── execute 2 system table mutations transactions
- ├── backfill using primary index t_pkey+ in relation t
- │    └── into t_i_key+ (i: j)
- ├── execute 2 system table mutations transactions
- ├── merge temporary indexes into backfilled indexes in relation t
- │    └── from t@[3] into t_i_key+
- ├── execute 1 system table mutations transaction
- ├── validate UNIQUE constraint backed by index t_i_key+ in relation t
- └── execute 2 system table mutations transactions
+ └── execute 4 system table mutations transactions

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -367,7 +368,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, constraintName)
+	constraintExists, err := og.constraintExists(ctx, tx, tableName.ObjectName, tree.Name(constraintName))
 	if err != nil {
 		return nil, err
 	}
@@ -404,6 +405,9 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 
 	if !canApplyConstraint {
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+		// For newly created tables its possible for the execution to
+		// the unique violation error.
+		stmt.potentialExecErrors.add(pgcode.UniqueViolation)
 	} else {
 		// Otherwise there is still a possibility for an error,
 		// so add it in the potential set, since our validation query
@@ -890,7 +894,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, string(constraintName))
+	constraintExists, err := og.constraintExists(ctx, tx, childTable.ObjectName, constraintName)
 	if err != nil {
 		return nil, err
 	}
@@ -982,13 +986,20 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 	}
 
+	// TODO(andyk): Do we need to include vector indexes?
+	indexType := idxtype.FORWARD
+	if og.randIntn(10) == 0 {
+		// 10% INVERTED
+		indexType = idxtype.INVERTED
+	}
+
 	def := &tree.CreateIndex{
 		Name:         tree.Name(indexName),
 		Table:        *tableName,
-		Unique:       og.randIntn(4) == 0,  // 25% UNIQUE
-		Inverted:     og.randIntn(10) == 0, // 10% INVERTED
-		IfNotExists:  og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		Invisibility: invisibility,         // 5% NOT VISIBLE
+		Unique:       og.randIntn(4) == 0, // 25% UNIQUE
+		Type:         indexType,
+		IfNotExists:  og.randIntn(2) == 0, // 50% IF NOT EXISTS
+		Invisibility: invisibility,        // 5% NOT VISIBLE
 	}
 
 	regionColumn := tree.Name("")
@@ -1020,7 +1031,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		if columnNames[i].name == regionColumn && i != 0 {
 			duplicateRegionColumn = true
 		}
-		if def.Inverted {
+		if def.Type == idxtype.INVERTED {
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
@@ -1137,10 +1148,10 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
-			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
+			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Type == idxtype.INVERTED},
 			// Inverted indexes cannot be unique.
-			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
-			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Type == idxtype.INVERTED},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Type == idxtype.INVERTED && len(def.Storing) > 0},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
@@ -1149,6 +1160,11 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 			{code: pgcode.FeatureNotSupported, condition: lastColInvertedIndexIsDescending},
 			{code: pgcode.FeatureNotSupported, condition: pkColUsedInInvertedIndex},
+		})
+		// Unique violations can occur at the statement phase if the table is
+		// new.
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 		})
 	}
 
@@ -2468,6 +2484,9 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 		if colContainsNull {
 			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
+			// If the table is created within the txn, then the not null violation
+			// will be an execution error.
+			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
 		}
 		// If we are running with the legacy schema changer, the not null constraint
 		// is enforced during the job phase. So it's still possible to INSERT not null
@@ -2783,9 +2802,6 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil, err
 	}
 
-	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
-	// error.
-	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
 	// There is a risk of unique violations if concurrent inserts
 	// happen during an ALTER PRIMARY KEY. So allow this to be
 	// a potential error on the commit.
@@ -2935,7 +2951,23 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range nonGeneratedCols {
-			d := randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+			// Limit the size of columns being generated.
+			const maxSize = 1024 * 1024
+			maxAttempts := 32
+			var d tree.Datum
+			for i := 0; i < maxAttempts; i++ {
+				d = randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+				// Retry if we exceed the maximum size.
+				if d.Size() < maxSize {
+					break
+				}
+			}
+			if d.Size() > maxSize {
+				og.LogMessage(fmt.Sprintf("datum of type %s exceeds size limit (%d / %d)",
+					col.typ.SQLString(),
+					d.Size(),
+					maxSize))
+			}
 			// Unfortunately, RandDatum for OIDs only selects random values, which will
 			// always fail validation. So, for OIDs we will select a random known type
 			// instead.
@@ -2986,6 +3018,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	// Only evaluate these if we know that the inserted values are sane, since
 	// we will need to evaluate generated expressions below.
 	hasUniqueConstraints := false
+	hasUniqueConstraintsMutations := false
 	fkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
@@ -2995,6 +3028,12 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			return nil, err
 		}
 		hasUniqueConstraints = len(constraints) > 0
+		// If we have any unique constraint mutations pending then its always possible,
+		// for us to still violate them.
+		hasUniqueConstraintsMutations, err = og.tableHasUniqueConstraintMutation(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
 		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
@@ -3005,7 +3044,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints},
+		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
@@ -3209,6 +3248,17 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 				errRunInTxnRbkSentinel,
 			)
 		}
+
+		// Command is too large errors are allowed on DML operations since,
+		// some of the tables can be pretty wide in this test.
+		if s.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Error(), "command is too large") {
+			return errors.Mark(
+				err,
+				errRunInTxnRbkSentinel,
+			)
+		}
+
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(

@@ -659,7 +659,7 @@ func TestGCScoreWithHint(t *testing.T) {
 	}
 }
 
-func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
+func testMVCCGCQueueProcessImpl(t *testing.T, snapshotBounds bool) {
 	defer log.Scope(t).Close(t)
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
@@ -861,9 +861,10 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	gcInfo, err := func() (gc.Info, error) {
 		var snap storage.Reader
 		desc := tc.repl.Desc()
-		if useEfos {
-			snap = tc.repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
+		if snapshotBounds {
+			snap = tc.repl.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
 		} else {
+			// Use implicit engine-wide bounds.
 			snap = tc.repl.store.TODOEngine().NewSnapshot()
 		}
 		defer snap.Close()
@@ -906,9 +907,6 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 		t.Errorf("expected total range value size: %d bytes; got %d bytes", expectedVersionsRangeValBytes,
 			gcInfo.AffectedVersionsRangeValBytes)
 	}
-
-	settings := tc.repl.ClusterSettings()
-	storage.UseEFOS.Override(ctx, &settings.SV, useEfos)
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
@@ -978,9 +976,9 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 // scales and verifies that scan queue process properly GCs test data.
 func TestMVCCGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, useEfos := range []bool{false, true} {
-		t.Run(fmt.Sprintf("use_efos=%v", useEfos), func(t *testing.T) {
-			testMVCCGCQueueProcessImpl(t, useEfos)
+	for _, snapshotBounds := range []bool{false, true} {
+		t.Run(fmt.Sprintf("snapshot_bounds=%v", snapshotBounds), func(t *testing.T) {
+			testMVCCGCQueueProcessImpl(t, snapshotBounds)
 		})
 	}
 }

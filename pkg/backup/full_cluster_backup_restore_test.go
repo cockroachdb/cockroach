@@ -143,6 +143,7 @@ CREATE TABLE data2.foo (a int);
 
 		// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 		// Populate system.users.
+		sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 		numBatches := 5
 		usersPerBatch := 20
 		if util.RaceEnabled {
@@ -161,6 +162,7 @@ CREATE TABLE data2.foo (a int);
 				return nil
 			})
 		}
+		sqlDB.Exec(t, "RESET autocommit_before_ddl")
 
 		// Populate system.zones.
 		sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -647,6 +649,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	}
 	usersPerBatch := 10
 	userID := 0
+	sqlDB.Exec(t, "SET autocommit_before_ddl = false")
 	for b := 0; b < numBatches; b++ {
 		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
 			for u := 0; u < usersPerBatch; u++ {
@@ -658,6 +661,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			return nil
 		})
 	}
+	sqlDB.Exec(t, "RESET autocommit_before_ddl")
 	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
@@ -1025,10 +1029,6 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// the small test-case will get entirely buffered/merged by small-file merging
 	// and not report any progress in the meantime unless it is disabled.
 	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.file_size = '1'`)
-
-	// Test servers only have 128MB root memory monitors, reduce the buffer size
-	// so we don't see memory errors.
-	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
 
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)

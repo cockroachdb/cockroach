@@ -208,6 +208,11 @@ func checkBaseAndJoinFilePath(prefix, basename string) (string, error) {
 	return path.Join(prefix, basename), nil
 }
 
+// isNotExistErr checks if the error indicates a file does not exist
+func isNotExistErr(err error) bool {
+	return oserror.IsNotExist(err)
+}
+
 // ReadFile implements the ExternalStorage interface and returns the contents of
 // the file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ReadFile(
@@ -218,11 +223,9 @@ func (f *fileTableStorage) ReadFile(
 		return nil, 0, err
 	}
 	reader, size, err := f.fs.ReadFile(ctx, filepath, opts.Offset)
-	if oserror.IsNotExist(err) {
-		return nil, 0, errors.Wrapf(cloud.ErrFileDoesNotExist,
-			"file %s does not exist in the UserFileTableSystem", filepath)
+	if err != nil && isNotExistErr(err) {
+		return nil, 0, cloud.WrapErrFileDoesNotExist(err, "file does not exist in the UserFileTableSystem")
 	}
-
 	return reader, size, err
 }
 
@@ -276,7 +279,11 @@ func (f *fileTableStorage) Delete(ctx context.Context, basename string) error {
 	if err != nil {
 		return err
 	}
-	return f.fs.DeleteFile(ctx, filepath)
+	err = f.fs.DeleteFile(ctx, filepath)
+	if isNotExistErr(err) {
+		return nil
+	}
+	return err
 }
 
 // Size implements the ExternalStorage interface and returns the size of the

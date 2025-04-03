@@ -966,8 +966,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.flags.Set(exec.PlanFlagContainsMutation)
-			break
+			b.setMutationFlags(s)
 		}
 	}
 
@@ -1131,6 +1130,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
+	originalMemo := b.mem
 	planGen := func(
 		ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
 	) (err error) {
@@ -1203,7 +1203,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 				return f.CopyAndReplaceDefault(e, replaceFn)
 			}
-			f.CopyAndReplace(stmt, props, replaceFn)
+			f.CopyAndReplace(originalMemo, stmt, props, replaceFn)
 
 			if wrapRootExpr != nil {
 				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)

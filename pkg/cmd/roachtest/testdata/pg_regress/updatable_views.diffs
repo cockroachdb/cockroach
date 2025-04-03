@@ -1,0 +1,4942 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.out --label=/mnt/data1/postgres/src/test/regress/results/updatable_views.out /mnt/data1/postgres/src/test/regress/expected/updatable_views.out /mnt/data1/postgres/src/test/regress/results/updatable_views.out
+--- /mnt/data1/postgres/src/test/regress/expected/updatable_views.out
++++ /mnt/data1/postgres/src/test/regress/results/updatable_views.out
+@@ -21,6 +21,7 @@
+ CREATE VIEW ro_view12 AS SELECT * FROM generate_series(1, 10) AS g(a); -- SRF in rangetable
+ CREATE VIEW ro_view13 AS SELECT a, b FROM (SELECT * FROM base_tbl) AS t; -- Subselect in rangetable
+ CREATE VIEW rw_view14 AS SELECT ctid, a, b FROM base_tbl; -- System columns may be part of an updatable view
++ERROR:  column "ctid" does not exist
+ CREATE VIEW rw_view15 AS SELECT a, upper(b) FROM base_tbl; -- Expression/function may be part of an updatable view
+ CREATE VIEW rw_view16 AS SELECT a, b, a AS aa FROM base_tbl; -- Repeated column may be part of an updatable view
+ CREATE VIEW ro_view17 AS SELECT * FROM ro_view1; -- Base relation not updatable
+@@ -51,10 +52,9 @@
+  ro_view7   | NO
+  ro_view8   | NO
+  ro_view9   | NO
+- rw_view14  | YES
+- rw_view15  | YES
+- rw_view16  | YES
+-(20 rows)
++ rw_view15  | NO
++ rw_view16  | NO
++(19 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+   FROM information_schema.views
+@@ -79,10 +79,9 @@
+  ro_view7   | NO           | NO
+  ro_view8   | NO           | NO
+  ro_view9   | NO           | NO
+- rw_view14  | YES          | YES
+- rw_view15  | YES          | YES
+- rw_view16  | YES          | YES
+-(20 rows)
++ rw_view15  | NO           | NO
++ rw_view16  | NO           | NO
++(19 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+   FROM information_schema.columns
+@@ -121,78 +120,49 @@
+  ro_view8   | b           | NO
+  ro_view9   | a           | NO
+  ro_view9   | b           | NO
+- rw_view14  | ctid        | NO
+- rw_view14  | a           | YES
+- rw_view14  | b           | YES
+- rw_view15  | a           | YES
++ rw_view15  | a           | NO
+  rw_view15  | upper       | NO
+- rw_view16  | a           | YES
+- rw_view16  | b           | YES
+- rw_view16  | aa          | YES
+-(39 rows)
++ rw_view16  | a           | NO
++ rw_view16  | b           | NO
++ rw_view16  | aa          | NO
++(36 rows)
+ 
+ -- Read-only views
+ DELETE FROM ro_view1;
+-ERROR:  cannot delete from view "ro_view1"
+-DETAIL:  Views containing DISTINCT are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view1" is not a table
+ DELETE FROM ro_view2;
+-ERROR:  cannot delete from view "ro_view2"
+-DETAIL:  Views containing GROUP BY are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view2" is not a table
+ DELETE FROM ro_view3;
+-ERROR:  cannot delete from view "ro_view3"
+-DETAIL:  Views containing HAVING are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view3" is not a table
+ DELETE FROM ro_view4;
+-ERROR:  cannot delete from view "ro_view4"
+-DETAIL:  Views that return aggregate functions are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view4" is not a table
+ DELETE FROM ro_view5;
+-ERROR:  cannot delete from view "ro_view5"
+-DETAIL:  Views that return window functions are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view5" is not a table
+ DELETE FROM ro_view6;
+-ERROR:  cannot delete from view "ro_view6"
+-DETAIL:  Views containing UNION, INTERSECT, or EXCEPT are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view6" is not a table
+ UPDATE ro_view7 SET a=a+1;
+-ERROR:  cannot update view "ro_view7"
+-DETAIL:  Views containing WITH are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view7" is not a table
+ UPDATE ro_view8 SET a=a+1;
+-ERROR:  cannot update view "ro_view8"
+-DETAIL:  Views containing LIMIT or OFFSET are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view8" is not a table
+ UPDATE ro_view9 SET a=a+1;
+-ERROR:  cannot update view "ro_view9"
+-DETAIL:  Views containing LIMIT or OFFSET are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view9" is not a table
+ UPDATE ro_view10 SET a=a+1;
+-ERROR:  cannot update view "ro_view10"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view10" is not a table
+ UPDATE ro_view11 SET a=a+1;
+-ERROR:  cannot update view "ro_view11"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view11" is not a table
+ UPDATE ro_view12 SET a=a+1;
+-ERROR:  cannot update view "ro_view12"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view12" is not a table
+ INSERT INTO ro_view13 VALUES (3, 'Row 3');
+-ERROR:  cannot insert into view "ro_view13"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable inserting into the view, provide an INSTEAD OF INSERT trigger or an unconditional ON INSERT DO INSTEAD rule.
++ERROR:  "ro_view13" is not a table
+ -- Partially updatable view
+ INSERT INTO rw_view14 VALUES (null, 3, 'Row 3'); -- should fail
+-ERROR:  cannot insert into column "ctid" of view "rw_view14"
+-DETAIL:  View columns that refer to system columns are not updatable.
++ERROR:  relation "rw_view14" does not exist
+ INSERT INTO rw_view14 (a, b) VALUES (3, 'Row 3'); -- should be OK
++ERROR:  relation "rw_view14" does not exist
+ UPDATE rw_view14 SET ctid=null WHERE a=3; -- should fail
+-ERROR:  cannot update column "ctid" of view "rw_view14"
+-DETAIL:  View columns that refer to system columns are not updatable.
++ERROR:  relation "rw_view14" does not exist
+ UPDATE rw_view14 SET b='ROW 3' WHERE a=3; -- should be OK
++ERROR:  relation "rw_view14" does not exist
+ SELECT * FROM base_tbl;
+  a  |   b    
+ ----+--------
+@@ -201,106 +171,108 @@
+   0 | Row 0
+   1 | Row 1
+   2 | Row 2
+-  3 | ROW 3
+-(6 rows)
++(5 rows)
+ 
+ DELETE FROM rw_view14 WHERE a=3; -- should be OK
++ERROR:  relation "rw_view14" does not exist
+ -- Partially updatable view
+ INSERT INTO rw_view15 VALUES (3, 'ROW 3'); -- should fail
+-ERROR:  cannot insert into column "upper" of view "rw_view15"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "rw_view15" is not a table
+ INSERT INTO rw_view15 (a) VALUES (3); -- should be OK
++ERROR:  "rw_view15" is not a table
+ INSERT INTO rw_view15 (a) VALUES (3) ON CONFLICT DO NOTHING; -- succeeds
++ERROR:  "rw_view15" is not a table
+ SELECT * FROM rw_view15;
+- a  |    upper    
+-----+-------------
++ a  | upper  
++----+--------
+  -2 | ROW -2
+  -1 | ROW -1
+   0 | ROW 0
+   1 | ROW 1
+   2 | ROW 2
+-  3 | UNSPECIFIED
+-(6 rows)
++(5 rows)
+ 
+ INSERT INTO rw_view15 (a) VALUES (3) ON CONFLICT (a) DO NOTHING; -- succeeds
++ERROR:  "rw_view15" is not a table
+ SELECT * FROM rw_view15;
+- a  |    upper    
+-----+-------------
++ a  | upper  
++----+--------
+  -2 | ROW -2
+  -1 | ROW -1
+   0 | ROW 0
+   1 | ROW 1
+   2 | ROW 2
+-  3 | UNSPECIFIED
+-(6 rows)
++(5 rows)
+ 
+ INSERT INTO rw_view15 (a) VALUES (3) ON CONFLICT (a) DO UPDATE set a = excluded.a; -- succeeds
++ERROR:  "rw_view15" is not a table
+ SELECT * FROM rw_view15;
+- a  |    upper    
+-----+-------------
++ a  | upper  
++----+--------
+  -2 | ROW -2
+  -1 | ROW -1
+   0 | ROW 0
+   1 | ROW 1
+   2 | ROW 2
+-  3 | UNSPECIFIED
+-(6 rows)
++(5 rows)
+ 
+ INSERT INTO rw_view15 (a) VALUES (3) ON CONFLICT (a) DO UPDATE set upper = 'blarg'; -- fails
+-ERROR:  cannot insert into column "upper" of view "rw_view15"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "rw_view15" is not a table
+ SELECT * FROM rw_view15;
+- a  |    upper    
+-----+-------------
++ a  | upper  
++----+--------
+  -2 | ROW -2
+  -1 | ROW -1
+   0 | ROW 0
+   1 | ROW 1
+   2 | ROW 2
+-  3 | UNSPECIFIED
+-(6 rows)
++(5 rows)
+ 
+ SELECT * FROM rw_view15;
+- a  |    upper    
+-----+-------------
++ a  | upper  
++----+--------
+  -2 | ROW -2
+  -1 | ROW -1
+   0 | ROW 0
+   1 | ROW 1
+   2 | ROW 2
+-  3 | UNSPECIFIED
+-(6 rows)
++(5 rows)
+ 
+ ALTER VIEW rw_view15 ALTER COLUMN upper SET DEFAULT 'NOT SET';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view15 ALTER COLUMN upper SET DEFAULT 'NOT SET'
++                     ^
++HINT:  try \h ALTER VIEW
+ INSERT INTO rw_view15 (a) VALUES (4); -- should fail
+-ERROR:  cannot insert into column "upper" of view "rw_view15"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "rw_view15" is not a table
+ UPDATE rw_view15 SET upper='ROW 3' WHERE a=3; -- should fail
+-ERROR:  cannot update column "upper" of view "rw_view15"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "rw_view15" is not a table
+ UPDATE rw_view15 SET upper=DEFAULT WHERE a=3; -- should fail
+-ERROR:  cannot update column "upper" of view "rw_view15"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "rw_view15" is not a table
+ UPDATE rw_view15 SET a=4 WHERE a=3; -- should be OK
++ERROR:  "rw_view15" is not a table
+ SELECT * FROM base_tbl;
+- a  |      b      
+-----+-------------
++ a  |   b    
++----+--------
+  -2 | Row -2
+  -1 | Row -1
+   0 | Row 0
+   1 | Row 1
+   2 | Row 2
+-  4 | Unspecified
+-(6 rows)
++(5 rows)
+ 
+ DELETE FROM rw_view15 WHERE a=4; -- should be OK
++ERROR:  "rw_view15" is not a table
+ -- Partially updatable view
+ INSERT INTO rw_view16 VALUES (3, 'Row 3', 3); -- should fail
+-ERROR:  multiple assignments to same column "a"
++ERROR:  "rw_view16" is not a table
+ INSERT INTO rw_view16 (a, b) VALUES (3, 'Row 3'); -- should be OK
++ERROR:  "rw_view16" is not a table
+ UPDATE rw_view16 SET a=3, aa=-3 WHERE a=3; -- should fail
+-ERROR:  multiple assignments to same column "a"
++ERROR:  "rw_view16" is not a table
+ UPDATE rw_view16 SET aa=-3 WHERE a=3; -- should be OK
++ERROR:  "rw_view16" is not a table
+ SELECT * FROM base_tbl;
+  a  |   b    
+ ----+--------
+@@ -309,69 +281,82 @@
+   0 | Row 0
+   1 | Row 1
+   2 | Row 2
+- -3 | Row 3
+-(6 rows)
++(5 rows)
+ 
+ DELETE FROM rw_view16 WHERE a=-3; -- should be OK
++ERROR:  "rw_view16" is not a table
+ -- Read-only views
+ INSERT INTO ro_view17 VALUES (3, 'ROW 3');
+-ERROR:  cannot insert into view "ro_view1"
+-DETAIL:  Views containing DISTINCT are not automatically updatable.
+-HINT:  To enable inserting into the view, provide an INSTEAD OF INSERT trigger or an unconditional ON INSERT DO INSTEAD rule.
++ERROR:  "ro_view17" is not a table
+ DELETE FROM ro_view18;
+-ERROR:  cannot delete from view "ro_view18"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
++ERROR:  "ro_view18" is not a table
+ UPDATE ro_view19 SET last_value=1000;
+-ERROR:  cannot update view "ro_view19"
+-DETAIL:  Views that do not select from a single table or view are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view19" is not a table
+ UPDATE ro_view20 SET b=upper(b);
+-ERROR:  cannot update view "ro_view20"
+-DETAIL:  Views that return set-returning functions are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "ro_view20" is not a table
+ -- A view with a conditional INSTEAD rule but no unconditional INSTEAD rules
+ -- or INSTEAD OF triggers should be non-updatable and generate useful error
+ -- messages with appropriate detail
+ CREATE RULE rw_view16_ins_rule AS ON INSERT TO rw_view16
+   WHERE NEW.a > 0 DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a, NEW.b);
++ERROR:  at or near "rw_view16_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view16_ins_rule AS ON INSERT TO rw_view16
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE rw_view16_upd_rule AS ON UPDATE TO rw_view16
+   WHERE OLD.a > 0 DO INSTEAD UPDATE base_tbl SET b=NEW.b WHERE a=OLD.a;
++ERROR:  at or near "rw_view16_upd_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view16_upd_rule AS ON UPDATE TO rw_view16
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE rw_view16_del_rule AS ON DELETE TO rw_view16
+   WHERE OLD.a > 0 DO INSTEAD DELETE FROM base_tbl WHERE a=OLD.a;
++ERROR:  at or near "rw_view16_del_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view16_del_rule AS ON DELETE TO rw_view16
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO rw_view16 (a, b) VALUES (3, 'Row 3'); -- should fail
+-ERROR:  cannot insert into view "rw_view16"
+-DETAIL:  Views with conditional DO INSTEAD rules are not automatically updatable.
+-HINT:  To enable inserting into the view, provide an INSTEAD OF INSERT trigger or an unconditional ON INSERT DO INSTEAD rule.
++ERROR:  "rw_view16" is not a table
+ UPDATE rw_view16 SET b='ROW 2' WHERE a=2; -- should fail
+-ERROR:  cannot update view "rw_view16"
+-DETAIL:  Views with conditional DO INSTEAD rules are not automatically updatable.
+-HINT:  To enable updating the view, provide an INSTEAD OF UPDATE trigger or an unconditional ON UPDATE DO INSTEAD rule.
++ERROR:  "rw_view16" is not a table
+ DELETE FROM rw_view16 WHERE a=2; -- should fail
+-ERROR:  cannot delete from view "rw_view16"
+-DETAIL:  Views with conditional DO INSTEAD rules are not automatically updatable.
+-HINT:  To enable deleting from the view, provide an INSTEAD OF DELETE trigger or an unconditional ON DELETE DO INSTEAD rule.
+-DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 16 other objects
+-DETAIL:  drop cascades to view ro_view1
+-drop cascades to view ro_view17
+-drop cascades to view ro_view2
+-drop cascades to view ro_view3
+-drop cascades to view ro_view4
+-drop cascades to view ro_view5
+-drop cascades to view ro_view6
+-drop cascades to view ro_view7
+-drop cascades to view ro_view8
+-drop cascades to view ro_view9
+-drop cascades to view ro_view11
+-drop cascades to view ro_view13
+-drop cascades to view rw_view14
+-drop cascades to view rw_view15
+-drop cascades to view rw_view16
+-drop cascades to view ro_view20
++ERROR:  "rw_view16" is not a table
++DROP TABLE base_tbl CASCADE;
+ DROP VIEW ro_view10, ro_view12, ro_view18;
+ DROP SEQUENCE uv_seq CASCADE;
+-NOTICE:  drop cascades to view ro_view19
+ -- simple updatable view
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+ INSERT INTO base_tbl SELECT i, 'Row ' || i FROM generate_series(-2, 2) g(i);
+@@ -381,7 +366,7 @@
+  WHERE table_name = 'rw_view1';
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
++ rw_view1   | NO
+ (1 row)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -389,7 +374,7 @@
+  WHERE table_name = 'rw_view1';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
++ rw_view1   | NO           | NO
+ (1 row)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -398,64 +383,76 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | a           | YES
+- rw_view1   | b           | YES
++ rw_view1   | a           | NO
++ rw_view1   | b           | NO
+ (2 rows)
+ 
+ INSERT INTO rw_view1 VALUES (3, 'Row 3');
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 (a) VALUES (4);
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET a=5 WHERE a=4;
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view1 WHERE b='Row 2';
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+- a  |      b      
+-----+-------------
++ a  |   b    
++----+--------
+  -2 | Row -2
+  -1 | Row -1
+   0 | Row 0
+   1 | Row 1
+-  3 | Row 3
+-  5 | Unspecified
+-(6 rows)
++  2 | Row 2
++(5 rows)
+ 
+ EXPLAIN (costs off) UPDATE rw_view1 SET a=6 WHERE a=5;
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Update on base_tbl
+-   ->  Index Scan using base_tbl_pkey on base_tbl
+-         Index Cond: ((a > 0) AND (a = 5))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view1 SET a=6 WHERE a=5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view1 WHERE a=5;
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Delete on base_tbl
+-   ->  Index Scan using base_tbl_pkey on base_tbl
+-         Index Cond: ((a > 0) AND (a = 5))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view1 WHERE a=5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- it's still updatable if we add a DO ALSO rule
+ CREATE TABLE base_tbl_hist(ts timestamptz default now(), a int, b text);
+ CREATE RULE base_tbl_log AS ON INSERT TO rw_view1 DO ALSO
+   INSERT INTO base_tbl_hist(a,b) VALUES(new.a, new.b);
++ERROR:  at or near "base_tbl_log": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE base_tbl_log AS ON INSERT TO rw_view1 DO ALSO
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT table_name, is_updatable, is_insertable_into
+   FROM information_schema.views
+  WHERE table_name = 'rw_view1';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
++ rw_view1   | NO           | NO
+ (1 row)
+ 
+ -- Check behavior with DEFAULTs (bug #17633)
+ INSERT INTO rw_view1 VALUES (9, DEFAULT), (10, DEFAULT);
++ERROR:  "rw_view1" is not a table
+ SELECT a, b FROM base_tbl_hist;
+- a  | b 
+-----+---
+-  9 | 
+- 10 | 
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ DROP TABLE base_tbl_hist;
+ -- view on top of view
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+@@ -467,7 +464,7 @@
+  WHERE table_name = 'rw_view2';
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view2   | YES
++ rw_view2   | NO
+ (1 row)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -475,7 +472,7 @@
+  WHERE table_name = 'rw_view2';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view2   | YES          | YES
++ rw_view2   | NO           | NO
+ (1 row)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -484,51 +481,45 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view2   | aaa         | YES
+- rw_view2   | bbb         | YES
++ rw_view2   | aaa         | NO
++ rw_view2   | bbb         | NO
+ (2 rows)
+ 
+ INSERT INTO rw_view2 VALUES (3, 'Row 3');
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 (aaa) VALUES (4);
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+- aaa |     bbb     
+------+-------------
++ aaa |  bbb  
++-----+-------
+    1 | Row 1
+    2 | Row 2
+-   3 | Row 3
+-   4 | Unspecified
+-(4 rows)
++(2 rows)
+ 
+ UPDATE rw_view2 SET bbb='Row 4' WHERE aaa=4;
++ERROR:  "rw_view2" is not a table
+ DELETE FROM rw_view2 WHERE aaa=2;
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+  aaa |  bbb  
+ -----+-------
+    1 | Row 1
+-   3 | Row 3
+-   4 | Row 4
+-(3 rows)
++   2 | Row 2
++(2 rows)
+ 
+ EXPLAIN (costs off) UPDATE rw_view2 SET aaa=5 WHERE aaa=4;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Update on base_tbl
+-   ->  Index Scan using base_tbl_pkey on base_tbl
+-         Index Cond: ((a < 10) AND (a > 0) AND (a = 4))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view2 SET aaa=5 WHERE aaa=4
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view2 WHERE aaa=4;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Delete on base_tbl
+-   ->  Index Scan using base_tbl_pkey on base_tbl
+-         Index Cond: ((a < 10) AND (a > 0) AND (a = 4))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view2 WHERE aaa=4
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- view on top of view with rules
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+ INSERT INTO base_tbl SELECT i, 'Row ' || i FROM generate_series(-2, 2) g(i);
+@@ -568,14 +559,29 @@
+ 
+ CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
+   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a, NEW.b) RETURNING *;
++ERROR:  at or near "rw_view1_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+  ORDER BY table_name;
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+- rw_view2   | YES
++ rw_view1   | NO
++ rw_view2   | NO
+ (2 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -584,8 +590,8 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | NO           | YES
+- rw_view2   | NO           | YES
++ rw_view1   | NO           | NO
++ rw_view2   | NO           | NO
+ (2 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -602,14 +608,29 @@
+ 
+ CREATE RULE rw_view1_upd_rule AS ON UPDATE TO rw_view1
+   DO INSTEAD UPDATE base_tbl SET b=NEW.b WHERE a=OLD.a RETURNING NEW.*;
++ERROR:  at or near "rw_view1_upd_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_upd_rule AS ON UPDATE TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+  ORDER BY table_name;
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+- rw_view2   | YES
++ rw_view1   | NO
++ rw_view2   | NO
+ (2 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -618,8 +639,8 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | NO           | YES
+- rw_view2   | NO           | YES
++ rw_view1   | NO           | NO
++ rw_view2   | NO           | NO
+ (2 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -636,14 +657,29 @@
+ 
+ CREATE RULE rw_view1_del_rule AS ON DELETE TO rw_view1
+   DO INSTEAD DELETE FROM base_tbl WHERE a=OLD.a RETURNING OLD.*;
++ERROR:  at or near "rw_view1_del_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_del_rule AS ON DELETE TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+  ORDER BY table_name;
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+- rw_view2   | YES
++ rw_view1   | NO
++ rw_view2   | NO
+ (2 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -652,8 +688,8 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
+- rw_view2   | YES          | YES
++ rw_view1   | NO           | NO
++ rw_view2   | NO           | NO
+ (2 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -662,38 +698,25 @@
+  ORDER BY table_name, ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | a           | YES
+- rw_view1   | b           | YES
+- rw_view2   | a           | YES
+- rw_view2   | b           | YES
++ rw_view1   | a           | NO
++ rw_view1   | b           | NO
++ rw_view2   | a           | NO
++ rw_view2   | b           | NO
+ (4 rows)
+ 
+ INSERT INTO rw_view2 VALUES (3, 'Row 3') RETURNING *;
+- a |   b   
+----+-------
+- 3 | Row 3
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET b='Row three' WHERE a=3 RETURNING *;
+- a |     b     
+----+-----------
+- 3 | Row three
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+- a |     b     
+----+-----------
++ a |   b   
++---+-------
+  1 | Row 1
+  2 | Row 2
+- 3 | Row three
+-(3 rows)
++(2 rows)
+ 
+ DELETE FROM rw_view2 WHERE a=3 RETURNING *;
+- a |     b     
+----+-----------
+- 3 | Row three
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+  a |   b   
+ ---+-------
+@@ -702,39 +725,18 @@
+ (2 rows)
+ 
+ EXPLAIN (costs off) UPDATE rw_view2 SET a=3 WHERE a=2;
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Update on base_tbl
+-   ->  Nested Loop
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (a = 2)
+-         ->  Subquery Scan on rw_view1
+-               Filter: ((rw_view1.a < 10) AND (rw_view1.a = 2))
+-               ->  Bitmap Heap Scan on base_tbl base_tbl_1
+-                     Recheck Cond: (a > 0)
+-                     ->  Bitmap Index Scan on base_tbl_pkey
+-                           Index Cond: (a > 0)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view2 SET a=3 WHERE a=2
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view2 WHERE a=2;
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Delete on base_tbl
+-   ->  Nested Loop
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (a = 2)
+-         ->  Subquery Scan on rw_view1
+-               Filter: ((rw_view1.a < 10) AND (rw_view1.a = 2))
+-               ->  Bitmap Heap Scan on base_tbl base_tbl_1
+-                     Recheck Cond: (a > 0)
+-                     ->  Bitmap Index Scan on base_tbl_pkey
+-                           Index Cond: (a > 0)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view2 WHERE a=2
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- view on top of view with triggers
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+ INSERT INTO base_tbl SELECT i, 'Row ' || i FROM generate_series(-2, 2) g(i);
+@@ -793,6 +795,9 @@
+ LANGUAGE plpgsql;
+ CREATE TRIGGER rw_view1_ins_trig INSTEAD OF INSERT ON rw_view1
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  unimplemented: INSTEAD OF triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126363/_version_
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+@@ -811,7 +816,7 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+ ------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- rw_view1   | NO           | NO                 | NO                   | NO                   | YES
++ rw_view1   | NO           | NO                 | NO                   | NO                   | NO
+  rw_view2   | NO           | NO                 | NO                   | NO                   | NO
+ (2 rows)
+ 
+@@ -829,6 +834,9 @@
+ 
+ CREATE TRIGGER rw_view1_upd_trig INSTEAD OF UPDATE ON rw_view1
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  unimplemented: INSTEAD OF triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126363/_version_
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+@@ -847,7 +855,7 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+ ------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- rw_view1   | NO           | NO                 | YES                  | NO                   | YES
++ rw_view1   | NO           | NO                 | NO                   | NO                   | NO
+  rw_view2   | NO           | NO                 | NO                   | NO                   | NO
+ (2 rows)
+ 
+@@ -865,6 +873,9 @@
+ 
+ CREATE TRIGGER rw_view1_del_trig INSTEAD OF DELETE ON rw_view1
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  unimplemented: INSTEAD OF triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126363/_version_
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name LIKE 'rw_view%'
+@@ -883,7 +894,7 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+ ------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- rw_view1   | NO           | NO                 | YES                  | YES                  | YES
++ rw_view1   | NO           | NO                 | NO                   | NO                   | NO
+  rw_view2   | NO           | NO                 | NO                   | NO                   | NO
+ (2 rows)
+ 
+@@ -900,31 +911,18 @@
+ (4 rows)
+ 
+ INSERT INTO rw_view2 VALUES (3, 'Row 3') RETURNING *;
+- a |   b   
+----+-------
+- 3 | Row 3
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET b='Row three' WHERE a=3 RETURNING *;
+- a |     b     
+----+-----------
+- 3 | Row three
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+- a |     b     
+----+-----------
++ a |   b   
++---+-------
+  1 | Row 1
+  2 | Row 2
+- 3 | Row three
+-(3 rows)
++(2 rows)
+ 
+ DELETE FROM rw_view2 WHERE a=3 RETURNING *;
+- a |     b     
+----+-----------
+- 3 | Row three
+-(1 row)
+-
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM rw_view2;
+  a |   b   
+ ---+-------
+@@ -933,33 +931,18 @@
+ (2 rows)
+ 
+ EXPLAIN (costs off) UPDATE rw_view2 SET a=3 WHERE a=2;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Update on rw_view1 rw_view1_1
+-   ->  Subquery Scan on rw_view1
+-         Filter: ((rw_view1.a < 10) AND (rw_view1.a = 2))
+-         ->  Bitmap Heap Scan on base_tbl
+-               Recheck Cond: (a > 0)
+-               ->  Bitmap Index Scan on base_tbl_pkey
+-                     Index Cond: (a > 0)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view2 SET a=3 WHERE a=2
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view2 WHERE a=2;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Delete on rw_view1 rw_view1_1
+-   ->  Subquery Scan on rw_view1
+-         Filter: ((rw_view1.a < 10) AND (rw_view1.a = 2))
+-         ->  Bitmap Heap Scan on base_tbl
+-               Recheck Cond: (a > 0)
+-               ->  Bitmap Index Scan on base_tbl_pkey
+-                     Index Cond: (a > 0)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view2 WHERE a=2
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ DROP FUNCTION rw_view1_trig_fn();
+ -- update using whole row from view
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+@@ -967,165 +950,269 @@
+ CREATE VIEW rw_view1 AS SELECT b AS bb, a AS aa FROM base_tbl;
+ CREATE FUNCTION rw_view1_aa(x rw_view1)
+   RETURNS int AS $$ SELECT x.aa $$ LANGUAGE sql;
++ERROR:  no data source matches prefix: x in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ UPDATE rw_view1 v SET bb='Updated row 2' WHERE rw_view1_aa(v)=2
+   RETURNING rw_view1_aa(v), v.bb;
+- rw_view1_aa |      bb       
+--------------+---------------
+-           2 | Updated row 2
+-(1 row)
+-
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+- a  |       b       
+-----+---------------
++ a  |   b    
++----+--------
+  -2 | Row -2
+  -1 | Row -1
+   0 | Row 0
+   1 | Row 1
+-  2 | Updated row 2
++  2 | Row 2
+ (5 rows)
+ 
+ EXPLAIN (costs off)
+ UPDATE rw_view1 v SET bb='Updated row 2' WHERE rw_view1_aa(v)=2
+   RETURNING rw_view1_aa(v), v.bb;
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Update on base_tbl
+-   ->  Index Scan using base_tbl_pkey on base_tbl
+-         Index Cond: (a = 2)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to function rw_view1_aa(rw_view1)
+ -- permissions checks
+ CREATE USER regress_view_user1;
+ CREATE USER regress_view_user2;
+ CREATE USER regress_view_user3;
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE base_tbl(a int, b text, c float);
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
+ INSERT INTO rw_view1 VALUES ('Row 2', 2.0, 2);
++ERROR:  "rw_view1" is not a table
+ GRANT SELECT ON base_tbl TO regress_view_user2;
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ GRANT UPDATE (bb,cc) ON rw_view1 TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (bb,cc) ON rw_view1 TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW rw_view2 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
+ SELECT * FROM base_tbl; -- ok
+  a |   b   | c 
+ ---+-------+---
+  1 | Row 1 | 1
+- 2 | Row 2 | 2
+-(2 rows)
++(1 row)
+ 
+ SELECT * FROM rw_view1; -- ok
+   bb   | cc | aa 
+ -------+----+----
+  Row 1 |  1 |  1
+- Row 2 |  2 |  2
+-(2 rows)
++(1 row)
+ 
+ SELECT * FROM rw_view2; -- ok
+   bb   | cc | aa 
+ -------+----+----
+  Row 1 |  1 |  1
+- Row 2 |  2 |  2
+-(2 rows)
++(1 row)
+ 
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- not allowed
+-ERROR:  permission denied for table base_tbl
+ INSERT INTO rw_view1 VALUES ('Row 3', 3.0, 3); -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view2 VALUES ('Row 3', 3.0, 3); -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE base_tbl SET a=a, c=c; -- ok
+ UPDATE base_tbl SET b=b; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ UPDATE rw_view1 SET bb=bb, cc=cc; -- ok
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET aa=aa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view2 SET aa=aa, cc=cc; -- ok
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bb=bb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ DELETE FROM base_tbl; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ DELETE FROM rw_view1; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view2; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT INSERT, DELETE ON base_tbl TO regress_view_user2;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- ok
+ INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view2 VALUES ('Row 4', 4.0, 4); -- ok
++ERROR:  "rw_view2" is not a table
+ DELETE FROM base_tbl WHERE a=1; -- ok
+ DELETE FROM rw_view1 WHERE aa=2; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view2 WHERE aa=2; -- ok
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+  a |   b   | c 
+ ---+-------+---
+  3 | Row 3 | 3
+- 4 | Row 4 | 4
+-(2 rows)
++(1 row)
+ 
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE INSERT, DELETE ON base_tbl FROM regress_view_user2;
+ GRANT INSERT, DELETE ON rw_view1 TO regress_view_user2;
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO base_tbl VALUES (5, 'Row 5', 5.0); -- not allowed
+-ERROR:  permission denied for table base_tbl
+ INSERT INTO rw_view1 VALUES ('Row 5', 5.0, 5); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view2 VALUES ('Row 6', 6.0, 6); -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ DELETE FROM base_tbl WHERE a=3; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ DELETE FROM rw_view1 WHERE aa=3; -- ok
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view2 WHERE aa=4; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+  a |   b   | c 
+ ---+-------+---
+- 4 | Row 4 | 4
+  5 | Row 5 | 5
+-(2 rows)
++(1 row)
+ 
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- nested-view permissions
+ CREATE TABLE base_tbl(a int, b text, c float);
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT SELECT ON base_tbl TO regress_view_user1;
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view1;
+  a |   b   | c 
+ ---+-------+---
+@@ -1133,19 +1220,49 @@
+ (1 row)
+ 
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;
+  a |   b   | c 
+ ---+-------+---
+@@ -1153,12 +1270,27 @@
+ (1 row)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT UPDATE ON base_tbl TO regress_view_user1;
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view1;
+  a |   b   | c 
+ ---+-------+---
+@@ -1172,167 +1304,341 @@
+ (1 row)
+ 
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
+ (1 row)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT UPDATE ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
+ (1 row)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;
+- a |  b  | c 
+----+-----+---
+- 1 | foo | 1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
+ (1 row)
+ 
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE UPDATE ON base_tbl FROM regress_view_user1;
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view1;
+- a |  b  | c 
+----+-----+---
+- 1 | bar | 1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
+ (1 row)
+ 
+ SELECT * FROM rw_view1 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view1 SET b = 'foo' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;
+- a |  b  | c 
+----+-----+---
+- 1 | bar | 1
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
+ (1 row)
+ 
+ SELECT * FROM rw_view2 FOR UPDATE;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ UPDATE rw_view2 SET b = 'bar' WHERE a = 1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- security invoker view permissions
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE base_tbl(a int, b text, c float);
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
+ ALTER VIEW rw_view1 SET (security_invoker = true);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 SET (security_invoker = true)
++                        ^
++HINT:  try \h ALTER VIEW
+ INSERT INTO rw_view1 VALUES ('Row 2', 2.0, 2);
++ERROR:  "rw_view1" is not a table
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ GRANT UPDATE (bb,cc) ON rw_view1 TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (bb,cc) ON rw_view1 TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM base_tbl; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ a |   b   | c 
++---+-------+---
++ 1 | Row 1 | 1
++(1 row)
++
+ SELECT * FROM rw_view1; -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 1 |  1 |  1
++(1 row)
++
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- not allowed
+-ERROR:  permission denied for table base_tbl
+ INSERT INTO rw_view1 VALUES ('Row 3', 3.0, 3); -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ UPDATE base_tbl SET a=a; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ UPDATE rw_view1 SET bb=bb, cc=cc; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ DELETE FROM base_tbl; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ DELETE FROM rw_view1; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT ON base_tbl TO regress_view_user2;
+ GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a,c) ON base_tbl TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM base_tbl; -- ok
+- a |   b   | c 
+----+-------+---
+- 1 | Row 1 | 1
+- 2 | Row 2 | 2
+-(2 rows)
++ a | b | c 
++---+---+---
++(0 rows)
+ 
+ SELECT * FROM rw_view1; -- ok
+-  bb   | cc | aa 
+--------+----+----
+- Row 1 |  1 |  1
+- Row 2 |  2 |  2
+-(2 rows)
++ bb | cc | aa 
++----+----+----
++(0 rows)
+ 
+ UPDATE base_tbl SET a=a, c=c; -- ok
+ UPDATE base_tbl SET b=b; -- not allowed
+-ERROR:  permission denied for table base_tbl
+ UPDATE rw_view1 SET cc=cc; -- ok
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET aa=aa; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET bb=bb; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT INSERT, DELETE ON base_tbl TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO base_tbl VALUES (3, 'Row 3', 3.0); -- ok
+ INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ DELETE FROM base_tbl WHERE a=1; -- ok
+ DELETE FROM rw_view1 WHERE aa=2; -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ REVOKE INSERT, DELETE ON base_tbl FROM regress_view_user2;
+ GRANT INSERT, DELETE ON rw_view1 TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view1 WHERE aa=2; -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT INSERT, DELETE ON base_tbl TO regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ INSERT INTO rw_view1 VALUES ('Row 4', 4.0, 4); -- ok
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view1 WHERE aa=2; -- ok
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl; -- ok
+  a |   b   | c 
+ ---+-------+---
+  3 | Row 3 | 3
+- 4 | Row 4 | 4
+-(2 rows)
++(1 row)
+ 
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- ordinary view on top of security invoker view permissions
+ CREATE TABLE base_tbl(a int, b text, c float);
+ INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
+ ALTER VIEW rw_view1 SET (security_invoker = true);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 SET (security_invoker = true)
++                        ^
++HINT:  try \h ALTER VIEW
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 1 |  1 |  1
++(1 row)
++
+ UPDATE rw_view1 SET aa=aa;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE VIEW rw_view2 AS SELECT cc AS ccc, aa AS aaa, bb AS bbb FROM rw_view1;
+ GRANT SELECT, UPDATE ON rw_view2 TO regress_view_user3;
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT SELECT ON base_tbl TO regress_view_user1;
+ GRANT UPDATE (a, b) ON base_tbl TO regress_view_user1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a, b) ON base_tbl TO regress_view_user1
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view1; -- ok
+   bb   | cc | aa 
+ -------+----+----
+@@ -1340,35 +1646,103 @@
+ (1 row)
+ 
+ UPDATE rw_view1 SET aa=aa, bb=bb;  -- ok
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET cc=cc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ GRANT SELECT ON rw_view1 TO regress_view_user2;
+ GRANT UPDATE (bb, cc) ON rw_view1 TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (bb, cc) ON rw_view1 TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT SELECT ON base_tbl TO regress_view_user2;
+ GRANT UPDATE (a, c) ON base_tbl TO regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a, c) ON base_tbl TO regress_view_user2
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- ok
+  ccc | aaa |  bbb  
+ -----+-----+-------
+@@ -1376,23 +1750,50 @@
+ (1 row)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ GRANT SELECT ON base_tbl TO regress_view_user3;
+ GRANT UPDATE (a, c) ON base_tbl TO regress_view_user3;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT UPDATE (a, c) ON base_tbl TO regress_view_user3
++             ^
++HINT:  try \h GRANT
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- ok
+  ccc | aaa |  bbb  
+ -----+-----+-------
+@@ -1400,18 +1801,40 @@
+ (1 row)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE SELECT, UPDATE ON base_tbl FROM regress_view_user1;
+ SET SESSION AUTHORIZATION regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view1;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++  bb   | cc | aa 
++-------+----+----
++ Row 1 |  1 |  1
++(1 row)
++
+ UPDATE rw_view1 SET aa=aa;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view1" is not a table
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- ok
+  ccc | aaa |  bbb  
+ -----+-----+-------
+@@ -1419,11 +1842,18 @@
+ (1 row)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- ok
+  ccc | aaa |  bbb  
+ -----+-----+-------
+@@ -1431,22 +1861,44 @@
+ (1 row)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ REVOKE SELECT, UPDATE ON base_tbl FROM regress_view_user2;
+ SET SESSION AUTHORIZATION regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ ccc | aaa |  bbb  
++-----+-----+-------
++   1 |   1 | Row 1
++(1 row)
++
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ SET SESSION AUTHORIZATION regress_view_user3;
++ERROR:  at or near "regress_view_user3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_view_user3
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM rw_view2;  -- ok
+  ccc | aaa |  bbb  
+ -----+-----+-------
+@@ -1454,39 +1906,47 @@
+ (1 row)
+ 
+ UPDATE rw_view2 SET aaa=aaa;  -- not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET bbb=bbb;  -- not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET ccc=ccc;  -- ok
++ERROR:  "rw_view2" is not a table
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ DROP USER regress_view_user1;
+ DROP USER regress_view_user2;
+ DROP USER regress_view_user3;
+ -- column defaults
+-CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified', c serial);
++CREATE SEQUENCE c_seq;
++CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified', c int default nextval('c_seq'));
+ INSERT INTO base_tbl VALUES (1, 'Row 1');
+ INSERT INTO base_tbl VALUES (2, 'Row 2');
+ INSERT INTO base_tbl VALUES (3);
+ CREATE VIEW rw_view1 AS SELECT a AS aa, b AS bb FROM base_tbl;
+ ALTER VIEW rw_view1 ALTER COLUMN bb SET DEFAULT 'View default';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 ALTER COLUMN bb SET DEFAULT 'View default'
++                    ^
++HINT:  try \h ALTER VIEW
+ INSERT INTO rw_view1 VALUES (4, 'Row 4');
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 (aa) VALUES (5);
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+- a |      b       | c 
+----+--------------+---
+- 1 | Row 1        | 1
+- 2 | Row 2        | 2
+- 3 | Unspecified  | 3
+- 4 | Row 4        | 4
+- 5 | View default | 5
+-(5 rows)
++ a |      b      | c 
++---+-------------+---
++ 1 | Row 1       | 1
++ 2 | Row 2       | 2
++ 3 | Unspecified | 3
++(3 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- Table having triggers
+ CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
+ INSERT INTO base_tbl VALUES (1, 'Row 1');
+@@ -1505,18 +1965,23 @@
+ LANGUAGE plpgsql;
+ CREATE TRIGGER rw_view1_ins_trig AFTER INSERT ON base_tbl
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  no data source matches prefix: new in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ CREATE VIEW rw_view1 AS SELECT a AS aa, b AS bb FROM base_tbl;
+ INSERT INTO rw_view1 VALUES (3, 'Row 3');
++ERROR:  "rw_view1" is not a table
+ select * from base_tbl;
+  a |   b   
+ ---+-------
++ 1 | Row 1
+  2 | Row 2
+- 3 | Row 3
+- 1 | Row 3
+-(3 rows)
++(2 rows)
+ 
+ DROP VIEW rw_view1;
+ DROP TRIGGER rw_view1_ins_trig on base_tbl;
++ERROR:  trigger "rw_view1_ins_trig" for table "base_tbl" does not exist
+ DROP FUNCTION rw_view1_trig_fn();
+ DROP TABLE base_tbl;
+ -- view with ORDER BY
+@@ -1526,148 +1991,112 @@
+ SELECT * FROM rw_view1;
+  a | b  
+ ---+----
+- 3 | -3
+  1 |  2
+  4 |  5
++ 3 | -3
+ (3 rows)
+ 
+ INSERT INTO rw_view1 VALUES (7,-8);
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM rw_view1;
+  a | b  
+ ---+----
+- 7 | -8
+- 3 | -3
+  1 |  2
+  4 |  5
+-(4 rows)
++ 3 | -3
++(3 rows)
+ 
+ EXPLAIN (verbose, costs off) UPDATE rw_view1 SET b = b + 1 RETURNING *;
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Update on public.base_tbl
+-   Output: base_tbl.a, base_tbl.b
+-   ->  Seq Scan on public.base_tbl
+-         Output: (base_tbl.b + 1), base_tbl.ctid
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (verbose, costs off) UPDATE rw_view1 SET b = b + 1 RETURNING *
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE rw_view1 SET b = b + 1 RETURNING *;
+- a | b  
+----+----
+- 1 |  3
+- 4 |  6
+- 3 | -2
+- 7 | -7
+-(4 rows)
+-
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM rw_view1;
+  a | b  
+ ---+----
+- 7 | -7
+- 3 | -2
+- 1 |  3
+- 4 |  6
+-(4 rows)
++ 1 |  2
++ 4 |  5
++ 3 | -3
++(3 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- multiple array-column updates
+ CREATE TABLE base_tbl (a int, arr int[]);
+ INSERT INTO base_tbl VALUES (1,ARRAY[2]), (3,ARRAY[4]);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
+ UPDATE rw_view1 SET arr[1] = 42, arr[2] = 77 WHERE a = 3;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE rw_view1 SET arr[1] = 42, arr[2] = 77 WHERE a = 3
++                       ^
++HINT:  try \h UPDATE
+ SELECT * FROM rw_view1;
+- a |   arr   
+----+---------
++ a | arr 
++---+-----
+  1 | {2}
+- 3 | {42,77}
++ 3 | {4}
+ (2 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- views with updatable and non-updatable columns
+ CREATE TABLE base_tbl(a float);
+ INSERT INTO base_tbl SELECT i/10.0 FROM generate_series(1,10) g(i);
++ERROR:  unsupported binary operator: <int> / <decimal> (returning <float>)
+ CREATE VIEW rw_view1 AS
+   SELECT ctid, sin(a) s, a, cos(a) c
+   FROM base_tbl
+   WHERE a != 0
+   ORDER BY abs(a);
++ERROR:  column "ctid" does not exist
+ INSERT INTO rw_view1 VALUES (null, null, 1.1, null); -- should fail
+-ERROR:  cannot insert into column "ctid" of view "rw_view1"
+-DETAIL:  View columns that refer to system columns are not updatable.
++ERROR:  relation "rw_view1" does not exist
+ INSERT INTO rw_view1 (s, c, a) VALUES (null, null, 1.1); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view1" does not exist
+ INSERT INTO rw_view1 (a) VALUES (1.1) RETURNING a, s, c; -- OK
+-  a  |         s         |         c         
+------+-------------------+-------------------
+- 1.1 | 0.891207360061435 | 0.453596121425577
+-(1 row)
+-
++ERROR:  relation "rw_view1" does not exist
+ UPDATE rw_view1 SET s = s WHERE a = 1.1; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view1" does not exist
+ UPDATE rw_view1 SET a = 1.05 WHERE a = 1.1 RETURNING s; -- OK
+-         s         
+--------------------
+- 0.867423225594017
+-(1 row)
+-
++ERROR:  relation "rw_view1" does not exist
+ DELETE FROM rw_view1 WHERE a = 1.05; -- OK
++ERROR:  relation "rw_view1" does not exist
+ CREATE VIEW rw_view2 AS
+   SELECT s, c, s/c t, a base_a, ctid
+   FROM rw_view1;
++ERROR:  relation "rw_view1" does not exist
+ INSERT INTO rw_view2 VALUES (null, null, null, 1.1, null); -- should fail
+-ERROR:  cannot insert into column "t" of view "rw_view2"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view2" does not exist
+ INSERT INTO rw_view2(s, c, base_a) VALUES (null, null, 1.1); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view2" does not exist
+ INSERT INTO rw_view2(base_a) VALUES (1.1) RETURNING t; -- OK
+-        t         
+-------------------
+- 1.96475965724865
+-(1 row)
+-
++ERROR:  relation "rw_view2" does not exist
+ UPDATE rw_view2 SET s = s WHERE base_a = 1.1; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view2" does not exist
+ UPDATE rw_view2 SET t = t WHERE base_a = 1.1; -- should fail
+-ERROR:  cannot update column "t" of view "rw_view2"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view2" does not exist
+ UPDATE rw_view2 SET base_a = 1.05 WHERE base_a = 1.1; -- OK
++ERROR:  relation "rw_view2" does not exist
+ DELETE FROM rw_view2 WHERE base_a = 1.05 RETURNING base_a, s, c, t; -- OK
+- base_a |         s         |         c         |        t         
+---------+-------------------+-------------------+------------------
+-   1.05 | 0.867423225594017 | 0.497571047891727 | 1.74331530998317
+-(1 row)
+-
++ERROR:  relation "rw_view2" does not exist
+ CREATE VIEW rw_view3 AS
+   SELECT s, c, s/c t, ctid
+   FROM rw_view1;
++ERROR:  relation "rw_view1" does not exist
+ INSERT INTO rw_view3 VALUES (null, null, null, null); -- should fail
+-ERROR:  cannot insert into column "t" of view "rw_view3"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
+ INSERT INTO rw_view3(s) VALUES (null); -- should fail
+-ERROR:  cannot insert into column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
+ UPDATE rw_view3 SET s = s; -- should fail
+-ERROR:  cannot update column "s" of view "rw_view1"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  relation "rw_view3" does not exist
+ DELETE FROM rw_view3 WHERE s = sin(0.1); -- should be OK
++ERROR:  relation "rw_view3" does not exist
+ SELECT * FROM base_tbl ORDER BY a;
+-  a  
+------
+- 0.2
+- 0.3
+- 0.4
+- 0.5
+- 0.6
+- 0.7
+- 0.8
+- 0.9
+-   1
+-(9 rows)
++ a 
++---
++(0 rows)
+ 
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+@@ -1675,10 +2104,7 @@
+  ORDER BY table_name;
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
+- rw_view2   | YES
+- rw_view3   | NO
+-(3 rows)
++(0 rows)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+   FROM information_schema.views
+@@ -1686,10 +2112,7 @@
+  ORDER BY table_name;
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
+- rw_view2   | YES          | YES
+- rw_view3   | NO           | NO
+-(3 rows)
++(0 rows)
+ 
+ SELECT table_name, column_name, is_updatable
+   FROM information_schema.columns
+@@ -1697,75 +2120,56 @@
+  ORDER BY table_name, ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | ctid        | NO
+- rw_view1   | s           | NO
+- rw_view1   | a           | YES
+- rw_view1   | c           | NO
+- rw_view2   | s           | NO
+- rw_view2   | c           | NO
+- rw_view2   | t           | NO
+- rw_view2   | base_a      | YES
+- rw_view2   | ctid        | NO
+- rw_view3   | s           | NO
+- rw_view3   | c           | NO
+- rw_view3   | t           | NO
+- rw_view3   | ctid        | NO
+-(13 rows)
++(0 rows)
+ 
+ SELECT events & 4 != 0 AS upd,
+        events & 8 != 0 AS ins,
+        events & 16 != 0 AS del
+   FROM pg_catalog.pg_relation_is_updatable('rw_view3'::regclass, false) t(events);
+- upd | ins | del 
+------+-----+-----
+- f   | f   | t
+-(1 row)
+-
++ERROR:  relation "rw_view3" does not exist
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+-drop cascades to view rw_view3
+ -- view on table with GENERATED columns
+ CREATE TABLE base_tbl (id int, idplus1 int GENERATED ALWAYS AS (id + 1) STORED);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl;
+ INSERT INTO base_tbl (id) VALUES (1);
+ INSERT INTO rw_view1 (id) VALUES (2);
++ERROR:  "rw_view1" is not a table
+ INSERT INTO base_tbl (id, idplus1) VALUES (3, DEFAULT);
++ERROR:  cannot write directly to computed column "idplus1"
+ INSERT INTO rw_view1 (id, idplus1) VALUES (4, DEFAULT);
++ERROR:  "rw_view1" is not a table
+ INSERT INTO base_tbl (id, idplus1) VALUES (5, 6);  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "idplus1"
+-DETAIL:  Column "idplus1" is a generated column.
++ERROR:  cannot write directly to computed column "idplus1"
+ INSERT INTO rw_view1 (id, idplus1) VALUES (6, 7);  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "idplus1"
+-DETAIL:  Column "idplus1" is a generated column.
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+  id | idplus1 
+ ----+---------
+   1 |       2
+-  2 |       3
+-  3 |       4
+-  4 |       5
+-(4 rows)
++(1 row)
+ 
+ UPDATE base_tbl SET id = 2000 WHERE id = 2;
+ UPDATE rw_view1 SET id = 3000 WHERE id = 3;
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+-  id  | idplus1 
+-------+---------
+-    1 |       2
+-    4 |       5
+- 2000 |    2001
+- 3000 |    3001
+-(4 rows)
++ id | idplus1 
++----+---------
++  1 |       2
++(1 row)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- inheritance tests
+ CREATE TABLE base_tbl_parent (a int);
+ CREATE TABLE base_tbl_child (CHECK (a > 0)) INHERITS (base_tbl_parent);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE base_tbl_child (CHECK (a > 0)) INHERITS (base_tbl_parent)
++                                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO base_tbl_parent SELECT * FROM generate_series(-8, -1);
+ INSERT INTO base_tbl_child SELECT * FROM generate_series(1, 8);
++ERROR:  relation "base_tbl_child" does not exist
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl_parent;
+ CREATE VIEW rw_view2 AS SELECT * FROM ONLY base_tbl_parent;
+ SELECT * FROM rw_view1 ORDER BY a;
+@@ -1779,15 +2183,7 @@
+  -3
+  -2
+  -1
+-  1
+-  2
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(16 rows)
++(8 rows)
+ 
+ SELECT * FROM ONLY rw_view1 ORDER BY a;
+  a  
+@@ -1800,15 +2196,7 @@
+  -3
+  -2
+  -1
+-  1
+-  2
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(16 rows)
++(8 rows)
+ 
+ SELECT * FROM rw_view2 ORDER BY a;
+  a  
+@@ -1824,316 +2212,315 @@
+ (8 rows)
+ 
+ INSERT INTO rw_view1 VALUES (-100), (100);
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view2 VALUES (-200), (200);
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view1 SET a = a*10 WHERE a IN (-1, 1); -- Should produce -10 and 10
++ERROR:  "rw_view1" is not a table
+ UPDATE ONLY rw_view1 SET a = a*10 WHERE a IN (-2, 2); -- Should produce -20 and 20
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view2 SET a = a*10 WHERE a IN (-3, 3); -- Should produce -30 only
++ERROR:  "rw_view2" is not a table
+ UPDATE ONLY rw_view2 SET a = a*10 WHERE a IN (-4, 4); -- Should produce -40 only
++ERROR:  "rw_view2" is not a table
+ DELETE FROM rw_view1 WHERE a IN (-5, 5); -- Should delete -5 and 5
++ERROR:  "rw_view1" is not a table
+ DELETE FROM ONLY rw_view1 WHERE a IN (-6, 6); -- Should delete -6 and 6
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view2 WHERE a IN (-7, 7); -- Should delete -7 only
++ERROR:  "rw_view2" is not a table
+ DELETE FROM ONLY rw_view2 WHERE a IN (-8, 8); -- Should delete -8 only
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM ONLY base_tbl_parent ORDER BY a;
+-  a   
+-------
+- -200
+- -100
+-  -40
+-  -30
+-  -20
+-  -10
+-  100
+-  200
+-(8 rows)
+-
+-SELECT * FROM base_tbl_child ORDER BY a;
+  a  
+ ----
+-  3
+-  4
+-  7
+-  8
+- 10
+- 20
+-(6 rows)
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
++(8 rows)
+ 
++SELECT * FROM base_tbl_child ORDER BY a;
++ERROR:  relation "base_tbl_child" does not exist
+ CREATE TABLE other_tbl_parent (id int);
+ CREATE TABLE other_tbl_child () INHERITS (other_tbl_parent);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE other_tbl_child () INHERITS (other_tbl_parent)
++                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO other_tbl_parent VALUES (7),(200);
+ INSERT INTO other_tbl_child VALUES (8),(100);
++ERROR:  relation "other_tbl_child" does not exist
+ EXPLAIN (costs off)
+ UPDATE rw_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Update on base_tbl_parent
+-   Update on base_tbl_parent base_tbl_parent_1
+-   Update on base_tbl_child base_tbl_parent_2
+-   ->  Merge Join
+-         Merge Cond: (base_tbl_parent.a = other_tbl_parent.id)
+-         ->  Sort
+-               Sort Key: base_tbl_parent.a
+-               ->  Append
+-                     ->  Seq Scan on base_tbl_parent base_tbl_parent_1
+-                     ->  Seq Scan on base_tbl_child base_tbl_parent_2
+-         ->  Sort
+-               Sort Key: other_tbl_parent.id
+-               ->  Append
+-                     ->  Seq Scan on other_tbl_parent other_tbl_parent_1
+-                     ->  Seq Scan on other_tbl_child other_tbl_parent_2
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE rw_view1 SET a = a + 1000 FROM other_tbl_parent WHERE a = id;
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM ONLY base_tbl_parent ORDER BY a;
+-  a   
+-------
+- -200
+- -100
+-  -40
+-  -30
+-  -20
+-  -10
+- 1100
+- 1200
++ a  
++----
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
+ (8 rows)
+ 
+ SELECT * FROM base_tbl_child ORDER BY a;
+-  a   
+-------
+-    3
+-    4
+-   10
+-   20
+- 1007
+- 1008
+-(6 rows)
+-
++ERROR:  relation "base_tbl_child" does not exist
+ DROP TABLE base_tbl_parent, base_tbl_child CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
++ERROR:  relation "base_tbl_child" does not exist
+ DROP TABLE other_tbl_parent CASCADE;
+-NOTICE:  drop cascades to table other_tbl_child
+ -- simple WITH CHECK OPTION
+ CREATE TABLE base_tbl (a int, b int DEFAULT 10);
+ INSERT INTO base_tbl VALUES (1,2), (2,3), (1,-1);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b
+   WITH LOCAL CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b
++  WITH LOCAL CHECK OPTION
++  ^
+ \d+ rw_view1
+-                          View "public.rw_view1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+- b      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT a,
+-    b
+-   FROM base_tbl
+-  WHERE a < b;
+-Options: check_option=local
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rw_view1)$' COLLATE pg_catalog.default
++                                                                        ^
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view1';
+- table_catalog | table_schema | table_name | view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view1   |  SELECT a,      +| LOCAL        | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |     b           +|              |              |                    |                      |                      | 
+-               |              |            |    FROM base_tbl+|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < b); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name |                      view_definition                      | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------------------------------------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ root          | public       | rw_view1   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view1 VALUES(3,4); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES(4,3); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (4, 3).
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES(5,null); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (5, null).
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET b = 5 WHERE a = 3; -- ok
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET b = -5 WHERE a = 3; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (3, -5).
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1(a) VALUES (9); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1(a) VALUES (10); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, 10).
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+  a | b  
+ ---+----
+  1 |  2
+  2 |  3
+  1 | -1
+- 3 |  5
+- 9 | 10
+-(5 rows)
++(3 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- WITH LOCAL/CASCADED CHECK OPTION
+ CREATE TABLE base_tbl (a int);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a > 0;
++ERROR:  relation "root.public.rw_view1" already exists
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
+   WITH CHECK OPTION; -- implicitly cascaded
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
++  WITH CHECK OPTION
++  ^
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
+-Options: check_option=cascaded
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rw_view2)$' COLLATE pg_catalog.default
++                                                                        ^
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name |                      view_definition                      | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------------------------------------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ root          | public       | rw_view2   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (-5); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-5).
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (15); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (15).
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+  a 
+ ---
+- 5
+-(1 row)
++(0 rows)
+ 
+ UPDATE rw_view2 SET a = a - 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-5).
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET a = a + 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (15).
++ERROR:  "rw_view2" is not a table
+ CREATE OR REPLACE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
+   WITH LOCAL CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a < 10
++  WITH LOCAL CHECK OPTION
++  ^
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
+-Options: check_option=local
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rw_view2)$' COLLATE pg_catalog.default
++                                                                        ^
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| LOCAL        | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name |                      view_definition                      | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------------------------------------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ root          | public       | rw_view2   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (-10); -- ok, but not in view
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (20); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (20).
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+-  a  
+------
+-   5
+- -10
+-(2 rows)
++ a 
++---
++(0 rows)
+ 
+ ALTER VIEW rw_view1 SET (check_option=here); -- invalid
+-ERROR:  invalid value for enum option "check_option": here
+-DETAIL:  Valid values are "local" and "cascaded".
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 SET (check_option=here)
++                        ^
++HINT:  try \h ALTER VIEW
+ ALTER VIEW rw_view1 SET (check_option=local);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 SET (check_option=local)
++                        ^
++HINT:  try \h ALTER VIEW
+ INSERT INTO rw_view2 VALUES (-20); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (-20).
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (30); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (30).
++ERROR:  "rw_view2" is not a table
+ ALTER VIEW rw_view2 RESET (check_option);
++ERROR:  at or near "reset": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view2 RESET (check_option)
++                    ^
++HINT:  try \h ALTER VIEW
+ \d+ rw_view2
+-                          View "public.rw_view2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- a      | integer |           |          |         | plain   | 
+-View definition:
+- SELECT a
+-   FROM rw_view1
+-  WHERE a < 10;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(rw_view2)$' COLLATE pg_catalog.default
++                                                                        ^
+ SELECT * FROM information_schema.views WHERE table_name = 'rw_view2';
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view2   |  SELECT a        +| NONE         | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a < 10); |              |              |                    |                      |                      | 
++ table_catalog | table_schema | table_name |                      view_definition                      | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------------------------------------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ root          | public       | rw_view2   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
+ (1 row)
+ 
+ INSERT INTO rw_view2 VALUES (30); -- ok, but not in view
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+-  a  
+------
+-   5
+- -10
+-  30
+-(3 rows)
++ a 
++---
++(0 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- WITH CHECK OPTION with no local view qual
+ CREATE TABLE base_tbl (a int);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WITH CHECK OPTION
++                                               ^
+ CREATE VIEW rw_view2 AS SELECT * FROM rw_view1 WHERE a > 0;
++ERROR:  relation "root.public.rw_view2" already exists
+ CREATE VIEW rw_view3 AS SELECT * FROM rw_view2 WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view3 AS SELECT * FROM rw_view2 WITH CHECK OPTION
++                                               ^
+ SELECT * FROM information_schema.views WHERE table_name LIKE E'rw\\_view_' ORDER BY table_name;
+- table_catalog | table_schema | table_name |  view_definition  | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
+----------------+--------------+------------+-------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
+- regression    | public       | rw_view1   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM base_tbl; |              |              |                    |                      |                      | 
+- regression    | public       | rw_view2   |  SELECT a        +| NONE         | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view1 +|              |              |                    |                      |                      | 
+-               |              |            |   WHERE (a > 0);  |              |              |                    |                      |                      | 
+- regression    | public       | rw_view3   |  SELECT a        +| CASCADED     | YES          | YES                | NO                   | NO                   | NO
+-               |              |            |    FROM rw_view2; |              |              |                    |                      |                      | 
+-(3 rows)
++ table_catalog | table_schema | table_name |                      view_definition                      | check_option | is_updatable | is_insertable_into | is_trigger_updatable | is_trigger_deletable | is_trigger_insertable_into 
++---------------+--------------+------------+-----------------------------------------------------------+--------------+--------------+--------------------+----------------------+----------------------+----------------------------
++ root          | public       | rw_view1   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
++ root          | public       | rw_view2   | SELECT base_tbl_parent.a FROM root.public.base_tbl_parent |              | NO           | NO                 | NO                   | NO                   | NO
++(2 rows)
+ 
+ INSERT INTO rw_view1 VALUES (-1); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES (1); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view2 VALUES (-2); -- ok, but not in view
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (2); -- ok
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view3 VALUES (-3); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-3).
++ERROR:  relation "rw_view3" does not exist
+ INSERT INTO rw_view3 VALUES (3); -- ok
++ERROR:  relation "rw_view3" does not exist
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+-drop cascades to view rw_view3
+ -- WITH CHECK OPTION with scalar array ops
+ CREATE TABLE base_tbl (a int, b int[]);
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a = ANY (b)
+   WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a = ANY (b)
++  WITH CHECK OPTION
++  ^
+ INSERT INTO rw_view1 VALUES (1, ARRAY[1,2,3]); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES (10, ARRAY[4,5]); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, {4,5}).
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET b[2] = -b[2] WHERE a = 1; -- ok
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE rw_view1 SET b[2] = -b[2] WHERE a = 1
++                     ^
++HINT:  try \h UPDATE
+ UPDATE rw_view1 SET b[1] = -b[1] WHERE a = 1; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (1, {-1,-2,3}).
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++UPDATE rw_view1 SET b[1] = -b[1] WHERE a = 1
++                     ^
++HINT:  try \h UPDATE
+ PREPARE ins(int, int[]) AS INSERT INTO rw_view1 VALUES($1, $2);
++ERROR:  "rw_view1" is not a table
+ EXECUTE ins(2, ARRAY[1,2,3]); -- ok
++ERROR:  prepared statement "ins" does not exist
+ EXECUTE ins(10, ARRAY[4,5]); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (10, {4,5}).
++ERROR:  prepared statement "ins" does not exist
+ DEALLOCATE PREPARE ins;
++ERROR:  prepared statement "ins" does not exist
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- WITH CHECK OPTION with subquery
+ CREATE TABLE base_tbl (a int);
+ CREATE TABLE ref_tbl (a int PRIMARY KEY);
+@@ -2142,40 +2529,34 @@
+   SELECT * FROM base_tbl b
+   WHERE EXISTS(SELECT 1 FROM ref_tbl r WHERE r.a = b.a)
+   WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 AS
++  SELECT * FROM base_tbl b
++  WHERE EXISTS(SELECT 1 FROM ref_tbl r WHERE r.a = b.a)
++  WITH CHECK OPTION
++  ^
+ INSERT INTO rw_view1 VALUES (5); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES (15); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15).
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET a = a + 5; -- ok
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET a = a + 5; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15).
++ERROR:  "rw_view1" is not a table
+ EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (5);
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Insert on base_tbl b
+-   ->  Result
+-   SubPlan 1
+-     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r
+-           Index Cond: (a = b.a)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (5)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) UPDATE rw_view1 SET a = a + 5;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Update on base_tbl b
+-   ->  Hash Join
+-         Hash Cond: (b.a = r.a)
+-         ->  Seq Scan on base_tbl b
+-         ->  Hash
+-               ->  Seq Scan on ref_tbl r
+-   SubPlan 1
+-     ->  Index Only Scan using ref_tbl_pkey on ref_tbl r_1
+-           Index Cond: (a = b.a)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view1 SET a = a + 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl, ref_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- WITH CHECK OPTION with BEFORE trigger on base table
+ CREATE TABLE base_tbl (a int, b int);
+ CREATE FUNCTION base_tbl_trig_fn()
+@@ -2190,19 +2571,22 @@
+ CREATE TRIGGER base_tbl_trig BEFORE INSERT OR UPDATE ON base_tbl
+   FOR EACH ROW EXECUTE PROCEDURE base_tbl_trig_fn();
+ CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH CHECK OPTION
++                                                           ^
+ INSERT INTO rw_view1 VALUES (5,0); -- ok
++ERROR:  "rw_view1" is not a table
+ INSERT INTO rw_view1 VALUES (15, 20); -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (15, 10).
++ERROR:  "rw_view1" is not a table
+ UPDATE rw_view1 SET a = 20, b = 30; -- should fail
+-ERROR:  new row violates check option for view "rw_view1"
+-DETAIL:  Failing row contains (20, 10).
++ERROR:  "rw_view1" is not a table
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ DROP FUNCTION base_tbl_trig_fn();
+ -- WITH LOCAL CHECK OPTION with INSTEAD OF trigger on base view
+ CREATE TABLE base_tbl (a int, b int);
+ CREATE VIEW rw_view1 AS SELECT a FROM base_tbl WHERE a < b;
++ERROR:  relation "root.public.rw_view1" already exists
+ CREATE FUNCTION rw_view1_trig_fn()
+ RETURNS trigger AS
+ $$
+@@ -2223,75 +2607,131 @@
+ CREATE TRIGGER rw_view1_trig
+   INSTEAD OF INSERT OR UPDATE OR DELETE ON rw_view1
+   FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
++ERROR:  unimplemented: INSTEAD OF triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126363/_version_
+ CREATE VIEW rw_view2 AS
+   SELECT * FROM rw_view1 WHERE a > 0 WITH LOCAL CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view2 AS
++  SELECT * FROM rw_view1 WHERE a > 0 WITH LOCAL CHECK OPTION
++                                     ^
+ INSERT INTO rw_view2 VALUES (-5); -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-5).
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (50); -- ok, but not in view
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET a = a - 10; -- should fail
+-ERROR:  new row violates check option for view "rw_view2"
+-DETAIL:  Failing row contains (-5).
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+- a  | b  
+-----+----
+-  5 | 10
+- 50 | 10
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- Check option won't cascade down to base view with INSTEAD OF triggers
+ ALTER VIEW rw_view2 SET (check_option=cascaded);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view2 SET (check_option=cascaded)
++                        ^
++HINT:  try \h ALTER VIEW
+ INSERT INTO rw_view2 VALUES (100); -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET a = 200 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+-  a  | b  
+------+----
+-  50 | 10
+- 100 | 10
+- 200 | 10
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- Neither local nor cascaded check options work with INSTEAD rules
+ DROP TRIGGER rw_view1_trig ON rw_view1;
++ERROR:  "rw_view1" is not a table
+ CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
+   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a, 10);
++ERROR:  at or near "rw_view1_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE rw_view1_upd_rule AS ON UPDATE TO rw_view1
+   DO INSTEAD UPDATE base_tbl SET a=NEW.a WHERE a=OLD.a;
++ERROR:  at or near "rw_view1_upd_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_upd_rule AS ON UPDATE TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO rw_view2 VALUES (-10); -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (20); -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET a = 30 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view1's check)
++ERROR:  "rw_view2" is not a table
+ INSERT INTO rw_view2 VALUES (5); -- ok
++ERROR:  "rw_view2" is not a table
+ UPDATE rw_view2 SET a = -5 WHERE a = 5; -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  "rw_view2" is not a table
+ SELECT * FROM base_tbl;
+-  a  | b  
+------+----
+-  50 | 10
+- 100 | 10
+- 200 | 10
+- -10 | 10
+-  20 | 10
+-  30 | 10
+-  -5 | 10
+-(7 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ DROP FUNCTION rw_view1_trig_fn();
+ CREATE TABLE base_tbl (a int);
+ CREATE VIEW rw_view1 AS SELECT a,10 AS b FROM base_tbl;
++ERROR:  relation "root.public.rw_view1" already exists
+ CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
+   DO INSTEAD INSERT INTO base_tbl VALUES (NEW.a);
++ERROR:  at or near "rw_view1_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE rw_view1_ins_rule AS ON INSERT TO rw_view1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE VIEW rw_view2 AS
+   SELECT * FROM rw_view1 WHERE a > b WITH LOCAL CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view2 AS
++  SELECT * FROM rw_view1 WHERE a > b WITH LOCAL CHECK OPTION
++                                     ^
+ INSERT INTO rw_view2 VALUES (2,3); -- ok, but not in view (doesn't fail rw_view2's check)
++ERROR:  "rw_view2" is not a table
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- security barrier view
+ CREATE TABLE base_tbl (person text, visibility text);
+ INSERT INTO base_tbl VALUES ('Tom', 'public'),
+@@ -2299,6 +2739,7 @@
+                             ('Harry', 'public');
+ CREATE VIEW rw_view1 AS
+   SELECT person FROM base_tbl WHERE visibility = 'public';
++ERROR:  relation "root.public.rw_view1" already exists
+ CREATE FUNCTION snoop(anyelement)
+ RETURNS boolean AS
+ $$
+@@ -2308,6 +2749,29 @@
+ END;
+ $$
+ LANGUAGE plpgsql COST 0.000001;
++ERROR:  at or near "0.000001": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION snoop(anyelement)
++RETURNS boolean AS
++$$
++BEGIN
++  RAISE NOTICE 'snooped value: %', $1;
++  RETURN true;
++END;
++$$
++LANGUAGE plpgsql COST 0.000001
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE OR REPLACE FUNCTION leakproof(anyelement)
+ RETURNS boolean AS
+ $$
+@@ -2317,30 +2781,23 @@
+ $$
+ LANGUAGE plpgsql STRICT IMMUTABLE LEAKPROOF;
+ SELECT * FROM rw_view1 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  unknown function: snoop()
+ UPDATE rw_view1 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view1 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Dick
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view1" is not a table
+ ALTER VIEW rw_view1 SET (security_barrier = true);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER VIEW rw_view1 SET (security_barrier = true)
++                        ^
++HINT:  try \h ALTER VIEW
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name = 'rw_view1';
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view1   | YES
++ rw_view1   | NO
+ (1 row)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -2348,7 +2805,7 @@
+  WHERE table_name = 'rw_view1';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view1   | YES          | YES
++ rw_view1   | NO           | NO
+ (1 row)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -2357,58 +2814,47 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view1   | person      | YES
++ rw_view1   | a           | NO
+ (1 row)
+ 
+ SELECT * FROM rw_view1 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  unknown function: snoop()
+ UPDATE rw_view1 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view1" is not a table
+ DELETE FROM rw_view1 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view1" is not a table
+ EXPLAIN (costs off) SELECT * FROM rw_view1 WHERE snoop(person);
+-                  QUERY PLAN                   
+------------------------------------------------
+- Subquery Scan on rw_view1
+-   Filter: snoop(rw_view1.person)
+-   ->  Seq Scan on base_tbl
+-         Filter: (visibility = 'public'::text)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) SELECT * FROM rw_view1 WHERE snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) UPDATE rw_view1 SET person=person WHERE snoop(person);
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Update on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view1 SET person=person WHERE snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view1 WHERE NOT snoop(person);
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Delete on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND (NOT snoop(person)))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view1 WHERE NOT snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- security barrier view on top of security barrier view
+ CREATE VIEW rw_view2 WITH (security_barrier = true) AS
+   SELECT * FROM rw_view1 WHERE snoop(person);
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view2 WITH (security_barrier = true) AS
++                     ^
++HINT:  try \h CREATE VIEW
+ SELECT table_name, is_insertable_into
+   FROM information_schema.tables
+  WHERE table_name = 'rw_view2';
+  table_name | is_insertable_into 
+ ------------+--------------------
+- rw_view2   | YES
++ rw_view2   | NO
+ (1 row)
+ 
+ SELECT table_name, is_updatable, is_insertable_into
+@@ -2416,7 +2862,7 @@
+  WHERE table_name = 'rw_view2';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- rw_view2   | YES          | YES
++ rw_view2   | NO           | NO
+ (1 row)
+ 
+ SELECT table_name, column_name, is_updatable
+@@ -2425,61 +2871,34 @@
+  ORDER BY ordinal_position;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- rw_view2   | person      | YES
++ rw_view2   | a           | NO
+ (1 row)
+ 
+ SELECT * FROM rw_view2 WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
+- person 
+---------
+- Tom
+- Harry
+-(2 rows)
+-
++ERROR:  unknown function: snoop()
+ UPDATE rw_view2 SET person=person WHERE snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view2" is not a table
+ DELETE FROM rw_view2 WHERE NOT snoop(person);
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Tom
+-NOTICE:  snooped value: Harry
+-NOTICE:  snooped value: Harry
++ERROR:  "rw_view2" is not a table
+ EXPLAIN (costs off) SELECT * FROM rw_view2 WHERE snoop(person);
+-                     QUERY PLAN                      
+------------------------------------------------------
+- Subquery Scan on rw_view2
+-   Filter: snoop(rw_view2.person)
+-   ->  Subquery Scan on rw_view1
+-         Filter: snoop(rw_view1.person)
+-         ->  Seq Scan on base_tbl
+-               Filter: (visibility = 'public'::text)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) SELECT * FROM rw_view2 WHERE snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) UPDATE rw_view2 SET person=person WHERE snoop(person);
+-                                     QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+- Update on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person) AND snoop(person))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE rw_view2 SET person=person WHERE snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (costs off) DELETE FROM rw_view2 WHERE NOT snoop(person);
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Delete on base_tbl
+-   ->  Seq Scan on base_tbl
+-         Filter: ((visibility = 'public'::text) AND snoop(person) AND (NOT snoop(person)))
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view2 WHERE NOT snoop(person)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to view rw_view1
+-drop cascades to view rw_view2
+ -- security barrier view on top of table with rules
+ CREATE TABLE base_tbl(id int PRIMARY KEY, data text, deleted boolean);
+ INSERT INTO base_tbl VALUES (1, 'Row 1', false), (2, 'Row 2', true);
+@@ -2487,61 +2906,83 @@
+   WHERE EXISTS (SELECT 1 FROM base_tbl t WHERE t.id = new.id)
+   DO INSTEAD
+     UPDATE base_tbl SET data = new.data, deleted = false WHERE id = new.id;
++ERROR:  at or near "base_tbl_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE base_tbl_ins_rule AS ON INSERT TO base_tbl
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE RULE base_tbl_del_rule AS ON DELETE TO base_tbl
+   DO INSTEAD
+     UPDATE base_tbl SET deleted = true WHERE id = old.id;
++ERROR:  at or near "base_tbl_del_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE base_tbl_del_rule AS ON DELETE TO base_tbl
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE VIEW rw_view1 WITH (security_barrier=true) AS
+   SELECT id, data FROM base_tbl WHERE NOT deleted;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW rw_view1 WITH (security_barrier=true) AS
++                     ^
++HINT:  try \h CREATE VIEW
+ SELECT * FROM rw_view1;
+- id | data  
+-----+-------
+-  1 | Row 1
+-(1 row)
++ a  
++----
++ -8
++ -7
++ -6
++ -5
++ -4
++ -3
++ -2
++ -1
++(8 rows)
+ 
+ EXPLAIN (costs off) DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Update on base_tbl base_tbl_1
+-   ->  Nested Loop
+-         ->  Index Scan using base_tbl_pkey on base_tbl base_tbl_1
+-               Index Cond: (id = 1)
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (id = 1)
+-               Filter: ((NOT deleted) AND snoop(data))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) DELETE FROM rw_view1 WHERE id = 1 AND snoop(data)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DELETE FROM rw_view1 WHERE id = 1 AND snoop(data);
+-NOTICE:  snooped value: Row 1
++ERROR:  "rw_view1" is not a table
+ EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (2, 'New row 2');
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Insert on base_tbl
+-   InitPlan 1 (returns $0)
+-     ->  Index Only Scan using base_tbl_pkey on base_tbl t
+-           Index Cond: (id = 2)
+-   ->  Result
+-         One-Time Filter: ($0 IS NOT TRUE)
+- 
+- Update on base_tbl
+-   InitPlan 1 (returns $0)
+-     ->  Index Only Scan using base_tbl_pkey on base_tbl t
+-           Index Cond: (id = 2)
+-   ->  Result
+-         One-Time Filter: $0
+-         ->  Index Scan using base_tbl_pkey on base_tbl
+-               Index Cond: (id = 2)
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) INSERT INTO rw_view1 VALUES (2, 'New row 2')
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ INSERT INTO rw_view1 VALUES (2, 'New row 2');
++ERROR:  "rw_view1" is not a table
+ SELECT * FROM base_tbl;
+- id |   data    | deleted 
+-----+-----------+---------
+-  1 | Row 1     | t
+-  2 | New row 2 | f
++ id | data  | deleted 
++----+-------+---------
++  1 | Row 1 | f
++  2 | Row 2 | t
+ (2 rows)
+ 
+ DROP TABLE base_tbl CASCADE;
+-NOTICE:  drop cascades to view rw_view1
+ -- security barrier view based on inheritance set
+ CREATE TABLE t1 (a int, b float, c text);
+ CREATE INDEX t1_a_idx ON t1(a);
+@@ -2549,83 +2990,71 @@
+ SELECT i,i,'t1' FROM generate_series(1,10) g(i);
+ ANALYZE t1;
+ CREATE TABLE t11 (d text) INHERITS (t1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE t11 (d text) INHERITS (t1)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE INDEX t11_a_idx ON t11(a);
++ERROR:  relation "t11" does not exist
+ INSERT INTO t11
+ SELECT i,i,'t11','t11d' FROM generate_series(1,10) g(i);
++ERROR:  relation "t11" does not exist
+ ANALYZE t11;
++ERROR:  relation "t11" does not exist
+ CREATE TABLE t12 (e int[]) INHERITS (t1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE t12 (e int[]) INHERITS (t1)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE INDEX t12_a_idx ON t12(a);
++ERROR:  relation "t12" does not exist
+ INSERT INTO t12
+ SELECT i,i,'t12','{1,2}'::int[] FROM generate_series(1,10) g(i);
++ERROR:  relation "t12" does not exist
+ ANALYZE t12;
++ERROR:  relation "t12" does not exist
+ CREATE TABLE t111 () INHERITS (t11, t12);
+-NOTICE:  merging multiple inherited definitions of column "a"
+-NOTICE:  merging multiple inherited definitions of column "b"
+-NOTICE:  merging multiple inherited definitions of column "c"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE t111 () INHERITS (t11, t12)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE INDEX t111_a_idx ON t111(a);
++ERROR:  relation "t111" does not exist
+ INSERT INTO t111
+ SELECT i,i,'t111','t111d','{1,1,1}'::int[] FROM generate_series(1,10) g(i);
++ERROR:  relation "t111" does not exist
+ ANALYZE t111;
++ERROR:  relation "t111" does not exist
+ CREATE VIEW v1 WITH (security_barrier=true) AS
+ SELECT *, (SELECT d FROM t11 WHERE t11.a = t1.a LIMIT 1) AS d
+ FROM t1
+ WHERE a > 5 AND EXISTS(SELECT 1 FROM t12 WHERE t12.a = t1.a);
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW v1 WITH (security_barrier=true) AS
++               ^
++HINT:  try \h CREATE VIEW
+ SELECT * FROM v1 WHERE a=3; -- should not see anything
+- a | b | c | d 
+----+---+---+---
+-(0 rows)
+-
++ERROR:  relation "v1" does not exist
+ SELECT * FROM v1 WHERE a=8;
+- a | b |  c   |  d   
+----+---+------+------
+- 8 | 8 | t1   | t11d
+- 8 | 8 | t11  | t11d
+- 8 | 8 | t12  | t11d
+- 8 | 8 | t111 | t11d
+-(4 rows)
+-
++ERROR:  relation "v1" does not exist
+ EXPLAIN (VERBOSE, COSTS OFF)
+ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
+-                                             QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+- Update on public.t1
+-   Update on public.t1 t1_1
+-   Update on public.t11 t1_2
+-   Update on public.t12 t1_3
+-   Update on public.t111 t1_4
+-   ->  Result
+-         Output: 100, t1.tableoid, t1.ctid
+-         ->  Append
+-               ->  Index Scan using t1_a_idx on public.t1 t1_1
+-                     Output: t1_1.tableoid, t1_1.ctid
+-                     Index Cond: ((t1_1.a > 5) AND (t1_1.a < 7))
+-                     Filter: ((t1_1.a <> 6) AND (SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan 1
+-                       ->  Append
+-                             ->  Seq Scan on public.t12 t12_1
+-                                   Filter: (t12_1.a = t1_1.a)
+-                             ->  Seq Scan on public.t111 t12_2
+-                                   Filter: (t12_2.a = t1_1.a)
+-               ->  Index Scan using t11_a_idx on public.t11 t1_2
+-                     Output: t1_2.tableoid, t1_2.ctid
+-                     Index Cond: ((t1_2.a > 5) AND (t1_2.a < 7))
+-                     Filter: ((t1_2.a <> 6) AND (SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-               ->  Index Scan using t12_a_idx on public.t12 t1_3
+-                     Output: t1_3.tableoid, t1_3.ctid
+-                     Index Cond: ((t1_3.a > 5) AND (t1_3.a < 7))
+-                     Filter: ((t1_3.a <> 6) AND (SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-               ->  Index Scan using t111_a_idx on public.t111 t1_4
+-                     Output: t1_4.tableoid, t1_4.ctid
+-                     Index Cond: ((t1_4.a > 5) AND (t1_4.a < 7))
+-                     Filter: ((t1_4.a <> 6) AND (SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-(30 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE v1 SET a=100 WHERE snoop(a) AND leakproof(a) AND a < 7 AND a != 6;
++ERROR:  relation "v1" does not exist
+ SELECT * FROM v1 WHERE a=100; -- Nothing should have been changed to 100
+- a | b | c | d 
+----+---+---+---
+-(0 rows)
+-
++ERROR:  relation "v1" does not exist
+ SELECT * FROM t1 WHERE a=100; -- Nothing should have been changed to 100
+  a | b | c 
+ ---+---+---
+@@ -2633,114 +3062,47 @@
+ 
+ EXPLAIN (VERBOSE, COSTS OFF)
+ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
+-                                    QUERY PLAN                                     
+------------------------------------------------------------------------------------
+- Update on public.t1
+-   Update on public.t1 t1_1
+-   Update on public.t11 t1_2
+-   Update on public.t12 t1_3
+-   Update on public.t111 t1_4
+-   ->  Result
+-         Output: (t1.a + 1), t1.tableoid, t1.ctid
+-         ->  Append
+-               ->  Index Scan using t1_a_idx on public.t1 t1_1
+-                     Output: t1_1.a, t1_1.tableoid, t1_1.ctid
+-                     Index Cond: ((t1_1.a > 5) AND (t1_1.a = 8))
+-                     Filter: ((SubPlan 1) AND snoop(t1_1.a) AND leakproof(t1_1.a))
+-                     SubPlan 1
+-                       ->  Append
+-                             ->  Seq Scan on public.t12 t12_1
+-                                   Filter: (t12_1.a = t1_1.a)
+-                             ->  Seq Scan on public.t111 t12_2
+-                                   Filter: (t12_2.a = t1_1.a)
+-               ->  Index Scan using t11_a_idx on public.t11 t1_2
+-                     Output: t1_2.a, t1_2.tableoid, t1_2.ctid
+-                     Index Cond: ((t1_2.a > 5) AND (t1_2.a = 8))
+-                     Filter: ((SubPlan 1) AND snoop(t1_2.a) AND leakproof(t1_2.a))
+-               ->  Index Scan using t12_a_idx on public.t12 t1_3
+-                     Output: t1_3.a, t1_3.tableoid, t1_3.ctid
+-                     Index Cond: ((t1_3.a > 5) AND (t1_3.a = 8))
+-                     Filter: ((SubPlan 1) AND snoop(t1_3.a) AND leakproof(t1_3.a))
+-               ->  Index Scan using t111_a_idx on public.t111 t1_4
+-                     Output: t1_4.a, t1_4.tableoid, t1_4.ctid
+-                     Index Cond: ((t1_4.a > 5) AND (t1_4.a = 8))
+-                     Filter: ((SubPlan 1) AND snoop(t1_4.a) AND leakproof(t1_4.a))
+-(30 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
+-NOTICE:  snooped value: 8
++ERROR:  relation "v1" does not exist
+ SELECT * FROM v1 WHERE b=8;
+- a | b |  c   |  d   
+----+---+------+------
+- 9 | 8 | t1   | t11d
+- 9 | 8 | t11  | t11d
+- 9 | 8 | t12  | t11d
+- 9 | 8 | t111 | t11d
+-(4 rows)
+-
++ERROR:  relation "v1" does not exist
+ DELETE FROM v1 WHERE snoop(a) AND leakproof(a); -- should not delete everything, just where a>5
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 6
+-NOTICE:  snooped value: 7
+-NOTICE:  snooped value: 9
+-NOTICE:  snooped value: 10
+-NOTICE:  snooped value: 9
++ERROR:  relation "v1" does not exist
+ TABLE t1; -- verify all a<=5 are intact
+- a | b |  c   
+----+---+------
+- 1 | 1 | t1
+- 2 | 2 | t1
+- 3 | 3 | t1
+- 4 | 4 | t1
+- 5 | 5 | t1
+- 1 | 1 | t11
+- 2 | 2 | t11
+- 3 | 3 | t11
+- 4 | 4 | t11
+- 5 | 5 | t11
+- 1 | 1 | t12
+- 2 | 2 | t12
+- 3 | 3 | t12
+- 4 | 4 | t12
+- 5 | 5 | t12
+- 1 | 1 | t111
+- 2 | 2 | t111
+- 3 | 3 | t111
+- 4 | 4 | t111
+- 5 | 5 | t111
+-(20 rows)
++ a  | b  | c  
++----+----+----
++  1 |  1 | t1
++  2 |  2 | t1
++  3 |  3 | t1
++  4 |  4 | t1
++  5 |  5 | t1
++  6 |  6 | t1
++  7 |  7 | t1
++  8 |  8 | t1
++  9 |  9 | t1
++ 10 | 10 | t1
++(10 rows)
+ 
+ DROP TABLE t1, t11, t12, t111 CASCADE;
+-NOTICE:  drop cascades to view v1
++ERROR:  relation "t11" does not exist
+ DROP FUNCTION snoop(anyelement);
++ERROR:  unknown function: snoop()
+ DROP FUNCTION leakproof(anyelement);
+ CREATE TABLE tx1 (a integer);
+ CREATE TABLE tx2 (b integer);
+ CREATE TABLE tx3 (c integer);
+ CREATE VIEW vx1 AS SELECT a FROM tx1 WHERE EXISTS(SELECT 1 FROM tx2 JOIN tx3 ON b=c);
+ INSERT INTO vx1 values (1);
++ERROR:  "vx1" is not a table
+ SELECT * FROM tx1;
+  a 
+ ---
+- 1
+-(1 row)
++(0 rows)
+ 
+ SELECT * FROM vx1;
+  a 
+@@ -2756,13 +3118,13 @@
+ CREATE TABLE tx3 (c integer);
+ CREATE VIEW vx1 AS SELECT a FROM tx1 WHERE EXISTS(SELECT 1 FROM tx2 JOIN tx3 ON b=c);
+ INSERT INTO vx1 VALUES (1);
++ERROR:  "vx1" is not a table
+ INSERT INTO vx1 VALUES (1);
++ERROR:  "vx1" is not a table
+ SELECT * FROM tx1;
+  a 
+ ---
+- 1
+- 1
+-(2 rows)
++(0 rows)
+ 
+ SELECT * FROM vx1;
+  a 
+@@ -2781,13 +3143,13 @@
+ ALTER TABLE tx3 DROP COLUMN d;
+ CREATE VIEW vx1 AS SELECT a FROM tx1 WHERE EXISTS(SELECT 1 FROM tx2 JOIN tx3 ON b=c);
+ INSERT INTO vx1 VALUES (1);
++ERROR:  "vx1" is not a table
+ INSERT INTO vx1 VALUES (1);
++ERROR:  "vx1" is not a table
+ SELECT * FROM tx1;
+  a 
+ ---
+- 1
+- 1
+-(2 rows)
++(0 rows)
+ 
+ SELECT * FROM vx1;
+  a 
+@@ -2803,38 +3165,47 @@
+ -- security barrier views, per bug #13988
+ --
+ CREATE TABLE t1 (a int, b text, c int);
++ERROR:  relation "root.public.t1" already exists
+ INSERT INTO t1 VALUES (1, 'one', 10);
++ERROR:  could not parse "one" as type float: strconv.ParseFloat: parsing "one": invalid syntax
+ CREATE TABLE t2 (cc int);
+ INSERT INTO t2 VALUES (10), (20);
+ CREATE VIEW v1 WITH (security_barrier = true) AS
+   SELECT * FROM t1 WHERE (a > 0)
+   WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW v1 WITH (security_barrier = true) AS
++               ^
++HINT:  try \h CREATE VIEW
+ CREATE VIEW v2 WITH (security_barrier = true) AS
+   SELECT * FROM v1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.cc = v1.c)
+   WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW v2 WITH (security_barrier = true) AS
++               ^
++HINT:  try \h CREATE VIEW
+ INSERT INTO v2 VALUES (2, 'two', 20); -- ok
++ERROR:  relation "v2" does not exist
+ INSERT INTO v2 VALUES (-2, 'minus two', 20); -- not allowed
+-ERROR:  new row violates check option for view "v1"
+-DETAIL:  Failing row contains (-2, minus two, 20).
++ERROR:  relation "v2" does not exist
+ INSERT INTO v2 VALUES (3, 'three', 30); -- not allowed
+-ERROR:  new row violates check option for view "v2"
+-DETAIL:  Failing row contains (3, three, 30).
++ERROR:  relation "v2" does not exist
+ UPDATE v2 SET b = 'ONE' WHERE a = 1; -- ok
++ERROR:  relation "v2" does not exist
+ UPDATE v2 SET a = -1 WHERE a = 1; -- not allowed
+-ERROR:  new row violates check option for view "v1"
+-DETAIL:  Failing row contains (-1, ONE, 10).
++ERROR:  relation "v2" does not exist
+ UPDATE v2 SET c = 30 WHERE a = 1; -- not allowed
+-ERROR:  new row violates check option for view "v2"
+-DETAIL:  Failing row contains (1, ONE, 30).
++ERROR:  relation "v2" does not exist
+ DELETE FROM v2 WHERE a = 2; -- ok
++ERROR:  relation "v2" does not exist
+ SELECT * FROM v2;
+- a |  b  | c  
+----+-----+----
+- 1 | ONE | 10
+-(1 row)
+-
++ERROR:  relation "v2" does not exist
+ DROP VIEW v2;
++ERROR:  relation "v2" does not exist
+ DROP VIEW v1;
++ERROR:  relation "v1" does not exist
+ DROP TABLE t2;
+ DROP TABLE t1;
+ --
+@@ -2843,31 +3214,45 @@
+ CREATE TABLE t1 (a int);
+ CREATE VIEW v1 WITH (security_barrier = true) AS
+   SELECT * FROM t1;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW v1 WITH (security_barrier = true) AS
++               ^
++HINT:  try \h CREATE VIEW
+ CREATE RULE v1_upd_rule AS ON UPDATE TO v1 DO INSTEAD
+   UPDATE t1 SET a = NEW.a WHERE a = OLD.a;
++ERROR:  at or near "v1_upd_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE RULE v1_upd_rule AS ON UPDATE TO v1 DO INSTEAD
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE VIEW v2 WITH (security_barrier = true) AS
+   SELECT * FROM v1 WHERE EXISTS (SELECT 1);
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW v2 WITH (security_barrier = true) AS
++               ^
++HINT:  try \h CREATE VIEW
+ EXPLAIN (COSTS OFF) UPDATE v2 SET a = 1;
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Update on t1
+-   InitPlan 1 (returns $0)
+-     ->  Result
+-   ->  Merge Join
+-         Merge Cond: (t1.a = v1.a)
+-         ->  Sort
+-               Sort Key: t1.a
+-               ->  Seq Scan on t1
+-         ->  Sort
+-               Sort Key: v1.a
+-               ->  Subquery Scan on v1
+-                     ->  Result
+-                           One-Time Filter: $0
+-                           ->  Seq Scan on t1 t1_1
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) UPDATE v2 SET a = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP VIEW v2;
++ERROR:  relation "v2" does not exist
+ DROP VIEW v1;
++ERROR:  relation "v1" does not exist
+ DROP TABLE t1;
+ --
+ -- Test CREATE OR REPLACE VIEW turning a non-updatable view into an
+@@ -2876,85 +3261,120 @@
+ CREATE TABLE t1 (a int, b text);
+ CREATE VIEW v1 AS SELECT null::int AS a;
+ CREATE OR REPLACE VIEW v1 AS SELECT * FROM t1 WHERE a > 0 WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE VIEW v1 AS SELECT * FROM t1 WHERE a > 0 WITH CHECK OPTION
++                                                          ^
+ INSERT INTO v1 VALUES (1, 'ok'); -- ok
++ERROR:  "v1" is not a table
+ INSERT INTO v1 VALUES (-1, 'invalid'); -- should fail
+-ERROR:  new row violates check option for view "v1"
+-DETAIL:  Failing row contains (-1, invalid).
++ERROR:  "v1" is not a table
+ DROP VIEW v1;
+ DROP TABLE t1;
+ -- check that an auto-updatable view on a partitioned table works correctly
+ create table uv_pt (a int, b int, v varchar) partition by range (a, b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table uv_pt (a int, b int, v varchar) partition by range (a, b)
++                                                                      ^
++HINT:  try \h CREATE TABLE
+ create table uv_pt1 (b int not null, v varchar, a int not null) partition by range (b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table uv_pt1 (b int not null, v varchar, a int not null) partition by range (b)
++                                                                                      ^
++HINT:  try \h CREATE TABLE
+ create table uv_pt11 (like uv_pt1);
++ERROR:  relation "uv_pt1" does not exist
+ alter table uv_pt11 drop a;
++ERROR:  relation "uv_pt11" does not exist
+ alter table uv_pt11 add a int;
++ERROR:  relation "uv_pt11" does not exist
+ alter table uv_pt11 drop a;
++ERROR:  relation "uv_pt11" does not exist
+ alter table uv_pt11 add a int not null;
++ERROR:  relation "uv_pt11" does not exist
+ alter table uv_pt1 attach partition uv_pt11 for values from (2) to (5);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table uv_pt1 attach partition uv_pt11 for values from (2) to (5)
++                   ^
++HINT:  try \h ALTER TABLE
+ alter table uv_pt attach partition uv_pt1 for values from (1, 2) to (1, 10);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table uv_pt attach partition uv_pt1 for values from (1, 2) to (1, 10)
++                  ^
++HINT:  try \h ALTER TABLE
+ create view uv_ptv as select * from uv_pt;
++ERROR:  relation "uv_pt" does not exist
+ select events & 4 != 0 AS upd,
+        events & 8 != 0 AS ins,
+        events & 16 != 0 AS del
+   from pg_catalog.pg_relation_is_updatable('uv_pt'::regclass, false) t(events);
+- upd | ins | del 
+------+-----+-----
+- t   | t   | t
+-(1 row)
+-
++ERROR:  relation "uv_pt" does not exist
+ select pg_catalog.pg_column_is_updatable('uv_pt'::regclass, 1::smallint, false);
+- pg_column_is_updatable 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  relation "uv_pt" does not exist
+ select pg_catalog.pg_column_is_updatable('uv_pt'::regclass, 2::smallint, false);
+- pg_column_is_updatable 
+-------------------------
+- t
+-(1 row)
+-
++ERROR:  relation "uv_pt" does not exist
+ select table_name, is_updatable, is_insertable_into
+   from information_schema.views where table_name = 'uv_ptv';
+  table_name | is_updatable | is_insertable_into 
+ ------------+--------------+--------------------
+- uv_ptv     | YES          | YES
+-(1 row)
++(0 rows)
+ 
+ select table_name, column_name, is_updatable
+   from information_schema.columns where table_name = 'uv_ptv' order by column_name;
+  table_name | column_name | is_updatable 
+ ------------+-------------+--------------
+- uv_ptv     | a           | YES
+- uv_ptv     | b           | YES
+- uv_ptv     | v           | YES
+-(3 rows)
++(0 rows)
+ 
+ insert into uv_ptv values (1, 2);
++ERROR:  relation "uv_ptv" does not exist
+ select tableoid::regclass, * from uv_pt;
+- tableoid | a | b | v 
+-----------+---+---+---
+- uv_pt11  | 1 | 2 | 
+-(1 row)
+-
++ERROR:  relation "uv_pt" does not exist
+ create view uv_ptv_wco as select * from uv_pt where a = 0 with check option;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++create view uv_ptv_wco as select * from uv_pt where a = 0 with check option
++                                                          ^
+ insert into uv_ptv_wco values (1, 2);
+-ERROR:  new row violates check option for view "uv_ptv_wco"
+-DETAIL:  Failing row contains (1, 2, null).
++ERROR:  relation "uv_ptv_wco" does not exist
+ drop view uv_ptv, uv_ptv_wco;
++ERROR:  relation "uv_ptv" does not exist
+ drop table uv_pt, uv_pt1, uv_pt11;
++ERROR:  relation "uv_pt" does not exist
+ -- check that wholerow vars appearing in WITH CHECK OPTION constraint expressions
+ -- work fine with partitioned tables
+ create table wcowrtest (a int) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table wcowrtest (a int) partition by list (a)
++                                                    ^
++HINT:  try \h CREATE TABLE
+ create table wcowrtest1 partition of wcowrtest for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table wcowrtest1 partition of wcowrtest for values in (1)
++                        ^
++HINT:  try \h CREATE TABLE
+ create view wcowrtest_v as select * from wcowrtest where wcowrtest = '(2)'::wcowrtest with check option;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++create view wcowrtest_v as select * from wcowrtest where wcowrtest = '(2)'::wcowrtest with check option
++                                                                                      ^
+ insert into wcowrtest_v values (1);
+-ERROR:  new row violates check option for view "wcowrtest_v"
+-DETAIL:  Failing row contains (1).
++ERROR:  relation "wcowrtest_v" does not exist
+ alter table wcowrtest add b text;
++ERROR:  relation "wcowrtest" does not exist
+ create table wcowrtest2 (b text, c int, a int);
+ alter table wcowrtest2 drop c;
+ alter table wcowrtest attach partition wcowrtest2 for values in (2);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table wcowrtest attach partition wcowrtest2 for values in (2)
++                      ^
++HINT:  try \h ALTER TABLE
+ create table sometable (a int, b text);
+ insert into sometable values (1, 'a'), (2, 'b');
+ create view wcowrtest_v2 as
+@@ -2962,13 +3382,22 @@
+       from wcowrtest r
+       where r in (select s from sometable s where r.a = s.a)
+ with check option;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++create view wcowrtest_v2 as
++    select *
++      from wcowrtest r
++      where r in (select s from sometable s where r.a = s.a)
++with check option
++^
+ -- WITH CHECK qual will be processed with wcowrtest2's
+ -- rowtype after tuple-routing
+ insert into wcowrtest_v2 values (2, 'no such row in sometable');
+-ERROR:  new row violates check option for view "wcowrtest_v2"
+-DETAIL:  Failing row contains (2, no such row in sometable).
++ERROR:  relation "wcowrtest_v2" does not exist
+ drop view wcowrtest_v, wcowrtest_v2;
++ERROR:  relation "wcowrtest_v" does not exist
+ drop table wcowrtest, sometable;
++ERROR:  relation "wcowrtest" does not exist
+ -- Check INSERT .. ON CONFLICT DO UPDATE works correctly when the view's
+ -- columns are named and ordered differently than the underlying table's.
+ create table uv_iocu_tab (a text unique, b float);
+@@ -2977,6 +3406,7 @@
+    select b, b+1 as c, a, '2.0'::text as two from uv_iocu_tab;
+ insert into uv_iocu_view (a, b) values ('xyxyxy', 1)
+    on conflict (a) do update set b = uv_iocu_view.b;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_tab;
+    a    | b 
+ --------+---
+@@ -2985,40 +3415,39 @@
+ 
+ insert into uv_iocu_view (a, b) values ('xyxyxy', 1)
+    on conflict (a) do update set b = excluded.b;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_tab;
+    a    | b 
+ --------+---
+- xyxyxy | 1
++ xyxyxy | 0
+ (1 row)
+ 
+ -- OK to access view columns that are not present in underlying base
+ -- relation in the ON CONFLICT portion of the query
+ insert into uv_iocu_view (a, b) values ('xyxyxy', 3)
+    on conflict (a) do update set b = cast(excluded.two as float);
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_tab;
+    a    | b 
+ --------+---
+- xyxyxy | 2
++ xyxyxy | 0
+ (1 row)
+ 
+ explain (costs off)
+ insert into uv_iocu_view (a, b) values ('xyxyxy', 3)
+    on conflict (a) do update set b = excluded.b where excluded.c > 0;
+-                                    QUERY PLAN                                     
+------------------------------------------------------------------------------------
+- Insert on uv_iocu_tab
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: uv_iocu_tab_a_key
+-   Conflict Filter: ((excluded.b + '1'::double precision) > '0'::double precision)
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ insert into uv_iocu_view (a, b) values ('xyxyxy', 3)
+    on conflict (a) do update set b = excluded.b where excluded.c > 0;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_tab;
+    a    | b 
+ --------+---
+- xyxyxy | 3
++ xyxyxy | 0
+ (1 row)
+ 
+ drop view uv_iocu_view;
+@@ -3028,112 +3457,179 @@
+ create view uv_iocu_view as
+     select b as bb, a as aa, uv_iocu_tab::text as cc from uv_iocu_tab;
+ insert into uv_iocu_view (aa,bb) values (1,'x');
++ERROR:  "uv_iocu_view" is not a table
+ explain (costs off)
+ insert into uv_iocu_view (aa,bb) values (1,'y')
+    on conflict (aa) do update set bb = 'Rejected: '||excluded.*
+    where excluded.aa > 0
+    and excluded.bb != ''
+    and excluded.cc is not null;
+-                                               QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+- Insert on uv_iocu_tab
+-   Conflict Resolution: UPDATE
+-   Conflict Arbiter Indexes: uv_iocu_tab_a_key
+-   Conflict Filter: ((excluded.a > 0) AND (excluded.b <> ''::text) AND ((excluded.*)::text IS NOT NULL))
+-   ->  Result
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ insert into uv_iocu_view (aa,bb) values (1,'y')
+    on conflict (aa) do update set bb = 'Rejected: '||excluded.*
+    where excluded.aa > 0
+    and excluded.bb != ''
+    and excluded.cc is not null;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_view;
+-           bb            | aa |               cc                
+--------------------------+----+---------------------------------
+- Rejected: (y,1,"(1,y)") |  1 | (1,"Rejected: (y,1,""(1,y)"")")
+-(1 row)
++ bb | aa | cc 
++----+----+----
++(0 rows)
+ 
+ -- Test omitting a column of the base relation
+ delete from uv_iocu_view;
++ERROR:  "uv_iocu_view" is not a table
+ insert into uv_iocu_view (aa,bb) values (1,'x');
++ERROR:  "uv_iocu_view" is not a table
+ insert into uv_iocu_view (aa) values (1)
+    on conflict (aa) do update set bb = 'Rejected: '||excluded.*;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_view;
+-          bb           | aa |              cc               
+------------------------+----+-------------------------------
+- Rejected: (,1,"(1,)") |  1 | (1,"Rejected: (,1,""(1,)"")")
+-(1 row)
++ bb | aa | cc 
++----+----+----
++(0 rows)
+ 
+ alter table uv_iocu_tab alter column b set default 'table default';
+ insert into uv_iocu_view (aa) values (1)
+    on conflict (aa) do update set bb = 'Rejected: '||excluded.*;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_view;
+-                          bb                           | aa |                                 cc                                  
+--------------------------------------------------------+----+---------------------------------------------------------------------
+- Rejected: ("table default",1,"(1,""table default"")") |  1 | (1,"Rejected: (""table default"",1,""(1,""""table default"""")"")")
+-(1 row)
++ bb | aa | cc 
++----+----+----
++(0 rows)
+ 
+ alter view uv_iocu_view alter column bb set default 'view default';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++alter view uv_iocu_view alter column bb set default 'view default'
++                        ^
++HINT:  try \h ALTER VIEW
+ insert into uv_iocu_view (aa) values (1)
+    on conflict (aa) do update set bb = 'Rejected: '||excluded.*;
++ERROR:  "uv_iocu_view" is not a table
+ select * from uv_iocu_view;
+-                         bb                          | aa |                                cc                                 
+------------------------------------------------------+----+-------------------------------------------------------------------
+- Rejected: ("view default",1,"(1,""view default"")") |  1 | (1,"Rejected: (""view default"",1,""(1,""""view default"""")"")")
+-(1 row)
++ bb | aa | cc 
++----+----+----
++(0 rows)
+ 
+ -- Should fail to update non-updatable columns
+ insert into uv_iocu_view (aa) values (1)
+    on conflict (aa) do update set cc = 'XXX';
+-ERROR:  cannot insert into column "cc" of view "uv_iocu_view"
+-DETAIL:  View columns that are not columns of their base relation are not updatable.
++ERROR:  "uv_iocu_view" is not a table
+ drop view uv_iocu_view;
+ drop table uv_iocu_tab;
+ -- ON CONFLICT DO UPDATE permissions checks
+ create user regress_view_user1;
+ create user regress_view_user2;
+ set session authorization regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ create table base_tbl(a int unique, b text, c float);
+ insert into base_tbl values (1,'xxx',1.0);
+ create view rw_view1 as select b as bb, c as cc, a as aa from base_tbl;
++ERROR:  relation "root.public.rw_view1" already exists
+ grant select (aa,bb) on rw_view1 to regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant select (aa,bb) on rw_view1 to regress_view_user2
++             ^
++HINT:  try \h GRANT
+ grant insert on rw_view1 to regress_view_user2;
+ grant update (bb) on rw_view1 to regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant update (bb) on rw_view1 to regress_view_user2
++             ^
++HINT:  try \h GRANT
+ set session authorization regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = excluded.cc; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = rw_view1.cc; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ insert into rw_view1 values ('yyy',2.0,1)
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  "rw_view1" is not a table
+ insert into rw_view1 values ('zzz',2.0,1)
+   on conflict (aa) do update set bb = rw_view1.bb||'xxx'; -- OK
++ERROR:  "rw_view1" is not a table
+ insert into rw_view1 values ('zzz',2.0,1)
+   on conflict (aa) do update set cc = 3.0; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  "rw_view1" is not a table
+ reset session authorization;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++reset session authorization
++              ^
++HINT:  try \h RESET
+ select * from base_tbl;
+- a |   b    | c 
+----+--------+---
+- 1 | yyyxxx | 1
++ a |  b  | c 
++---+-----+---
++ 1 | xxx | 1
+ (1 row)
+ 
+ set session authorization regress_view_user1;
++ERROR:  at or near "regress_view_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_view_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ grant select (a,b) on base_tbl to regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant select (a,b) on base_tbl to regress_view_user2
++             ^
++HINT:  try \h GRANT
+ grant insert (a,b) on base_tbl to regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant insert (a,b) on base_tbl to regress_view_user2
++             ^
++HINT:  try \h GRANT
+ grant update (a,b) on base_tbl to regress_view_user2;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant update (a,b) on base_tbl to regress_view_user2
++             ^
++HINT:  try \h GRANT
+ set session authorization regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ create view rw_view2 as select b as bb, c as cc, a as aa from base_tbl;
++ERROR:  relation "root.public.rw_view2" already exists
+ insert into rw_view2 (aa,bb) values (1,'xxx')
+   on conflict (aa) do update set bb = excluded.bb; -- Not allowed
+-ERROR:  permission denied for table base_tbl
++ERROR:  "rw_view2" is not a table
+ create view rw_view3 as select b as bb, a as aa from base_tbl;
+ insert into rw_view3 (aa,bb) values (1,'xxx')
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  "rw_view3" is not a table
+ reset session authorization;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++reset session authorization
++              ^
++HINT:  try \h RESET
+ select * from base_tbl;
+  a |  b  | c 
+ ---+-----+---
+@@ -3141,22 +3637,38 @@
+ (1 row)
+ 
+ set session authorization regress_view_user2;
++ERROR:  at or near "regress_view_user2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_view_user2
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ create view rw_view4 as select aa, bb, cc FROM rw_view1;
++ERROR:  column "aa" does not exist
+ insert into rw_view4 (aa,bb) values (1,'yyy')
+   on conflict (aa) do update set bb = excluded.bb; -- Not allowed
+-ERROR:  permission denied for view rw_view1
++ERROR:  relation "rw_view4" does not exist
+ create view rw_view5 as select aa, bb FROM rw_view1;
++ERROR:  column "aa" does not exist
+ insert into rw_view5 (aa,bb) values (1,'yyy')
+   on conflict (aa) do update set bb = excluded.bb; -- OK
++ERROR:  relation "rw_view5" does not exist
+ reset session authorization;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++reset session authorization
++              ^
++HINT:  try \h RESET
+ select * from base_tbl;
+  a |  b  | c 
+ ---+-----+---
+- 1 | yyy | 1
++ 1 | xxx | 1
+ (1 row)
+ 
+ drop view rw_view5;
++ERROR:  relation "rw_view5" does not exist
+ drop view rw_view4;
++ERROR:  relation "rw_view4" does not exist
+ drop view rw_view3;
+ drop view rw_view2;
+ drop view rw_view1;
+@@ -3169,36 +3681,43 @@
+                            c text default 'Table default', d text, e text);
+ create view base_tab_def_view as select * from base_tab_def;
+ alter view base_tab_def_view alter b set default 'View default';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++alter view base_tab_def_view alter b set default 'View default'
++                             ^
++HINT:  try \h ALTER VIEW
+ alter view base_tab_def_view alter d set default 'View default';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++alter view base_tab_def_view alter d set default 'View default'
++                             ^
++HINT:  try \h ALTER VIEW
+ insert into base_tab_def values (1);
+ insert into base_tab_def values (2), (3);
+ insert into base_tab_def values (4, default, default, default, default);
+ insert into base_tab_def values (5, default, default, default, default),
+                                 (6, default, default, default, default);
+ insert into base_tab_def_view values (11);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (12), (13);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (14, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (15, default, default, default, default),
+                                      (16, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (17), (default);
++ERROR:  "base_tab_def_view" is not a table
+ select * from base_tab_def order by a;
+- a  |       b       |       c       |      d       | e 
+-----+---------------+---------------+--------------+---
+-  1 | Table default | Table default |              | 
+-  2 | Table default | Table default |              | 
+-  3 | Table default | Table default |              | 
+-  4 | Table default | Table default |              | 
+-  5 | Table default | Table default |              | 
+-  6 | Table default | Table default |              | 
+- 11 | View default  | Table default | View default | 
+- 12 | View default  | Table default | View default | 
+- 13 | View default  | Table default | View default | 
+- 14 | View default  | Table default | View default | 
+- 15 | View default  | Table default | View default | 
+- 16 | View default  | Table default | View default | 
+- 17 | View default  | Table default | View default | 
+-    | View default  | Table default | View default | 
+-(14 rows)
++ a |       b       |       c       | d | e 
++---+---------------+---------------+---+---
++ 1 | Table default | Table default |   | 
++ 2 | Table default | Table default |   | 
++ 3 | Table default | Table default |   | 
++ 4 | Table default | Table default |   | 
++ 5 | Table default | Table default |   | 
++ 6 | Table default | Table default |   | 
++(6 rows)
+ 
+ -- Adding an INSTEAD OF trigger should cause NULLs to be inserted instead of
+ -- table defaults, where there are no view defaults.
+@@ -3213,6 +3732,9 @@
+ language plpgsql;
+ create trigger base_tab_def_view_instrig instead of insert on base_tab_def_view
+   for each row execute function base_tab_def_view_instrig_func();
++ERROR:  unimplemented: INSTEAD OF triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126363/_version_
+ truncate base_tab_def;
+ insert into base_tab_def values (1);
+ insert into base_tab_def values (2), (3);
+@@ -3220,36 +3742,49 @@
+ insert into base_tab_def values (5, default, default, default, default),
+                                 (6, default, default, default, default);
+ insert into base_tab_def_view values (11);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (12), (13);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (14, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (15, default, default, default, default),
+                                      (16, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (17), (default);
++ERROR:  "base_tab_def_view" is not a table
+ select * from base_tab_def order by a;
+- a  |       b       |       c       |      d       | e 
+-----+---------------+---------------+--------------+---
+-  1 | Table default | Table default |              | 
+-  2 | Table default | Table default |              | 
+-  3 | Table default | Table default |              | 
+-  4 | Table default | Table default |              | 
+-  5 | Table default | Table default |              | 
+-  6 | Table default | Table default |              | 
+- 11 | View default  |               | View default | 
+- 12 | View default  |               | View default | 
+- 13 | View default  |               | View default | 
+- 14 | View default  |               | View default | 
+- 15 | View default  |               | View default | 
+- 16 | View default  |               | View default | 
+- 17 | View default  |               | View default | 
+-    | View default  |               | View default | 
+-(14 rows)
++ a |       b       |       c       | d | e 
++---+---------------+---------------+---+---
++ 1 | Table default | Table default |   | 
++ 2 | Table default | Table default |   | 
++ 3 | Table default | Table default |   | 
++ 4 | Table default | Table default |   | 
++ 5 | Table default | Table default |   | 
++ 6 | Table default | Table default |   | 
++(6 rows)
+ 
+ -- Using an unconditional DO INSTEAD rule should also cause NULLs to be
+ -- inserted where there are no view defaults.
+ drop trigger base_tab_def_view_instrig on base_tab_def_view;
++ERROR:  "base_tab_def_view" is not a table
+ drop function base_tab_def_view_instrig_func;
+ create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
+   do instead insert into base_tab_def values (new.a, new.b, new.c, new.d, new.e);
++ERROR:  at or near "base_tab_def_view_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ truncate base_tab_def;
+ insert into base_tab_def values (1);
+ insert into base_tab_def values (2), (3);
+@@ -3257,29 +3792,26 @@
+ insert into base_tab_def values (5, default, default, default, default),
+                                 (6, default, default, default, default);
+ insert into base_tab_def_view values (11);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (12), (13);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (14, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (15, default, default, default, default),
+                                      (16, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (17), (default);
++ERROR:  "base_tab_def_view" is not a table
+ select * from base_tab_def order by a;
+- a  |       b       |       c       |      d       | e 
+-----+---------------+---------------+--------------+---
+-  1 | Table default | Table default |              | 
+-  2 | Table default | Table default |              | 
+-  3 | Table default | Table default |              | 
+-  4 | Table default | Table default |              | 
+-  5 | Table default | Table default |              | 
+-  6 | Table default | Table default |              | 
+- 11 | View default  |               | View default | 
+- 12 | View default  |               | View default | 
+- 13 | View default  |               | View default | 
+- 14 | View default  |               | View default | 
+- 15 | View default  |               | View default | 
+- 16 | View default  |               | View default | 
+- 17 | View default  |               | View default | 
+-    | View default  |               | View default | 
+-(14 rows)
++ a |       b       |       c       | d | e 
++---+---------------+---------------+---+---
++ 1 | Table default | Table default |   | 
++ 2 | Table default | Table default |   | 
++ 3 | Table default | Table default |   | 
++ 4 | Table default | Table default |   | 
++ 5 | Table default | Table default |   | 
++ 6 | Table default | Table default |   | 
++(6 rows)
+ 
+ -- A DO ALSO rule should cause each row to be inserted twice. The first
+ -- insert should behave the same as an auto-updatable view (using table
+@@ -3287,8 +3819,38 @@
+ -- behave the same as a rule-updatable view (inserting NULLs where there are
+ -- no view defaults).
+ drop rule base_tab_def_view_ins_rule on base_tab_def_view;
++ERROR:  at or near "base_tab_def_view_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule base_tab_def_view_ins_rule on base_tab_def_view
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
+   do also insert into base_tab_def values (new.a, new.b, new.c, new.d, new.e);
++ERROR:  at or near "base_tab_def_view_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ truncate base_tab_def;
+ insert into base_tab_def values (1);
+ insert into base_tab_def values (2), (3);
+@@ -3296,56 +3858,71 @@
+ insert into base_tab_def values (5, default, default, default, default),
+                                 (6, default, default, default, default);
+ insert into base_tab_def_view values (11);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (12), (13);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (14, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (15, default, default, default, default),
+                                      (16, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (17), (default);
++ERROR:  "base_tab_def_view" is not a table
+ select * from base_tab_def order by a, c NULLS LAST;
+- a  |       b       |       c       |      d       | e 
+-----+---------------+---------------+--------------+---
+-  1 | Table default | Table default |              | 
+-  2 | Table default | Table default |              | 
+-  3 | Table default | Table default |              | 
+-  4 | Table default | Table default |              | 
+-  5 | Table default | Table default |              | 
+-  6 | Table default | Table default |              | 
+- 11 | View default  | Table default | View default | 
+- 11 | View default  |               | View default | 
+- 12 | View default  | Table default | View default | 
+- 12 | View default  |               | View default | 
+- 13 | View default  | Table default | View default | 
+- 13 | View default  |               | View default | 
+- 14 | View default  | Table default | View default | 
+- 14 | View default  |               | View default | 
+- 15 | View default  | Table default | View default | 
+- 15 | View default  |               | View default | 
+- 16 | View default  | Table default | View default | 
+- 16 | View default  |               | View default | 
+- 17 | View default  | Table default | View default | 
+- 17 | View default  |               | View default | 
+-    | View default  | Table default | View default | 
+-    | View default  |               | View default | 
+-(22 rows)
++ a |       b       |       c       | d | e 
++---+---------------+---------------+---+---
++ 1 | Table default | Table default |   | 
++ 2 | Table default | Table default |   | 
++ 3 | Table default | Table default |   | 
++ 4 | Table default | Table default |   | 
++ 5 | Table default | Table default |   | 
++ 6 | Table default | Table default |   | 
++(6 rows)
+ 
+ -- Test a DO ALSO INSERT ... SELECT rule
+ drop rule base_tab_def_view_ins_rule on base_tab_def_view;
++ERROR:  at or near "base_tab_def_view_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule base_tab_def_view_ins_rule on base_tab_def_view
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
+   do also insert into base_tab_def (a, b, e) select new.a, new.b, 'xxx';
++ERROR:  at or near "base_tab_def_view_ins_rule": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule base_tab_def_view_ins_rule as on insert to base_tab_def_view
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ truncate base_tab_def;
+ insert into base_tab_def_view values (1, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ insert into base_tab_def_view values (2, default, default, default, default),
+                                      (3, default, default, default, default);
++ERROR:  "base_tab_def_view" is not a table
+ select * from base_tab_def order by a, e nulls first;
+- a |      b       |       c       |      d       |  e  
+----+--------------+---------------+--------------+-----
+- 1 | View default | Table default | View default | 
+- 1 | View default | Table default |              | xxx
+- 2 | View default | Table default | View default | 
+- 2 | View default | Table default |              | xxx
+- 3 | View default | Table default | View default | 
+- 3 | View default | Table default |              | xxx
+-(6 rows)
++ a | b | c | d | e 
++---+---+---+---+---
++(0 rows)
+ 
+ drop view base_tab_def_view;
+ drop table base_tab_def;
+@@ -3353,14 +3930,22 @@
+ create table base_tab (a serial, b int[], c text, d text default 'Table default');
+ create view base_tab_view as select c, a, b from base_tab;
+ alter view base_tab_view alter column c set default 'View default';
++ERROR:  at or near "alter": syntax error
++DETAIL:  source SQL:
++alter view base_tab_view alter column c set default 'View default'
++                         ^
++HINT:  try \h ALTER VIEW
+ insert into base_tab_view (b[1], b[2], c, b[5], b[4], a, b[3])
+ values (1, 2, default, 5, 4, default, 3), (10, 11, 'C value', 14, 13, 100, 12);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into base_tab_view (b[1], b[2], c, b[5], b[4], a, b[3])
++                            ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from base_tab order by a;
+-  a  |        b         |      c       |       d       
+------+------------------+--------------+---------------
+-   1 | {1,2,3,4,5}      | View default | Table default
+- 100 | {10,11,12,13,14} | C value      | Table default
+-(2 rows)
++ a | b | c | d 
++---+---+---+---
++(0 rows)
+ 
+ drop view base_tab_view;
+ drop table base_tab;

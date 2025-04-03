@@ -92,6 +92,7 @@ var buildTargetMapping = map[string]string{
 	"geos":                 geosTarget,
 	"langgen":              "//pkg/sql/opt/optgen/cmd/langgen:langgen",
 	"libgeos":              geosTarget,
+	"microbench-ci":        "//pkg/cmd/microbench-ci:microbench-ci",
 	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"reduce":               "//pkg/cmd/reduce:reduce",
@@ -107,6 +108,7 @@ var buildTargetMapping = map[string]string{
 	"sql-bootstrap-data":   "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
 	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"tests":                "//pkg:all_tests",
+	"whoownsit":            "//pkg/cmd/whoownsit:whoownsit",
 	"workload":             "//pkg/cmd/workload:workload",
 }
 
@@ -188,7 +190,7 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt", "--config=pgo")
 	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {

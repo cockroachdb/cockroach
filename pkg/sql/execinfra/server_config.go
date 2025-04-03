@@ -133,6 +133,10 @@ type ServerConfig struct {
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
@@ -206,6 +210,11 @@ type ServerConfig struct {
 	// RootSQLMemoryPoolSize is the size in bytes of the root SQL memory
 	// monitor.
 	RootSQLMemoryPoolSize int64
+
+	// VecIndexManager allows SQL processors to access the vecindex.VectorIndex
+	// for operations on a vector index. It's stored as an `interface{}` due to
+	// package dependency cycles
+	VecIndexManager interface{}
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -232,6 +241,10 @@ type TestingKnobs struct {
 	// transaction executing the chunk. It is always called even when the backfill
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
+
+	// RunBeforeIndexBackfillProgressUpdate is called before updating the
+	// progress for a single index backfill.
+	RunBeforeIndexBackfillProgressUpdate func(completed []roachpb.Span)
 
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the

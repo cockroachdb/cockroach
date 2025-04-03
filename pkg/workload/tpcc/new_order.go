@@ -8,6 +8,7 @@ package tpcc
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
-	"golang.org/x/exp/rand"
 )
 
 // From the TPCC spec, section 2.4:
@@ -128,7 +128,7 @@ func createNewOrder(
 func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	n.config.auditor.newOrderTransactions.Add(1)
 
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	d := newOrderData{
 		wID:    wID,
@@ -151,7 +151,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 	// 2.4.1.4: A fixed 1% of the New-Order transactions are chosen at random to
 	// simulate user data entry errors and exercise the performance of rolling
 	// back update transactions.
-	rollback := rng.Intn(100) == 0
+	rollback := rng.IntN(100) == 0
 
 	// allLocal tracks whether any of the items were from a remote warehouse.
 	allLocal := 1
@@ -159,7 +159,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 		item := orderItem{
 			olNumber: i + 1,
 			// 2.4.1.5.3: order has a quantity [1..10]
-			olQuantity: rng.Intn(10) + 1,
+			olQuantity: rng.IntN(10) + 1,
 		}
 		// 2.4.1.5.1 an order item has a random item number, unless rollback is true
 		// and it's the last item in the items list.
@@ -180,7 +180,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 		if n.config.localWarehouses {
 			item.remoteWarehouse = false
 		} else {
-			item.remoteWarehouse = rng.Intn(100) == 0
+			item.remoteWarehouse = rng.IntN(100) == 0
 		}
 		item.olSupplyWID = wID
 		if item.remoteWarehouse && n.config.activeWarehouses > 1 {

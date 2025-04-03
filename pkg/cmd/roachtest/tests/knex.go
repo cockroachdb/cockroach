@@ -148,12 +148,15 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			//   This can be removed once the upstream knex repo updates to test with
 			//   v23.1.
 			// - (3) ignores a failure caused by our use of the autocommit_before_ddl
-			//   setting, which makes a test that drops a primary key and then re-adds
-			//   it in the same transaction fail.
+			//   setting. It does a migration then checks the transaction is still
+			//   opened. Since those include DDL, it was committed, which is unexpected.
+			// - Like (3), (4) is related to autocommit_before_ddl. The test drops a
+			//   primary key and then re-adds it in the same transaction but fails.
 			if !strings.Contains(rawResultsStr, "1) should handle basic delete with join") ||
 				!strings.Contains(rawResultsStr, "2) should handle returning") ||
-				!strings.Contains(rawResultsStr, "3) #1430 - .primary() & .dropPrimary() same for all dialects") ||
-				strings.Contains(rawResultsStr, " 4) ") {
+				!strings.Contains(rawResultsStr, "3) should not create column for invalid migration with transaction enabled") ||
+				!strings.Contains(rawResultsStr, "4) #1430 - .primary() & .dropPrimary() same for all dialects") ||
+				strings.Contains(rawResultsStr, " 5) ") {
 				t.Fatal(err)
 			}
 		}

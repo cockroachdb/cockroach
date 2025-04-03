@@ -227,9 +227,11 @@ func BenchmarkExternalSort(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
 	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
+	afterEachRun := func() {
+		closerRegistry.BenchmarkReset(ctx)
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
@@ -280,6 +282,7 @@ func BenchmarkExternalSort(b *testing.B) {
 							sorter.Init(ctx)
 							for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 							}
+							afterEachRun()
 							require.Equal(b, spillForced, spilled, fmt.Sprintf(
 								"expected: spilled=%t\tactual: spilled=%t", spillForced, spilled,
 							))

@@ -747,6 +747,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
 DROP DATABASE db1 CASCADE
 
 statement error pgcode 3D000 database "db1" does not exist

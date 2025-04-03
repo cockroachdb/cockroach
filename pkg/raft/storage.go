@@ -35,8 +35,10 @@ var ErrCompacted = errors.New("requested index is unavailable due to compaction"
 // TODO(pav-kv): this is used only in tests. Remove it.
 var ErrSnapOutOfDate = errors.New("requested index is older than the existing snapshot")
 
-// ErrUnavailable is returned by Storage interface when the requested log entries
-// are unavailable.
+// ErrUnavailable is returned by Storage interface when the requested log
+// entries are unavailable. Typically, this means that the index is higher than
+// LastIndex, but otherwise it means a gap in the log. The receiver of this
+// error can distinguish the two cases if necessary.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
 // LogStorage is a read-only API for the raft log.
@@ -73,24 +75,24 @@ type LogStorage interface {
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
 
 	// Term returns the term of the entry at the given index, which must be in the
-	// valid range: [FirstIndex()-1, LastIndex()]. The term of the entry before
-	// FirstIndex is retained for matching purposes even though the rest of that
-	// entry may not be available.
+	// valid range: [Compacted(), LastIndex()]. The term of the Compacted() entry
+	// is retained for matching purposes even though the rest of that entry is not
+	// available.
 	Term(index uint64) (uint64, error)
 	// LastIndex returns the index of the last entry in the log.
 	// TODO(pav-kv): replace this with LastEntryID() which never fails.
 	LastIndex() uint64
-	// FirstIndex returns the index of the first log entry that is possibly
-	// available via Entries. Older entries have been incorporated into the
-	// StateStorage.Snapshot.
+	// Compacted returns the index of the last compacted log entry. If storage
+	// only contains the dummy entry or initial snapshot then Compacted() returns
+	// the snapshot index.
 	//
-	// If storage only contains the dummy entry or initial snapshot then
-	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
-	// this index is not available.
+	// Entries at indices <= Compacted() have been committed and incorporated into
+	// StateStorage.Snapshot, and are no longer available via Entries() calls.
+	// Note that some entries > Compacted() may have been already applied too.
 	//
 	// TODO(pav-kv): replace this with a Prev() method equivalent to LogSlice's
 	// prev field. The log storage is just a storage-backed LogSlice.
-	FirstIndex() uint64
+	Compacted() uint64
 
 	// LogSnapshot returns an immutable point-in-time log storage snapshot.
 	LogSnapshot() LogStorageSnapshot
@@ -129,7 +131,7 @@ type Storage interface {
 }
 
 type inMemStorageCallStats struct {
-	initialState, firstIndex, lastIndex, entries, term, snapshot int
+	initialState, compacted, lastIndex, entries, term, snapshot int
 }
 
 // MemoryStorage implements the Storage interface backed by an in-memory slice.
@@ -145,11 +147,6 @@ type MemoryStorage struct {
 	snapshot  pb.Snapshot
 
 	// ls contains the log entries.
-	//
-	// TODO(pav-kv): the term field of the LogSlice is conservatively populated
-	// to be the last entry term, to keep the LogSlice valid. But it must be
-	// sourced from the upper layer's last accepted term (which is >= the last
-	// entry term).
 	ls LogSlice
 
 	callStats inMemStorageCallStats
@@ -214,12 +211,12 @@ func (ms *MemoryStorage) LastIndex() uint64 {
 	return ms.ls.lastIndex()
 }
 
-// FirstIndex implements the Storage interface.
-func (ms *MemoryStorage) FirstIndex() uint64 {
+// Compacted implements the Storage interface.
+func (ms *MemoryStorage) Compacted() uint64 {
 	ms.Lock()
 	defer ms.Unlock()
-	ms.callStats.firstIndex++
-	return ms.ls.prev.index + 1
+	ms.callStats.compacted++
+	return ms.ls.prev.index
 }
 
 // LogSnapshot implements the LogStorage interface.
@@ -258,8 +255,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap pb.Snapshot) error {
 		raftlogger.GetLogger().Panicf("snapshot at %+v regresses the term %d", id, oldTerm)
 	}
 	ms.snapshot = snap
-	// TODO(pav-kv): the term must be the last accepted term passed in.
-	ms.ls = LogSlice{term: id.term, prev: id}
+	ms.ls = LogSlice{prev: id}
 	return nil
 }
 
@@ -304,7 +300,7 @@ func (ms *MemoryStorage) Compact(index uint64) error {
 
 // Append the new entries to storage.
 //
-// TODO(pav-kv): pass in a LogSlice which carries correctness semantics.
+// TODO(pav-kv): pass in a LeadSlice which carries correctness semantics.
 func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	if len(entries) == 0 {
 		return nil
@@ -320,10 +316,6 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 		raftlogger.GetLogger().Panicf("missing log entry [last: %d, append at: %d]", last, first)
 	}
 
-	// TODO(pav-kv): this must have the correct last accepted term. Pass in the
-	// logSlice to this append method to update it correctly.
-	ms.ls.term = entries[len(entries)-1].Term
-
 	if first == ms.ls.lastIndex()+1 { // appending at the end of the log
 		ms.ls.entries = append(ms.ls.entries, entries...)
 	} else { // first <= lastIndex, after checks above
@@ -337,10 +329,12 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 // MakeLogSnapshot converts the MemoryStorage to a LogSnapshot type serving the
 // log from the MemoryStorage snapshot. Only for testing.
 func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
+	ls := ms.ls.forward(ms.ls.lastIndex())
 	return LogSnapshot{
-		first:    ms.FirstIndex(),
-		storage:  ms.LogSnapshot(),
-		unstable: ms.ls.forward(ms.ls.lastIndex()),
-		logger:   raftlogger.DiscardLogger,
+		compacted: ms.Compacted(),
+		storage:   ms.LogSnapshot(),
+		unstable:  LeadSlice{term: ls.lastEntryID().term, LogSlice: ls},
+		termCache: newTermCache(1, ms.ls.lastEntryID()),
+		logger:    raftlogger.DiscardLogger,
 	}
 }

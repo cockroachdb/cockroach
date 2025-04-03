@@ -140,7 +140,6 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
-						sd.RowLevelSecurityEnabled = true
 						sd.SerialNormalizationMode = localData.SerialNormalizationMode
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
@@ -170,6 +169,8 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 			}
 			return d.Expected
 		})
+		require.Equalf(t, 1, numTestStatementsObserved,
+			"one test should exist")
 	})
 }
 

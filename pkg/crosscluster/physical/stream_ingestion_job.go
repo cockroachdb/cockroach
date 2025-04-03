@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -40,6 +41,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var maxIngestionProcessorShutdownWait = 5 * time.Minute
 
 type streamIngestionResumer struct {
 	job *jobs.Job
@@ -89,30 +92,33 @@ func connectToActiveClient(
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
 
-func updateRunningStatus(
+func updateStatus(
 	ctx context.Context,
 	ingestionJob *jobs.Job,
-	status jobspb.ReplicationStatus,
-	runningStatus redact.RedactableString,
+	replicationStatus jobspb.ReplicationStatus,
+	status redact.RedactableString,
 ) {
 	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		updateRunningStatusInternal(md, ju, status, string(runningStatus.Redact()))
+		updateStatusInternal(md, ju, replicationStatus, string(status.Redact()))
 		return nil
 	})
 	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
-	} else if status == jobspb.ReplicationError {
-		log.Warningf(ctx, "%s", runningStatus)
+	} else if replicationStatus == jobspb.ReplicationError {
+		log.Warningf(ctx, "%s", status)
 	} else {
-		log.Infof(ctx, "%s", runningStatus)
+		log.Infof(ctx, "%s", status)
 	}
 }
 
-func updateRunningStatusInternal(
-	md jobs.JobMetadata, ju *jobs.JobUpdater, status jobspb.ReplicationStatus, runningStatus string,
+func updateStatusInternal(
+	md jobs.JobMetadata,
+	ju *jobs.JobUpdater,
+	replicationStatus jobspb.ReplicationStatus,
+	status string,
 ) {
-	md.Progress.GetStreamIngest().ReplicationStatus = status
-	md.Progress.RunningStatus = runningStatus
+	md.Progress.GetStreamIngest().ReplicationStatus = replicationStatus
+	md.Progress.StatusMessage = status
 	ju.UpdateProgress(md.Progress)
 }
 
@@ -130,7 +136,7 @@ func completeIngestion(
 
 	msg := redact.Sprintf("completing the producer job %d in the source cluster",
 		details.StreamID)
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver, msg)
+	updateStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 	evalContext := &execCtx.ExtendedEvalContext().Context
 	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
@@ -286,7 +292,7 @@ func ingestWithRetries(
 	if err != nil {
 		return err
 	}
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver,
+	updateStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver,
 		"stream ingestion finished successfully")
 	return nil
 }
@@ -296,7 +302,7 @@ func (s *streamIngestionResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
 	msg := redact.Sprintf("ingestion job failed (%s) but is being paused", err)
-	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, msg)
+	updateStatus(ctx, s.job, jobspb.ReplicationError, msg)
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
@@ -479,7 +485,7 @@ func maybeRevertToCutoverTimestamp(
 			shouldRevertToCutover = cutoverTimeIsEligibleForCutover(ctx, cutoverTimestamp, md.Progress)
 
 			if shouldRevertToCutover {
-				updateRunningStatusInternal(md, ju, jobspb.ReplicationFailingOver,
+				updateStatusInternal(md, ju, jobspb.ReplicationFailingOver,
 					fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTimestamp))
 			} else {
 				if streamIngestionProgress.ReplicationStatus == jobspb.ReplicationFailingOver {
@@ -501,6 +507,11 @@ func maybeRevertToCutoverTimestamp(
 			return cutoverTimestamp, false, errors.Wrapf(err, "failed to stop reader tenant")
 		}
 	}
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, ingestionJob, maxIngestionProcessorShutdownWait); err != nil {
+		return cutoverTimestamp, false, errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", ingestionJob.ID(), maxIngestionProcessorShutdownWait)
+	}
+	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", ingestionJob.ID())
+
 	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
@@ -593,12 +604,8 @@ func stopTenant(ctx context.Context, execCfg *sql.ExecutorConfig, tenantID roach
 	return nil
 }
 
-// OnFailOrCancel is part of the jobs.Resumer interface.
-// There is a known race between the ingestion processors shutting down, and
-// OnFailOrCancel being invoked. As a result of which we might see some keys
-// leftover in the keyspace if a ClearRange were to be issued here. In general
-// the tenant keyspace of a failed/canceled ingestion job should be treated as
-// corrupted, and the tenant should be dropped before resuming the ingestion.
+// OnFailOrCancel is part of the jobs.Resumer interface. After ingestion job
+// fails or gets cancelled, the tenant should be dropped.
 func (s *streamIngestionResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
@@ -627,6 +634,14 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 		telemetry.Count("physical_replication.failed")
 	}
 
+	// Ensure no sip processors are still ingesting data, so a subsequent DROP
+	// TENANT cmd will cleanly wipe out all data.
+	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, s.job, maxIngestionProcessorShutdownWait); err != nil {
+		log.Warningf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", s.job.ID(), maxIngestionProcessorShutdownWait, err)
+	} else {
+		log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", s.job.ID())
+	}
+
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
@@ -648,7 +663,6 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 				return err
 			}
 		}
-
 		return nil
 	})
 }
@@ -778,7 +792,7 @@ func (c *cutoverProgressTracker) updateJobProgress(
 	}
 
 	if err := c.job.NoTxn().FractionProgressed(ctx, persistProgress); err != nil {
-		return jobs.SimplifyInvalidStatusError(err)
+		return jobs.SimplifyInvalidStateError(err)
 	}
 	if c.onJobProgressUpdate != nil {
 		c.onJobProgressUpdate(remainingSpans)

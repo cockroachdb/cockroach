@@ -1,0 +1,71 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "memstore",
+    srcs = [
+        "memstore.go",
+        "memstore_lock.go",
+        "memstore_txn.go",
+    ],
+    embed = [":memstore_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/sql/vecindex/vecpb",
+        "//pkg/util/container/list",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+proto_library(
+    name = "memstore_proto",
+    srcs = ["memstore.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann:cspann_proto",
+        "//pkg/sql/vecindex/cspann/quantize:quantize_proto",
+        "//pkg/sql/vecindex/vecpb:vecpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "memstore_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore",
+    proto = ":memstore_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/vecpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "memstore_test",
+    srcs = ["memstore_test.go"],
+    embed = [":memstore"],
+    deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/commontest",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/vector",
+        "@com_github_stretchr_testify//require",
+        "@com_github_stretchr_testify//suite",
+        "@org_gonum_v1_gonum//floats/scalar",
+    ],
+)

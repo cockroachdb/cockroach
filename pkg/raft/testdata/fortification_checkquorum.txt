@@ -84,7 +84,7 @@ INFO 1 leader at term 1 does not support itself in the liveness fabric
 INFO 1 leader at term 1 does not support itself in the liveness fabric
 DEBUG 1 has not received messages from a quorum of peers in the last election timeout
 DEBUG 1 does not have store liveness support from a quorum of peers
-WARN 1 stepped down to follower since quorum is not active
+INFO 1 stepped down to follower since quorum is not active
 DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
 DEBUG 1 reset election elapsed to 0

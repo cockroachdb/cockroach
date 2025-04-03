@@ -77,6 +77,7 @@ upsert descriptor #106
   +      storeColumnNames:
   +      - serial_id
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -104,6 +105,7 @@ upsert descriptor #106
   +      - serial_id
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -209,6 +211,7 @@ upsert descriptor #106
   +      storeColumnNames:
   +      - serial_id
   +      unique: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -236,6 +239,7 @@ upsert descriptor #106
   +      - serial_id
   +      unique: true
   +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -464,6 +468,7 @@ upsert descriptor #106
   -      storeColumnNames:
   -      - serial_id
   -      unique: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: WRITE_ONLY
@@ -493,6 +498,7 @@ upsert descriptor #106
   -      - serial_id
          unique: true
   -      useDeletePreservingEncoding: true
+         vecConfig: {}
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
@@ -535,7 +541,7 @@ upsert descriptor #106
   +    storeColumnNames:
   +    - serial_id
        unique: true
-       version: 4
+       vecConfig: {}
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -621,6 +627,7 @@ upsert descriptor #106
   -      partitioning: {}
   -      sharded: {}
   -      unique: true
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

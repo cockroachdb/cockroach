@@ -427,9 +427,11 @@ func BenchmarkCrossJoiner(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
 	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
+	afterEachRun := func() {
+		closerRegistry.BenchmarkReset(ctx)
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
@@ -476,6 +478,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 						cj.Init(ctx)
 						for b := cj.Next(); b.Length() > 0; b = cj.Next() {
 						}
+						afterEachRun()
 					}
 				})
 			}

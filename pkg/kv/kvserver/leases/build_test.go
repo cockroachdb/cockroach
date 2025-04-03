@@ -1195,7 +1195,7 @@ func TestInputToVerifyInput(t *testing.T) {
 		LocalReplicaID: 1,
 		Desc:           &roachpb.RangeDescriptor{},
 		RaftStatus:     &raft.Status{},
-		RaftFirstIndex: 1,
+		RaftCompacted:  1,
 		PrevLease: roachpb.Lease{
 			Start:      cts,
 			Expiration: &ts,
@@ -1215,6 +1215,7 @@ func TestInputToVerifyInput(t *testing.T) {
 			NodeID: 1, StoreID: 1, ReplicaID: 1, Type: 1,
 		},
 		BypassSafetyChecks: true,
+		DesiredLeaseType:   roachpb.LeaseLeader,
 	}
 	verifyInput := noZeroBuildInput.toVerifyInput()
 	require.NoError(t, zerofields.NoZeroField(verifyInput),

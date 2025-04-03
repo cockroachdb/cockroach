@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -24,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -1525,4 +1528,521 @@ func TestTxnPreparedWriteReadConflict(t *testing.T) {
 			t.Run(name, func(t *testing.T) { run(t, writeIsoLevel, readIsoLevel) })
 		}
 	}
+}
+
+// TestTxnBasicBufferedWrites verifies that a simple buffered writes transaction
+// can be run and committed. Moreover, it verifies that the transaction's writes
+// are only observed iff it commits.
+func TestTxnBasicBufferedWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+		ctx := context.Background()
+
+		value1 := []byte("value1")
+		value2 := []byte("value2")
+		value3 := []byte("value3")
+
+		keyA := []byte("keyA")
+		keyB := []byte("keyB")
+		keyC := []byte("keyC")
+
+		// doReadTryLeaf is a helper that calls readFn on the given root txn as
+		// well as a fresh leaf txn.
+		doReadTryLeaf := func(txn *kv.Txn, readFn func(*kv.Txn) error) error {
+			tis, err := txn.GetLeafTxnInputState(ctx)
+			if err != nil {
+				return err
+			}
+			for _, txnForRead := range []*kv.Txn{
+				txn,
+				kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, tis),
+			} {
+				if err = readFn(txnForRead); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		// scanAllKeys reads all the keys relevant to the test via a Scan
+		// request and asserts that the expected values are returned. It does so
+		// via the given root txn as well as a fresh leaf txn.
+		scanAllKeys := func(txn *kv.Txn, expectedValues [][]byte) error {
+			return doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				kvs, err := txnForRead.Scan(ctx, []byte("key"), []byte("keyZ"), 0 /* maxRows */)
+				if err != nil {
+					return err
+				}
+				if len(expectedValues) != len(kvs) {
+					return errors.Errorf("expected %d kvs, got %d", len(expectedValues), len(kvs))
+				}
+				for i, expValue := range expectedValues {
+					if !bytes.Equal(kvs[i].ValueBytes(), expValue) {
+						return errors.Errorf("expected value %q; got %q", expValue, kvs[i].Value)
+					}
+				}
+				return nil
+			})
+		}
+
+		// Before the test begins, write a value to keyC. We'll delete it below.
+		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		require.NoError(t, txn.Put(ctx, keyC, value3))
+		require.NoError(t, txn.Commit(ctx))
+
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetBufferedWritesEnabled(true)
+
+			// Put transactional value.
+			if err := txn.Put(ctx, keyA, value1); err != nil {
+				return err
+			}
+
+			// Attempt to read in another txn.
+			conflictTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			conflictTxn.TestingSetPriority(enginepb.MinTxnPriority)
+			if gr, err := conflictTxn.Get(ctx, keyA); err != nil {
+				return err
+			} else if gr.Exists() {
+				return errors.Errorf("expected nil value; got %v", gr.Value)
+			}
+
+			// Read within the transaction (including the leaf variant).
+			if err := doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				if gr, err := txnForRead.Get(ctx, keyA); err != nil {
+					return err
+				} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value1) {
+					return errors.Errorf("expected value %q; got %q", value1, gr.Value)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			// Write to keyB two times. Only the last write should be visible once the
+			// transaction commits.
+			if err := txn.Put(ctx, keyB, value1); err != nil {
+				return err
+			}
+			if err := txn.Put(ctx, keyB, value2); err != nil {
+				return err
+			}
+
+			// Scan all keys within the transaction (including the leaf
+			// variant).
+			if err := scanAllKeys(txn, [][]byte{value1, value2, value3}); err != nil {
+				return err
+			}
+
+			// Delete keyC before attempting to read it.
+			if _, err := txn.Del(ctx, keyC); err != nil {
+				return err
+			}
+			if err := doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				if gr, err := txnForRead.Get(ctx, keyC); err != nil {
+					return err
+				} else if gr.Exists() {
+					return errors.Errorf("expected nil value for the deleted key; got %v", gr.Value)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := scanAllKeys(txn, [][]byte{value1, value2}); err != nil {
+				return err
+			}
+
+			if commit {
+				return nil
+			} else {
+				return errors.New("abort")
+			}
+		})
+
+		if commit {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			testutils.IsError(err, "abort")
+		}
+
+		// Verify the values are visible only if the transaction committed.
+		gr, err := s.DB.Get(ctx, keyA)
+		require.NoError(t, err)
+
+		if commit {
+			require.True(t, gr.Exists())
+			require.Equal(t, value1, gr.ValueBytes())
+		} else {
+			require.False(t, gr.Exists())
+		}
+
+		gr, err = s.DB.Get(ctx, keyB)
+		require.NoError(t, err)
+
+		if commit {
+			require.True(t, gr.Exists())
+			require.Equal(t, value2, gr.ValueBytes()) // value2 is the final value
+		} else {
+			require.False(t, gr.Exists())
+		}
+
+		// keyC was deleted.
+		gr, err = s.DB.Get(ctx, keyC)
+		require.NoError(t, err)
+		if commit {
+			require.False(t, gr.Exists())
+		} else {
+			require.True(t, gr.Exists())
+			require.Equal(t, value3, gr.ValueBytes())
+		}
+	})
+}
+
+// TestTxnBufferedWritesOverlappingScan verifies that a transaction that buffers
+// its writes on the client, and then performs scans that overlap with some part
+// of the buffer, correctly observe read-your-own-writes semantics.
+func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	extractKVs := func(rows []roachpb.KeyValue, batchResponses [][]byte) []roachpb.KeyValue {
+		if rows != nil {
+			return rows
+		}
+		var kvs []roachpb.KeyValue
+		err := storage.MVCCScanDecodeKeyValues(batchResponses, func(key storage.MVCCKey, rawBytes []byte) error {
+			kvs = append(kvs, roachpb.KeyValue{Key: key.Key, Value: roachpb.Value{RawBytes: rawBytes}})
+			return nil
+		})
+		require.NoError(t, err)
+		return kvs
+	}
+
+	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+		// valueTxn is a special value that indicates that a particular KV has
+		// been modified in the current txn but hasn't been committed yet.
+		valueTxn := []byte("valueTxn")
+		makeKV := func(key []byte, val []byte) roachpb.KeyValue {
+			var ts hlc.Timestamp
+			if !bytes.Equal(val, valueTxn) {
+				// If we have a value other than valueTxn, it means that the KV
+				// has been committed. As such, it'll have the Timestamp set, so
+				// we simulate that here (this is needed to get the correct
+				// NumBytes estimate). (A particular timestamp doesn't matter,
+				// just that both WallTime and Logical parts are set.)
+				ts = hlc.Timestamp{WallTime: 1, Logical: 1}
+			}
+			var value roachpb.Value
+			value.SetBytes(val)
+			value.Timestamp = ts
+			return roachpb.KeyValue{Key: key, Value: value}
+		}
+
+		ctx := context.Background()
+		valueA := []byte("valueA")
+		valueC := []byte("valueC")
+		valueF := []byte("valueF")
+		valueG := []byte("valueG")
+
+		keyA := []byte("keyA")
+		keyB := []byte("keyB")
+		keyC := []byte("keyC")
+		keyD := []byte("keyD")
+		keyE := []byte("keyE")
+		keyF := []byte("keyF")
+		keyG := []byte("keyG")
+		keyH := []byte("keyH")
+		keyJ := []byte("keyJ")
+		keyK := []byte("keyK")
+
+		// Before the test begins, write a value to keyA, keyC, keyF, and keyG.
+		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		require.NoError(t, txn.Put(ctx, keyA, valueA))
+		require.NoError(t, txn.Put(ctx, keyC, valueC))
+		require.NoError(t, txn.Put(ctx, keyF, valueF))
+		require.NoError(t, txn.Put(ctx, keyG, valueG))
+		require.NoError(t, txn.Commit(ctx))
+
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetBufferedWritesEnabled(true)
+
+			// Write some values to keyB, keyC, and keyD.
+			if err := txn.Put(ctx, keyB, valueTxn); err != nil {
+				return err
+			}
+			if err := txn.Put(ctx, keyC, valueTxn); err != nil {
+				return err
+			}
+			if err := txn.Put(ctx, keyD, valueTxn); err != nil {
+				return err
+			}
+			// Last key (lexicographically) that we write to the buffer. Ensure
+			// this is higher than any deleted key, and therefore must be
+			// included in the scan results (if the scan overlaps with this
+			// key). Useful to test the scan end key exclusivity logic.
+			if err := txn.Put(ctx, keyH, valueTxn); err != nil {
+				return err
+			}
+			// Delete some values. Do so at KeyE, where nothing was present, keyG
+			// where a value was present, and keyD where we just wrote in this
+			// transaction.
+			if _, err := txn.Del(ctx, keyE, keyG, keyD); err != nil {
+				return err
+			}
+
+			// Perform some scans.
+			for i, tc := range []struct {
+				key    roachpb.Key
+				endKey roachpb.Key
+				expRes []roachpb.KeyValue
+			}{
+				{
+					// Scan over the entire keyspace.
+					key:    keyA,
+					endKey: keyK,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyA, valueA), makeKV(keyB, valueTxn),
+						makeKV(keyC, valueTxn), makeKV(keyF, valueF), makeKV(keyH, valueTxn),
+					},
+				},
+				{
+					// The end key should be exclusive.
+					key:    keyA,
+					endKey: keyF,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyA, valueA), makeKV(keyB, valueTxn), makeKV(keyC, valueTxn),
+					},
+				},
+				{
+					// Entirely within the buffer.
+					key:    keyB,
+					endKey: keyF,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyB, valueTxn), makeKV(keyC, valueTxn),
+					},
+				},
+				{
+					// Entirely within the buffer and the server response is empty.
+					key:    keyB,
+					endKey: keyC,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyB, valueTxn),
+					},
+				},
+				{
+					// End key is present in the buffer, but isn't returned because the scan
+					// is exclusive.
+					key:    keyA,
+					endKey: keyB,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyA, valueA),
+					},
+				},
+				{
+					key:    keyA,
+					endKey: keyD,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyA, valueA), makeKV(keyB, valueTxn), makeKV(keyC, valueTxn),
+					},
+				},
+				{
+					key:    keyC,
+					endKey: keyF,
+					expRes: []roachpb.KeyValue{makeKV(keyC, valueTxn)},
+				},
+				{
+					// Doesn't overlap with the buffer at all.
+					key:    keyJ,
+					endKey: keyK,
+					expRes: []roachpb.KeyValue{},
+				},
+				{
+					// Includes the last write in the buffer.
+					key:    keyA,
+					endKey: keyH,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyA, valueA), makeKV(keyB, valueTxn), makeKV(keyC, valueTxn), makeKV(keyF, valueF),
+					},
+				},
+			} {
+				for _, sf := range []kvpb.ScanFormat{
+					kvpb.KEY_VALUES,
+					kvpb.BATCH_RESPONSE,
+				} {
+					var req kvpb.Request
+					if reverse {
+						req = &kvpb.ReverseScanRequest{
+							RequestHeader: kvpb.RequestHeader{
+								Key:    tc.key,
+								EndKey: tc.endKey,
+							},
+							ScanFormat: sf,
+						}
+					} else {
+						req = &kvpb.ScanRequest{
+							RequestHeader: kvpb.RequestHeader{
+								Key:    tc.key,
+								EndKey: tc.endKey,
+							},
+							ScanFormat: sf,
+						}
+					}
+					b := txn.NewBatch()
+					b.AddRawRequest(req)
+					require.NoError(t, txn.Run(ctx, b))
+					br := b.RawResponse()
+
+					require.Equal(t, 1, len(br.Responses))
+					var kvs []roachpb.KeyValue
+					var numKeys, numBytes int
+					if reverse {
+						rsr := br.Responses[0].GetInner().(*kvpb.ReverseScanResponse)
+						kvs = extractKVs(rsr.Rows, rsr.BatchResponses)
+						numKeys, numBytes = int(rsr.NumKeys), int(rsr.NumBytes)
+					} else {
+						sr := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+						kvs = extractKVs(sr.Rows, sr.BatchResponses)
+						numKeys, numBytes = int(sr.NumKeys), int(sr.NumBytes)
+					}
+					if reverse {
+						// Reverse the expected result.
+						sort.Slice(tc.expRes, func(i, j int) bool {
+							return bytes.Compare(tc.expRes[i].Key, tc.expRes[j].Key) > 0
+						})
+					}
+					require.Len(t, kvs, len(tc.expRes), "failed %d", i)
+					for i, exp := range tc.expRes {
+						require.Equal(t, exp.Key, kvs[i].Key, "failed %d", i)
+						expVal, err := exp.Value.GetBytes()
+						require.NoError(t, err)
+						val, err := kvs[i].Value.GetBytes()
+						require.NoError(t, err)
+						require.Equal(t, expVal, val)
+					}
+					// Additionally verify NumKeys and NumBytes fields.
+					require.Equal(t, len(tc.expRes), numKeys, "incorrect NumKeys value")
+					var expNumBytes int
+					for _, r := range tc.expRes {
+						// See encKVLength in txn_interceptor_write_buffer.go
+						// for more details on the expected sizing.
+						expNumBytes += 8 + mvccencoding.EncodedMVCCKeyLength(r.Key, r.Value.Timestamp) + len(r.Value.RawBytes)
+					}
+					require.Equal(t, expNumBytes, numBytes, "incorrect NumBytes value")
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	})
+}
+
+// TestsTxnBufferedWritesConditionalPuts verifies that conditional puts behave correctly with
+// buffered writes. In particular, it verifies that the condition is evaluated in the CPut's
+// batch, even though the write is flushed at commit time.
+func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+		ctx := context.Background()
+
+		value1Str := "value1"
+		value2Str := "value2"
+
+		value1 := []byte(value1Str)
+		valueTxn := []byte("valueTxn")
+
+		keyA := []byte("keyA")
+		keyB := []byte("keyB")
+
+		for _, tc := range []struct {
+			key       roachpb.Key
+			value     []byte
+			origValue string
+			condValue string
+		}{
+			{
+				key:       keyA,
+				origValue: value1Str,
+				condValue: value1Str,
+			},
+			{
+				key:       keyA,
+				origValue: value1Str,
+				condValue: value2Str,
+			},
+			{
+				key:       keyB,
+				origValue: "",
+				condValue: value2Str,
+			},
+			{
+				key:       keyB,
+				origValue: "",
+				condValue: "",
+			},
+		} {
+			// Before the test begins, write a value to keyA.
+			txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			require.NoError(t, txn.Put(ctx, keyA, value1))
+			require.NoError(t, txn.Commit(ctx))
+
+			// Expect an error if the original value doesn't match the one we're supplying
+			// in the CPut expectation.
+			expErr := tc.origValue != tc.condValue
+			err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				txn.SetBufferedWritesEnabled(true)
+
+				expValue := kvclientutils.StrToCPutExistingValue(tc.condValue)
+				if tc.condValue == "" {
+					// Handle empty strings specially.
+					expValue = nil
+				}
+
+				err := txn.CPut(ctx, tc.key, valueTxn, expValue)
+				if expErr {
+					require.Error(t, err)
+					require.IsType(t, &kvpb.ConditionFailedError{}, err)
+				} else {
+					require.NoError(t, err)
+				}
+
+				if commit {
+					return nil
+				} else {
+					return errors.New("abort")
+				}
+			})
+
+			if commit {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				testutils.IsError(err, "abort")
+			}
+
+			// Verify the values are visible only if the transaction commited
+			// and the CPut expectation was satisfied. Otherwise, the original
+			// value remains.
+			gr, err := s.DB.Get(ctx, tc.key)
+			require.NoError(t, err)
+			if commit && !expErr {
+				require.Equal(t, valueTxn, gr.ValueBytes())
+			} else {
+				if tc.origValue == "" {
+					require.False(t, gr.Exists())
+				} else {
+					require.Equal(t, []byte(tc.origValue), gr.ValueBytes())
+				}
+			}
+		}
+	})
 }

@@ -7,12 +7,14 @@ package upgrades
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -92,60 +94,94 @@ var jobsBackfillPageSize = 32
 func backfillJobsTablesAndColumns(
 	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	log.Infof(ctx, "backfilling new jobs tables and columns")
+	totalRowsRow, err := d.DB.Executor().QueryRowEx(ctx, "jobs-backfill-count", nil, sessiondata.NodeUserSessionDataOverride,
+		`SELECT count(*) FROM system.jobs WHERE owner IS NULL`)
+	if err != nil {
+		return err
+	}
+	totalRows := int(tree.MustBeDInt(totalRowsRow[0]))
+	if totalRows == 0 {
+		return nil
+	}
+
+	every := log.Every(time.Minute)
+	log.Infof(ctx, "backfilling new jobs tables and columns for %d jobs", totalRows)
 	jobsBackfilled := 0
 	for {
-		var done int
-		if err := d.DB.DescsTxn(ctx, func(ctx context.Context, tx descs.Txn) (retErr error) {
-			// Find rows that have not been backfilled, which we will detect via a
-			// NULL owner. The coalesce() here isn't necessary since the vtable will
-			// produce empty strings rather than nulls if a job somehow is missing an
-			// owner, but since the owner not being null is what breaks the loop the
-			// extra coalesce here just ensures wouldn't loop forever if that were to
-			// change out from under us.
-			q, err := tx.QueryIteratorEx(ctx, "jobs-backfill-read", tx.KV(), sessiondata.NodeUserSessionDataOverride,
-				`SELECT
-				v.job_id,
-				v.description,
-				coalesce(v.user_name, ''),
-				v.finished,
-				v.error,
-				v.running_status,
-				v.fraction_completed,
-				v.high_water_timestamp
-				FROM crdb_internal.jobs v
-				LEFT JOIN system.jobs j ON j.id = v.job_id
-				WHERE j.owner IS NULL
-				LIMIT $1`, jobsBackfillPageSize,
-			)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				retErr = errors.CombineErrors(retErr, q.Close())
-			}()
-
-			done = 0
-			for {
-				ok, err := q.Next(ctx)
+		candidateRows, err := d.DB.Executor().QueryBufferedEx(ctx, "jobs-backfill-find", nil, sessiondata.NodeUserSessionDataOverride,
+			`SELECT id FROM system.jobs WHERE owner IS NULL LIMIT $1`, jobsBackfillPageSize)
+		if err != nil {
+			return err
+		}
+		if len(candidateRows) == 0 {
+			// All done!
+			break
+		}
+		for _, candidate := range candidateRows {
+			id := int(tree.MustBeDInt(candidate[0]))
+			var backfilled bool
+			if err := d.DB.DescsTxn(ctx, func(ctx context.Context, tx descs.Txn) (retErr error) {
+				backfilled = false
+				// re-read the job in the txn, acquiring locks this time.
+				found, err := tx.QueryRowEx(ctx, "jobs-backfill-lock-job", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT id FROM system.jobs WHERE id = $1 AND owner IS NULL FOR UPDATE`, id)
 				if err != nil {
 					return err
 				}
-				if !ok {
-					break
+				// The job isn't here anymore and needing backfill; move on.
+				if found == nil {
+					return nil
 				}
 
-				row := q.Cur()
+				backfilled = true
+
+				// Lock the job infos to prevent concurrent modifications there as well.
+				_, err = tx.QueryBufferedEx(ctx, "jobs-backfill-lock-info", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT job_id FROM system.job_info WHERE job_id = $1 FOR UPDATE`, id)
+				if err != nil {
+					return err
+				}
+
+				// Materialize the job details for the (now locked) job row.
+				row, err := tx.QueryRowEx(ctx, "jobs-backfill-read", tx.KV(), sessiondata.NodeUserSessionDataOverride,
+					`SELECT
+					job_id,
+					description,
+					user_name,
+					finished,
+					error,
+					running_status,
+					fraction_completed,
+					high_water_timestamp
+					FROM crdb_internal.jobs
+					WHERE job_id = $1`, id,
+				)
+				if err != nil {
+					return err
+				}
+				// row shouldn't be nil -- we read the job row in this txn already so it
+				// does exist -- but if somehow a job is missing its legacy_payload row
+				// in job_info then the legacy vtable does render a row for it. We can't
+				// proceeed to the line below with a nil row or we will crash. We do not
+				// currently know of a path that would get us here, so for now we'll
+				// treat this as an error and fail the migration job, which will block
+				// the upgrade but if/when we identify a path that gets here, we should
+				// consider instead marking the job as backfilled (e.g. by setting the
+				// owner to an empty string) and continuing so that the upgrade
+				// completes.
+				if row == nil {
+					return jobs.MarkAsPermanentJobError(errors.Newf("job %d missing from crdb_internal.jobs", id))
+				}
 
 				// Update the job row.
 				if _, err := tx.ExecEx(ctx, "jobs-backfill-jobs", tx.KV(),
 					sessiondata.NodeUserSessionDataOverride,
 					`UPDATE system.jobs
-					SET description = $1,
-					owner = $2,
-					finished = $3,
-					error_msg = NULLIF($4, '')
-					WHERE id = $5`, row[1], row[2], row[3], row[4], row[0],
+						SET description = $1,
+						owner = $2,
+						finished = $3,
+						error_msg = NULLIF($4, '')
+						WHERE id = $5`, row[1], row[2], row[3], row[4], row[0],
 				); err != nil {
 					return err
 				}
@@ -174,16 +210,31 @@ func backfillJobsTablesAndColumns(
 						return err
 					}
 				}
-				done++
+				return nil
+			}); err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		jobsBackfilled += done
-		if done == 0 {
-			break
+			if backfilled {
+				jobsBackfilled++
+			}
+			if every.ShouldLog() {
+				log.Infof(ctx, "backfilled new columns for %d of %d jobs so far", jobsBackfilled, totalRows)
+				if jobID := d.OptionalJobID; jobID != 0 {
+					frac := float32(jobsBackfilled) / float32(totalRows)
+					if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						// It would be nice to just ProgressStorage(jobID).Set() here, but
+						// the new table is not used by reads until this backfill is marked
+						// as complete, so we still need to use the old LoadJob/WithTxn API.
+						j, err := d.JobRegistry.LoadClaimedJob(ctx, jobID)
+						if err != nil {
+							return err
+						}
+						return j.WithTxn(txn).FractionProgressed(ctx, jobs.FractionUpdater(frac))
+					}); err != nil {
+						log.Warningf(ctx, "failed to update progress for job %d: %v", jobID, err)
+					}
+				}
+			}
 		}
 	}
 	log.Infof(ctx, "finished backfilling new jobs tables and columns for %d jobs", jobsBackfilled)

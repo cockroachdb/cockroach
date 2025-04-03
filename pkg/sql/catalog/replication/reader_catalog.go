@@ -52,6 +52,7 @@ func SetupOrAdvanceStandbyReaderCatalog(
 			// in the reader tenant, but not in the from tenant which we are
 			// replicating).
 			descriptorsUpdated := catalog.DescriptorIDSet{}
+			descriptorsRenamed := catalog.DescriptorIDSet{}
 			allExistingDescs, err := txn.Descriptors().GetAll(ctx, txn.KV())
 			if err != nil {
 				return err
@@ -112,6 +113,10 @@ func SetupOrAdvanceStandbyReaderCatalog(
 					if err != nil {
 						return err
 					}
+					// If the descriptor has been renamed then delete the old namespace entry.
+					if existingDesc != nil && existingDesc.GetName() != fromDesc.GetName() {
+						descriptorsRenamed.Add(existingDesc.GetID())
+					}
 				}
 				return errors.Wrapf(txn.Descriptors().WriteDescToBatch(ctx, true, mut, b),
 					"unable to create replicated descriptor: %d %T", mut.GetID(), mut)
@@ -146,9 +151,11 @@ func SetupOrAdvanceStandbyReaderCatalog(
 			}
 			// Figure out which namespaces should be deleted.
 			if err := allExistingDescs.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-				// Skip descriptors that were updated above
+				// Skip descriptors that were updated above that were
+				// not renamed.
 				if !shouldSetupForReader(e.GetID(), e.GetParentID()) ||
-					descriptorsUpdated.Contains(e.GetID()) {
+					(descriptorsUpdated.Contains(e.GetID()) &&
+						!descriptorsRenamed.Contains(e.GetID())) {
 					return nil
 				}
 				return errors.Wrapf(txn.Descriptors().DeleteNamespaceEntryToBatch(ctx, true, e, b),

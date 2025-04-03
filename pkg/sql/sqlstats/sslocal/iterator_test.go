@@ -43,7 +43,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 		sqlConn.Exec(t, stmt)
 	}
 
-	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStats := s.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
 
 	// We collect all the statement fingerprint IDs so that we can test the
 	// transaction stats later.

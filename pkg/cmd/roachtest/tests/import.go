@@ -175,6 +175,25 @@ func registerImportTPCC(r registry.Registry) {
 			Suites:            registry.Suites(registry.Nightly),
 			Timeout:           timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+				metricName := fmt.Sprintf("%s_elapsed", test)
+				totalElapsed := histograms.Elapsed
+
+				gb := int64(1 << 30)
+				mb := int64(1 << 20)
+				dataSizeInMB := (56 * gb) / mb
+				backupDuration := int64(totalElapsed / 1000)
+				avgRatePerNode := roachtestutil.MetricPoint(float64(dataSizeInMB) / float64(int64(numNodes)*backupDuration))
+
+				return roachtestutil.AggregatedPerfMetrics{
+					{
+						Name:           metricName,
+						Value:          avgRatePerNode,
+						Unit:           "MB/s/node",
+						IsHigherBetter: false,
+					},
+				}, nil
+			},
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runImportTPCC(ctx, t, c, testName, timeout, warehouses)
 			},

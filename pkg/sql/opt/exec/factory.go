@@ -74,6 +74,22 @@ const (
 	// check plan uses locking. Typically this is set for plans with FK checks
 	// under read committed isolation.
 	PlanFlagCheckContainsLocking
+
+	// PlanFlagContainsDelete is set if at least one DELETE stmt is found in the
+	// whole plan.
+	PlanFlagContainsDelete
+
+	// PlanFlagContainsInsert is set if at least one INSERT stmt is found in the
+	// whole plan.
+	PlanFlagContainsInsert
+
+	// PlanFlagContainsUpdate is set if at least one UPDATE stmt is found in the
+	// whole plan.
+	PlanFlagContainsUpdate
+
+	// PlanFlagContainsUpsert is set if at least one UPSERT stmt is found in the
+	// whole plan.
+	PlanFlagContainsUpsert
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
@@ -255,6 +271,7 @@ type ExplainEnvData struct {
 	Tables    []tree.TableName
 	Sequences []tree.TableName
 	Views     []tree.TableName
+	AddFKs    []*tree.AlterTable
 }
 
 // KVOption represents information about a statement option
@@ -383,6 +400,9 @@ const (
 
 	// ExecutionStatsID is an annotation with a *ExecutionStats value.
 	ExecutionStatsID
+
+	// PolicyInfoID is an annotation with a *RLSPoliciesApplied value.
+	PolicyInfoID
 )
 
 // EstimatedStats contains estimated statistics about a given operator.
@@ -426,6 +446,8 @@ type ExecutionStats struct {
 
 	KVTime                optional.Duration
 	KVContentionTime      optional.Duration
+	KVLockWaitTime        optional.Duration
+	KVLatchWaitTime       optional.Duration
 	KVBytesRead           optional.Uint
 	KVPairsRead           optional.Uint
 	KVRowsRead            optional.Uint
@@ -505,6 +527,7 @@ type ExecutionStats struct {
 	SeekCount         optional.Uint
 	InternalSeekCount optional.Uint
 
+	ExecTime         optional.Duration
 	MaxAllocatedMem  optional.Uint
 	MaxAllocatedDisk optional.Uint
 	SQLCPUTime       optional.Duration
@@ -520,6 +543,19 @@ type ExecutionStats struct {
 	// UsedFollowerRead indicates whether at least some reads were served by the
 	// follower replicas.
 	UsedFollowerRead bool
+}
+
+// RLSPoliciesApplied contains information about the row-level security policies
+// that were applied during the query.
+type RLSPoliciesApplied struct {
+	// PoliciesSkippedForRole is true if the user is a member of a role that is
+	// exempt from all policies (e.g., admin).
+	PoliciesSkippedForRole bool
+	// Policies is the list of policy IDs applied to the scan of a single table.
+	// This applies to the table that this annotation was attached to. If this is
+	// empty, it either means policies were skipped due to the role, or none were
+	// applied.
+	Policies opt.PolicyIDSet
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

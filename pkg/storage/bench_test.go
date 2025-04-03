@@ -2004,11 +2004,11 @@ func runMVCCAcquireLockCommon(
 				txn = &txn2
 			}
 			// Acquire a shared and an exclusive lock on the key.
-			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0, 0)
+			err := MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, key, nil, 0, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
-			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0, 0)
+			err = MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Exclusive, key, nil, 0, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -2032,7 +2032,7 @@ func runMVCCAcquireLockCommon(
 		if checkFor {
 			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0, 0)
 		} else {
-			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0, 0)
+			err = MVCCAcquireLock(ctx, rw, &txn.TxnMeta, txn.IgnoredSeqNums, strength, key, ms, 0, 0)
 		}
 		if heldOtherTxn {
 			if err == nil {
@@ -2301,7 +2301,7 @@ func runCheckSSTConflicts(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), false, hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2493,7 +2493,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 		writer := sstable.NewWriter(objstorageprovider.NewFileWritable(sstFile), opts)
 		for _, kv := range kvPairs {
-			require.NoError(b, writer.Raw().AddWithForceObsolete(
+			require.NoError(b, writer.Raw().Add(
 				pebble.MakeInternalKey(kv.key, 0 /* seqNum */, kv.kind), kv.value, false /* forceObsolete */))
 		}
 		require.NoError(b, writer.Close())

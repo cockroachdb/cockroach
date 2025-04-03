@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build !bazel_code_cover
-// +build !bazel_code_cover
 
 // Package bazelcodecover allows instrumented binaries to output code coverage
 // data.

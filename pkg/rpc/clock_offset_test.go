@@ -178,6 +178,12 @@ func TestClockOffsetMetrics(t *testing.T) {
 	if a, e := monitor.Metrics().ClockOffsetStdDevNanos.Value(), int64(7); a != e {
 		t.Errorf("stdDev %d != expected %d", a, e)
 	}
+	if a, e := monitor.Metrics().ClockOffsetMedianNanos.Value(), int64(13); a != e {
+		t.Errorf("median %d != expected %d", a, e)
+	}
+	if a, e := monitor.Metrics().ClockOffsetMedianAbsDevNanos.Value(), int64(7); a != e {
+		t.Errorf("MAD %d != expected %d", a, e)
+	}
 }
 
 // TestLatencies tests the tracking of round-trip latency between nodes.

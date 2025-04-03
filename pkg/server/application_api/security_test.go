@@ -22,11 +22,7 @@ import (
 func TestAdminAPIUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create sample users.

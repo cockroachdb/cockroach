@@ -33,22 +33,18 @@ message Span {
 }
 
 // ValueType defines a set of type constants placed in the "tag" field of Value
-// messages. These are defined as a protocol buffer enumeration so that they
-// can be used portably between our Go and C code. The tags are used by the
-// RocksDB Merge Operator to perform specialized merges.
+// messages. These are defined as a protocol buffer enumeration for historical
+// reasons.
 enum ValueType {
   // This is a subset of the SQL column type values, representing the underlying
-  // storage for various types. The DELIMITED_foo entries each represent a foo
-  // variant that self-delimits length.
+  // storage for various types.
   UNKNOWN = 0;
-  reserved 7;
+  reserved 7, 8, 9;
   INT = 1;
   FLOAT = 2;
   BYTES = 3;
-  DELIMITED_BYTES = 8;
   TIME = 4;
   DECIMAL = 5;
-  DELIMITED_DECIMAL = 9;
   DURATION = 6;
   TIMETZ = 12;
   GEO = 13;
@@ -772,6 +768,18 @@ message AbortSpanEntry {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];
 }
 
+// BufferedWrite contains information about all writes buffered on the root txn
+// for a given key.
+message BufferedWrite {
+  message Val {
+    Value val = 1 [(gogoproto.nullable) = false];
+    int32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  }
+  uint64 id = 1 [(gogoproto.customname) = "ID"];
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  repeated Val vals = 3 [(gogoproto.nullable) = false];
+}
+
 // LeafTxnInputState is the state from a transaction coordinator
 // necessary and sufficient to set up a leaf transaction coordinator
 // on another node.
@@ -800,6 +808,13 @@ message LeafTxnInputState {
   // updated via the (kv.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // buffered_writes stores all writes that are buffered on the root txn (on the
+  // gateway node). Overlapping read requests need to be aware of these in order
+  // to support read-your-own-writes.
+  // TODO(#139060): ship only a part of the write buffer that intersects with
+  // tables that we'll be scanned by the leaf. Also consider applying the same
+  // optimization to in_flight_writes.
+  repeated BufferedWrite buffered_writes = 11 [(gogoproto.nullable) = false];
 }
 
 // LeafTxnFinalState is the state from a leaf transaction coordinator
@@ -811,17 +826,11 @@ message LeafTxnFinalState {
   // record. This can be simplified.
   // See: https://github.com/cockroachdb/cockroach/issues/43192
   Transaction txn = 1 [(gogoproto.nullable) = false];
-  reserved 2;
-  // deprecated_command_count indicates that at least one request
-  // has been processed in this transaction.
-  // Populated only for compatibility with pre-20.1 nodes.
-  // TODO(knz,andrei): Remove this in 20.2.
-  int32 deprecated_command_count = 3;
+  reserved 2, 3;
   // refresh_spans contains the key spans read by the leaf. The root will add
   // them to its own tracking of reads.
   repeated Span refresh_spans = 4 [(gogoproto.nullable) = false];
-  reserved 5;
-  reserved 6;
+  reserved 5, 6;
   // refresh_invalid is set if refresh spans have not been collected. In this
   // case, refresh_spans is empty. It may be set because the leaf was asked not
   // to collect spans or because the leaf's reads exceeded the tracking memory

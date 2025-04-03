@@ -16,21 +16,22 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// LogStatusChangeStructured job state change using structured logging, if job is not nil.
-func LogStatusChangeStructured(
+// LogStateChangeStructured job state change using structured logging, if job is not nil.
+func LogStateChangeStructured(
 	ctx context.Context,
 	id jobspb.JobID,
 	jobType string,
 	payload *jobspb.Payload,
-	prevStatus Status,
-	status Status,
+	prevState State,
+	state State,
 ) {
+	// TODO (msbutler): check with obs about changing proto names.
 	out := eventpb.StatusChange{
 		JobID:          int64(id),
 		JobType:        jobType,
-		Description:    redact.Sprintf("status changed to: %s", status),
-		PreviousStatus: string(prevStatus),
-		NewStatus:      string(status),
+		Description:    redact.Sprintf("state changed to: %s", state),
+		PreviousStatus: string(prevState),
+		NewStatus:      string(state),
 	}
 
 	if payload != nil {

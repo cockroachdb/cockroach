@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -449,10 +450,9 @@ func TestDistSQLUnavailableHosts(t *testing.T) {
 			}
 
 			// Grant capability to run RELOCATE to secondary (test) tenant.
-			systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-			systemDB.Exec(t,
-				`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
-				serverutils.TestTenantID().ToUint64())
+			tc.GrantTenantCapabilities(
+				ctx, t, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 		}
 
 		// Connect to node 1 (gateway node)
@@ -1995,9 +1995,22 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 		{
+			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs: []*aggregateFuncHolder{
+					{filterRenderIdx: 0},
+					{filterRenderIdx: tree.NoColumnIdx},
+				}},
+			}},
+			// Filtering aggregation is not natively supported.
+			prohibitParallelization: true,
+		},
+		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
 				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				table:               &scanNode{desc: makeTableDesc()},
+				indexJoinPlanningInfo: indexJoinPlanningInfo{
+					fetch: fetchPlanningInfo{desc: makeTableDesc()},
+				},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
@@ -2020,6 +2033,16 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
 				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
 				render:              []tree.TypedExpr{&tree.IsNullExpr{}},
+			}}},
+			// Not a simple projection (some expressions might be handled by
+			// wrapping a row-execution processor, so we choose to be safe and
+			// prohibit the parallelization for all non-IndexedVar expressions).
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}, &tree.IsNullExpr{}},
 			}}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
@@ -2062,8 +2085,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 	} {
-		var c localScanParallelizationChecker
-		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan, &c)
+		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
 		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
 	}

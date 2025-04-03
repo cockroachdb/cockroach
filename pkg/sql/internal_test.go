@@ -43,7 +43,7 @@ func TestInternalExecutor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -126,7 +126,7 @@ func TestInternalFullTableScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -177,7 +177,7 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -201,7 +201,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -248,7 +248,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 
 	// sem will be fired every time pg_sleep(1337666) is called.
@@ -427,13 +427,14 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			tt.serializable, tt.pushed, tt.refreshable)
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
-			params, _ := createTestServerParams()
+			params, _ := createTestServerParamsAllowTenants()
 			s, _, db := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 
 			// Setup a txn.
 			txn := db.NewTxn(ctx, "test")
-			keyA := roachpb.Key("a")
+			// Build a key in the tenant's keyspace
+			keyA := append(s.Codec().TenantPrefix(), roachpb.Key("a")...)
 			if !tt.serializable {
 				require.NoError(t, txn.SetIsoLevel(isolation.Snapshot))
 			}
@@ -614,7 +615,7 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	srv, db, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -715,7 +716,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

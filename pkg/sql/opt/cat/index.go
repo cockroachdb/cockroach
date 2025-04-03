@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -45,14 +46,11 @@ type Index interface {
 	// Specifically idx = Table().Index(idx.Ordinal).
 	Ordinal() IndexOrdinal
 
+	// Type returns the type of this index: forward, inverted, vector, etc.
+	Type() idxtype.T
+
 	// IsUnique returns true if this index is declared as UNIQUE in the schema.
 	IsUnique() bool
-
-	// IsInverted returns true if this is an inverted index.
-	IsInverted() bool
-
-	// IsVector returns true if this is a vector index.
-	IsVector() bool
 
 	// GetInvisibility returns index invisibility.
 	GetInvisibility() float64

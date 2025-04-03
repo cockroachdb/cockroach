@@ -99,12 +99,6 @@ func (e *ProjectExpr) Private() interface{} {
 	return &e.Passthrough
 }
 
-func (e *ProjectExpr) String() string {
-	f := makeExprFmtCtxForString(ExprFmtHideQualifications, e.Memo(), nil)
-	f.FormatExpr(e)
-	return f.Buffer.String()
-}
-
 func (e *ProjectExpr) SetChild(nth int, child opt.Expr) {
 	switch nth {
 	case 0:
@@ -115,10 +109,6 @@ func (e *ProjectExpr) SetChild(nth int, child opt.Expr) {
 		return
 	}
 	panic(errors.AssertionFailedf("child index out of range"))
-}
-
-func (e *ProjectExpr) Memo() *Memo {
-	return e.grp.memo()
 }
 
 func (e *ProjectExpr) Relational() *props.Relational {
@@ -155,31 +145,26 @@ func (e *ProjectExpr) bestProps() *bestProps {
 
 func (e *ProjectExpr) setNext(member RelExpr) {
 	if e.next != nil {
-		panic(errors.AssertionFailedf("expression already has its next defined: %s", e))
+		panic(errors.AssertionFailedf("expression already has its next defined: %s", errors.Safe(e.Op())))
 	}
 	e.next = member
 }
 
 func (e *ProjectExpr) setGroup(member RelExpr) {
 	if e.grp != nil {
-		panic(errors.AssertionFailedf("expression is already in a group: %s", e))
+		panic(errors.AssertionFailedf("expression is already in a group: %s", errors.Safe(e.Op())))
 	}
 	e.grp = member.group()
 	LastGroupMember(member).setNext(e)
 }
 
 type projectGroup struct {
-	mem   *Memo
 	rel   props.Relational
 	first ProjectExpr
 	best  bestProps
 }
 
 var _ exprGroup = &projectGroup{}
-
-func (g *projectGroup) memo() *Memo {
-	return g.mem
-}
 
 func (g *projectGroup) relational() *props.Relational {
 	return &g.rel
@@ -230,7 +215,7 @@ func (e *ProjectionsExpr) SetChild(nth int, child opt.Expr) {
 }
 
 func (e *ProjectionsExpr) DataType() *types.T {
-	return types.Any
+	return types.AnyElement
 }
 
 type ProjectionsItem struct {
@@ -266,12 +251,6 @@ func (e *ProjectionsItem) Private() interface{} {
 	return &e.ColPrivate
 }
 
-func (e *ProjectionsItem) String() string {
-	f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)
-	f.FormatExpr(e)
-	return f.Buffer.String()
-}
-
 func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 	switch nth {
 	case 0:
@@ -279,6 +258,12 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 		return
 	}
 	panic(errors.AssertionFailedf("child index out of range"))
+}
+
+func (e *ProjectionsItem) String() string {
+	f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)
+	f.FormatExpr(e)
+	return f.Buffer.String()
 }
 
 func (e *ProjectionsItem) DataType() *types.T {
@@ -317,22 +302,12 @@ func (e *SortExpr) Private() interface{} {
 	return nil
 }
 
-func (e *SortExpr) String() string {
-	f := makeExprFmtCtxForString(ExprFmtHideQualifications, e.Memo(), nil)
-	f.FormatExpr(e)
-	return f.Buffer.String()
-}
-
 func (e *SortExpr) SetChild(nth int, child opt.Expr) {
 	if nth == 0 {
 		e.Input = child.(RelExpr)
 		return
 	}
 	panic(errors.AssertionFailedf("child index out of range"))
-}
-
-func (e *SortExpr) Memo() *Memo {
-	return e.Input.Memo()
 }
 
 func (e *SortExpr) Relational() *props.Relational {
@@ -381,7 +356,7 @@ func (m *Memo) MemoizeProject(
 	passthrough opt.ColSet,
 ) RelExpr {
 	const size = int64(unsafe.Sizeof(projectGroup{}))
-	grp := &projectGroup{mem: m, first: ProjectExpr{
+	grp := &projectGroup{first: ProjectExpr{
 		Input:       input,
 		Projections: projections,
 		Passthrough: passthrough,
@@ -426,7 +401,7 @@ func (in *interner) InternExpr(e opt.Expr) opt.Expr {
 	case *ProjectionsItem:
 		return in.InternProjectionsItem(t)
 	default:
-		panic(errors.AssertionFailedf("unhandled op: %s", e.Op()))
+		panic(errors.AssertionFailedf("unhandled op: %s", errors.Safe(e.Op())))
 	}
 }
 
@@ -495,7 +470,7 @@ func (b *logicalPropsBuilder) buildProps(e RelExpr, rel *props.Relational) {
 	case *ProjectExpr:
 		b.buildProjectProps(t, rel)
 	default:
-		panic(errors.AssertionFailedf("unhandled type: %s", t.Op()))
+		panic(errors.AssertionFailedf("unhandled type: %s", errors.Safe(e.Op())))
 	}
 }
 ----
@@ -565,14 +540,14 @@ func (e *VariableExpr) Private() interface{} {
 	return &e.Col
 }
 
+func (e *VariableExpr) SetChild(nth int, child opt.Expr) {
+	panic(errors.AssertionFailedf("child index out of range"))
+}
+
 func (e *VariableExpr) String() string {
 	f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)
 	f.FormatExpr(e)
 	return f.Buffer.String()
-}
-
-func (e *VariableExpr) SetChild(nth int, child opt.Expr) {
-	panic(errors.AssertionFailedf("child index out of range"))
 }
 
 func (e *VariableExpr) DataType() *types.T {
@@ -612,12 +587,6 @@ func (e *MaxExpr) Private() interface{} {
 	return nil
 }
 
-func (e *MaxExpr) String() string {
-	f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)
-	f.FormatExpr(e)
-	return f.Buffer.String()
-}
-
 func (e *MaxExpr) SetChild(nth int, child opt.Expr) {
 	switch nth {
 	case 0:
@@ -625,6 +594,12 @@ func (e *MaxExpr) SetChild(nth int, child opt.Expr) {
 		return
 	}
 	panic(errors.AssertionFailedf("child index out of range"))
+}
+
+func (e *MaxExpr) String() string {
+	f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)
+	f.FormatExpr(e)
+	return f.Buffer.String()
 }
 
 func (e *MaxExpr) DataType() *types.T {
@@ -678,7 +653,7 @@ func (in *interner) InternExpr(e opt.Expr) opt.Expr {
 	case *MaxExpr:
 		return in.InternMax(t)
 	default:
-		panic(errors.AssertionFailedf("unhandled op: %s", e.Op()))
+		panic(errors.AssertionFailedf("unhandled op: %s", errors.Safe(e.Op())))
 	}
 }
 
@@ -721,7 +696,7 @@ func (in *interner) InternMax(val *MaxExpr) *MaxExpr {
 func (b *logicalPropsBuilder) buildProps(e RelExpr, rel *props.Relational) {
 	switch t := e.(type) {
 	default:
-		panic(errors.AssertionFailedf("unhandled type: %s", t.Op()))
+		panic(errors.AssertionFailedf("unhandled type: %s", errors.Safe(e.Op())))
 	}
 }
 ----
