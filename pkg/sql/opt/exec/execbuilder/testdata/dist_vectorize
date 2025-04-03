@@ -59,7 +59,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 5 (40 B, 10 KVs, 5 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -69,6 +69,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │
 └── • scan
       sql nodes: <hidden>
@@ -97,7 +98,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -107,6 +108,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │ equality: (k) = (k)

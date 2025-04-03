@@ -13,7 +13,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -36,7 +36,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -59,7 +59,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -110,7 +110,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -133,7 +133,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -192,7 +192,7 @@ distribution: local
 vectorized: false
 plan type: custom
 maximum memory usage: 0 B
-network usage: 0 B (0 messages)
+DistSQL network usage: 0 B (0 messages)
 isolation level: serializable
 priority: normal
 quality of service: regular
@@ -233,4 +233,3 @@ quality of service: regular
                   spans: FULL SCAN
 ----
 ----
-

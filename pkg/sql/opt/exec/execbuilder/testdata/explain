@@ -2253,7 +2253,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -2263,6 +2263,7 @@ quality of service: regular
   sql nodes: <hidden>
   regions: <hidden>
   actual row count: 1
+  execution time: 0µs
   size: 1 column, 1 row
 
 # Tests for EXPLAIN (OPT, MEMO).

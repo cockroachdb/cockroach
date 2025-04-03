@@ -312,7 +312,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -326,6 +326,7 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │ estimated max memory allocated: 0 B
 │       │ estimated max sql temp disk usage: 0 B
 │       │ group by: lk
@@ -338,6 +339,7 @@ quality of service: regular
 │           │ KV rows decoded: 0
 │           │ KV bytes read: 0 B
 │           │ KV gRPC calls: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ table: rtable@rtable_pkey
 │           │ equality: (rk1, rk2) = (rk1, rk2)
@@ -352,6 +354,7 @@ quality of service: regular
 │               │ KV rows decoded: 0
 │               │ KV bytes read: 0 B
 │               │ KV gRPC calls: 0
+│               │ execution time: 0µs
 │               │ estimated max memory allocated: 0 B
 │               │ estimated max sql temp disk usage: 0 B
 │               │ table: rtable@geom_index
@@ -360,6 +363,7 @@ quality of service: regular
 │                     sql nodes: <hidden>
 │                     regions: <hidden>
 │                     actual row count: 0
+│                     execution time: 0µs
 │                     label: buffer 1 (q)
 │
 ├── • subquery
@@ -371,6 +375,7 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1 (q)
 │       │
 │       └── • scan
@@ -396,11 +401,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 1
+        │ execution time: 0µs
         │
         └── • scan buffer
               sql nodes: <hidden>
               regions: <hidden>
               actual row count: 0
+              execution time: 0µs
               label: buffer 1 (q)
 
 # Anti joins are also converted to paired joins by the optimizer.
