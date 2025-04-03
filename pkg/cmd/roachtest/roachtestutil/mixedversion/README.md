@@ -164,6 +164,11 @@ This is the first _user hook_ we encounter: `OnStartup`. [Hooks](#terminology) a
 
 One important point to note is that mixed-version tests start the cluster at a [_predecessor version_ (not necessarily immediate predecessor)](#high-level-overview). As such, if a feature was just introduced in the current release, it won't be available at this point.
 
+**Note**: _Minimum Supported Version_ vs. _Minimum Bootstrap Version_:
+One common mistake is to think that the _minimum supported version_ will configure the test to never start on any version older. However, this setting only configures _user hooks_ to not be scheduled at any versions older than the _minimum supported version_. It is still possible for the test to start the cluster at a _predecessor version_ of the _minimum supported version_ and run upgrades normally without any user hooks. Even if the feature we are primarily testing was not introduced until _minimum supported version_, it can be useful to run through the exercise of loading in old data.
+
+However, you may run into a scenario that requires the cluster to _start_ at a certain version. This is where _minimum bootstrap version_ comes in and enforces that the framework will not generate any plans that start the cluster on a version older. For best practices, if either option works, prefer _Minimum Supported Version_ due to the extra coverage it provides.
+
 #### Testing code in mixed-version
 
 ``` go

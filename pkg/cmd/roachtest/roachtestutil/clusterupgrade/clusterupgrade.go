@@ -83,6 +83,12 @@ func (v *Version) AtLeast(other *Version) bool {
 	return v.Version.AtLeast(&other.Version)
 }
 
+// LessThan returns true if the version is strictly
+// older than the other version. `v < other`
+func (v *Version) LessThan(other *Version) bool {
+	return !v.Version.AtLeast(&other.Version)
+}
+
 // Series returns the release series this version is a part of.
 func (v *Version) Series() string {
 	return release.VersionSeries(&v.Version)
