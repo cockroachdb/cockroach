@@ -4098,12 +4098,89 @@ var pgCatalogStatioAllSequencesTable = virtualSchemaTable{
 }
 
 var pgCatalogPoliciesTable = virtualSchemaTable{
-	comment: "pg_policies was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogPolicies,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	comment: `pg_policies provides a user-friendly view of row-level security policies
+https://www.postgresql.org/docs/17/view-pg-policies.html`,
+	schema: vtable.PgCatalogPolicies,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		query := `
+			SELECT 
+				n.nspname,
+				c.relname,
+				pol.polname,
+				pol.polpermissive,
+				array_agg(
+					CASE 
+						WHEN role_id.uid = 0 THEN 'public'
+						ELSE r.rolname
+					END
+					ORDER BY r.rolname
+				) AS roles,
+				CASE pol.polcmd::text
+					WHEN '*' THEN 'ALL'
+					WHEN 'a' THEN 'INSERT'
+					WHEN 'w' THEN 'UPDATE'
+					WHEN 'd' THEN 'DELETE'
+					WHEN 'r' THEN 'SELECT'
+				END AS cmd,
+				pol.polqual,
+				pol.polwithcheck
+			FROM pg_catalog.pg_policy pol
+			JOIN pg_catalog.pg_class c ON pol.polrelid = c.oid
+			JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+			LEFT JOIN LATERAL unnest(pol.polroles) AS role_id(uid) ON true
+			LEFT JOIN pg_catalog.pg_roles r ON r.oid = role_id.uid
+			GROUP BY n.nspname, c.relname, pol.polname, pol.polpermissive, pol.polcmd, pol.polqual, pol.polwithcheck
+		`
+
+		rows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx, "read-policies", p.txn,
+			sessiondata.NodeUserSessionDataOverride,
+			query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range rows {
+			schemaName := tree.MustBeDString(row[0])
+			tableName := tree.MustBeDString(row[1])
+			policyName := tree.MustBeDString(row[2])
+			isPermissive := tree.MustBeDBool(row[3])
+			roles := tree.MustBeDArray(row[4]) // This is now already a string array of role names
+			cmd := tree.MustBeDString(row[5])
+			qual := row[6]
+			withCheck := row[7]
+
+			// Convert permissive to string
+			permissive := "permissive"
+			if !isPermissive {
+				permissive = "restrictive"
+			}
+
+			// Create a NAME array for roles
+			roleNames := tree.NewDArray(types.Name)
+			for _, role := range roles.Array {
+				roleName := tree.MustBeDString(role)
+				if err := roleNames.Append(tree.NewDName(string(roleName))); err != nil {
+					return err
+				}
+			}
+
+			if err := addRow(
+				tree.NewDName(string(schemaName)), // schemaname
+				tree.NewDName(string(tableName)),  // tablename
+				tree.NewDName(string(policyName)), // policyname
+				tree.NewDString(permissive),       // permissive
+				roleNames,                         // roles
+				tree.NewDString(string(cmd)),      // cmd (already in correct format from query)
+				qual,                              // qual
+				withCheck,                         // with_check
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogStatsExtTable = virtualSchemaTable{
