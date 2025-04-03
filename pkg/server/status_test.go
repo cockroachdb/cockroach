@@ -668,3 +668,59 @@ func TestHotRangesPayloadMultitenant(t *testing.T) {
 		return nil
 	})
 }
+
+func TestHotRangesByNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// first verify that passing no ranges, applies a fanout
+	// eg returns the same results, regardless of which node is queried.
+	testutils.SucceedsSoon(t, func() error {
+		req := &serverpb.HotRangesRequest{PageSize: 50}
+		resp1, err := tc.ApplicationLayer(0).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+		if err != nil {
+			return err
+		}
+		resp2, err := tc.ApplicationLayer(1).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+		if err != nil {
+			return err
+		}
+		if len(resp1.Ranges) == 0 {
+			return errors.New("waiting for ranges")
+		}
+
+		require.Equal(t, resp1.Ranges, resp2.Ranges)
+
+		return nil
+	})
+
+	// then check that specifying a node results in different results.
+	testutils.SucceedsSoon(t, func() error {
+		req := &serverpb.HotRangesRequest{PageSize: 50, Nodes: []string{"1"}}
+		resp1, err := tc.ApplicationLayer(0).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+		if err != nil {
+			return err
+		}
+		req.Nodes[0] = "2"
+		resp2, err := tc.ApplicationLayer(1).StatusServer().(*systemStatusServer).HotRangesV2(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		if len(resp1.Ranges) == 0 {
+			return errors.New("waiting for ranges")
+		}
+
+		require.NotEqual(t, resp1.Ranges, resp2.Ranges)
+		return nil
+	})
+}
