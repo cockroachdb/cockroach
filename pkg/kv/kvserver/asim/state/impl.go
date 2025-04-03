@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -569,6 +570,25 @@ func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
 		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
 	}
 	node.cpuRateCapacity = cpuRateCapacity
+}
+
+func (s *state) SetSimulationSettings(Key string, Value interface{}) {
+	settingsValue := reflect.ValueOf(s.settings).Elem()
+	settingsType := settingsValue.Type()
+
+	for i := 0; i < settingsValue.NumField(); i++ {
+		field := settingsType.Field(i)
+		if field.Name == Key {
+			fieldValue := settingsValue.Field(i)
+			if fieldValue.CanSet() {
+				newValue := reflect.ValueOf(Value)
+				if newValue.Type().ConvertibleTo(fieldValue.Type()) {
+					fieldValue.Set(newValue.Convert(fieldValue.Type()))
+				}
+			}
+			break
+		}
+	}
 }
 
 func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
