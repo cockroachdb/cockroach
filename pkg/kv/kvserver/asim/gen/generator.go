@@ -315,7 +315,7 @@ type BaseRanges struct {
 	MinKey, MaxKey    int64
 	ReplicationFactor int
 	Bytes             int64
-	ReplicaPlacement  state.Configuration
+	ReplicaPlacement  state.ReplicaPlacement
 }
 
 func (b BaseRanges) String() string {
@@ -337,10 +337,8 @@ func (b BaseRanges) GetRangesInfo(
 	case WeightedRandom:
 		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case ReplicaPlacement:
-		return state.RangesInfoWithStoreWeightOnRF(
-			numOfStores,
-			b.ReplicaPlacement.ReplicaConfigs,
-			b.ReplicaPlacement.LeaseWeights,
+		return state.RangesInfoWithReplicaPlacement(
+			b.ReplicaPlacement,
 			b.Ranges,
 			state.DefaultSpanConfigWithRF(b.ReplicationFactor),
 			b.MinKey, b.MaxKey, b.Bytes,

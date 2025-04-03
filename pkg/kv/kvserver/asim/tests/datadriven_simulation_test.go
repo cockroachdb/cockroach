@@ -236,11 +236,10 @@ func TestDataDriven(t *testing.T) {
 					scanArg(t, d, "lease_weights", &leaseWeights)
 					scanArg(t, d, "replica_weights", &replicaWeights)
 				}
-				var replicaPlacement state.Configuration
+				var replicaPlacement state.ReplicaPlacement
 				if placementType == gen.ReplicaPlacement {
-					parsed, err := state.Parse(d.Input)
-					buf.WriteString(parsed.String())
-					require.NoError(t, err)
+					parsed := state.ParseStoreWeights(d.Input)
+					buf.WriteString(fmt.Sprintf("%v", parsed))
 					replicaPlacement = parsed
 				}
 				nextRangeGen := gen.BasicRanges{
