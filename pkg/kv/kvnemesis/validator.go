@@ -1038,8 +1038,8 @@ func (v *validator) checkAtomicCommitted(
 	// it, un-hiding each of them as we encounter each write, and using the
 	// current state of the view as we encounter each read. Luckily this is easy
 	// to do by with a pebble.Batch "view".
-	batch := v.kvs.kvs.NewIndexedBatch()
-	defer func() { _ = batch.Close() }()
+	firstBatch := v.kvs.kvs.NewIndexedBatch()
+	defer func() { _ = firstBatch.Close() }()
 
 	var failure string
 	// writeTS is populated with the timestamp of the materialized observed writes
@@ -1068,6 +1068,7 @@ func (v *validator) checkAtomicCommitted(
 	// rollbackSp = observedSavepoint{...} when the observedSavepoint object
 	// contains a rollback for which we haven't encountered a matching create yet.
 	var rollbackSp *observedSavepoint = nil
+	batch := firstBatch
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
