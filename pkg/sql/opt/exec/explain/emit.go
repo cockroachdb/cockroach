@@ -294,6 +294,9 @@ func (e *emitter) nodeName(n *Node) (name string, _ error) {
 		}
 		return "scan", nil
 
+	case placeholderScanOp:
+		return "placeholder-scan", nil
+
 	case valuesOp:
 		a := n.args.(*valuesArgs)
 		switch {
@@ -714,6 +717,10 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		e.emitLockingPolicy(a.Params.Locking)
 		e.emitPolicies(ob, a.Table, n)
+
+	case placeholderScanOp:
+		// a := n.args.(*placeholderScanArgs)
+		e.emitPolicies(ob, nil, n)
 
 	case valuesOp:
 		a := n.args.(*valuesArgs)
