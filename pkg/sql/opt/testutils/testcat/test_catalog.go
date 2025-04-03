@@ -336,6 +336,13 @@ func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Opti
 	return true, nil
 }
 
+// UserHasGlobalPrivilegeOrRoleOption is part of the cat.Catalog interface.
+func (tc *Catalog) UserHasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
+) (bool, error) {
+	return false, nil
+}
+
 // FullyQualifiedName is part of the cat.Catalog interface.
 func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
