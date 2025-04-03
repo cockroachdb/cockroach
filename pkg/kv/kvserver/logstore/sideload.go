@@ -169,16 +169,11 @@ func MaybeInlineSideloadedRaftCommand(
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
-	// We could unmarshal this yet again, but if it's committed we
-	// are very likely to have appended it recently, in which case
-	// we can save work.
-	cachedSingleton, _, _, _ := entryCache.Scan(
-		nil, rangeID, kvpb.RaftIndex(ent.Index), kvpb.RaftIndex(ent.Index+1), 1<<20,
-	)
-
-	if len(cachedSingleton) > 0 {
+	// We could unmarshal this yet again, but if it's committed we are very likely
+	// to have appended it recently, in which case we can save work.
+	if entry, hit := entryCache.Get(rangeID, kvpb.RaftIndex(ent.Index)); hit {
 		log.Event(ctx, "using cache hit")
-		return &cachedSingleton[0], nil
+		return &entry, nil
 	}
 
 	// Make a shallow copy.
