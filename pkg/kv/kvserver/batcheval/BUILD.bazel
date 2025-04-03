@@ -60,6 +60,7 @@ go_library(
         "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",

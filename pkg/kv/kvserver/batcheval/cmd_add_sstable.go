@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -585,6 +586,11 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			if !value.IsTombstone() {
 				return errors.AssertionFailedf("SST contains non-tombstone range key %s", rangeKey)
 			}
+
+			// Set the KVNemesisSeq to its zero value so that we can run KVNemesis
+			// under the race detector.
+			var emptyContainer kvnemesisutil.Container
+			value.MVCCValueHeader.KVNemesisSeq = emptyContainer
 			if value.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
 				return errors.AssertionFailedf("SST contains non-empty MVCC value header for range key %s",
 					rangeKey)
