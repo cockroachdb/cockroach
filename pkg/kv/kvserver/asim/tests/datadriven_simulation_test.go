@@ -176,6 +176,8 @@ func TestDataDriven(t *testing.T) {
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
+		var stateStrAcrossSamples []string
+		var statePrettyStrAcrossSamples []string
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -395,6 +397,8 @@ func TestDataDriven(t *testing.T) {
 						duration, clusterGen, rangeGen, loadGen,
 						settingsGen, eventGen, seedGen.Int63(),
 					)
+					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
+					statePrettyStrAcrossSamples = append(statePrettyStrAcrossSamples, simulator.State().PrettyPrint())
 					simulator.RunSim(ctx)
 					history := simulator.History()
 					runs = append(runs, history)
@@ -493,14 +497,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
 				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
 				return ""
-			case "print":
-				if len(runs) > 0 {
-					lastState := runs[len(runs)-1].S.String()
-					var buf strings.Builder
-					fmt.Fprintf(&buf, "cluster state:\n%s\n", lastState)
-					return buf.String()
-				}
-				return ""
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1
@@ -557,6 +553,14 @@ func TestDataDriven(t *testing.T) {
 					fmt.Fprintf(&buf, "]")
 				}
 				return buf.String()
+			case "print":
+				var buf strings.Builder
+				var sample = len(runs)
+				for i := 0; i < sample; i++ {
+					fmt.Fprintf(&buf, "sample %d:\npretty print cluster state:\n%s\ncluster state:\n%s\n", i+1, statePrettyStrAcrossSamples[i], stateStrAcrossSamples[i])
+				}
+				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
