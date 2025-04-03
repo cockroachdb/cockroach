@@ -155,16 +155,16 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 	return r.stateLoader
 }
 
-func (r *replicaTruncatorTest) handleTruncationResult(_ context.Context, pt pendingTruncation) {
-	expectedFirstIndexWasAccurate := r.truncState.Index+1 == pt.expectedFirstIndex
-	r.truncState = pt.RaftTruncatedState
-	// TODO(pav-kv): this is printing the legacy func names. Fix.
+func (r *replicaTruncatorTest) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
+	trusted := pt.isDeltaTrusted && r.truncState.Index+1 == pt.expectedFirstIndex
 	fmt.Fprintf(r.buf,
-		"r%d.setTruncatedStateAndSideEffects(..., expectedFirstIndex:%d) => trusted:%t\n",
-		r.rangeID, pt.expectedFirstIndex, expectedFirstIndexWasAccurate)
-	deltaTrusted := pt.isDeltaTrusted && expectedFirstIndexWasAccurate
-	fmt.Fprintf(r.buf, "r%d.setTruncationDeltaAndTrusted(delta:%d, trusted:%t)\n",
-		r.rangeID, pt.logDeltaBytes, deltaTrusted)
+		"r%d.stagePendingTruncation(..., expFirstIndex:%d, delta:%v, trusted:%t) => trusted:%t\n",
+		r.rangeID, pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted, trusted)
+	r.truncState = pt.RaftTruncatedState
+}
+
+func (r *replicaTruncatorTest) finalizeTruncation(_ context.Context) {
+	fmt.Fprintf(r.buf, "r%d.finalizeTruncation\n", r.rangeID)
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
