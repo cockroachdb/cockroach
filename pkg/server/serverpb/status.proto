@@ -1376,13 +1376,18 @@ message HotRangesRequest {
   // If left empty, the request is forwarded to every node
   // in the cluster.
   // API: PUBLIC ALPHA
-  string node_id = 1 [(gogoproto.customname) = "NodeID"];
   int32 page_size = 2 [(gogoproto.nullable) = true];
   string page_token = 3 [(gogoproto.nullable) = true];
   string tenant_id = 4 [
     (gogoproto.customname) = "TenantID",
     (gogoproto.nullable) = true
   ];
+  repeated string nodes = 5 [
+    (gogoproto.customname) = "Nodes",
+    (gogoproto.nullable) = true
+  ];
+  // previously used for single node id
+  reserved 1;
 }
 
 // HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
