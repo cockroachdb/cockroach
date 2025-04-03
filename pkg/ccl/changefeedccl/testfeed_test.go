@@ -548,8 +548,8 @@ func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
 	return hwm, nil
 }
 
-// TickHighWaterMark implements the TestFeed interface.
-func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
+// WaitForHighWaterMark implements the TestFeed interface.
+func (f *jobFeed) WaitForHighWaterMark(minHWM hlc.Timestamp) error {
 	return testutils.SucceedsWithinError(func() error {
 		current, err := f.HighWaterMark()
 		if err != nil {
@@ -559,7 +559,7 @@ func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
 			return nil
 		}
 		return errors.Newf("waiting to tick: current=%s min=%s", current, minHWM)
-	}, 10*time.Second)
+	}, timeout())
 }
 
 // FetchTerminalJobErr retrieves the error message from changefeed job.
