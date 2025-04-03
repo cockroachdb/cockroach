@@ -315,9 +315,9 @@ func (ri RangeInfo) String() string {
 
 type RangesInfo []RangeInfo
 
-func initializeRangesInfoWithSpanConfigs(
-	stores []StoreID, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
-) RangesInfo {
+func (ret RangesInfo) initializeRangesInfoWithSpanConfigs(
+	numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
+) {
 	// There cannot be less keys than there are ranges.
 	if int64(numRanges) > maxKey-minKey {
 		panic(fmt.Sprintf(
@@ -326,7 +326,6 @@ func initializeRangesInfoWithSpanConfigs(
 	}
 
 	rangeInterval := int(float64(maxKey-minKey+1) / float64(numRanges))
-	ret := make([]RangeInfo, numRanges)
 	for rngIdx := 0; rngIdx < numRanges; rngIdx++ {
 		key := Key(int64(rngIdx*rangeInterval)) + Key(minKey)
 		configCopy := config
@@ -342,7 +341,6 @@ func initializeRangesInfoWithSpanConfigs(
 		}
 		ret[rngIdx] = rangeInfo
 	}
-	return ret
 }
 
 // LoadConfig loads a predefined configuration which contains cluster
