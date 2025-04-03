@@ -9,4 +9,4 @@ CREATE TABLE t (
 EXPLAIN (DDL, SHAPE) ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
 ----
 Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

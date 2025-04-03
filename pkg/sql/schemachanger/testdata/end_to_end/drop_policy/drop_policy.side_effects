@@ -23,7 +23,7 @@ write *eventpb.DropPolicy to event log:
     tag: DROP POLICY
     user: root
   tableName: defaultdb.public.t1
-## StatementPhase stage 1 of 1 with 5 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #104
   ...
        type: PERMISSIVE
@@ -39,17 +39,52 @@ upsert descriptor #104
      primaryIndex:
        constraintId: 1
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "5"
+  +  version: "6"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
 upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": tenant_id
+  +        "2": c1
+  +        "3": rowid
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t1_pkey
+  +      name: t1
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP POLICY ‹"policy 2"› ON ‹t1›
+  +        statement: DROP POLICY "policy 2" ON t1
+  +        statementTag: DROP POLICY
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
   ...
        type: PERMISSIVE
        usingExpr: "true"
@@ -64,10 +99,70 @@ upsert descriptor #104
      primaryIndex:
        constraintId: 1
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "5"
+  +  version: "6"
 persist all catalog changes to storage
+create job #1 (non-cancelable: false): "DROP POLICY \"policy 2\" ON t1"
+  descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": tenant_id
+  -        "2": c1
+  -        "3": rowid
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t1_pkey
+  -      name: t1
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP POLICY ‹"policy 2"› ON ‹t1›
+  -        statement: DROP POLICY "policy 2" ON t1
+  -        statementTag: DROP POLICY
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

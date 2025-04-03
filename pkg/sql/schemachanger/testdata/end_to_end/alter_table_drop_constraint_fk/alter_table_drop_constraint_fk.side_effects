@@ -14,7 +14,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_constraint
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
   ...
      inboundFks:
@@ -30,7 +30,7 @@ upsert descriptor #104
      modificationTime: {}
      name: t2
   ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -74,7 +74,9 @@ upsert descriptor #105
      parentId: 100
      primaryIndex:
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -83,7 +85,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -121,7 +123,7 @@ upsert descriptor #104
      modificationTime: {}
      name: t2
   ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -195,7 +197,9 @@ upsert descriptor #105
      parentId: 100
      primaryIndex:
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -209,7 +213,63 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     formatVersion: 3
+     id: 104
+  -  inboundFks:
+  -  - constraintId: 2
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    originColumnIds:
+  -    - 1
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 1
+  -    referencedTableId: 104
+  -    validity: Dropping
+     modificationTime: {}
+     name: t2
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     id: 105
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check: {}
+  -      constraintType: FOREIGN_KEY
+  -      foreignKey:
+  -        constraintId: 2
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        originColumnIds:
+  -        - 1
+  -        originTableId: 105
+  -        referencedColumnIds:
+  -        - 1
+  -        referencedTableId: 104
+  -        validity: Dropping
+  -      name: t1_i_fkey
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t1
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -234,25 +294,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 104
-  -  inboundFks:
-  -  - constraintId: 2
-  -    name: crdb_internal_constraint_2_name_placeholder
-  -    originColumnIds:
-  -    - 1
-  -    originTableId: 105
-  -    referencedColumnIds:
-  -    - 1
-  -    referencedTableId: 104
-  -    validity: Dropping
-     modificationTime: {}
-     name: t2
-  ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #105
   ...
      createAsOfTime:
@@ -285,34 +330,12 @@ upsert descriptor #105
      families:
      - columnIds:
   ...
-     id: 105
-     modificationTime: {}
-  -  mutations:
-  -  - constraint:
-  -      check: {}
-  -      constraintType: FOREIGN_KEY
-  -      foreignKey:
-  -        constraintId: 2
-  -        name: crdb_internal_constraint_2_name_placeholder
-  -        originColumnIds:
-  -        - 1
-  -        originTableId: 105
-  -        referencedColumnIds:
-  -        - 1
-  -        referencedTableId: 104
-  -        validity: Dropping
-  -      name: t1_i_fkey
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: DROP
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-     name: t1
-     nextColumnId: 2
-  ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
@@ -320,5 +343,5 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 105
-commit transaction #3
+commit transaction #4
 # end PostCommitPhase

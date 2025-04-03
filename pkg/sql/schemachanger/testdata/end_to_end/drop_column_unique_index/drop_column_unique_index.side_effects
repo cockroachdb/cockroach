@@ -25,7 +25,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: t.public.test
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -50,17 +50,6 @@ upsert descriptor #106
        version: 4
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      defaultExpr: 3.14:::DECIMAL
-  +      id: 3
-  +      name: crdb_internal_column_3_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: DecimalFamily
-  +        oid: 1700
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 7
@@ -120,6 +109,17 @@ upsert descriptor #106
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      defaultExpr: 3.14:::DECIMAL
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: DecimalFamily
+  +        oid: 1700
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
      name: test
      nextColumnId: 5
   -  nextConstraintId: 7
@@ -137,16 +137,18 @@ upsert descriptor #106
        - x
        unique: true
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
-  -  version: "15"
-  +  version: "16"
+  -  version: "17"
+  +  version: "18"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -207,17 +209,6 @@ upsert descriptor #106
        version: 4
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      defaultExpr: 3.14:::DECIMAL
-  +      id: 3
-  +      name: crdb_internal_column_3_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: DecimalFamily
-  +        oid: 1700
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 7
@@ -277,6 +268,17 @@ upsert descriptor #106
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      defaultExpr: 3.14:::DECIMAL
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: DecimalFamily
+  +        oid: 1700
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
      name: test
      nextColumnId: 5
   -  nextConstraintId: 7
@@ -294,10 +296,12 @@ upsert descriptor #106
        - x
        unique: true
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
-  -  version: "15"
-  +  version: "16"
+  -  version: "17"
+  +  version: "18"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
@@ -315,13 +319,13 @@ upsert descriptor #106
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     name: test
-     nextColumnId: 5
+     - column:
+         defaultExpr: 3.14:::DECIMAL
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "16"
-  +  version: "17"
+  -  version: "18"
+  +  version: "19"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
@@ -342,8 +346,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "17"
-  +  version: "18"
+  -  version: "19"
+  +  version: "20"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
@@ -360,8 +364,8 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "18"
-  +  version: "19"
+  -  version: "20"
+  +  version: "21"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
@@ -386,13 +390,13 @@ upsert descriptor #106
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     name: test
-     nextColumnId: 5
+     - column:
+         defaultExpr: 3.14:::DECIMAL
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "19"
-  +  version: "20"
+  -  version: "21"
+  +  version: "22"
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
 commit transaction #8
@@ -401,7 +405,7 @@ begin transaction #9
 validate forward indexes [6] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 11 MutationType ops
 upsert descriptor #106
   ...
            statement: ALTER TABLE t.test DROP COLUMN pi
@@ -410,9 +414,8 @@ upsert descriptor #106
        targetRanks: <redacted>
        targets: <redacted>
   ...
-       direction: DROP
-       mutationId: 1
-  -    state: WRITE_ONLY
+     modificationTime: {}
+     mutations:
   -  - direction: ADD
   -    index:
   -      constraintId: 7
@@ -440,7 +443,16 @@ upsert descriptor #106
   -      unique: true
   -      vecConfig: {}
   -      version: 4
-  -    mutationId: 1
+  +  - column:
+  +      defaultExpr: 3.14:::DECIMAL
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: DecimalFamily
+  +        oid: 1700
+  +    direction: DROP
+       mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - direction: DROP
@@ -476,9 +488,18 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: WRITE_ONLY
+  -  - column:
+  -      defaultExpr: 3.14:::DECIMAL
+  -      id: 3
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: DecimalFamily
+  -        oid: 1700
+  -    direction: DROP
+  -    mutationId: 1
+       state: WRITE_ONLY
      name: test
-     nextColumnId: 5
   ...
      parentId: 104
      primaryIndex:
@@ -505,14 +526,14 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "20"
-  +  version: "21"
+  -  version: "22"
+  +  version: "23"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 5 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 7 MutationType ops
 upsert descriptor #106
   ...
          version: 4
@@ -524,49 +545,15 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "21"
-  +  version: "22"
+  -  version: "23"
+  +  version: "24"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 5 MutationType ops pending"
 commit transaction #11
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 7 MutationType ops
 upsert descriptor #106
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": k
-  -        "2": v
-  -        "4": x
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      constraints:
-  -        "4": check_x
-  -      families:
-  -        "0": primary
-  -      id: 106
-  -      indexes:
-  -        "2": vidx
-  -        "6": test_pkey
-  -      name: test
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
-  -        statement: ALTER TABLE t.test DROP COLUMN pi
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
        - 1
        - 2
   -    - 3
@@ -629,17 +616,65 @@ upsert descriptor #106
   ...
        time: {}
      unexposedParentSchemaId: 105
-  -  version: "22"
-  +  version: "23"
+  -  version: "24"
+  +  version: "25"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 1 MutationType op pending"
+commit transaction #12
+notified job registry to adopt jobs: [2]
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "4": x
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "4": check_x
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "2": vidx
+  -        "6": test_pkey
+  -      name: test
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
+  -        statement: ALTER TABLE t.test DROP COLUMN pi
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "25"
+  +  version: "26"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #12
-notified job registry to adopt jobs: [2]
+commit transaction #13
 # end PostCommitPhase
