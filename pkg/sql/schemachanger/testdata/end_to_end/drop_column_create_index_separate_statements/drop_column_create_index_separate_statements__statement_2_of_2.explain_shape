@@ -22,4 +22,4 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    └── from t@[6] into idx+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index idx+ in relation t
- └── execute 4 system table mutations transactions
+ └── execute 5 system table mutations transactions

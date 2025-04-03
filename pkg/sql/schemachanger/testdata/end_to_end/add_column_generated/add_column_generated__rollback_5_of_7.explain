@@ -93,10 +93,13 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT  → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DROPPED → ABSENT Sequence:{DescID: 107 (tbl_serial_id_seq-)}
-           │    └── PUBLIC  → ABSENT TableData:{DescID: 107 (tbl_serial_id_seq-), ReferencedDescID: 104 (#104)}
-           └── 4 Mutation operations
+           │    ├── DROPPED → ABSENT           Sequence:{DescID: 107 (tbl_serial_id_seq-)}
+           │    └── PUBLIC  → ABSENT           TableData:{DescID: 107 (tbl_serial_id_seq-), ReferencedDescID: 104 (#104)}
+           └── 5 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}

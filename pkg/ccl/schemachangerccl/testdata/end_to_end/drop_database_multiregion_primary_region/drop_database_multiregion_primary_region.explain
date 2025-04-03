@@ -10,7 +10,7 @@ EXPLAIN (DDL) DROP DATABASE multi_region_test_db CASCADE;
 Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 59 elements transitioning toward ABSENT
+ │         ├── 60 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -69,8 +69,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
- │         └── 65 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
+ │         └── 66 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -92,6 +93,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
@@ -138,7 +140,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 59 elements transitioning toward ABSENT
+ │    │    ├── 60 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 104 (multi_region_test_db-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -197,11 +199,12 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
- │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 59 elements transitioning toward ABSENT
+ │         ├── 60 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -260,8 +263,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
- │         └── 72 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
+ │         └── 73 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -283,6 +287,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}

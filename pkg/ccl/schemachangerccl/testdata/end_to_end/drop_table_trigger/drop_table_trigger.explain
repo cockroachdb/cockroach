@@ -7,7 +7,7 @@ EXPLAIN (DDL) DROP TABLE defaultdb.t;
 Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 41 elements transitioning toward ABSENT
+ │         ├── 42 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
@@ -48,8 +48,9 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │         │    └── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
- │         └── 51 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
+ │         └── 52 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
@@ -68,12 +69,13 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName"}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
@@ -103,7 +105,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 41 elements transitioning toward ABSENT
+ │    │    ├── 42 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 104 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (t-), Name: "admin"}
@@ -144,11 +146,12 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │    │    │    └── ABSENT  → PUBLIC TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 104 (t-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 41 elements transitioning toward ABSENT
+ │         ├── 42 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
@@ -189,8 +192,9 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │         │    └── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
- │         └── 54 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
+ │         └── 55 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
@@ -209,12 +213,13 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName"}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven..."}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
