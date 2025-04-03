@@ -3839,6 +3839,91 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`use_cputs_on_non_unique_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_cputs_on_non_unique_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_cputs_on_non_unique_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseCPutsOnNonUniqueIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseCPutsOnNonUniqueIndexes), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`buffered_writes_use_locking_on_non_unique_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`buffered_writes_use_locking_on_non_unique_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("buffered_writes_use_locking_on_non_unique_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetBufferedWritesUseLockingOnNonUniqueIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().BufferedWritesUseLockingOnNonUniqueIndexes), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_lock_elision_multiple_families`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_lock_elision_multiple_families`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_lock_elision_multiple_families", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseLockElisionMultipleFamilies(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLockElisionMultipleFamilies), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`optimizer_enable_lock_elision`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_enable_lock_elision`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_enable_lock_elision", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerEnableLockElision(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerEnableLockElision), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_delete_range_fast_path`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_delete_range_fast_path`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_delete_range_fast_path", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseDeleteRangeFastPath(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseDeleteRangeFastPath), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

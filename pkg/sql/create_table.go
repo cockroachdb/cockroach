@@ -554,18 +554,14 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Instantiate a row inserter and table writer. It has a 1-1
 			// mapping to the definitions in the descriptor.
-			internal := params.p.SessionData().Internal
 			ri, err := row.MakeInserter(
-				params.ctx,
-				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
 				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
-				&tree.DatumAlloc{},
+				params.p.SessionData(),
 				&params.ExecCfg().Settings.SV,
-				internal,
-				params.ExecCfg().GetRowMetrics(internal),
+				params.ExecCfg().GetRowMetrics(params.p.SessionData().Internal),
 			)
 			if err != nil {
 				return err

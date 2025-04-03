@@ -47,11 +47,12 @@ func (b *Builder) buildMutationInput(
 		defer func() {
 			b.forceForUpdateLocking = 0
 		}()
-		if b.mem.Metadata().Table(toLock).FamilyCount() >= 2 {
+		if sd := b.evalCtx.SessionData(); !sd.OptimizerEnableLockElision ||
+			(b.mem.Metadata().Table(toLock).FamilyCount() >= 2 && !sd.OptimizerUseLockElisionMultipleFamilies) {
 			// When the table has multiple column families, it is possible that
 			// we'll use Gets with family-specific keys during the initial scan,
-			// which means that we won't truly lock the indexes. As such, we say
-			// that we didn't lock any.
+			// which means that we won't truly lock the indexes. As such, we
+			// might want to say that we didn't lock any.
 			toLockIndexes = nil
 		}
 	}
@@ -693,6 +694,9 @@ func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 // logical Delete operator, checking all required conditions. See
 // exec.Factory.ConstructDeleteRange.
 func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool, _ error) {
+	if !b.allowDeleteRangeFastPath {
+		return execPlan{}, false, nil
+	}
 	if !b.canUseDeleteRange(del) {
 		return execPlan{}, false, nil
 	}
