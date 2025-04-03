@@ -804,7 +804,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	rangeStatsFetcher := rangestats.NewFetcher(cfg.db)
 
-	vecIndexManager := vecindex.NewManager(ctx, cfg.stopper, codec, cfg.internalDB)
+	vecIndexManager := vecindex.NewManager(ctx, cfg.stopper, &cfg.Settings.SV, codec, cfg.internalDB)
 	cfg.registry.AddMetricStruct(vecIndexManager.Metrics())
 
 	// Set up the DistSQL server.

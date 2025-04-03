@@ -18,10 +18,16 @@ import (
 
 // CheckPartitionMetadata tests the correctness of the given metadata's fields.
 func CheckPartitionMetadata(
-	t *testing.T, metadata cspann.PartitionMetadata, level cspann.Level, centroid vector.T,
+	t *testing.T,
+	metadata cspann.PartitionMetadata,
+	level cspann.Level,
+	centroid vector.T,
+	state cspann.PartitionStateDetails,
 ) {
 	require.Equal(t, level, metadata.Level)
 	require.Equal(t, []float32(centroid), testutils.RoundFloats(metadata.Centroid, 2))
+	state.Timestamp = metadata.StateDetails.Timestamp
+	require.Equal(t, state, metadata.StateDetails)
 }
 
 // CheckPartitionCount tests the size of a partition.

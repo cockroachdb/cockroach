@@ -187,7 +187,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
 	// Acquire shared lock on the partition in order to get its metadata.
-	memPart, err := tx.lockPartition(treeKey, partitionKey, false /* IsExclusive */)
+	memPart, err := tx.lockPartition(treeKey, partitionKey, forUpdate /* IsExclusive */)
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so create empty metadata.
@@ -195,9 +195,29 @@ func (tx *memTxn) GetPartitionMetadata(
 		}
 		return cspann.PartitionMetadata{}, err
 	}
-	defer memPart.lock.ReleaseShared()
 
-	return *memPart.lock.partition.Metadata(), nil
+	if forUpdate {
+		// Hold exclusive lock for the remainder of the transaction.
+		// TODO(andyk): This creates the potential for deadlocks. Right now, this
+		// is only called in the SearchForInsert case, which we don't use with the
+		// the memstore (outside of tests). To fix this, update lockPartition to
+		// return ErrRestartOperation if another txn already has the exclusive lock.
+		tx.ownedLocks = append(tx.ownedLocks, &memPart.lock.memLock)
+	} else {
+		// No need to hold the lock beyond this call.
+		defer memPart.lock.ReleaseShared()
+	}
+
+	// Do not allow updates to the partition if the state doesn't allow it.
+	metadata := memPart.lock.partition.Metadata()
+	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
+		err = cspann.NewConditionFailedError(*metadata)
+		return cspann.PartitionMetadata{}, errors.Wrapf(err,
+			"getting partition metadata %d (state=%s)",
+			partitionKey, metadata.StateDetails.State.String())
+	}
+
+	return *metadata, nil
 }
 
 // AddToPartition implements the Txn interface.
@@ -223,8 +243,16 @@ func (tx *memTxn) AddToPartition(
 	}
 	defer memPart.lock.Release()
 
-	// Add the vector to the partition.
+	// Do not allow vectors to be added to the partition if the state doesn't
+	// allow it.
 	partition := memPart.lock.partition
+	state := partition.Metadata().StateDetails.State
+	if !state.AllowAddOrRemove() {
+		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
+			"adding to partition %d (state=%s)", partitionKey, state.String())
+	}
+
+	// Add the vector to the partition.
 	if level != partition.Level() {
 		panic(errors.AssertionFailedf(
 			"AddToPartition level %d does not match actual partition level %d",
@@ -260,8 +288,16 @@ func (tx *memTxn) RemoveFromPartition(
 	}
 	defer memPart.lock.Release()
 
-	// Remove vector from the partition.
+	// Do not allow vectors to be removed from the partition if the state doesn't
+	// allow it.
 	partition := memPart.lock.partition
+	state := partition.Metadata().StateDetails.State
+	if !state.AllowAddOrRemove() {
+		return errors.Wrapf(cspann.NewConditionFailedError(*partition.Metadata()),
+			"removing from partition %d (state=%s)", partitionKey, state.String())
+	}
+
+	// Remove vector from the partition.
 	if level != partition.Level() {
 		panic(errors.AssertionFailedf(
 			"RemoveFromPartition level %d does not match actual partition level %d",

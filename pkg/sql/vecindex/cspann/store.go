@@ -179,25 +179,36 @@ type Txn interface {
 	// GetPartition returns the partition identified by the given key, or
 	// ErrPartitionNotFound if the key cannot be found. The returned partition's
 	// memory is owned by the caller - it can be modified as needed.
+	// TODO(andyk): Remove this method once we switch to non-transactional
+	// splits/merges.
 	GetPartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) (*Partition, error)
 
 	// SetRootPartition makes the given partition the root partition in the store.
 	// If the root partition already exists, it is replaced, else it is newly
 	// inserted into the store.
+	// TODO(andyk): Remove this method once we switch to non-transactional
+	// splits/merges.
 	SetRootPartition(ctx context.Context, treeKey TreeKey, partition *Partition) error
 
 	// InsertPartition inserts the given partition into the store and returns a
 	// new key that identifies it.
+	// TODO(andyk): Remove this method once we switch to non-transactional
+	// splits/merges.
 	InsertPartition(ctx context.Context, treeKey TreeKey, partition *Partition) (PartitionKey, error)
 
 	// DeletePartition deletes the partition with the given key from the store,
 	// or returns ErrPartitionNotFound if the key cannot be found.
+	// TODO(andyk): Remove this method once we switch to non-transactional
+	// splits/merges.
 	DeletePartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) error
 
 	// GetPartitionMetadata returns metadata for the given partition, including
 	// its size, its centroid, and its level in the K-means tree. If "forUpdate"
 	// is true, fetching the metadata is part of a mutation operation; the store
-	// can perform any needed locking in this case. GetPartitionMetadata returns
+	// can perform any needed locking in this case.
+	//
+	// GetPartitionMetadata returns ConditionFailedError if "forUpdate" is true
+	// and the partition is in a state that does not allow updates. It returns
 	// ErrPartitionNotFound if the partition cannot be found, or
 	// ErrRestartOperation if the caller should retry the operation that triggered
 	// this call.
@@ -207,10 +218,12 @@ type Txn interface {
 
 	// AddToPartition adds the given vector and its associated child key and value
 	// bytes to the partition with the given key. If the vector already exists, it
-	// is overwritten with the new key. AddToPartition returns
-	// ErrPartitionNotFound if the partition cannot be found, or
-	// ErrRestartOperation if the caller should retry the insert operation that
-	// triggered this call.
+	// is overwritten with the new key.
+	//
+	// AddToPartition returns ConditionalFailedError if the partition is in a
+	// state that does not allow adds. It returns ErrPartitionNotFound if the
+	// partition cannot be found, or ErrRestartOperation if the caller should
+	// retry the insert operation that triggered this call.
 	AddToPartition(
 		ctx context.Context,
 		treeKey TreeKey,
@@ -223,9 +236,12 @@ type Txn interface {
 
 	// RemoveFromPartition removes the given vector and its associated child key
 	// from the partition with the given key. If the key is not present in the
-	// partition, it is a no-op. RemoveFromPartition returns ErrPartitionNotFound
-	// if the partition cannot be found, or ErrRestartOperation if the caller
-	// should retry the delete operation that triggered this call.
+	// partition, it is a no-op.
+	//
+	// RemoveFromPartition returns ConditionalFailedError if the partition is in
+	// a state that does not allow removes. It returns ErrPartitionNotFound if the
+	// partition cannot be found, or ErrRestartOperation if the caller should
+	// retry the delete operation that triggered this call.
 	RemoveFromPartition(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, level Level, childKey ChildKey,
 	) error
