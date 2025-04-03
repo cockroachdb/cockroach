@@ -529,6 +529,21 @@ $.a ? (exists(@.b) && !exists(@.c))
 ----
 $."a"?((exists (@."b") && !(exists (@."c")))) -- normalized!
 
+parse
+(1 + 2 == 3) is unknown
+----
+(((1 + 2) == 3)) is unknown -- normalized!
+
+parse
+($ < 1) is unknown
+----
+(($ < 1)) is unknown -- normalized!
+
+parse
+(null like_regex "^he.*$") is unknown
+----
+((null like_regex "^he.*$")) is unknown -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

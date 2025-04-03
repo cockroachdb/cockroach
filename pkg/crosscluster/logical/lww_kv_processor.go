@@ -133,6 +133,10 @@ func (p *kvRowProcessor) HandleBatch(
 	return batchStats{}, errors.AssertionFailedf("TODO: multi-row transactions not supported by the kvRowProcessor")
 }
 
+func (p *kvRowProcessor) BatchSize() int {
+	return 1
+}
+
 func (p *kvRowProcessor) processRow(
 	ctx context.Context,
 	txn isql.Txn,
