@@ -1074,3 +1074,18 @@ query T
 SELECT jsonb_path_query('[{"a": 1, "b": 2}, {"a": 1}, {"b": 2}, {}]', '$[*] ? (exists(@.a) && exists(@.b))');
 ----
 {"a": 1, "b": 2}
+
+query T
+SELECT jsonb_path_query('{}', '(1 + 2 == 3) is unknown');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', '($ < 1) is unknown');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', '(null like_regex "^he.*$") is unknown');
+----
+true
