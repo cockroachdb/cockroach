@@ -2878,6 +2878,56 @@ project
  └── projections
       └── c.y:6 [as=k:10, outer=(6)]
 
+# Regression test for #142531 - do not hoist outer-column references from the
+# right input of a left-join.
+exec-ddl
+CREATE TABLE table_142531 (col1_1 INT NOT NULL);
+----
+
+norm expect-not=HoistJoinProjectRight
+SELECT (SELECT t.col1_1 FROM table_142531 WHERE (NOT EXISTS (SELECT (0)))) FROM table_142531 AS t;
+----
+project
+ ├── columns: col1_1:13
+ ├── ensure-distinct-on
+ │    ├── columns: t.rowid:2!null col1_1:12
+ │    ├── grouping columns: t.rowid:2!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(12)
+ │    ├── left-join-apply
+ │    │    ├── columns: t.col1_1:1!null t.rowid:2!null col1_1:12
+ │    │    ├── fd: (2)-->(1)
+ │    │    ├── scan table_142531 [as=t]
+ │    │    │    ├── columns: t.col1_1:1!null t.rowid:2!null
+ │    │    │    ├── key: (2)
+ │    │    │    └── fd: (2)-->(1)
+ │    │    ├── project
+ │    │    │    ├── columns: col1_1:12
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── fd: ()-->(12)
+ │    │    │    ├── select
+ │    │    │    │    ├── scan table_142531
+ │    │    │    │    └── filters
+ │    │    │    │         └── not [subquery]
+ │    │    │    │              └── coalesce
+ │    │    │    │                   ├── subquery
+ │    │    │    │                   │    └── values
+ │    │    │    │                   │         ├── columns: column11:11!null
+ │    │    │    │                   │         ├── cardinality: [1 - 1]
+ │    │    │    │                   │         ├── key: ()
+ │    │    │    │                   │         ├── fd: ()-->(11)
+ │    │    │    │                   │         └── (true,)
+ │    │    │    │                   └── false
+ │    │    │    └── projections
+ │    │    │         └── t.col1_1:1 [as=col1_1:12, outer=(1)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=col1_1:12, outer=(12)]
+ │              └── col1_1:12
+ └── projections
+      └── col1_1:12 [as=col1_1:13, outer=(12)]
+
 # --------------------------------------------------
 # HoistJoinProjectLeft
 # --------------------------------------------------
