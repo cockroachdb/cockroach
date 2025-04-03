@@ -153,7 +153,6 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r.mu.RUnlock()
 	b.changeRemovesReplica = false
 	b.changeTruncatesSideloadedFiles = false
-	b.truncatedSideloadedSize = 0
 	// TODO(pav-kv): what about b.ab and b.followerStoreWriteBytes?
 	b.start = timeutil.Now()
 	return b
@@ -313,16 +312,8 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 
 	// TODO(#93248): the strongly coupled truncation code will be removed once the
 	// loosely coupled truncations are the default.
-	if truncState := rResult.GetRaftTruncatedState(); truncState != nil {
-		// The size delta in the proposal is accurate, but does not account for the
-		// sideloaded entries, so we fix it up.
-		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, pendingTruncation{
-			RaftTruncatedState: *truncState,
-			expectedFirstIndex: rResult.RaftExpectedFirstIndex,
-			logDeltaBytes:      rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize,
-			isDeltaTrusted:     true,
-			hasSideloaded:      false, // unused, but listed here for completeness
-		})
+	if rResult.GetRaftTruncatedState() != nil {
+		sm.r.finalizeTruncationRaftMuLocked(ctx)
 		rResult.DiscardRaftTruncation()
 	}
 
