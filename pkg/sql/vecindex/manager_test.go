@@ -132,7 +132,7 @@ func TestVectorManager(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for i := 0; i < 11; i++ {
+		for i := range 11 {
 			err = txn.Descriptors().WriteDescToBatch(
 				ctx,
 				false,
@@ -147,7 +147,8 @@ func TestVectorManager(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	vectorMgr := vecindex.NewManager(ctx, stopper, codec, internalDB)
+	settings := srv.ApplicationLayer().ClusterSettings()
+	vectorMgr := vecindex.NewManager(ctx, stopper, &settings.SV, codec, internalDB)
 
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
@@ -165,7 +166,7 @@ func TestVectorManager(t *testing.T) {
 
 	t.Run("test single threaded functionality", func(t *testing.T) {
 		// Pull all the indexes.
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			_, err = vectorMgr.Get(ctx, catid.DescID(140+i), 2)
 			require.NoError(t, err)
 		}
@@ -196,7 +197,7 @@ func TestVectorManager(t *testing.T) {
 		}
 		vectorMgr.SetTestingKnobs(&testingKnobs)
 		wg := sync.WaitGroup{}
-		for i := 0; i < 11; i++ {
+		for range 11 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -225,7 +226,7 @@ func TestVectorManager(t *testing.T) {
 		errs := make([]error, 11)
 		vectorMgr.SetTestingKnobs(&testingKnobs)
 		wg := sync.WaitGroup{}
-		for i := 0; i < 11; i++ {
+		for i := range 11 {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()

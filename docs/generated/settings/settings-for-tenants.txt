@@ -391,6 +391,7 @@ sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
 sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
 sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
+sql.vecindex.stalled_op.timeout	duration	100ms	amount of time before other vector index workers will assist with a stalled background fixup	application
 storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
 storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application

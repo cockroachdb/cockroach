@@ -109,8 +109,19 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	metadata := *partition.Metadata()
-	if metadata.StateDetails.State != ReadyState && !fw.singleStep {
-		if !metadata.StateDetails.MaybeSplitStalled() {
+	if metadata.StateDetails.State == ReadyState {
+		// Check if partition size has decreased while the fixup was waiting to
+		// be processed. If it's gone down too much, abort the fixup (the partition
+		// is in the Ready state, so the fixup is not yet in progress). Note that
+		// even if it's below the max partition size, we still split, since if it
+		// exceeded that size, it's likely to do so again, and we don't want to be
+		// making expensive getPartition calls.
+		threshold := (fw.index.options.MaxPartitionSize + fw.index.options.MinPartitionSize) / 2
+		if partition.Count() <= threshold && !fw.singleStep {
+			return nil
+		}
+	} else {
+		if !metadata.StateDetails.MaybeSplitStalled(fw.index.options.StalledOpTimeout()) {
 			// There's evidence that another worker has been recently processing
 			// the partition, so don't process the fixup. This minimizes the
 			// possibility of multiple workers on different nodes doing duplicate
@@ -513,10 +524,9 @@ func (fw *fixupWorker) addToParentPartition(
 	log.VEventf(ctx, 2, format,
 		partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.State)
 
-	if !parentMetadata.StateDetails.State.AllowAddOrRemove() || parentMetadata.Level != parentLevel {
-		// Child could not be added to the parent because it doesn't exist or it
-		// no longer allows inserts, or it's at the wrong level (i.e. root after
-		// split or merge).
+	if parentMetadata.StateDetails.State != ReadyState || parentMetadata.Level != parentLevel {
+		// Only parent partitions in the Ready state at the expected level (level
+		// can change after split/merge) allow children to be added.
 		// TODO(andyk): Use parent state to identify alternate insert partition.
 		return errFixupAborted
 	}
@@ -578,23 +588,27 @@ func (fw *fixupWorker) deletePartition(
 			return errFixupAborted
 		}
 		return errors.Wrap(err, "removing partition from parent")
-	} else if fw.singleStep && removed {
-		return errFixupAborted
 	}
 
 	// Delete the partition, ignoring any partition not found error, as it means
-	// another worker already deleted the partition.
+	// another worker already deleted the partition. Do not delete the partition
+	// unless it was successfully removed from its parent, as otherwise we might
+	// delete a partition that has been re-parented, leaving the parent with a
+	// dangling reference.
+	//
 	// TODO(andyk): If the worker crashes or errors after removing this partition
-	// from its parent but before deleting it, it may never be cleaned up. This
-	// should be extremely rare, and therefore waste a tiny amount of storage, so
-	// it's probably not worth addressing.
-	err = fw.index.store.TryDeletePartition(ctx, fw.treeKey, partitionKey)
-	if err != nil {
-		if !errors.Is(err, ErrPartitionNotFound) {
-			return errors.Wrapf(err, "deleting partition")
+	// from its parent but before deleting it, it won't be cleaned up. This should
+	// be extremely rare, and therefore waste a tiny amount of storage, so it's
+	// probably not worth addressing.
+	if removed {
+		err = fw.index.store.TryDeletePartition(ctx, fw.treeKey, partitionKey)
+		if err != nil {
+			if !errors.Is(err, ErrPartitionNotFound) {
+				return errors.Wrapf(err, "deleting partition")
+			}
+		} else if fw.singleStep {
+			return errFixupAborted
 		}
-	} else if fw.singleStep {
-		return errFixupAborted
 	}
 
 	return nil

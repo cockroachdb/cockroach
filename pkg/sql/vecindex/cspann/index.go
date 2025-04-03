@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
@@ -70,6 +71,10 @@ type IndexOptions struct {
 	// split and merge fixup implementations that avoid the use of transactions.
 	// TODO(andyk): Remove this once we've fully converted to the new fixups.
 	UseNewFixups bool
+	// StalledOpTimeout can be called to determine how long a split/merge
+	// operation can stay in the same state before another worker may attempt to
+	// assist. If this is nil, then a default value is used.
+	StalledOpTimeout func() time.Duration
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -129,7 +134,7 @@ type Context struct {
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
-	tempResults         [1]SearchResult
+	tempResults         [2]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
 	tempToSearch        []PartitionToSearch
 	tempVectorsWithKeys []VectorWithKey
@@ -220,6 +225,9 @@ func NewIndex(
 	}
 	if vi.options.QualitySamples == 0 {
 		vi.options.QualitySamples = 16
+	}
+	if vi.options.StalledOpTimeout == nil {
+		vi.options.StalledOpTimeout = func() time.Duration { return DefaultStalledOpTimeout }
 	}
 
 	if vi.options.MaxPartitionSize < 2 {
@@ -360,7 +368,7 @@ func (vi *Index) Insert(
 // "dangling vector" reference will be left in the tree. Vector index methods
 // handle this rare case by joining quantized vectors in the tree with their
 // corresponding full vector from the primary index (which cannot "dangle")
-// before returning search results. For details, see Index.getRerankVectors.
+// before returning search results. For details, see Index.getFullVectors.
 func (vi *Index) Delete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) error {
@@ -407,20 +415,21 @@ func (vi *Index) SearchForInsert(
 	}
 
 	vi.setupInsertContext(idxCtx, treeKey, vec)
-	result, err := vi.searchForInsertHelper(ctx, idxCtx)
-	if err != nil {
-		return nil, err
+
+	// When a candidate insert partition is found, lock its metadata for update
+	// and get its centroid.
+	getFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
+		partitionKey := result.ChildKey.PartitionKey
+		metadata, err := idxCtx.txn.GetPartitionMetadata(
+			ctx, treeKey, partitionKey, true /* forUpdate */)
+		if err != nil {
+			return err
+		}
+		result.Vector = metadata.Centroid
+		return nil
 	}
 
-	// Now fetch the centroid of the insert partition.
-	partitionKey := result.ChildKey.PartitionKey
-	metadata, err := idxCtx.txn.GetPartitionMetadata(ctx, treeKey, partitionKey, true /* forUpdate */)
-	if err != nil {
-		return nil, err
-	}
-
-	result.Vector = metadata.Centroid
-	return result, nil
+	return vi.searchForInsertHelper(ctx, idxCtx, getFunc)
 }
 
 // SearchForDelete finds the leaf partition containing the vector to be deleted.
@@ -472,10 +481,15 @@ func (vi *Index) SuspendFixups() {
 	vi.fixups.Suspend()
 }
 
+// DiscardFixups drops all pending fixups. It is used for testing.
+func (vi *Index) DiscardFixups() {
+	vi.fixups.Process(true /* discard */)
+}
+
 // ProcessFixups waits until all pending fixups have been processed by
 // background workers. It is used for testing.
 func (vi *Index) ProcessFixups() {
-	vi.fixups.Process()
+	vi.fixups.Process(false /* discard */)
 }
 
 // ForceSplit enqueues a split fixup. It is used for testing.
@@ -536,27 +550,37 @@ func (vi *Index) setupContext(
 func (vi *Index) insertHelper(
 	ctx context.Context, idxCtx *Context, childKey ChildKey, valueBytes ValueBytes,
 ) error {
-	result, err := vi.searchForInsertHelper(ctx, idxCtx)
-	if err != nil {
-		return err
+	// When a candidate insert partition is found, add the vector to it.
+	addFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
+		partitionKey := result.ChildKey.PartitionKey
+		return vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
+			partitionKey, idxCtx.level-1, idxCtx.randomized, childKey, valueBytes)
 	}
 
-	// Add a vector to the found partition, which is a child of the partition that
-	// was searched.
-	partitionKey := result.ChildKey.PartitionKey
-	err = vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
-		partitionKey, idxCtx.level-1, idxCtx.randomized, childKey, valueBytes)
-	if errors.Is(err, ErrRestartOperation) {
-		return vi.insertHelper(ctx, idxCtx, childKey, valueBytes)
-	}
+	_, err := vi.searchForInsertHelper(ctx, idxCtx, addFunc)
 	return err
 }
 
+// insertFunc is called by searchForInsertHelper when it has a candidate insert
+// partition, i.e. a partition that may allow a vector to be added to it. The
+// Insert operation will attempt to directly add the vector, while the
+// SearchForInsert operation will only lock the partition for later update. If
+// the partition is in a state that does not allow adds or removes, then the
+// function will return ConditionFailedError with the latest metadata.
+type insertFunc func(ctx context.Context, idxCtx *Context, result *SearchResult) error
+
 // searchForInsertHelper searches for the best partition in which to add a
-// vector and returns that as exactly one search result (never nil).
+// vector and calls the insert function. If that returns ConditionFailedError,
+// then the partition does not allow adds or removes, so searchForInsertHelper
+// tries again with another partition, and so on. Eventually, the search will
+// succeed, and searchForInsertHelper returns a search result containing the
+// insert partition (never nil).
 func (vi *Index) searchForInsertHelper(
-	ctx context.Context, idxCtx *Context,
+	ctx context.Context, idxCtx *Context, fn insertFunc,
 ) (*SearchResult, error) {
+	// In most cases, the top result is the best insert partition. However, if
+	// that partition does not allow inserts, we need to fall back on a target
+	// paritition.
 	idxCtx.tempSearchSet = SearchSet{MaxResults: 1}
 	err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
 	if err != nil {
@@ -566,6 +590,35 @@ func (vi *Index) searchForInsertHelper(
 	if len(results) != 1 {
 		return nil, errors.AssertionFailedf(
 			"SearchForInsert should return exactly one result, got %d", len(results))
+	}
+	result := &results[0]
+
+	// Loop until we find an insert partition.
+	var metadata PartitionMetadata
+	for {
+		err = fn(ctx, idxCtx, result)
+		if err == nil {
+			// Partition supports inserts.
+			break
+		}
+
+		var errConditionFailed *ConditionFailedError
+		if errors.Is(err, ErrRestartOperation) {
+			// Entire operation needs to be restarted.
+			return vi.searchForInsertHelper(ctx, idxCtx, fn)
+		} else if errors.As(err, &errConditionFailed) {
+			// This partition does not allow adds or removes, so fallback on a
+			// target partition.
+			metadata = errConditionFailed.Actual
+			partitionKey := results[0].ChildKey.PartitionKey
+			result, err = vi.fallbackOnTargets(ctx, idxCtx, partitionKey,
+				idxCtx.randomized, metadata.StateDetails, results)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 
 	// Do an inconsistent scan of the partition to see if it might be ready to
@@ -585,7 +638,64 @@ func (vi *Index) searchForInsertHelper(
 			results[0].ParentPartitionKey, partitionKey, false /* singleStep */)
 	}
 
-	return &results[0], nil
+	return result, nil
+}
+
+// fallbackOnTargets is called when none of the partitions returned by a search
+// allow inserting a vector, because they are in a Draining state. Instead, the
+// search needs to continue with the target partitions of the split (or merge).
+// fallbackOnTargets returns a search result for the target that's closest to
+// the query vector.
+// NOTE: "tempResults" is reused within this method and a pointer to one of its
+// entries is returned as the best result.
+func (vi *Index) fallbackOnTargets(
+	ctx context.Context,
+	idxCtx *Context,
+	partitionKey PartitionKey,
+	vec vector.T,
+	state PartitionStateDetails,
+	tempResults []SearchResult,
+) (*SearchResult, error) {
+	if state.State == DrainingForSplitState {
+		// Synthesize one search result for each split target partition to pass
+		// to getFullVectors.
+		tempResults = tempResults[:0]
+		tempResults = append(tempResults, SearchResult{
+			ParentPartitionKey: partitionKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target1},
+		})
+		tempResults = append(tempResults, SearchResult{
+			ParentPartitionKey: partitionKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target2},
+		})
+
+		// Fetch the centroids of the target partitions.
+		var err error
+		tempResults, err = vi.getFullVectors(ctx, idxCtx, tempResults)
+		if err != nil {
+			return nil, err
+		}
+		if len(tempResults) != 2 {
+			return nil, errors.AssertionFailedf(
+				"expected to get two centroids for state %s", state.String())
+		}
+
+		// Order by the distance of the centroids from the query vector.
+		dist1 := num32.L2SquaredDistance(vec, tempResults[0].Vector)
+		dist2 := num32.L2SquaredDistance(vec, tempResults[1].Vector)
+
+		tempResults[0].QuerySquaredDistance = dist1
+		tempResults[1].QuerySquaredDistance = dist2
+
+		if dist1 < dist2 {
+			return &tempResults[0], nil
+		}
+		return &tempResults[1], nil
+	}
+
+	// TODO(andyk): Add support for DrainingForMergeState.
+	return nil, errors.AssertionFailedf(
+		"expected state that disallows adds/removes, not %s", state.String())
 }
 
 // addToPartition calls the store to add the given vector to an existing
@@ -648,9 +758,8 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 		searchSet.MaxResults, vi.options.QualitySamples, idxCtx.options.BaseBeamSize*4)
 	subSearchSet := &idxCtx.tempSubSearchSet
 	*subSearchSet = SearchSet{MaxResults: maxResults}
-	idxCtx.tempResults[0] = SearchResult{
-		ChildKey: ChildKey{PartitionKey: RootKey}}
-	searchLevel, err := vi.searchChildPartitions(ctx, idxCtx, subSearchSet, idxCtx.tempResults[:])
+	idxCtx.tempResults[0] = SearchResult{ChildKey: ChildKey{PartitionKey: RootKey}}
+	searchLevel, err := vi.searchChildPartitions(ctx, idxCtx, subSearchSet, idxCtx.tempResults[:1])
 	if err != nil {
 		return err
 	}
@@ -809,23 +918,73 @@ func (vi *Index) searchChildPartitions(
 
 		// If one of the searched partitions has only 1 vector remaining, do not
 		// return that vector when "ignoreLonelyVector" is true.
+		partitionKey := parentResults[i].ChildKey.PartitionKey
 		if idxCtx.ignoreLonelyVector && idxCtx.level == level && count == 1 {
-			searchSet.RemoveByParent(parentResults[i].ChildKey.PartitionKey)
+			searchSet.RemoveByParent(partitionKey)
 		}
 
 		// Enqueue background fixup if a split or merge operation needs to be
 		// started or continued after stalling.
-		partitionKey := parentResults[i].ChildKey.PartitionKey
 		state := idxCtx.tempToSearch[i].StateDetails
-		needSplit := count > vi.options.MaxPartitionSize || state.MaybeSplitStalled()
+		needSplit := count > vi.options.MaxPartitionSize
+		needSplit = needSplit || state.MaybeSplitStalled(vi.options.StalledOpTimeout())
 		needMerge := count < vi.options.MinPartitionSize && partitionKey != RootKey
-		needMerge = needMerge || state.MaybeMergeStalled()
+		needMerge = needMerge || state.MaybeMergeStalled(vi.options.StalledOpTimeout())
 		if needSplit {
 			vi.fixups.AddSplit(ctx, idxCtx.treeKey,
 				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
 		} else if needMerge {
 			vi.fixups.AddMerge(ctx, idxCtx.treeKey,
 				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+		}
+
+		// If the root partition is in a non-ready state, then we need to check
+		// whether its target partitions also need to be searched. Newly inserted
+		// vectors can get forwarded to target partitions during a split, and we
+		// need to make sure we can find them.
+		if partitionKey != RootKey || state.State == ReadyState {
+			continue
+		}
+
+		// This is the root partition in a non-ready state. Check whether target
+		// positions also need to be searched. This can happen when the root
+		// partition is in the middle of a split.
+		if len(parentResults) != 1 {
+			return InvalidLevel, errors.AssertionFailedf(
+				"expected exactly one root partition to search")
+		}
+
+		idxCtx.tempResults[0] = SearchResult{
+			ParentPartitionKey: RootKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target1},
+		}
+		idxCtx.tempResults[1] = SearchResult{
+			ParentPartitionKey: RootKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target2},
+		}
+
+		if state.State == DrainingForSplitState {
+			// In the DrainingForSplit state, the target partitions are still at
+			// the same level as the root partition, so merge their contents into
+			// the search set (which will remove any duplicates).
+			targetLevel, err := vi.searchChildPartitions(ctx, idxCtx, searchSet, idxCtx.tempResults[:2])
+			if err != nil {
+				return 0, err
+			}
+			if targetLevel != level {
+				return 0, errors.AssertionFailedf(
+					"root partition has level %d, but target partitions have level %d", level, targetLevel)
+			}
+		} else if state.State == AddingLevelState {
+			// In the AddingLevel state, the target partitions should be treated as
+			// children of the root partition. Add their partition keys to the search
+			// set.
+			// NOTE: QuerySquaredDistance is zero for both partitions. This should
+			// only impact accuracy if beam size is < 4. If we decide to handle
+			// this edge case, we can use GetFullVectors to fetch the sub-partition
+			// centroids in order to compute distances.
+			searchSet.Add(&idxCtx.tempResults[0])
+			searchSet.Add(&idxCtx.tempResults[1])
 		}
 	}
 
@@ -844,7 +1003,7 @@ func (vi *Index) rerankSearchResults(
 	}
 
 	// Fetch the full vectors from the store.
-	candidates, err := vi.getRerankVectors(ctx, idxCtx, candidates)
+	candidates, err := vi.getFullVectors(ctx, idxCtx, candidates)
 	if err != nil {
 		return candidates, err
 	}
@@ -872,11 +1031,11 @@ func (vi *Index) rerankSearchResults(
 	return candidates, nil
 }
 
-// getRerankVectors updates the given search candidates with the original full
+// getFullVectors updates the given search candidates with the original full
 // size vectors from the store. If a candidate's vector has been deleted from
 // the primary index, that candidate is removed from the list of candidates
 // that's returned.
-func (vi *Index) getRerankVectors(
+func (vi *Index) getFullVectors(
 	ctx context.Context, idxCtx *Context, candidates []SearchResult,
 ) ([]SearchResult, error) {
 	// Prepare vector references.
