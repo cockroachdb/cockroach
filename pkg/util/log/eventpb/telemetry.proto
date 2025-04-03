@@ -136,7 +136,7 @@ message SampledQuery {
   // The regions of the nodes where SQL processors ran.
   repeated string regions = 38 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // The number of network bytes sent by nodes for this query.
+  // The number of network bytes by DistSQL components.
   int64 network_bytes_sent = 39 [(gogoproto.jsontag) = ',omitempty'];
 
   // The maximum amount of memory usage by nodes for this query.
@@ -154,7 +154,8 @@ message SampledQuery {
   // The number of rows read at the KV layer for this query.
   int64 kv_rows_read = 43 [(gogoproto.customname) = "KVRowsRead", (gogoproto.jsontag) = ',omitempty'];
 
-  // The number of network messages sent by nodes for this query.
+  // The number of network messages sent by nodes for this query by DistSQL
+  // components.
   int64 network_messages = 44 [(gogoproto.jsontag) = ',omitempty'];
 
   // Generated index recommendations for this query.
@@ -311,7 +312,8 @@ message SampledQuery {
 // Fields in this struct should be updated in sync with apps_stats.proto.
 message SampledExecStats {
 
-  // NetworkBytes collects the number of bytes sent over the network.
+  // NetworkBytes collects the number of bytes sent over the network by DistSQL
+  // components.
   int64 network_bytes = 1 [(gogoproto.jsontag) = ",includeempty"];
 
   // MaxMemUsage collects the maximum memory usage that occurred on a node.
@@ -321,7 +323,7 @@ message SampledExecStats {
   int64 contention_time = 3 [(gogoproto.jsontag) = ",omitempty"];
 
   // NetworkMessages collects the number of messages that were sent over the
-  // network.
+  // network by DistSQL components.
   int64 network_messages = 4 [(gogoproto.jsontag) = ",includeempty"];
 
   // MaxDiskUsage collects the maximum temporary disk usage that occurred. This

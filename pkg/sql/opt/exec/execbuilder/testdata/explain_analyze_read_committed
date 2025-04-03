@@ -27,7 +27,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: read committed
 priority: low
@@ -68,7 +68,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 7 (56 B, 14 KVs, 7 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: read committed
 priority: normal
@@ -80,6 +80,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 2
 │ vectorized batch count: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ estimated row count: 990 (missing stats)
 │ equality: (v) = (a)

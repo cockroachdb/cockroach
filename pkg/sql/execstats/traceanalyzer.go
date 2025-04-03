@@ -95,7 +95,7 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
-	NetworkBytesSent                   int64
+	DistSQLNetworkBytesSent            int64
 	MaxMemUsage                        int64
 	MaxDiskUsage                       int64
 	KVBytesRead                        int64
@@ -116,7 +116,7 @@ type QueryLevelStats struct {
 	MvccRangeKeyCount                  int64
 	MvccRangeKeyContainedPoints        int64
 	MvccRangeKeySkippedPoints          int64
-	NetworkMessages                    int64
+	DistSQLNetworkMessages             int64
 	ContentionTime                     time.Duration
 	LockWaitTime                       time.Duration
 	LatchWaitTime                      time.Duration
@@ -156,7 +156,7 @@ func MakeQueryLevelStatsWithErr(stats QueryLevelStats, err error) QueryLevelStat
 
 // Accumulate accumulates other's stats into the receiver.
 func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
-	s.NetworkBytesSent += other.NetworkBytesSent
+	s.DistSQLNetworkBytesSent += other.DistSQLNetworkBytesSent
 	if other.MaxMemUsage > s.MaxMemUsage {
 		s.MaxMemUsage = other.MaxMemUsage
 	}
@@ -181,7 +181,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.MvccRangeKeyCount += other.MvccRangeKeyCount
 	s.MvccRangeKeyContainedPoints += other.MvccRangeKeyContainedPoints
 	s.MvccRangeKeySkippedPoints += other.MvccRangeKeySkippedPoints
-	s.NetworkMessages += other.NetworkMessages
+	s.DistSQLNetworkMessages += other.DistSQLNetworkMessages
 	s.ContentionTime += other.ContentionTime
 	s.LockWaitTime += other.LockWaitTime
 	s.LatchWaitTime += other.LatchWaitTime
@@ -295,8 +295,8 @@ func (a *TraceAnalyzer) ProcessStats() {
 		if stats.stats == nil {
 			continue
 		}
-		s.NetworkBytesSent += getNetworkBytesFromComponentStats(stats.stats)
-		s.NetworkMessages += getNumNetworkMessagesFromComponentsStats(stats.stats)
+		s.DistSQLNetworkBytesSent += getNetworkBytesFromComponentStats(stats.stats)
+		s.DistSQLNetworkMessages += getNumDistSQLNetworkMessagesFromComponentsStats(stats.stats)
 	}
 
 	// Process flowStats.
@@ -350,7 +350,7 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) int64 {
 	return 0
 }
 
-func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) int64 {
+func getNumDistSQLNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) int64 {
 	// We expect exactly one of MessagesReceived and MessagesSent to be set. It
 	// may seem like we are double-counting everything (from both the send and
 	// the receive side) but in practice only one side of each stream presents

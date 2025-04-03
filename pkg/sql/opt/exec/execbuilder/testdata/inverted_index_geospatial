@@ -29,7 +29,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 6 (48 B, 12 KVs, 6 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -39,6 +39,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -46,6 +47,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -66,6 +68,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
@@ -121,7 +124,7 @@ vectorized: <hidden>
 plan type: generic, re-optimized
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -131,6 +134,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -138,6 +142,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -158,6 +163,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
@@ -197,7 +203,7 @@ vectorized: <hidden>
 plan type: generic, re-optimized
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -207,6 +213,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -214,6 +221,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -234,6 +242,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key

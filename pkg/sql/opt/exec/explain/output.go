@@ -416,11 +416,11 @@ func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	)
 }
 
-// AddNetworkStats adds a top-level field for network statistics.
-func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
+// AddDistSQLNetworkStats adds a top-level field for DistSQL network statistics.
+func (ob *OutputBuilder) AddDistSQLNetworkStats(messages, bytes int64) {
 	ob.AddFlakyTopLevelField(
 		DeflakeVolatile,
-		"network usage",
+		"DistSQL network usage",
 		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
 	)
 }

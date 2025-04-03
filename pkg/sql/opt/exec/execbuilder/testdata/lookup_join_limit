@@ -83,7 +83,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -96,6 +96,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
+    │ execution time: 0µs
     │
     ├── • index join (streamer)
     │   │ sql nodes: <hidden>
@@ -166,7 +167,7 @@ vectorized: <hidden>
 plan type: generic, reused
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -322,7 +323,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -341,6 +342,7 @@ quality of service: regular
     │ KV pairs read: 2
     │ KV bytes read: 8 B
     │ KV gRPC calls: 1
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: b@b_pkey
     │ equality: (x) = (x)
@@ -418,7 +420,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -437,6 +439,7 @@ quality of service: regular
     │ KV pairs read: 4
     │ KV bytes read: 16 B
     │ KV gRPC calls: 2
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ estimated max sql temp disk usage: 0 B
     │ table: xy@xy_pkey
