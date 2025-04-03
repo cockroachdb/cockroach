@@ -947,7 +947,7 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
 	tdb.ExpectErr(t, "descriptor not found", `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	// Validate the job has hit a terminal state.
-	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%'",
+	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%' AND job_type='NEW SCHEMA CHANGE'",
 		[][]string{{"failed"}})
 }
 

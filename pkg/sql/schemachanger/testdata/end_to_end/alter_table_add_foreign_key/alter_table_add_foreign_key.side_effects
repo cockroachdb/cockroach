@@ -24,7 +24,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t1
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -55,7 +55,9 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -76,7 +78,9 @@ upsert descriptor #105
      modificationTime: {}
      name: t2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -85,7 +89,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+## PreCommitPhase stage 2 of 2 with 7 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -149,7 +153,9 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -160,6 +166,7 @@ upsert descriptor #105
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
   +      columns:
@@ -174,7 +181,14 @@ upsert descriptor #105
   +      indexes:
   +        "1": t2_pkey
   +      name: t2
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  +        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
+  +        statementTag: ALTER TABLE
   +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -193,7 +207,9 @@ upsert descriptor #105
      modificationTime: {}
      name: t2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -207,45 +223,12 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+## PostCommitPhase stage 1 of 3 with 1 ValidationType op
 validate FOREIGN KEY constraint t1_i_fkey in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 4 MutationType ops
+## PostCommitPhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #104
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": i
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      constraints:
-  -        "2": t1_i_fkey
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "1": t1_pkey
-  -      name: t1
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
-  -        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
-  -        statementTag: ALTER TABLE
-  -    revertible: true
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
   ...
      id: 104
      modificationTime: {}
@@ -291,11 +274,72 @@ upsert descriptor #104
   +  version: "3"
 upsert descriptor #105
   ...
+       - 1
+       referencedTableId: 105
+  -    validity: Validating
+     modificationTime: {}
+     name: t2
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 MutationType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 3 with 4 MutationType ops
+upsert descriptor #104
+  ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": t1_i_fkey
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t1_pkey
+  -      name: t1
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  -        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
+  -        statementTag: ALTER TABLE
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    nameMapping:
   -      columns:
@@ -310,20 +354,21 @@ upsert descriptor #105
   -      indexes:
   -        "1": t2_pkey
   -      name: t2
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  -        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
+  -        statementTag: ALTER TABLE
   -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...
-       - 1
-       referencedTableId: 105
-  -    validity: Validating
-     modificationTime: {}
-     name: t2
-  ...
-       time: {}
+     schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
@@ -331,5 +376,8 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #4
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #5
 # end PostCommitPhase
