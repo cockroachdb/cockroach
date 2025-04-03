@@ -6,14 +6,12 @@
 package state
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type requestCount struct {
@@ -143,79 +141,48 @@ func randDistribution(randSource *rand.Rand, n int) []float64 {
 	return distribution
 }
 
-type StructReplicas struct {
-	StoreID StoreID
-	Count   int
-}
-
-// We are given a number of stores, ranges, a list of replica configs, and a
-// list of lease configs. Some constraints: every store we pick here must be different for a single range.
-// store_weights=[s1=0.5,s2=0.5]          replica_type=VOTER
-// store_weights=[s2=0.5,s3=0.5]          replica_type=VOTER
-// store_weights=[s4=0.5,s5=0.5]          replica_type=VOTER
-// store_weights=[s4=0.33,s5=0.33,s7=0.33] replica_type=VOTER
-// store_weights=[s7=0.33,s8=0.33,s9=0.33] replica_type=VOTER]
-// replica=[(s1,s2,s4,s5,s7):1, (s7,s8,s9):1]
-// replica=[(region/zone/store):1]
-func RangesInfoWithStoreWeightOnRF(
-	numOfStores int,
-	replicaConfigs []ReplicaConfig,
-	leaseConfigs LeaseConfig,
+func RangesInfoWithReplicaPlacement(
+	rp ReplicaPlacement,
 	numRanges int,
 	config roachpb.SpanConfig,
 	minKey, maxKey, rangeSize int64,
 ) RangesInfo {
-	stores := makeStoreList(numOfStores)
 	// If there are no ranges specified, default to 1 range.
 	if numRanges == 0 {
 		numRanges = 1
 	}
-	ret := initializeRangesInfoWithSpanConfigs(stores, numRanges, config, minKey, maxKey, rangeSize)
+
+	ret := make(RangesInfo, numRanges)
+	ret.initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
+
+	rp.findReplicaPlacementForEveryStoreSet(numRanges)
+
 	rf := int(config.NumReplicas)
 
-	replicaFactor := make([][]StructReplicas, rf)
-	for i := 0; i < rf; i++ {
-		replicaFactor[i] = make([]StructReplicas, len(replicaConfigs[i].StoreWeights))
-		totalRangesToAllocate := numRanges
-		log.VInfof(context.Background(), 2, "replicaConfigs[i].StoreWeights: %d\n", replicaConfigs[i].StoreWeights)
-		for j := 0; j < len(replicaConfigs[i].StoreWeights); j++ {
-			sw := replicaConfigs[i].StoreWeights[j]
-			replicaFactor[i][j] = StructReplicas{
-				StoreID: sw.StoreID,
-				Count:   int(sw.Weight * float64(numRanges)),
-			}
-			totalRangesToAllocate -= replicaFactor[i][j].Count
-		}
-		replicaFactor[i][0].Count += totalRangesToAllocate
-	}
-	log.VInfof(context.Background(), 2, "numRanges: %d, rf: %d, replicaFactor: %v\n", numRanges, rf, replicaFactor)
-
 	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
-		rangeInfo := ret[rngIdx]
-		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
-			// pick a store with remaining replicas to allocate
-			for i := 0; i < len(replicaFactor[replCandidateIdx]); i++ {
-				count := replicaFactor[replCandidateIdx][i].Count
-				storeID := replicaFactor[replCandidateIdx][i].StoreID
-				if count > 0 {
-					rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
-						StoreID: roachpb.StoreID(storeID),
-						Type:    replicaConfigs[replCandidateIdx].ReplicaType,
-					}
-					replicaFactor[replCandidateIdx][i].Count--
-					if leaseConfigs.ReplicaIdx-1 == replCandidateIdx {
-						rangeInfo.Leaseholder = storeID
-					}
-					break
-				}
-			}
-			if rangeInfo.Descriptor.InternalReplicas[replCandidateIdx].StoreID == 0 {
-				log.VInfof(context.Background(), 2, "range %d: replica %d: store %d is missing with replicaFactor %v\n", rngIdx, replCandidateIdx, stores, replicaFactor)
+		nextStoreSet := 0
+		for i := 0; i < len(rp); i++ {
+			if rp[i].Weight > 0 {
+				nextStoreSet = i
+				break
 			}
 		}
-		ret[rngIdx] = rangeInfo
+		ratio := rp[nextStoreSet]
+		if len(ratio.StoreIDs) != rf {
+			panic(fmt.Sprintf("expected %d replicas, got %d", rf, len(ratio.StoreIDs)))
+		}
+		if len(ratio.StoreIDs) != len(ratio.Types) {
+			panic(fmt.Sprintf("expected %d types, got %d", len(ratio.StoreIDs), len(ratio.Types)))
+		}
+		for j := 0; j < len(ratio.StoreIDs); j++ {
+			ret[rngIdx].Descriptor.InternalReplicas[j] = roachpb.ReplicaDescriptor{
+				StoreID: roachpb.StoreID(ratio.StoreIDs[j]),
+				Type:    ratio.Types[j],
+			}
+		}
+		ret[rngIdx].Leaseholder = StoreID(ratio.StoreIDs[0])
+		rp[nextStoreSet].Weight--
 	}
-
 	return ret
 }
 
@@ -243,7 +210,8 @@ func RangesInfoWithDistribution(
 	if numRanges == 0 {
 		numRanges = 1
 	}
-	ret := initializeRangesInfoWithSpanConfigs(stores, numRanges, config, minKey, maxKey, rangeSize)
+	ret := make(RangesInfo, numRanges)
+	ret.initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
 	rf := int(config.NumReplicas)
 
 	targetReplicaCount := make(requestCounts, len(stores))
