@@ -1249,7 +1249,8 @@ CREATE TABLE pg_catalog.pg_stat_gssapi (
 	encrypted BOOL
 )`
 
-// PgCatalogPolicies is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPolicies provides a user-friendly view of row-level security policies.
+// https://www.postgresql.org/docs/17/view-pg-policies.html
 const PgCatalogPolicies = `
 CREATE TABLE pg_catalog.pg_policies (
 	schemaname NAME,

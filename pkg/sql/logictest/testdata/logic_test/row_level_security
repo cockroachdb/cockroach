@@ -142,7 +142,7 @@ statement ok
 CREATE POLICY "policy7" ON multi_pol_tab1 FOR SELECT
 
 statement ok
-CREATE USER papa_roach;
+CREATE USER papa_roach
 
 statement ok
 CREATE POLICY "policy8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
@@ -176,6 +176,19 @@ oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithch
 7    policy7  110       r       true           {0}            NULL     NULL
 8    policy8  110       *       true           {0,835509264}  NULL     NULL
 
+query TTTTTTTT colnames,rowsort
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies
+----
+schemaname  tablename       policyname  permissive   roles                cmd     qual  with_check
+public      multi_pol_tab1  policy1     permissive   {public}             ALL     NULL  NULL
+public      multi_pol_tab1  policy2     restrictive  {public}             ALL     NULL  NULL
+public      multi_pol_tab1  policy3     permissive   {public}             ALL     NULL  NULL
+public      multi_pol_tab1  policy4     permissive   {public}             INSERT  NULL  NULL
+public      multi_pol_tab1  policy5     permissive   {public}             UPDATE  NULL  NULL
+public      multi_pol_tab1  policy6     permissive   {public}             DELETE  NULL  NULL
+public      multi_pol_tab1  policy7     permissive   {public}             SELECT  NULL  NULL
+public      multi_pol_tab1  policy8     permissive   {public,papa_roach}  ALL     NULL  NULL
+
 query TTTTTT colnames,rowsort
 SHOW POLICIES FOR multi_pol_tab1
 ----
@@ -188,6 +201,23 @@ policy5  UPDATE  permissive   {public}             ·           ·
 policy6  DELETE  permissive   {public}             ·           ·
 policy7  SELECT  permissive   {public}             ·           ·
 policy8  ALL     permissive   {public,papa_roach}  ·           ·
+
+statement ok
+CREATE DATABASE roachdb
+
+statement ok
+USE roachdb
+
+query TTTTTTTT colnames,rowsort
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies
+----
+schemaname  tablename  policyname  permissive  roles  cmd  qual  with_check
+
+statement ok
+USE db1
+
+statement ok
+DROP DATABASE roachdb
 
 statement ok
 CREATE TABLE multi_pol_tab2 (c1 INT NOT NULL PRIMARY KEY)
@@ -224,15 +254,29 @@ query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
 oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-1    policy9   111       *       true           {0}       NULL     NULL
-2    policy10  111       *       true           {0}       NULL     NULL
+1    policy9   113       *       true           {0}       NULL     NULL
+2    policy10  113       *       true           {0}       NULL     NULL
+
+query TTTTTTTT colnames,rowsort
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab2'
+----
+schemaname  tablename       policyname  permissive  roles     cmd  qual  with_check
+public      multi_pol_tab2  policy9     permissive  {public}  ALL  NULL  NULL
+public      multi_pol_tab2  policy10    permissive  {public}  ALL  NULL  NULL
 
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab3'::regclass
 ----
 oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-1    policy11  112       *       true           {0}       NULL     NULL
-2    policy12  112       *       true           {0}       NULL     NULL
+1    policy11  114       *       true           {0}       NULL     NULL
+2    policy12  114       *       true           {0}       NULL     NULL
+
+query TTTTTTTT colnames,rowsort
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab3'
+----
+schemaname  tablename       policyname  permissive  roles     cmd  qual  with_check
+public      multi_pol_tab3  policy11    permissive  {public}  ALL  NULL  NULL
+public      multi_pol_tab3  policy12    permissive  {public}  ALL  NULL  NULL
 
 query TTTTTT colnames,rowsort
 SHOW POLICIES FOR multi_pol_tab2
@@ -499,6 +543,12 @@ query T rowsort
 select using_expr from [SHOW POLICIES FOR funcref];
 ----
 public.is_valid(c1)
+
+query TT colnames,rowsort
+select qual, with_check from pg_catalog.pg_policies where tablename = 'funcref'
+----
+qual                 with_check
+public.is_valid(c1)  public.is_valid(c1)
 
 statement error pq: cannot drop function "is_valid" because other objects \(\[db1.public.funcref\]\) still depend on it
 DROP FUNCTION is_valid;
