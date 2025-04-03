@@ -24,6 +24,7 @@ func RegisterOperations(r registry.Registry) {
 	registerManualCompaction(r)
 	registerResize(r)
 	registerPauseLDRJob(r)
+	registerProbeRanges(r)
 	registerLicenseThrottle(r)
 	registerSessionVariables(r)
 	registerDebugZip(r)
