@@ -632,6 +632,7 @@ func createCompactionManifest(
 	if err != nil {
 		return nil, err
 	}
+	m.IsCompacted = true
 	m.IntroducedSpans, err = compactIntroducedSpans(ctx, m, compactChain)
 	if err != nil {
 		return nil, err
