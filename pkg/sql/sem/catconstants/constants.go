@@ -20,7 +20,7 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 
 // AttributedToUserInternalAppNamePrefix indicates that the application name
 // identifies an internally-executed query that should be attributed to the
-// user.
+// user. Specifically, this means having the queries show up in SQL activity pages.
 const AttributedToUserInternalAppNamePrefix = ReportableAppNamePrefix + "public-internal"
 
 // DelegatedAppNamePrefix is added to a regular client application

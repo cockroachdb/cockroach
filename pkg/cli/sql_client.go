@@ -136,8 +136,14 @@ func makeSQLClientForBaseURL(
 	// If there is no user in the URL already, fill in the default user.
 	sqlCtx.User = username.RootUser
 
-	// If there is no application name already, use the provided one.
-	sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
+	// Some cli utilities (ex/ debug zip) use an InternalAppNamePrefix so that
+	// they do not affect user facing SQL metrics (and as a result the SQL charts
+	// in the DB Console).
+	if strings.HasPrefix(appName, catconstants.InternalAppNamePrefix) {
+		sqlCtx.ApplicationName = appName
+	} else {
+		sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
+	}
 
 	// How we're going to authenticate.
 	usePw, _, _ := baseURL.GetAuthnPassword()
