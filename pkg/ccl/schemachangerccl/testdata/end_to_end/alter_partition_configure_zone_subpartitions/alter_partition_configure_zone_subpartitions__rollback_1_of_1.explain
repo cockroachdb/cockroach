@@ -1,0 +1,65 @@
+/* setup */
+CREATE TABLE person (
+    name STRING,
+    country STRING,
+    birth_date DATE,
+    PRIMARY KEY (country, birth_date, name)
+)
+    PARTITION BY LIST (country) (
+            PARTITION australia
+                VALUES IN ('AU', 'NZ')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION north_america
+                VALUES IN ('US', 'CA')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_na VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_na VALUES FROM ('1995-01-01') TO (maxvalue)
+                    ),
+            PARTITION default
+                VALUES IN (default)
+        );
+
+/* test */
+ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
+ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
+ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
+ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 6;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER PARTITION old_au OF INDEX defaultdb.public.person@person_pkey CONFIGURE ZONE USING "gc.ttlseconds" = ‹6›; following ALTER PARTITION australia OF INDEX defaultdb.public.person@person_pkey CONFIGURE ZONE USING "gc.ttlseconds" = ‹2›; ALTER PARTITION old_au OF INDEX defaultdb.public.person@person_pkey CONFIGURE ZONE USING "gc.ttlseconds" = ‹4›; ALTER PARTITION yung_au OF INDEX defaultdb.public.person@person_pkey CONFIGURE ZONE USING "gc.ttlseconds" = ‹5›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 9 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "old_au"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 2, PartitionName: "australia"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "yung_au"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 3, PartitionName: "australia"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 2, PartitionName: "old_au"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 3, PartitionName: "old_au"}
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 4, PartitionName: "australia"}
+      │    │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 2, PartitionName: "yung_au"}
+      │    └── 11 Mutation operations
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (person)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

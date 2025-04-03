@@ -9,7 +9,7 @@ EXPLAIN (DDL) rollback at post-commit stage 5 of 23;
 ----
 Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (b);
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC
       │    │    └── VALIDATED     → PUBLIC      ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid+), IndexID: 0}
       │    ├── 21 elements transitioning toward ABSENT
@@ -59,25 +59,32 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m 
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":6,"Kind":2,"Ordinal":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 9 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (m-)}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (m-), TypeName: "INT8"}
-           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (m-), Expr: unique_rowid()}
-           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 6 (t_pkey-), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey+)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 6 (t_pkey-)}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 7, ConstraintID: 5, SourceIndexID: 1 (t_pkey+)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 7}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (t_pkey-)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 10 (t_pkey-)}
-           └── 10 Mutation operations
-                ├── RemoveColumnDefaultExpression {"ColumnID":4,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":6,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":6,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":7,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":7,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":8,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 9 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (m-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (m-), TypeName: "INT8"}
+      │    │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (m-), Expr: unique_rowid()}
+      │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 6 (t_pkey-), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 6 (t_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 7, ConstraintID: 5, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 7}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (t_pkey-)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 10 (t_pkey-)}
+      │    └── 10 Mutation operations
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":4,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":6,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":6,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":7,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":7,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

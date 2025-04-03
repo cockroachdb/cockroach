@@ -1,0 +1,23 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+
+/* test */
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 3;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── WRITE_ONLY → ABSENT ColumnNotNull:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 0}
+      │    └── 3 Mutation operations
+      │         ├── RemoveColumnNotNull {"ColumnID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
