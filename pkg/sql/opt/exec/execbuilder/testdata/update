@@ -1320,8 +1320,10 @@ Put /Table/118/3/2/1/0 -> /BYTES/
 
 subtest locking_behavior
 
-# TODO(yuzefovich): include 'w' into a separate column family when the session
-# variable to enable lock eliding optimization is added.
+# Enable the lock elision optimization so that we could put 'w' into a separate
+# column family which allows us to verify the behavior when 'w' is NULL.
+statement ok
+SET optimizer_use_lock_elision_multiple_families = true;
 
 statement ok
 CREATE TABLE t139160 (
@@ -1333,7 +1335,8 @@ CREATE TABLE t139160 (
   INDEX (i) STORING (u),
   UNIQUE INDEX (u) STORING (i),
   UNIQUE INDEX (v),
-  FAMILY (k, i, u, v, w)
+  FAMILY (k, i, u, v),
+  FAMILY (w)
 );
 
 statement ok
@@ -1362,8 +1365,9 @@ vectorized: true
 query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
 ----
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5/1:5:Int/6
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1379,8 +1383,9 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE k = 1
 ----
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1420,8 +1425,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
 ----
 Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5/1:5:Int/6
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1438,8 +1444,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE i = 2
 ----
 Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1480,8 +1487,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
 ----
 Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5/1:5:Int/6
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del /Table/119/3/3/0
@@ -1498,8 +1506,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE u = 3
 ----
 Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del /Table/119/3/3/0
@@ -1540,8 +1549,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
 ----
 Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5/1:5:Int/6
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1558,8 +1568,9 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE v = 4
 ----
 Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
-Scan /Table/119/1/1/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1597,7 +1608,8 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
 ----
 Scan /Table/119/{1-2}
-Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5/1:5:Int/6
+Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put (locking) /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
@@ -1615,12 +1627,16 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE w = 5
 ----
 Scan /Table/119/{1-2}
 Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del (locking) /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
 Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+RESET optimizer_use_lock_elision_multiple_families;
 
 subtest end
 
@@ -1739,5 +1755,62 @@ Del (locking) /Table/120/3/3/1/1
 CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
 Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+# Sanity check a couple of session variables.
+statement ok
+SET use_cputs_on_non_unique_indexes = true;
+SET optimizer_use_lock_elision_multiple_families = true;
+
+statement ok
+DELETE FROM t139160_families WHERE true;
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put /Table/120/1/1/1/1 -> /INT/3
+Put /Table/120/1/1/2/1 -> /INT/4
+Put /Table/120/1/1/3/1 -> /INT/5
+Put /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+CPut /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+CPut /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160_families WHERE true;
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+SET optimizer_enable_lock_elision = false;
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+CPut /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+CPut /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement ok
+RESET optimizer_enable_lock_elision;
+RESET optimizer_use_lock_elision_multiple_families;
+RESET use_cputs_on_non_unique_indexes;
 
 subtest end

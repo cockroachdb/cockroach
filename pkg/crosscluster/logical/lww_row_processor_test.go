@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -361,9 +362,10 @@ func TestLWWConflictResolution(t *testing.T) {
 					LeaseManager: s.LeaseManager(),
 					Settings:     s.ClusterSettings(),
 				}, &eval.Context{
-					Codec:    s.Codec(),
-					Settings: s.ClusterSettings(),
-				}, sd, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
+					Codec:            s.Codec(),
+					Settings:         s.ClusterSettings(),
+					SessionDataStack: sessiondata.NewStack(sd),
+				}, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
 					dstDesc.GetID(): {
 						srcDesc: srcDesc,
 					},

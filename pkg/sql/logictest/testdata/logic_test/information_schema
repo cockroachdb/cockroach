@@ -3911,6 +3911,7 @@ authentication_method                                      cert-password
 avoid_buffering                                            off
 avoid_full_table_scans_in_mutations                        on
 backslash_quote                                            safe_encoding
+buffered_writes_use_locking_on_non_unique_indexes          off
 bypass_pcr_reader_catalog_aost                             off
 bytea_output                                               hex
 check_function_bodies                                      on
@@ -4011,6 +4012,7 @@ opt_split_scan_limit                                       2048
 optimizer                                                  on
 optimizer_always_use_histograms                            on
 optimizer_check_input_min_row_count                        1
+optimizer_enable_lock_elision                              on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_min_row_count                                    0
@@ -4020,6 +4022,7 @@ optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
+optimizer_use_delete_range_fast_path                       on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on
@@ -4031,6 +4034,7 @@ optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_improved_trigram_similarity_selectivity      on
 optimizer_use_improved_zigzag_join_costing                 on
 optimizer_use_limit_ordering_for_streaming_group_by        on
+optimizer_use_lock_elision_multiple_families               off
 optimizer_use_lock_op_for_serializable                     off
 optimizer_use_merged_partial_statistics                    on
 optimizer_use_multicol_stats                               on
@@ -4094,6 +4098,7 @@ troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
 unsafe_allow_triggers_modifying_cascades                   off
+use_cputs_on_non_unique_indexes                            off
 variable_inequality_lookup_join_enabled                    on
 xmloption                                                  content
 

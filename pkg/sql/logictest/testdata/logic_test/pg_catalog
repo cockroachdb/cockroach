@@ -2921,6 +2921,7 @@ autocommit_before_ddl                                      on                  N
 avoid_buffering                                            off                 NULL      NULL        NULL        string
 avoid_full_table_scans_in_mutations                        on                  NULL      NULL        NULL        string
 backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
+buffered_writes_use_locking_on_non_unique_indexes          off                 NULL      NULL        NULL        string
 bypass_pcr_reader_catalog_aost                             off                 NULL      NULL        NULL        string
 bytea_output                                               hex                 NULL      NULL        NULL        string
 check_function_bodies                                      on                  NULL      NULL        NULL        string
@@ -3022,6 +3023,7 @@ on_update_rehome_row_enabled                               on                  N
 opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
 optimizer_check_input_min_row_count                        1                   NULL      NULL        NULL        string
+optimizer_enable_lock_elision                              on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
 optimizer_min_row_count                                    0                   NULL      NULL        NULL        string
@@ -3031,6 +3033,7 @@ optimizer_prove_implication_with_virtual_computed_columns  on                  N
 optimizer_push_limit_into_project_filtered_scan            on                  NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
 optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
+optimizer_use_delete_range_fast_path                       on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
@@ -3042,6 +3045,7 @@ optimizer_use_improved_split_disjunction_for_joins         on                  N
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL      NULL        NULL        string
 optimizer_use_improved_zigzag_join_costing                 on                  NULL      NULL        NULL        string
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
+optimizer_use_lock_elision_multiple_families               off                 NULL      NULL        NULL        string
 optimizer_use_lock_op_for_serializable                     off                 NULL      NULL        NULL        string
 optimizer_use_merged_partial_statistics                    on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
@@ -3106,6 +3110,7 @@ troubleshooting_mode                                       off                 N
 unbounded_parallel_scans                                   off                 NULL      NULL        NULL        string
 unconstrained_non_covering_index_scan_enabled              off                 NULL      NULL        NULL        string
 unsafe_allow_triggers_modifying_cascades                   off                 NULL      NULL        NULL        string
+use_cputs_on_non_unique_indexes                            off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
 vectorize                                                  on                  NULL      NULL        NULL        string
@@ -3132,6 +3137,7 @@ autocommit_before_ddl                                      on                  N
 avoid_buffering                                            off                 NULL  user     NULL      off                 off
 avoid_full_table_scans_in_mutations                        on                  NULL  user     NULL      on                  on
 backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
+buffered_writes_use_locking_on_non_unique_indexes          off                 NULL  user     NULL      off                 off
 bypass_pcr_reader_catalog_aost                             off                 NULL  user     NULL      off                 off
 bytea_output                                               hex                 NULL  user     NULL      hex                 hex
 check_function_bodies                                      on                  NULL  user     NULL      on                  on
@@ -3233,6 +3239,7 @@ on_update_rehome_row_enabled                               on                  N
 opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
 optimizer_check_input_min_row_count                        1                   NULL  user     NULL      1                   1
+optimizer_enable_lock_elision                              on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
 optimizer_min_row_count                                    0                   NULL  user     NULL      0                   0
@@ -3242,6 +3249,7 @@ optimizer_prove_implication_with_virtual_computed_columns  on                  N
 optimizer_push_limit_into_project_filtered_scan            on                  NULL  user     NULL      on                  on
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
 optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
+optimizer_use_delete_range_fast_path                       on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
@@ -3253,6 +3261,7 @@ optimizer_use_improved_split_disjunction_for_joins         on                  N
 optimizer_use_improved_trigram_similarity_selectivity      on                  NULL  user     NULL      on                  on
 optimizer_use_improved_zigzag_join_costing                 on                  NULL  user     NULL      on                  on
 optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
+optimizer_use_lock_elision_multiple_families               off                 NULL  user     NULL      off                 off
 optimizer_use_lock_op_for_serializable                     off                 NULL  user     NULL      off                 off
 optimizer_use_merged_partial_statistics                    on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
@@ -3317,6 +3326,7 @@ troubleshooting_mode                                       off                 N
 unbounded_parallel_scans                                   off                 NULL  user     NULL      off                 off
 unconstrained_non_covering_index_scan_enabled              off                 NULL  user     NULL      off                 off
 unsafe_allow_triggers_modifying_cascades                   off                 NULL  user     NULL      off                 off
+use_cputs_on_non_unique_indexes                            off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
 vectorize                                                  on                  NULL  user     NULL      on                  on
@@ -3336,6 +3346,7 @@ autocommit_before_ddl                                      NULL    NULL     NULL
 avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
 avoid_full_table_scans_in_mutations                        NULL    NULL     NULL     NULL        NULL
 backslash_quote                                            NULL    NULL     NULL     NULL        NULL
+buffered_writes_use_locking_on_non_unique_indexes          NULL    NULL     NULL     NULL        NULL
 bypass_pcr_reader_catalog_aost                             NULL    NULL     NULL     NULL        NULL
 bytea_output                                               NULL    NULL     NULL     NULL        NULL
 check_function_bodies                                      NULL    NULL     NULL     NULL        NULL
@@ -3443,6 +3454,7 @@ opt_split_scan_limit                                       NULL    NULL     NULL
 optimizer                                                  NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
 optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
+optimizer_enable_lock_elision                              NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
 optimizer_min_row_count                                    NULL    NULL     NULL     NULL        NULL
@@ -3452,6 +3464,7 @@ optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL
 optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL     NULL        NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
 optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
+optimizer_use_delete_range_fast_path                       NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
@@ -3463,6 +3476,7 @@ optimizer_use_improved_split_disjunction_for_joins         NULL    NULL     NULL
 optimizer_use_improved_trigram_similarity_selectivity      NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_zigzag_join_costing                 NULL    NULL     NULL     NULL        NULL
 optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
+optimizer_use_lock_elision_multiple_families               NULL    NULL     NULL     NULL        NULL
 optimizer_use_lock_op_for_serializable                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_merged_partial_statistics                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL
@@ -3528,6 +3542,7 @@ troubleshooting_mode                                       NULL    NULL     NULL
 unbounded_parallel_scans                                   NULL    NULL     NULL     NULL        NULL
 unconstrained_non_covering_index_scan_enabled              NULL    NULL     NULL     NULL        NULL
 unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL     NULL        NULL
+use_cputs_on_non_unique_indexes                            NULL    NULL     NULL     NULL        NULL
 use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
 vectorize                                                  NULL    NULL     NULL     NULL        NULL

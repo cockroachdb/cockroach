@@ -143,8 +143,6 @@ type Memo struct {
 
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
-	// NOTE: If you add new fields here, be sure to add them to the relevant
-	//       fields in explain_bundle.go.
 	reorderJoinsLimit                          int
 	zigzagJoinEnabled                          bool
 	useForecasts                               bool

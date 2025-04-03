@@ -726,7 +726,9 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 		sd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
 
 		if lrw.spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, sd, lrw.spec, lrw.configByTable)
+			evalCtx := flowCtx.NewEvalCtx()
+			evalCtx.SessionDataStack.Push(sd)
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, evalCtx, lrw.spec, lrw.configByTable)
 			if err != nil {
 				return err
 			}
