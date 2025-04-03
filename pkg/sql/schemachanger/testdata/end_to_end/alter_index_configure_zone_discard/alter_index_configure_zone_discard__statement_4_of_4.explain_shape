@@ -12,4 +12,4 @@ ALTER INDEX t@idx CONFIGURE ZONE USING num_replicas = 10;
 EXPLAIN (DDL, SHAPE) ALTER INDEX t@t_pkey CONFIGURE ZONE DISCARD;
 ----
 Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE DISCARD; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›; ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›; ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹num_replicas› = ‹10›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

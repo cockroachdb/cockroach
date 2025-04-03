@@ -68,6 +68,8 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT        → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -94,7 +96,10 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │         │    └── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
- │         └── 30 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 31 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":2,"TableID":104}
@@ -182,26 +187,35 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward PUBLIC
-           │    ├── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
-           │    ├── DESCRIPTOR_ADDED      → PUBLIC           Database:{DescID: 105 (db+)}
-           │    ├── ABSENT                → PUBLIC           DatabaseData:{DescID: 105 (db+)}
-           │    └── DESCRIPTOR_ADDED      → PUBLIC           Schema:{DescID: 106 (public+)}
-           ├── 4 elements transitioning toward TRANSIENT_ABSENT
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
-           └── 12 Mutation operations
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
-                ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
-                ├── RefreshStats {"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-                ├── MarkDescriptorAsPublic {"DescriptorID":105}
-                ├── MarkDescriptorAsPublic {"DescriptorID":106}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward PUBLIC
+      │    │    ├── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+      │    │    ├── DESCRIPTOR_ADDED      → PUBLIC           Database:{DescID: 105 (db+)}
+      │    │    ├── ABSENT                → PUBLIC           DatabaseData:{DescID: 105 (db+)}
+      │    │    └── DESCRIPTOR_ADDED      → PUBLIC           Schema:{DescID: 106 (public+)}
+      │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
+      │    └── 12 Mutation operations
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── MarkDescriptorAsPublic {"DescriptorID":105}
+      │         ├── MarkDescriptorAsPublic {"DescriptorID":106}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 5 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

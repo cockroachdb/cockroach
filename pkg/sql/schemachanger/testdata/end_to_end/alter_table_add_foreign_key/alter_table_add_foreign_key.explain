@@ -13,7 +13,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
- │         └── 2 Mutation operations
+ │         ├── 2 elements transitioning toward TRANSIENT_PUBLIC
+ │         │    ├── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t1)}
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 105 (t2)}
+ │         └── 4 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  │              └── SetConstraintName {"ConstraintID":2,"Name":"t1_i_fkey","TableID":104}
  ├── PreCommitPhase
@@ -21,29 +26,48 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── WRITE_ONLY → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │    │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
+ │    │    ├── 2 elements transitioning toward TRANSIENT_PUBLIC
+ │    │    │    ├── ABSENT     → PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
+ │    │    │    └── ABSENT     → PUBLIC TableSchemaLocked:{DescID: 105 (t2)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
  │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t1), Name: "t1_i_fkey", ConstraintID: 2 (t1_i_fkey+)}
- │         └── 5 Mutation operations
+ │         ├── 2 elements transitioning toward TRANSIENT_PUBLIC
+ │         │    ├── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 104 (t1)}
+ │         │    └── PUBLIC → ABSENT     TableSchemaLocked:{DescID: 105 (t2)}
+ │         └── 7 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── SetTableSchemaLocked {"TableID":105}
  │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"t1_i_fkey","TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  └── PostCommitPhase
-      ├── Stage 1 of 2 in PostCommitPhase
+      ├── Stage 1 of 3 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
       │    │    └── WRITE_ONLY → VALIDATED ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
       │    └── 1 Validation operation
       │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
-      └── Stage 2 of 2 in PostCommitPhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
+      ├── Stage 2 of 3 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── VALIDATED → PUBLIC           ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey+), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
+      │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+      │    │    └── ABSENT    → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 105 (t2)}
+      │    └── 5 Mutation operations
+      │         ├── SetTableSchemaLocked {"Locked":true,"TableID":105}
+      │         ├── MakeValidatedForeignKeyConstraintPublic {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+      └── Stage 3 of 3 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
            └── 4 Mutation operations
-                ├── MakeValidatedForeignKeyConstraintPublic {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

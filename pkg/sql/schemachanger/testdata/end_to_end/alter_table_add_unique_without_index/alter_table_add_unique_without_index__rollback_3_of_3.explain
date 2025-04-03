@@ -1,0 +1,34 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+SET experimental_enable_unique_without_index_constraints = true;
+INSERT INTO t(i, j) VALUES(-1, -1), (-2, -2), (-3, -3);
+
+/* test */
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+EXPLAIN (DDL) rollback at post-commit stage 3 of 3;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
+      │    │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
+      │    └── 4 Mutation operations
+      │         ├── MakePublicUniqueWithoutIndexConstraintValidated {"ConstraintID":2,"TableID":104}
+      │         ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── VALIDATED → ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
+      │    └── 3 Mutation operations
+      │         ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
