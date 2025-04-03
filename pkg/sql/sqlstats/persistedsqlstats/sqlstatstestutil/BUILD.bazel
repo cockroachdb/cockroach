@@ -13,6 +13,9 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/testutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/safesql",
+        "@com_github_pkg_errors//:errors",
     ],
 )

@@ -170,3 +170,9 @@ func (c *ConcurrentBufferGuard) currentWriterIndex() int64 {
 	}
 	return sizeLimit
 }
+
+// GetBufferSize returns the current number of events in the buffer.
+// This should only be used for testing to observe when the buffer has been flushed.
+func (c *ConcurrentBufferGuard) GetBufferSize() int64 {
+	return atomic.LoadInt64(&c.atomicIdx)
+}

@@ -18,7 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
+	"github.com/pkg/errors"
 )
 
 // GetRandomizedCollectedStatementStatisticsForTest returns a
@@ -292,4 +295,60 @@ VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 	)
 
 	return err
+}
+
+func WaitForStatementStatsContainerCountGreaterThanOrEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		conn.QueryRow(t, "SELECT count(*) FROM crdb_internal.cluster_statement_statistics").Scan(&count)
+		if count <= expectedCount {
+			return nil
+		}
+		return errors.Errorf("expected 0 statements, got %d", count)
+	})
+}
+
+func WaitForStatementStatsContainerCountEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		conn.QueryRow(t, "SELECT count(*) FROM crdb_internal.cluster_statement_statistics").Scan(&count)
+		if count != expectedCount {
+			return nil
+		}
+		return errors.Errorf("expected 0 statements, got %d", count)
+	})
+}
+
+func WaitForTransactionStatsContainerCountGreaterThanOrEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		conn.QueryRow(t, "SELECT count(*) FROM crdb_internal.cluster_transaction_statistics").Scan(&count)
+		if count <= expectedCount {
+			return nil
+		}
+		return errors.Errorf("expected 0 statements, got %d", count)
+	})
+}
+
+func WaitForTransactionStatsContainerCountEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		conn.QueryRow(t, "SELECT count(*) FROM crdb_internal.cluster_transaction_statistics").Scan(&count)
+		if count != expectedCount {
+			return nil
+		}
+		return errors.Errorf("expected 0 statements, got %d", count)
+	})
 }

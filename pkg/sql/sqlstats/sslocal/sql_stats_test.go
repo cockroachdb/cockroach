@@ -1866,23 +1866,6 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 		discardedMetric.Reset()
 	}
 
-	countStmts := func() int {
-		var count int
-		row := utilConn.QueryRow(t,
-			`SELECT count(*) FROM crdb_internal.statement_statistics`)
-		row.Scan(&count)
-		t.Log(utilConn.QueryStr(t, `SELECT app_name, metadata->'query' FROM crdb_internal.statement_statistics`))
-		return count
-	}
-
-	countTxns := func() int {
-		var count int
-		row := utilConn.QueryRow(t,
-			`SELECT count(*) FROM crdb_internal.transaction_statistics`)
-		row.Scan(&count)
-		return count
-	}
-
 	// We'll execute queries across 3 different applications.
 	// The fingerprint limit should be enforced per-node, so even if the entry
 	// count per application is below the max, we should still discard stats if
@@ -2001,14 +1984,14 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 			// number of stats the test expects. We use this as a minimum since internal
 			// statementsBySessionID may be executed in the background.
 			if tc.stmtLimit == 0 {
-				require.GreaterOrEqual(t, countStmts(), tc.minStmts)
+				sqlstatstestutil.WaitForStatementStatsContainerCountGreaterThanOrEqual(t, utilConn, tc.minStmts)
 			} else {
-				require.Equal(t, tc.stmtLimit-1, countStmts())
+				sqlstatstestutil.WaitForStatementStatsContainerCountEqual(t, utilConn, tc.stmtLimit-1)
 			}
 			if tc.txnLimit == 0 {
-				require.GreaterOrEqual(t, countTxns(), tc.minTxns)
+				sqlstatstestutil.WaitForTransactionStatsContainerCountGreaterThanOrEqual(t, utilConn, tc.minTxns)
 			} else {
-				require.Equal(t, tc.txnLimit-1, countTxns())
+				sqlstatstestutil.WaitForStatementStatsContainerCountEqual(t, utilConn, tc.txnLimit-1)
 			}
 			require.GreaterOrEqual(t, discardedMetric.Count(), int64(tc.totalSkipped))
 		})

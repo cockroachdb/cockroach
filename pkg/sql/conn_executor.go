@@ -709,6 +709,11 @@ func (s *Server) GetLocalSQLStatsProvider() *sslocal.SQLStats {
 	return s.localSqlStats
 }
 
+// GetSQLStatsIngester returns the sqlstats.Ingester for the current sql.Server.
+func (s *Server) GetSQLStatsIngester() *sslocal.SQLStatsIngester {
+	return s.sqlStatsIngester
+}
+
 // GetReportedSQLStatsController returns the sqlstats.Controller for the current
 // sql.Server's reported SQL Stats.
 func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
