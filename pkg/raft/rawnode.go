@@ -580,19 +580,9 @@ func (rn *RawNode) SupportingFortifiedLeader() bool {
 	return rn.raft.supportingFortifiedLeader()
 }
 
-// ProgressType indicates the type of replica a Progress corresponds to.
-type ProgressType byte
-
-const (
-	// ProgressTypePeer accompanies a Progress for a regular peer replica.
-	ProgressTypePeer ProgressType = iota
-	// ProgressTypeLearner accompanies a Progress for a learner replica.
-	ProgressTypeLearner
-)
-
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
-func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, pr tracker.Progress)) {
 	withProgress(rn.raft, visitor)
 }
 

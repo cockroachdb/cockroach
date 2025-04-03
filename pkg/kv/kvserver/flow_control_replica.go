@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	rafttracker "github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +57,7 @@ func (rf *replicaFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{
 	rf.assertLocked()
 	// Lazily allocate the map, since expected to be empty.
 	var behindFollowers map[roachpb.ReplicaID]struct{}
-	rf.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, progress rafttracker.Progress) {
+	rf.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, progress rafttracker.Progress) {
 		if progress.State == rafttracker.StateReplicate {
 			return
 		}
