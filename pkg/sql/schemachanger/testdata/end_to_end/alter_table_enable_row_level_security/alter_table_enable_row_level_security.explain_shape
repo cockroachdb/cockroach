@@ -5,4 +5,4 @@ CREATE TABLE roaches();
 EXPLAIN (DDL, SHAPE) ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› ENABLE ROW LEVEL SECURITY;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

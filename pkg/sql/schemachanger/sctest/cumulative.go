@@ -44,7 +44,12 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 		}
 		var numInjectedFailures uint32
 		var numCheckedExplainInRollback uint32
+		var knobEnabled atomic.Bool
 		beforeStage := func(p scplan.Plan, stageIdx int) error {
+			// Only enabled after setup.
+			if !knobEnabled.Load() {
+				return nil
+			}
 			s := p.Stages[stageIdx]
 			if atomic.LoadUint32(&numInjectedFailures) > 0 {
 				// At this point, if a failure has already been injected, any stage
@@ -70,9 +75,17 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 		knobs := &scexec.TestingKnobs{
 			BeforeStage: beforeStage,
 			OnPostCommitPlanError: func(err error) error {
+				// Only enabled after setup.
+				if !knobEnabled.Load() {
+					return nil
+				}
 				panic(fmt.Sprintf("%+v", err))
 			},
 			OnPostCommitError: func(p scplan.Plan, stageIdx int, err error) error {
+				// Only enabled after setup.
+				if !knobEnabled.Load() {
+					return nil
+				}
 				if strings.Contains(err.Error(), "boom") {
 					return err
 				}
@@ -84,6 +97,7 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 			tdb := sqlutils.MakeSQLRunner(db)
 			var before [][]string
 			require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
+			knobEnabled.Swap(true)
 			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
 			err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
 			if err != nil {
@@ -222,13 +236,13 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 		}
 
 		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
-			clusterCreated.Store(true)
 			tdb = sqlutils.MakeSQLRunner(db)
 
 			// Now run the schema change and the `BeforeStage` knob will inject DMLs
 			// as specified in `injection`.
 			errorDetected := false
 			require.NoError(t, setupSchemaChange(ctx, t, ts, db))
+			clusterCreated.Store(true)
 			defer waitForSchemaChangesToFinish(t, tdb)
 			if err := executeSchemaChangeTxn(ctx, t, ts, db); err != nil {
 				// Mute the error if it matches what the DML injection specifies.
@@ -291,10 +305,17 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, factory TestServerFac
 			}
 		}
 		ctx := context.Background()
+		var knobEnabled atomic.Bool
 		factory.WithSchemaChangerKnobs(&scexec.TestingKnobs{
-			BeforeStage: cc.GetBeforeStage("EndToEndCorpus", t),
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if !knobEnabled.Load() {
+					return nil
+				}
+				return cc.GetBeforeStage("EndToEndCorpus", t)(p, stageIdx)
+			},
 		}).Run(ctx, t, func(s serverutils.TestServerInterface, db *gosql.DB) {
 			require.NoError(t, setupSchemaChange(ctx, t, ts, db))
+			knobEnabled.Swap(true)
 			require.NoError(t, executeSchemaChangeTxn(ctx, t, ts, db))
 			waitForSchemaChangesToFinish(t, sqlutils.MakeSQLRunner(db))
 		})
@@ -330,8 +351,13 @@ func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
 func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 	re := regexp.MustCompile(`job (\d+) was paused before it completed with reason: boom (\d+)`)
 	var numInjectedFailures uint32
+	var knobEnabled atomic.Bool
 	knobs := &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, stageIdx int) error {
+			// Only enabled after setup.
+			if !knobEnabled.Load() {
+				return nil
+			}
 			if atomic.LoadUint32(&numInjectedFailures) > 0 {
 				return nil
 			}
@@ -355,6 +381,7 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 		tdb.Exec(t, `SET CLUSTER SETTING server.sqlliveness.ttl = '120s'`)
 
 		require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
+		knobEnabled.Swap(true)
 		err := executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db)
 		if err != nil {
 			// Check that it's a pause error, with a job.

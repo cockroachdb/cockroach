@@ -1,0 +1,37 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, b INT);
+CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
+
+/* test */
+ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
+EXPLAIN (DDL) rollback at post-commit stage 3 of 3;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CONSTRAINT check_b CHECK (f(b) > ‹1›);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b-), ReferencedColumnIDs: [2]}
+      │    │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b-)}
+      │    └── 5 Mutation operations
+      │         ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
+      │         ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── VALIDATED → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b-), ReferencedColumnIDs: [2]}
+      │    └── 5 Mutation operations
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── RemoveTableConstraintBackReferencesFromFunctions {"BackReferencedConstraintID":2,"BackReferencedTableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

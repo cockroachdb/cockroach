@@ -709,6 +709,9 @@ ElementState:
     databaseId: 100
     tableId: 108
   Status: PUBLIC
+- TableSchemaLocked:
+    tableId: 108
+  Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:
     - 5
@@ -1711,6 +1714,9 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
+    tableId: 111
+  Status: PUBLIC
+- TableSchemaLocked:
     tableId: 111
   Status: PUBLIC
 - UserPrivileges:

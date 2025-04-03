@@ -1,0 +1,17 @@
+/* setup */
+CREATE TYPE e AS ENUM();
+CREATE TABLE t (i INT PRIMARY KEY, j e);
+
+/* test */
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE e;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN j SET DATA TYPE e;
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

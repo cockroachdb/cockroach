@@ -22,7 +22,10 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
- │         └── 12 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 13 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":104,"Validity":2}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsInaccessible":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_id...","TableID":104}
@@ -52,6 +55,8 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+), IndexID: 3}
  │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT        → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -70,7 +75,10 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
- │         └── 16 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 17 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":104,"Validity":2}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsInaccessible":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_id...","TableID":104}
@@ -149,25 +157,32 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 2 elements transitioning toward PUBLIC
-           │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+)}
-           │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
-           ├── 5 elements transitioning toward TRANSIENT_ABSENT
-           │    ├── TRANSIENT_VALIDATED   → TRANSIENT_ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
-           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+), IndexID: 3}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
-           │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
-           └── 11 Mutation operations
-                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
-                ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
-                ├── RefreshStats {"TableID":104}
-                ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
-                ├── RefreshStats {"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+)}
+      │    │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+      │    ├── 5 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── TRANSIENT_VALIDATED   → TRANSIENT_ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+), IndexID: 3}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
+      │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
+      │    └── 11 Mutation operations
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

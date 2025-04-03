@@ -6,4 +6,4 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 ----
 Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8;
- └── execute 3 system table mutations transactions
+ └── execute 4 system table mutations transactions
