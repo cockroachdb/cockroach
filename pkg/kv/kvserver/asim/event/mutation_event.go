@@ -51,11 +51,27 @@ type SetNodeLocalityEvent struct {
 	LocalityString string
 }
 
+type SetSimulationSettingsEvent struct {
+	Key   string
+	Value interface{}
+}
+
 var _ Event = &SetSpanConfigEvent{}
 var _ Event = &AddNodeEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
 var _ Event = &SetNodeLocalityEvent{}
+var _ Event = &SetSimulationSettingsEvent{}
+
+func (se SetSimulationSettingsEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		s.SetSimulationSettings(se.Key, se.Value)
+	})
+}
+
+func (se SetSimulationSettingsEvent) String() string {
+	return fmt.Sprintf("set simulation settings event with key=%s, value=%v", se.Key, se.Value)
+}
 
 func (se SetSpanConfigEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {

@@ -204,6 +204,8 @@ type State interface {
 	// SetNodeCPURateCapacity sets the CPU rate capacity for the node with ID
 	// NodeID to be equal to the value given.
 	SetNodeCPURateCapacity(NodeID, int64)
+	// SetSimulationSettings sets the simulation settings for the state.
+	SetSimulationSettings(Key string, Value interface{})
 }
 
 // Node is a container for stores and is part of a cluster.
