@@ -2600,10 +2600,12 @@ func (ds *DistSender) sendToReplicas(
 	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
 	// DEFAULT if the class is unknown, to handle mixed-version states gracefully.
 	// Other kinds of overrides are possible, see rpc.ConnectionClassForKey().
+	isFollowerRead := !routeToLeaseholder
+	followerReadsUnhealthy := FollowerReadsUnhealthy.Get(&ds.st.SV)
 	opts := SendOptions{
 		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
 		metrics:                &ds.metrics,
-		dontConsiderConnHealth: ds.dontConsiderConnHealth,
+		dontConsiderConnHealth: ds.dontConsiderConnHealth || (isFollowerRead && followerReadsUnhealthy),
 	}
 	transport := ds.transportFactory(opts, replicas)
 	defer transport.Release()
