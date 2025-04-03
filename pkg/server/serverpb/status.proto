@@ -1383,6 +1383,10 @@ message HotRangesRequest {
     (gogoproto.customname) = "TenantID",
     (gogoproto.nullable) = true
   ];
+  repeated string nodes = 5 [
+    (gogoproto.customname) = "Nodes",
+    (gogoproto.nullable) = true
+  ];
 }
 
 // HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.

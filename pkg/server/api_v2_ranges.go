@@ -497,7 +497,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
+	remoteRequest := serverpb.HotRangesRequest{Nodes: []string{"local"}}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
