@@ -1,13 +1,12 @@
 /* setup */
-CREATE TABLE t (i INT PRIMARY KEY);
+CREATE TABLE t (i INT);
 INSERT INTO t(i) VALUES (1), (2), (3);
 ----
 ...
 +object {100 101 t} -> 104
 
 /* test */
-ALTER TABLE t ADD CHECK (i > 0)
----;
+ALTER TABLE t ADD CHECK (i > 0);
 ----
 begin transaction #1
 # begin StatementPhase
@@ -22,7 +21,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -53,13 +52,15 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
-     nextColumnId: 2
+     nextColumnId: 3
   -  nextConstraintId: 2
   +  nextConstraintId: 3
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -68,7 +69,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -91,6 +92,7 @@ upsert descriptor #104
   +    nameMapping:
   +      columns:
   +        "1": i
+  +        "2": rowid
   +        "4294967292": crdb_internal_origin_timestamp
   +        "4294967293": crdb_internal_origin_id
   +        "4294967294": tableoid
@@ -132,13 +134,15 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
-     nextColumnId: 2
+     nextColumnId: 3
   -  nextConstraintId: 2
   +  nextConstraintId: 3
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -152,11 +156,11 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+## PostCommitPhase stage 1 of 3 with 1 ValidationType op
 validate CHECK constraint check_i in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 3 MutationType ops
+## PostCommitPhase stage 2 of 3 with 3 MutationType ops
 upsert descriptor #104
   ...
        expr: i > 0:::INT8
@@ -164,6 +168,37 @@ upsert descriptor #104
   -    validity: Validating
      columns:
      - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        constraintId: 2
+  -        expr: i > 0:::INT8
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 MutationType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 3 with 3 MutationType ops
+upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -175,6 +210,7 @@ upsert descriptor #104
   -    nameMapping:
   -      columns:
   -        "1": i
+  -        "2": rowid
   -        "4294967292": crdb_internal_origin_timestamp
   -        "4294967293": crdb_internal_origin_id
   -        "4294967294": tableoid
@@ -198,30 +234,12 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
-     modificationTime: {}
-  -  mutations:
-  -  - constraint:
-  -      check:
-  -        columnIds:
-  -        - 1
-  -        constraintId: 2
-  -        expr: i > 0:::INT8
-  -        name: crdb_internal_constraint_2_name_placeholder
-  -        validity: Validating
-  -      foreignKey: {}
-  -      name: crdb_internal_constraint_2_name_placeholder
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-     name: t
-     nextColumnId: 2
-  ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
@@ -229,5 +247,5 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #4
+commit transaction #5
 # end PostCommitPhase

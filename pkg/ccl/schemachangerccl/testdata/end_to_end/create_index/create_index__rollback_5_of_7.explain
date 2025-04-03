@@ -10,7 +10,7 @@ EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
 Schema change plan for rolling back CREATE INDEX idx ON defaultdb.public.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (‹1›));
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT
       │    │    ├── MERGE_ONLY       → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC           → ABSENT      IndexPartitioning:{DescID: 104 (t), IndexID: 2 (idx-)}
@@ -35,16 +35,23 @@ Schema change plan for rolling back CREATE INDEX idx ON defaultdb.public.t (id, 
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
-           └── 6 Mutation operations
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
+      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
+      │    └── 6 Mutation operations
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

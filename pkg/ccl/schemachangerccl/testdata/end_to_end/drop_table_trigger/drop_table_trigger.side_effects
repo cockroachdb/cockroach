@@ -17,7 +17,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 51 MutationType ops
+## StatementPhase stage 1 of 1 with 52 MutationType ops
 delete object namespace entry {100 101 t} -> 104
 upsert descriptor #104
   ...
@@ -29,6 +29,7 @@ upsert descriptor #104
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
   -    dependsOnRoutines:
@@ -50,8 +51,8 @@ upsert descriptor #104
   +  state: DROP
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -63,15 +64,15 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 54 MutationType ops
+## PreCommitPhase stage 2 of 2 with 55 MutationType ops
 delete object namespace entry {100 101 t} -> 104
 upsert descriptor #104
   ...
@@ -98,6 +99,7 @@ upsert descriptor #104
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
   -    dependsOnRoutines:
@@ -119,8 +121,8 @@ upsert descriptor #104
   +  state: DROP
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -139,8 +141,8 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP TABLE defaultdb.public.t"
@@ -177,8 +179,8 @@ upsert descriptor #104
   ...
      triggers: []
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #105
    function:
   -  declarativeSchemaChangerState:
@@ -193,8 +195,8 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
      volatility: VOLATILE
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP TABLE defaultdb.public.t"

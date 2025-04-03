@@ -13,4 +13,4 @@ ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
 EXPLAIN (DDL, SHAPE) ALTER PARTITION p2 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 10;
 ----
 Schema change plan for ALTER PARTITION ‹p2› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹10›; following ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›; ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

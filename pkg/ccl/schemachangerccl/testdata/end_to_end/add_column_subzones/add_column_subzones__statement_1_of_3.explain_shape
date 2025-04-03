@@ -8,4 +8,4 @@ CREATE TABLE t (
 EXPLAIN (DDL, SHAPE) ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
 ----
 Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹1›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

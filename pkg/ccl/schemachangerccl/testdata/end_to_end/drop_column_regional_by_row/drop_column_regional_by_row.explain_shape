@@ -17,4 +17,4 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    └── from table_regional_by_row@[3] into table_regional_by_row_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey+ in relation table_regional_by_row
- └── execute 3 system table mutations transactions
+ └── execute 4 system table mutations transactions

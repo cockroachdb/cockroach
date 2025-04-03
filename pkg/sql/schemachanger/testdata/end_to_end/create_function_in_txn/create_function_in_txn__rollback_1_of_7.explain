@@ -50,10 +50,13 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT  → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
            ├── 1 element transitioning toward ABSENT
-           │    └── DROPPED → ABSENT Function:{DescID: 105 (t-)}
-           └── 4 Mutation operations
+           │    └── DROPPED → ABSENT           Function:{DescID: 105 (t-)}
+           └── 5 Mutation operations
                 ├── DeleteDescriptor {"DescriptorID":105}
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

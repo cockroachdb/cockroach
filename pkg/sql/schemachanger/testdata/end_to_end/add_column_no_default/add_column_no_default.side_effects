@@ -24,7 +24,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -65,7 +65,9 @@ upsert descriptor #106
        unique: true
        vecConfig: {}
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -74,7 +76,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 6 MutationType ops
+## PreCommitPhase stage 2 of 2 with 7 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -145,7 +147,9 @@ upsert descriptor #106
        unique: true
        vecConfig: {}
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -180,11 +184,11 @@ upsert descriptor #106
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -196,6 +200,39 @@ upsert descriptor #106
   +      family: IntFamily
   +      oid: 20
   +      width: 64
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+     id: 106
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      id: 2
+  -      name: j
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+adding table for stats refresh: 106
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #106
+  ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
@@ -227,35 +264,18 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     id: 106
-     modificationTime: {}
-  -  mutations:
-  -  - column:
-  -      id: 2
-  -      name: j
-  -      nullable: true
-  -      type:
-  -        family: IntFamily
-  -        oid: 20
-  -        width: 64
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  +  mutations: []
-     name: tbl
-     nextColumnId: 3
-  ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 105
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 persist all catalog changes to storage
-adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 106
-commit transaction #4
+commit transaction #5
 # end PostCommitPhase

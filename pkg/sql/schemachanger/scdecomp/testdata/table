@@ -322,6 +322,9 @@ ElementState:
     databaseId: 100
     tableId: 104
   Status: PUBLIC
+- TableSchemaLocked:
+    tableId: 104
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
@@ -938,6 +941,9 @@ ElementState:
     databaseId: 100
     tableId: 105
   Status: PUBLIC
+- TableSchemaLocked:
+    tableId: 105
+  Status: PUBLIC
 - TableZoneConfig:
     seqNum: 0
     tableId: 105
@@ -1349,6 +1355,9 @@ ElementState:
     databaseId: 100
     tableId: 104
   Status: PUBLIC
+- TableSchemaLocked:
+    tableId: 104
+  Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
@@ -1739,6 +1748,9 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
+    tableId: 109
+  Status: PUBLIC
+- TableSchemaLocked:
     tableId: 109
   Status: PUBLIC
 - UserPrivileges:

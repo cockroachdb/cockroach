@@ -32,16 +32,34 @@ Schema change plan for ALTER PARTITION ‹australia› OF INDEX ‹defaultdb›.
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
- │         └── 1 Mutation operation
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (person)}
+ │         └── 2 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              └── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
-           └── 1 Mutation operation
-                └── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (person)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (person), IndexID: 1 (person_pkey), SeqNum: 1, PartitionName: "australia"}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (person)}
+ │         └── 4 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (person)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -25,7 +25,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -94,7 +94,9 @@ upsert descriptor #107
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -103,7 +105,7 @@ upsert descriptor #107
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 9 MutationType ops
+## PreCommitPhase stage 2 of 2 with 10 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -239,7 +241,9 @@ upsert descriptor #107
      nextFamilyId: 1
      nextIndexId: 2
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -253,11 +257,67 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 2 with 1 ValidationType op
+## PostCommitPhase stage 1 of 3 with 1 ValidationType op
 validate CHECK constraint check_i_j in table #107
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 2 with 6 MutationType ops
+## PostCommitPhase stage 2 of 3 with 6 MutationType ops
+upsert descriptor #104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #107
+  ...
+       expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+       name: check_i_j
+  -    validity: Validating
+     columns:
+     - id: 1
+  ...
+     id: 107
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        constraintId: 2
+  -        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 MutationType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 3 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -275,8 +335,8 @@ upsert descriptor #104
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    type:
      arrayTypeId: 106
@@ -293,8 +353,8 @@ upsert descriptor #105
   ...
      referencingDescriptorIds:
      - 107
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #106
   ...
        family: ArrayFamily
@@ -312,15 +372,9 @@ upsert descriptor #106
   ...
      referencingDescriptorIds:
      - 107
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
-  ...
-       expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-       name: check_i_j
-  -    validity: Validating
-     columns:
-     - id: 1
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -356,31 +410,12 @@ upsert descriptor #107
      families:
      - columnIds:
   ...
-     id: 107
-     modificationTime: {}
-  -  mutations:
-  -  - constraint:
-  -      check:
-  -        columnIds:
-  -        - 1
-  -        - 2
-  -        constraintId: 2
-  -        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
-  -        name: crdb_internal_constraint_2_name_placeholder
-  -        validity: Validating
-  -      foreignKey: {}
-  -      name: crdb_internal_constraint_2_name_placeholder
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
+     replacementOf:
        time: {}
+  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
@@ -388,5 +423,5 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 107
-commit transaction #4
+commit transaction #5
 # end PostCommitPhase

@@ -2,11 +2,17 @@ setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 ----
 
-# Ensure that NOT NULL constraint is enforced for inserts with NULL values.
-stage-exec phase=PostCommitPhase stage=:
+# NOT NULL enforced via check constraint initially
+stage-exec phase=PostCommitPhase stage=2
 INSERT INTO t VALUES ($stageKey, NULL);
 ----
-pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
+pq: failed to satisfy CHECK constraint.*
+
+# Ensure that NOT NULL constraint is enforced for inserts with NULL values.
+stage-exec phase=PostCommitPhase stage=3:
+INSERT INTO t VALUES ($stageKey, NULL);
+----
+pq: null value in column "j" violates not-null constraint
 
 # Ensure that inserts with non-null values will succeed.
 stage-exec phase=PostCommitPhase stage=:
