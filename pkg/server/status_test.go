@@ -9,12 +9,15 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -570,4 +573,98 @@ func TestNodesUiMetrics(t *testing.T) {
 			}
 		}
 	}
+}
+
+func hasDescriptorTable(hr *serverpb.HotRangesResponseV2) bool {
+	for _, r := range hr.Ranges {
+		if slices.Contains(r.Tables, "descriptor") {
+			// assert non-zero range, node, and qps
+			if r.RangeID != 0 && r.NodeID != 0 && r.QPS != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestHotRangesPayload(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	testutils.SucceedsSoon(t, func() error {
+		ss := s.TenantStatusServer().(serverpb.TenantStatusServer)
+		resp, err := ss.HotRangesV2(ctx, &serverpb.HotRangesRequest{})
+		if err != nil {
+			return err
+		}
+
+		if !hasDescriptorTable(resp) {
+			return errors.New("waiting for hot ranges to be collected")
+		}
+		return nil
+	})
+}
+
+func TestHotRangesPayloadMultitenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tenantID := roachpb.MustMakeTenantID(2)
+	tt, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: tenantID,
+	})
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		ss := tt.TenantStatusServer().(serverpb.TenantStatusServer)
+		resp, err := ss.HotRangesV2(ctx, &serverpb.HotRangesRequest{TenantID: tenantID.String()})
+		if err != nil {
+			return err
+		}
+
+		if !hasDescriptorTable(resp) {
+			return errors.New("waiting for hot ranges to be collected")
+		}
+		return nil
+	})
 }
