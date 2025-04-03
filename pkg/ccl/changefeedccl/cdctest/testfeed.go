@@ -107,6 +107,6 @@ type EnterpriseTestFeed interface {
 	Progress() (*jobspb.ChangefeedProgress, error)
 	// HighWaterMark returns feed highwatermark.
 	HighWaterMark() (hlc.Timestamp, error)
-	// TickHighWaterMark waits until job highwatermark progresses beyond specified threshold.
-	TickHighWaterMark(minHWM hlc.Timestamp) error
+	// WaitForHighWaterMark waits until job highwatermark progresses beyond specified threshold.
+	WaitForHighWaterMark(minHWM hlc.Timestamp) error
 }
