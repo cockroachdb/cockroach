@@ -4348,7 +4348,7 @@ func TestChangefeedEnrichedWithDiff(t *testing.T) {
 		assertion func(topic string) []string
 	}{
 		{
-			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook", "cloudstorage"},
 			assertion: func(topic string) []string {
 				return []string{
 					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "before": null, "op": "c"}`, topic),
@@ -4536,6 +4536,7 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 		})
 	})
 }
+
 func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4631,7 +4632,7 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 				}
 			}
-			for _, sink := range []string{"kafka", "pubsub", "sinkless"} {
+			for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage"} {
 				testLocality := roachpb.Locality{
 					Tiers: []roachpb.Tier{{
 						Key:   "region",
@@ -7114,7 +7115,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `this sink is incompatible with envelope=enriched`,
-		`CREATE CHANGEFEED FOR foo INTO 'nodelocal://.' WITH envelope=enriched`,
+		`CREATE CHANGEFEED FOR foo INTO 'pulsar://.' WITH envelope=enriched`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `enriched_properties is only usable with envelope=enriched`,

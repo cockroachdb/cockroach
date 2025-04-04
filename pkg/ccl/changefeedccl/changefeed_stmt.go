@@ -1047,6 +1047,7 @@ func validateSink(
 			sinkTypeKafka:          {},
 			sinkTypeWebhook:        {},
 			sinkTypeSinklessBuffer: {},
+			sinkTypeCloudstorage:   {},
 		}
 		if _, ok := allowedSinkTypes[sinkTy]; !ok {
 			return errors.Newf("envelope=%s is incompatible with %s sink", changefeedbase.OptEnvelopeEnriched, sinkTy)
