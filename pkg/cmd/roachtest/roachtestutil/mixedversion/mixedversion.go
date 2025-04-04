@@ -1026,6 +1026,9 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc 
 // ARM64 builds are only available on v22.2.0+.
 func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 	skipVersions := t.prng.Float64() < t.options.skipVersionProbability
+	numUpgrades := t.numUpgrades()
+	currentVersion := clusterupgrade.CurrentVersion()
+
 	isAvailable := func(v *clusterupgrade.Version) bool {
 		if t.clusterArch() != vm.ArchARM64 {
 			return true
@@ -1033,8 +1036,11 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 
 		return v.AtLeast(minSupportedARM64Version)
 	}
+	isOlderThanMinimumBootstrapVersion := func(v *clusterupgrade.Version) bool {
+		return t.options.minimumBootstrapVersion != nil && v.LessThan(t.options.minimumBootstrapVersion)
+	}
 
-	var numSkips int
+	forceSkipVersion := true
 	// possiblePredecessorsFor returns a list of possible predecessors
 	// for the given release `v`. If skip-version is enabled and
 	// supported, this function will return both the immediate
@@ -1045,6 +1051,12 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 		pred, err := t.options.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion)
 		if err != nil {
 			return nil, err
+		}
+
+		// If the predecessor is older than the minimum bootstrap version,
+		// then it is not a legal predecessor.
+		if isOlderThanMinimumBootstrapVersion(pred) {
+			return nil, nil
 		}
 
 		if !isAvailable(pred) {
@@ -1062,12 +1074,18 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return nil, err
 		}
 
+		// If the skip upgrade predecessor is older than the minimum bootstrap version,
+		// then it is not a legal predecessor.
+		if isOlderThanMinimumBootstrapVersion(predPred) {
+			return []*clusterupgrade.Version{pred}, nil
+		}
+
 		// If we haven't performed a skip-version upgrade yet, do it. This logic
 		// makes sure that, when skip-version upgrades are enabled, it happens
 		// when upgrading to the current release, which is the most important
 		// upgrade to be tested on any release branch.
-		if numSkips == 0 {
-			numSkips++
+		if forceSkipVersion {
+			forceSkipVersion = false
 			return []*clusterupgrade.Version{predPred}, nil
 		}
 
@@ -1078,7 +1096,7 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 
 	// possibleUpgradePathsMap maps a version to the possible upgrade paths that
 	// can be taken with exactly n upgrades.
-	possibleUpgradePathsMap := make(map[*clusterupgrade.Version]map[int][][]*clusterupgrade.Version)
+	possibleUpgradePathsMap := make(map[string]map[int][][]*clusterupgrade.Version)
 	// findPossibleUpgradePaths finds all legal upgrade paths ending at version `v` with
 	// exactly `numUpgrades` upgrades.
 	var findPossibleUpgradePaths func(v *clusterupgrade.Version, numUpgrades int) ([][]*clusterupgrade.Version, error)
@@ -1088,9 +1106,9 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return [][]*clusterupgrade.Version{{v}}, nil
 		}
 		// Check if we have already computed the possible upgrade paths for this version.
-		if _, ok := possibleUpgradePathsMap[v]; !ok {
-			possibleUpgradePathsMap[v] = make(map[int][][]*clusterupgrade.Version)
-		} else if paths, ok := possibleUpgradePathsMap[v][numUpgrades]; ok {
+		if _, ok := possibleUpgradePathsMap[v.String()]; !ok {
+			possibleUpgradePathsMap[v.String()] = make(map[int][][]*clusterupgrade.Version)
+		} else if paths, ok := possibleUpgradePathsMap[v.String()][numUpgrades]; ok {
 			return paths, nil
 		}
 
@@ -1103,11 +1121,6 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return nil, err
 		}
 		for _, pred := range predecessors {
-			// If the predecessor is older than the minimum bootstrapped version, then
-			// it's not a legal upgrade path.
-			if t.options.minimumBootstrapVersion != nil && pred.LessThan(t.options.minimumBootstrapVersion) {
-				continue
-			}
 			predPaths, err := findPossibleUpgradePaths(pred, numUpgrades-1)
 			if err != nil {
 				return nil, err
@@ -1117,13 +1130,11 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			}
 		}
 
-		possibleUpgradePathsMap[v][numUpgrades] = paths
+		possibleUpgradePathsMap[v.String()][numUpgrades] = paths
 		return paths, nil
 	}
 
-	currentVersion := clusterupgrade.CurrentVersion()
 	var upgradePath []*clusterupgrade.Version
-	numUpgrades := t.numUpgrades()
 
 	// Best effort to find a valid upgrade path with exactly numUpgrades. If one is
 	// not found because some release is not available for the cluster architecture,
@@ -1141,13 +1152,21 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			upgradePath = possibleUpgradePaths[t.prng.Intn(len(possibleUpgradePaths))]
 			break
 		}
+		forceSkipVersion = true
 	}
 
-	if len(upgradePath) < numUpgrades {
-		if t.clusterArch() != vm.ArchARM64 {
+	if len(upgradePath) < (numUpgrades + 1) {
+		warnMsg := "WARNING: %d upgrades requested but found plan with only %d upgrades"
+		if skipVersions {
+			t.logger.Printf("%s: prioritizing running at least one skip version upgrade", warnMsg)
+		} else if t.clusterArch() == vm.ArchARM64 {
+			t.logger.Printf("%s: ARM64 is only supported on %s+", warnMsg, minSupportedARM64Version)
+		} else {
 			return nil, errors.Newf("unable to find a valid upgrade path with %d upgrades", numUpgrades)
 		}
-		t.logger.Printf("WARNING: skipping upgrades as ARM64 is only supported on %s+", minSupportedARM64Version)
+	}
+	if skipVersions && forceSkipVersion {
+		t.logger.Printf("WARNING: skip version upgrades were enabled but were not performed because the minimum supported or bootstrap version did not allow")
 	}
 	return upgradePath, nil
 }
