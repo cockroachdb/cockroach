@@ -28,10 +28,9 @@ type preparedStatementsAccessor interface {
 	// List returns all prepared statements as a map keyed by name.
 	// The map itself is a copy of the prepared statements.
 	List() map[string]*prep.Statement
-	// Get returns the prepared statement with the given name. If touchLRU is
-	// true, this counts as an access for LRU bookkeeping. The returned bool is
-	// false if a statement with the given name doesn't exist.
-	Get(name string, touchLRU bool) (*prep.Statement, bool)
+	// Get returns the prepared statement with the given name. The returned bool
+	// is false if a statement with the given name doesn't exist.
+	Get(name string) (*prep.Statement, bool)
 	// Delete removes the PreparedStatement with the provided name from the
 	// collection. If a portal exists for that statement, it is also removed.
 	// The method returns true if statement with that name was found and removed,
@@ -51,7 +50,7 @@ func (e emptyPreparedStatements) List() map[string]*prep.Statement {
 	return nil
 }
 
-func (e emptyPreparedStatements) Get(string, bool) (*prep.Statement, bool) {
+func (e emptyPreparedStatements) Get(string) (*prep.Statement, bool) {
 	return nil, false
 }
 

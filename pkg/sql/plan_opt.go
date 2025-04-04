@@ -95,7 +95,7 @@ func (p *planner) prepareUsingOptimizer(
 		// we need to set the expected output columns to the output columns of the
 		// prepared statement that the user is trying to execute.
 		name := string(t.Name)
-		prepared, ok := p.preparedStatements.Get(name, true /* touchLRU */)
+		prepared, ok := p.preparedStatements.Get(name)
 		if !ok {
 			// We're trying to prepare an EXECUTE of a statement that doesn't exist.
 			// Let's just give up at this point.

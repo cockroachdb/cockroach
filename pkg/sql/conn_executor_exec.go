@@ -525,11 +525,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -845,7 +844,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -1483,11 +1482,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -1872,7 +1870,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -2514,7 +2512,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		return err
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
 	// We need to step the transaction's internal read sequence before committing
 	// if it has stepping enabled. If it doesn't have stepping enabled, then we
@@ -2644,7 +2642,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
 	// A non-retryable error automatically rolls-back the transaction if there are
