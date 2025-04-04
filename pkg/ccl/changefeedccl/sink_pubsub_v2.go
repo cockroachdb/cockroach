@@ -104,7 +104,7 @@ func makePubsubSinkClient(
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	pubsubURL := &changefeedbase.SinkURL{URL: u}
 
 	projectID := pubsubURL.Host
 	if projectID == "" {
@@ -295,10 +295,10 @@ func (pe *pubsubSinkClient) Close() error {
 }
 
 func makePublisherClient(
-	ctx context.Context, url sinkURL, unordered bool, nm *cidr.NetMetrics,
+	ctx context.Context, url *changefeedbase.SinkURL, unordered bool, nm *cidr.NetMetrics,
 ) (*pubsub.PublisherClient, error) {
 	const regionParam = "region"
-	region := url.consumeParam(regionParam)
+	region := url.ConsumeParam(regionParam)
 	var endpoint string
 	if region == "" {
 		if unordered {
@@ -351,7 +351,9 @@ func gcpEndpointForRegion(region string) string {
 
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
 // getGCPCredentials returns gcp credentials parsed out from url
-func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, error) {
+func getGCPCredentials(
+	ctx context.Context, u *changefeedbase.SinkURL,
+) (option.ClientOption, error) {
 	const authParam = "AUTH"
 	const assumeRoleParam = "ASSUME_ROLE"
 	const authSpecified = "specified"
@@ -361,8 +363,8 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	var credsJSON []byte
 	var creds *google.Credentials
 	var err error
-	authOption := u.consumeParam(authParam)
-	assumeRoleOption := u.consumeParam(assumeRoleParam)
+	authOption := u.ConsumeParam(authParam)
+	assumeRoleOption := u.ConsumeParam(assumeRoleParam)
 	authScope := gcpScope
 	if assumeRoleOption != "" {
 		// If we need to assume a role, the credentials need to have the scope to
@@ -382,10 +384,10 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	case authDefault:
 		fallthrough
 	default:
-		if u.q.Get(credentialsParam) == "" {
+		if u.PeekParam(credentialsParam) == "" {
 			return nil, errors.New("missing credentials parameter")
 		}
-		err := u.decodeBase64(credentialsParam, &credsJSON)
+		err := u.DecodeBase64(credentialsParam, &credsJSON)
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding credentials json")
 		}
@@ -445,9 +447,9 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	pubsubURL := &changefeedbase.SinkURL{URL: u}
 	var includeTableNameAttribute bool
-	_, err = pubsubURL.consumeBool(changefeedbase.SinkParamTableNameAttribute, &includeTableNameAttribute)
+	_, err = pubsubURL.ConsumeBool(changefeedbase.SinkParamTableNameAttribute, &includeTableNameAttribute)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +459,7 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
+	pubsubTopicName := pubsubURL.ConsumeParam(changefeedbase.SinkParamTopicName)
 	topicNamer, err := MakeTopicNamer(targets, WithSingleName(pubsubTopicName))
 	if err != nil {
 		return nil, err
