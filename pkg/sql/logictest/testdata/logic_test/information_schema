@@ -3902,6 +3902,7 @@ WHERE
 ORDER BY variable
 ----
 variable                                                   value
+allow_create_trigger_function_with_argv_references         off
 allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off

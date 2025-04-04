@@ -447,7 +447,7 @@ func (b *Builder) buildRoutine(
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
 			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(),
-			isProc, false /* isDoBlock */, true /* buildSQL */, outScope,
+			isProc, false /* isDoBlock */, false /* isTriggerFn */, true /* buildSQL */, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
@@ -859,7 +859,8 @@ func (b *Builder) buildPLpgSQLDoBody(
 	// Build an expression for each statement in the function body.
 	plBuilder := newPLpgSQLBuilder(
 		b, doBlockRoutineName, do.Block.Label, nil /* colRefs */, nil /* routineParams */, types.Void,
-		true /* isProc */, true /* isDoBlock */, true /* buildSQL */, nil, /* outScope */
+		true /* isProc */, true, /* isDoBlock */
+		false /* isTriggerFn */, true /* buildSQL */, nil, /* outScope */
 	)
 	// Allocate a fresh scope, since DO blocks do not take parameters or reference
 	// variables or columns from the calling context.
