@@ -457,7 +457,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 
 	// TODO(xinhaoz): We'll come back and add the sql stats sink once we
 	// enable the SQL stats ingestion for sql stats.
-	ingester := sslocal.NewSQLStatsIngester()
+	ingester := sslocal.NewSQLStatsIngester(nil /* testing knobs */)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
@@ -567,7 +567,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		// Construct the SQL Stats machinery.
-		insightsProvider := insights.New(st, insights.NewMetrics(), nil)
+		insightsProvider := insights.New(st, insights.NewMetrics())
 		sqlStats := sslocal.New(
 			st,
 			sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -578,7 +578,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			nil,
 		)
-		ingester := sslocal.NewSQLStatsIngester(insightsProvider)
+		ingester := sslocal.NewSQLStatsIngester(nil /* testing knobs */, insightsProvider)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,

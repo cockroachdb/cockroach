@@ -441,7 +441,7 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -463,7 +463,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
-	sqlStatsIngester := sslocal.NewSQLStatsIngester(insightsProvider)
+	sqlStatsIngester := sslocal.NewSQLStatsIngester(cfg.SQLStatsTestingKnobs, insightsProvider)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {

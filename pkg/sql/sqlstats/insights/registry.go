@@ -17,10 +17,9 @@ import (
 // statement execution to determine which statements are outliers and
 // writes insights into the provided sink.
 type lockingRegistry struct {
-	detector     detector
-	causes       *causes
-	store        *LockingStore
-	testingKnobs *TestingKnobs
+	detector detector
+	causes   *causes
+	store    *LockingStore
 }
 
 // Instead of creating and allocating a map to track duplicate
@@ -150,13 +149,10 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(
-	st *cluster.Settings, detector detector, store *LockingStore, knobs *TestingKnobs,
-) *lockingRegistry {
+func newRegistry(st *cluster.Settings, detector detector, store *LockingStore) *lockingRegistry {
 	return &lockingRegistry{
-		detector:     detector,
-		causes:       &causes{st: st},
-		store:        store,
-		testingKnobs: knobs,
+		detector: detector,
+		causes:   &causes{st: st},
+		store:    store,
 	}
 }

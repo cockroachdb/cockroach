@@ -12,7 +12,6 @@ go_library(
         "provider.go",
         "registry.go",
         "store.go",
-        "test_utils.go",
         "util.go",
     ],
     embed = [":insights_go_proto"],
