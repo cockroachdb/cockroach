@@ -70,10 +70,9 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 
 		registry.observeTransaction(txns[0].txn, txns[0].stmts)
-		t.Log("aaaaaaaaaah ", store.stmtCount.Load())
 
 		expected := []*Insight{{
 			Session:     session,
@@ -121,7 +120,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		// Transaction status is set during expectedTxnInsight stats recorded based on
 		// if the transaction committed. We'll inject the failure here to align
 		// it with the test. The insights integration tests will verify that this
@@ -156,7 +155,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 0)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, []*sqlstats.RecordedStmtStats{statement})
 
 		var actual []*Insight
@@ -180,7 +179,7 @@ func TestRegistry(t *testing.T) {
 			ServiceLatencySec: 0.5,
 		}
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, []*sqlstats.RecordedStmtStats{stmt})
 
 		var actual []*Insight
@@ -234,7 +233,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 
 		expected := []*Insight{{
 			Session:     session,
@@ -317,7 +316,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 
 		registry.observeTransaction(transaction, []*sqlstats.RecordedStmtStats{
 			statement, siblingStatement,
@@ -335,14 +334,14 @@ func TestRegistry(t *testing.T) {
 	t.Run("txn with no stmts", func(t *testing.T) {
 		transaction := &sqlstats.RecordedTxnStats{TransactionID: uuid.MakeV4(), Committed: true, SessionID: session.ID}
 		st := cluster.MakeTestingClusterSettings()
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st), nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		require.NotPanics(t, func() { registry.observeTransaction(transaction, nil) })
 	})
 
 	t.Run("txn with high accumulated contention without high single stmt contention", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		contentionDuration := 10 * time.Second
 		statement := &sqlstats.RecordedStmtStats{
 			SessionID:         session.ID,
@@ -439,7 +438,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, stmts)
 
 		expected := []*Insight{

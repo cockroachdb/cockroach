@@ -70,8 +70,9 @@ func (s *sqlStatsTestSink) ObserveTransaction(
 }
 
 type testEvent struct {
-	sessionID                  string
-	transactionID, statementID uint64
+	sessionID     string
+	transactionID uint64
+	statementID   uint64
 }
 
 func ingestEventsSync(ingester *SQLStatsIngester, events []testEvent) {
@@ -114,36 +115,36 @@ func TestSQLIngester(t *testing.T) {
 		{
 			name: "One session",
 			observations: []testEvent{
-				{sessionID: "a", statementID: 10},
-				{sessionID: "a", transactionID: 100},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 10},
+				{sessionID: "aaaaaaaaaaaaaaaa", transactionID: 100},
 			},
 		},
 		{
 			name: "Interleaved sessions",
 			observations: []testEvent{
-				{sessionID: "a", statementID: 10},
-				{sessionID: "b", statementID: 20},
-				{sessionID: "a", statementID: 11},
-				{sessionID: "b", statementID: 21},
-				{sessionID: "a", transactionID: 100},
-				{sessionID: "b", transactionID: 200},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 10},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 20},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 11},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 21},
+				{sessionID: "aaaaaaaaaaaaaaaa", transactionID: 100},
+				{sessionID: "bbbbbbbbbbbbbbbb", transactionID: 200},
 			},
 		},
 		{
 			name: "Multiple transaction sessions",
 			observations: []testEvent{
-				{sessionID: "a", statementID: 10},
-				{sessionID: "a", statementID: 11},
-				{sessionID: "b", statementID: 20},
-				{sessionID: "b", statementID: 21},
-				{sessionID: "b", transactionID: 1},
-				{sessionID: "a", transactionID: 2},
-				{sessionID: "a", statementID: 10},
-				{sessionID: "a", statementID: 11},
-				{sessionID: "b", statementID: 20},
-				{sessionID: "b", statementID: 21},
-				{sessionID: "b", transactionID: 1},
-				{sessionID: "a", transactionID: 2},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 10},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 11},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 20},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 21},
+				{sessionID: "bbbbbbbbbbbbbbbb", transactionID: 1},
+				{sessionID: "aaaaaaaaaaaaaaaa", transactionID: 2},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 10},
+				{sessionID: "aaaaaaaaaaaaaaaa", statementID: 11},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 20},
+				{sessionID: "bbbbbbbbbbbbbbbb", statementID: 21},
+				{sessionID: "bbbbbbbbbbbbbbbb", transactionID: 1},
+				{sessionID: "aaaaaaaaaaaaaaaa", transactionID: 2},
 			},
 		},
 	}
@@ -155,9 +156,10 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(testSink)
+			ingester := NewSQLStatsIngester(nil, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
+			t.Log(tc.observations)
 			ingestEventsSync(ingester, tc.observations)
 
 			// Wait for the insights to come through.
@@ -188,7 +190,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ingesterCtx)
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(testSink)
+	ingester := NewSQLStatsIngester(nil, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -196,12 +198,12 @@ func TestSQLIngester_Clear(t *testing.T) {
 	// Only 3 events will make it into the sink since we only write 1 transaction.
 	expectedSinkEvents := 3
 	ingesterObservations := []testEvent{
-		{sessionID: "a", statementID: 10},
-		{sessionID: "b", statementID: 20},
-		{sessionID: "a", statementID: 11},
-		{sessionID: "b", statementID: 21},
-		{sessionID: "a", transactionID: 100},
-		{sessionID: "a", statementID: 2},
+		{sessionID: "aaaaaaaaaaaaaaaa", statementID: 10},
+		{sessionID: "bbbbbbbbbbbbbbbb", statementID: 20},
+		{sessionID: "aaaaaaaaaaaaaaaa", statementID: 11},
+		{sessionID: "bbbbbbbbbbbbbbbb", statementID: 21},
+		{sessionID: "aaaaaaaaaaaaaaaa", transactionID: 100},
+		{sessionID: "aaaaaaaaaaaaaaaa", statementID: 2},
 	}
 	ingestEventsSync(ingester, ingesterObservations)
 
@@ -231,7 +233,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 	defer stopper.Stop(ctx)
 
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(sink)
+	ingester := NewSQLStatsIngester(nil, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -273,7 +275,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(sink)
+	ingester := NewSQLStatsIngester(nil, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -304,20 +306,45 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 		sessionA := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
 		sessionB := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 		statementA := &sqlstats.RecordedStmtStats{
-			SessionID: sessionA,
+			SessionID:     sessionA,
+			FingerprintID: 1,
 		}
 		statementB := &sqlstats.RecordedStmtStats{
-			SessionID: sessionB,
+			SessionID:     sessionB,
+			FingerprintID: 1,
 		}
 		// Create an ingester with no sinks.
-		ingester := NewSQLStatsIngester()
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+		ingestCh := make(chan struct{})
+		sessionClearCh := make(chan struct{}, 2)
+		defer close(sessionClearCh)
+		knobs := &sqlstats.TestingKnobs{
+			OnIngesterFlush: func() {
+				select {
+				case ingestCh <- struct{}{}:
+				default:
+
+				}
+			},
+			OnIngesterSessionClear: func(_ clusterunique.ID) {
+				sessionClearCh <- struct{}{}
+			},
+		}
+		ingester := NewSQLStatsIngester(knobs)
+		ingester.Start(ctx, stopper)
 		ingester.IngestStatement(statementA)
 		ingester.IngestStatement(statementB)
+		// Wait for the flush.
+		<-ingestCh
 		require.Len(t, ingester.statementsBySessionID, 2)
 		// Clear the cache.
 		ingester.ClearSession(sessionA)
+		<-sessionClearCh
 		require.Len(t, ingester.statementsBySessionID, 1)
 		ingester.ClearSession(sessionB)
+		<-sessionClearCh
 		require.Len(t, ingester.statementsBySessionID, 0)
 	})
 }

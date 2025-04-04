@@ -132,6 +132,10 @@ func (i *SQLStatsIngester) Start(ctx context.Context, stopper *stop.Stopper, opt
 					i.statementsBySessionID = make(map[clusterunique.ID]*statementBuf)
 				}
 				eventBufferPool.Put(payload.events)
+
+				if i.testingKnobs != nil && i.testingKnobs.OnIngesterFlush != nil {
+					i.testingKnobs.OnIngesterFlush()
+				}
 			case <-stopper.ShouldQuiesce():
 				close(i.closeCh)
 				return
@@ -190,6 +194,11 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 }
 
 func (i *SQLStatsIngester) IngestStatement(statement *sqlstats.RecordedStmtStats) {
+	if i.testingKnobs != nil && i.testingKnobs.IngesterStmtInterceptor != nil {
+		i.testingKnobs.IngesterStmtInterceptor(statement.SessionID, statement)
+		return
+	}
+
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			statement: statement,
@@ -198,6 +207,11 @@ func (i *SQLStatsIngester) IngestStatement(statement *sqlstats.RecordedStmtStats
 }
 
 func (i *SQLStatsIngester) IngestTransaction(transaction *sqlstats.RecordedTxnStats) {
+	if i.testingKnobs != nil && i.testingKnobs.IngesterTxnInterceptor != nil {
+		i.testingKnobs.IngesterTxnInterceptor(transaction.SessionID, transaction)
+		return
+	}
+
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			transaction: transaction,
@@ -261,6 +275,10 @@ func (i *SQLStatsIngester) clearSession(sessionID clusterunique.ID) {
 	if b, ok := i.statementsBySessionID[sessionID]; ok {
 		delete(i.statementsBySessionID, sessionID)
 		b.release()
+
+		if i.testingKnobs != nil && i.testingKnobs.OnIngesterSessionClear != nil {
+			i.testingKnobs.OnIngesterSessionClear(sessionID)
+		}
 
 	}
 }
