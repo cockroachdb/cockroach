@@ -34,17 +34,21 @@ import (
 // sqlServiceLatencyP95Agg is the 10s avg P95 latency of foreground SQL traffic
 // across all nodes measured in milliseconds.
 var sqlServiceLatencyP95Agg = clusterstats.AggQuery{
-	Stat:  sqlServiceLatency,
-	Query: "histogram_quantile(0.95, sum by(le) (rate(sql_service_latency_bucket[30s]))) / (1000*1000)",
-	Tag:   "P95 Foreground Latency (ms)",
+	Stat:           sqlServiceLatency,
+	Query:          "histogram_quantile(0.95, sum by(le) (rate(sql_service_latency_bucket[30s]))) / (1000*1000)",
+	Tag:            "P95 Foreground Latency (ms)",
+	Unit:           "milliseconds",
+	IsHigherBetter: false,
 }
 
 var queriesThroughput = clusterstats.ClusterStat{Query: "rate(sql_query_count[30s])", LabelName: "node"}
 
 var queriesThroughputAgg = clusterstats.AggQuery{
-	Stat:  queriesThroughput,
-	Query: applyAggQuery("sum", queriesThroughput.Query),
-	Tag:   "Queries over Time",
+	Stat:           queriesThroughput,
+	Query:          applyAggQuery("sum", queriesThroughput.Query),
+	Tag:            "Queries over Time",
+	Unit:           "queries/sec",
+	IsHigherBetter: true,
 }
 
 type onlineRestoreSpecs struct {

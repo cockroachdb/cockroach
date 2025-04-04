@@ -42,7 +42,7 @@ var metricsRegExTag = regexp.MustCompile(`^.*,tag="(\d+)",agg_tag=.*$`)
 
 // testingComplexAggFn returns the coefficient of variation of tagged values at
 // the same index.
-func testingComplexAggFn(_ string, matSeries [][]float64) (string, []float64) {
+func testingComplexAggFn(_ string, matSeries [][]float64) (string, []float64, string, bool) {
 	agg := make([]float64, 0, 1)
 	for _, series := range matSeries {
 		stdev, _ := stats.StandardDeviationSample(series)
@@ -53,11 +53,11 @@ func testingComplexAggFn(_ string, matSeries [][]float64) (string, []float64) {
 		}
 		agg = append(agg, cv)
 	}
-	return "cv(foo)", agg
+	return "cv(foo)", agg, "ratio", false
 }
 
 // testingAggFn returns the sum of tagged values at the same index.
-func testingAggFn(_ string, matSeries [][]float64) (string, []float64) {
+func testingAggFn(_ string, matSeries [][]float64) (string, []float64, string, bool) {
 	agg := make([]float64, 0, 1)
 	for _, series := range matSeries {
 		curSum := 0.0
@@ -66,7 +66,7 @@ func testingAggFn(_ string, matSeries [][]float64) (string, []float64) {
 		}
 		agg = append(agg, curSum)
 	}
-	return "sum(foo)", agg
+	return "sum(foo)", agg, "count", true
 }
 
 type expectPromRangeQuery struct {
@@ -84,16 +84,22 @@ var (
 	barStat = ClusterStat{Query: "bar_count", LabelName: "instance"}
 
 	fooAggQuery = AggQuery{
-		Stat:  fooStat,
-		AggFn: testingAggFn,
+		Stat:           fooStat,
+		AggFn:          testingAggFn,
+		Unit:           "count",
+		IsHigherBetter: true,
 	}
 	barAggQuery = AggQuery{
-		Stat:  barStat,
-		AggFn: testingAggFn,
+		Stat:           barStat,
+		AggFn:          testingAggFn,
+		Unit:           "count",
+		IsHigherBetter: true,
 	}
 	fooComplexAggQuery = AggQuery{
-		Stat:  fooStat,
-		AggFn: testingComplexAggFn,
+		Stat:           fooStat,
+		AggFn:          testingComplexAggFn,
+		Unit:           "ratio",
+		IsHigherBetter: false,
 	}
 
 	fooTS = promTimeSeries{
@@ -188,13 +194,15 @@ var (
 	makeExpectedTs = func(ts promTimeSeries, aggQuery AggQuery, ticks int, tags ...string) StatSummary {
 		filteredMap := filterTSMap(ts.values, ticks, tags...)
 		tsMat := convertEqualLengthMapToMat(filteredMap)
-		tag, val := aggQuery.AggFn("", tsMat)
+		tag, val, unit, isHigherBetter := aggQuery.AggFn("", tsMat)
 		return StatSummary{
-			Time:   makeTickList(statsTestingStartTime, fooTS.interval, ticks-1),
-			Value:  val,
-			Tagged: filteredMap,
-			AggTag: tag,
-			Tag:    aggQuery.Stat.Query,
+			Time:           makeTickList(statsTestingStartTime, fooTS.interval, ticks-1),
+			Value:          val,
+			Tagged:         filteredMap,
+			AggTag:         tag,
+			Tag:            aggQuery.Stat.Query,
+			Unit:           unit,
+			IsHigherBetter: isHigherBetter,
 		}
 	}
 
@@ -501,7 +509,9 @@ const expectedJSONContent = `{
         ]
       },
       "AggTag": "sum(foo)",
-      "Tag": "bar_count"
+      "Tag": "bar_count",
+      "Unit": "count",
+      "IsHigherBetter": true
     },
     "foo_count": {
       "Time": [
@@ -537,7 +547,9 @@ const expectedJSONContent = `{
         ]
       },
       "AggTag": "sum(foo)",
-      "Tag": "foo_count"
+      "Tag": "foo_count",
+      "Unit": "count",
+      "IsHigherBetter": true
     }
   }
 }`
