@@ -1,4 +1,4 @@
-# Check if summary is generated correctly
+# Check if a regression is detected correctly
 config old=abcdef123 new=qwerty456
 benchmarks:
   - display_name: Sysbench
