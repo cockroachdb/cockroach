@@ -201,6 +201,10 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	if m.Reject {
 		fmt.Fprintf(&buf, " Rejected (Hint: %d)", m.RejectHint)
 	}
+	if m.RejectHint != 0 && m.LogTerm != 0 {
+		fmt.Fprintf(&buf, " RejectIndex:%d", m.RejectHint)
+		fmt.Fprintf(&buf, " RejectTerm:%d", m.LogTerm)
+	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
 	}
