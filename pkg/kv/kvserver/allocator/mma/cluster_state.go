@@ -6,17 +6,21 @@
 package mma
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
 
-// These values can sometimes be used in replicaType, replicaIDAndType,
-// replicaState, specifically when used in the context of a
+// These values can sometimes be used in ReplicaType, ReplicaIDAndType,
+// ReplicaState, specifically when used in the context of a
 // pendingReplicaChange.
 const (
 	// unknownReplicaID is used with a change that proposes to add a replica
@@ -26,19 +30,23 @@ const (
 	noReplicaID roachpb.ReplicaID = -2
 )
 
-type replicaType struct {
-	replicaType   roachpb.ReplicaType
-	isLeaseholder bool
+type ReplicaType struct {
+	ReplicaType   roachpb.ReplicaType
+	IsLeaseholder bool
 }
 
-type replicaIDAndType struct {
-	// replicaID can be set to unknownReplicaID or noReplicaID.
+type ReplicaIDAndType struct {
+	// ReplicaID can be set to unknownReplicaID or noReplicaID.
 	roachpb.ReplicaID
-	replicaType
+	// In general, all roachpb.ReplicaTypes can be represented here. Some
+	// contexts that use ReplicaIDAndType may only represent a subset of
+	// roachpb.ReplicaTypes -- the commentary in those contexts will specify if
+	// that is the case.
+	ReplicaType
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (rt replicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
+func (rt ReplicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Print("replica-id=")
 	switch rt.ReplicaID {
 	case unknownReplicaID:
@@ -48,20 +56,20 @@ func (rt replicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		w.Print(rt.ReplicaID)
 	}
-	w.Printf(" type=%v", rt.replicaType.replicaType)
-	if rt.isLeaseholder {
+	w.Printf(" type=%v", rt.ReplicaType.ReplicaType)
+	if rt.IsLeaseholder {
 		w.Print(" leaseholder=true")
 	}
 }
 
-func (rt replicaIDAndType) String() string {
+func (rt ReplicaIDAndType) String() string {
 	return redact.StringWithoutMarkers(rt)
 }
 
 // subsumesChange returns true if rit subsumes prev and next. prev is the state
 // before the proposed change and next is the state after the proposed change.
 // rit is the current observed state.
-func (rit replicaIDAndType) subsumesChange(prev, next replicaIDAndType) bool {
+func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 	if rit.ReplicaID == noReplicaID && next.ReplicaID == noReplicaID {
 		// Removal has happened.
 		return true
@@ -76,51 +84,45 @@ func (rit replicaIDAndType) subsumesChange(prev, next replicaIDAndType) bool {
 	// are as expected, and if we were either not trying to change the
 	// leaseholder, or that leaseholder change has happened, then the change has
 	// been subsumed.
-	switch rit.replicaType.replicaType {
-	// TODO(kvoli,sumeer): in some cases we normalize the types, but we don't
-	// document it clearly. And documentation is insufficient -- we should use a
-	// different type, and centralize the normalization code. Examples: this
-	// normalization; the pendingReplicaChange.{prev,next} fields;
-	// analyzedConstraintsBuf.tryAddingStore. It may not be possible to normalize
-	// in the same way, as here we are concerned with load, unlike in
-	// analyzedConstraintsBuf.tryAddingStore.
+	switch rit.ReplicaType.ReplicaType {
 	case roachpb.VOTER_INCOMING:
 		// Already seeing the load, so consider the change done.
-		rit.replicaType.replicaType = roachpb.VOTER_FULL
+		rit.ReplicaType.ReplicaType = roachpb.VOTER_FULL
 	}
 	// rit.replicaId equal to LEARNER, VOTER_DEMOTING* are left as-is. If next
-	// is trying to remove a replica, this store is still seeing some of the
-	// load.
-	if rit.replicaType == next.replicaType && (prev.isLeaseholder == next.isLeaseholder ||
-		rit.isLeaseholder == next.isLeaseholder) {
+	// is trying to remove a replica, this change has not finished yet, and the
+	// store is still seeing the load corresponding to the state it is exiting.
+	if rit.ReplicaType == next.ReplicaType && (prev.IsLeaseholder == next.IsLeaseholder ||
+		rit.IsLeaseholder == next.IsLeaseholder) {
 		return true
 	}
 	return false
 }
 
-type replicaState struct {
-	replicaIDAndType
-	// voterIsLagging can be set for a VOTER_FULL replica that has fallen behind
+type ReplicaState struct {
+	ReplicaIDAndType
+	// VoterIsLagging can be set for a VOTER_FULL replica that has fallen behind
 	// (and possibly even needs a snapshot to catch up). It is a hint to the
 	// allocator not to transfer the lease to this replica.
-	voterIsLagging bool
+	VoterIsLagging bool
 	// TODO(kvoli,sumeerbhola): Add in rac2.SendQueue information to prevent
 	// lease transfers to replicas which are not able to take the lease due to a
 	// send queue.
 }
 
-// changeID is a unique ID, in the context of this data-structure and when
+// ChangeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
-type changeID uint64
+type ChangeID uint64
 
-type replicaChange struct {
+type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
-	loadDelta          loadVector
-	secondaryLoadDelta secondaryLoadVector
+	loadDelta          LoadVector
+	secondaryLoadDelta SecondaryLoadVector
 
-	storeID roachpb.StoreID
+	// target is the target {store,node} for the change.
+	target  roachpb.ReplicationTarget
 	rangeID roachpb.RangeID
 
 	// NB: 0 is not a valid ReplicaID, but this component does not care about
@@ -130,43 +132,63 @@ type replicaChange struct {
 	// Only following cases can happen:
 	//
 	// - prev.replicaID >= 0 && next.replicaID == noReplicaID: outgoing replica.
-	//   prev.isLeaseholder is false, since we shed a lease first.
+	//   prev.IsLeaseholder is false, since we shed a lease first.
 	//
 	// - prev.replicaID == noReplicaID && next.replicaID == unknownReplicaID:
-	//   incoming replica, next.replicaType must be VOTER_FULL or NON_VOTER.
-	//   Both isLeaseholder fields must be false.
+	//   incoming replica, next.ReplicaType must be VOTER_FULL or NON_VOTER.
+	//   Both IsLeaseholder fields must be false.
 	//
 	// - prev.replicaID >= 0 && next.replicaID >= 0: can be a change to
-	//   isLeaseholder, or replicaType. next.replicaType must be VOTER_FULL or
+	//   IsLeaseholder, or ReplicaType. next.ReplicaType must be VOTER_FULL or
 	//   NON_VOTER.
-	prev replicaState
-	next replicaIDAndType
+	prev ReplicaState
+	next ReplicaIDAndType
 }
 
-func (rc replicaChange) isRemoval() bool {
+func (rc ReplicaChange) String() string {
+	return redact.StringWithoutMarkers(rc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rc ReplicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%v %v (%v)->(%v)", rc.rangeID, rc.target, rc.prev, rc.next)
+}
+
+// isRemoval returns true if the change is a removal of a replica.
+func (rc ReplicaChange) isRemoval() bool {
 	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID == noReplicaID
 }
 
-func (rc replicaChange) isAddition() bool {
+// isAddition returns true if the change is an addition of a replica.
+func (rc ReplicaChange) isAddition() bool {
 	return rc.prev.ReplicaID == noReplicaID && rc.next.ReplicaID == unknownReplicaID
 }
 
-func (rc replicaChange) isUpdate() bool {
+// isUpdate returns true if the change is an update to the replica type or
+// leaseholder status. This includes promotion/demotion changes.
+func (rc ReplicaChange) isUpdate() bool {
 	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0
+}
+
+// isPromoDemo returns true if the change is a promotion or demotion of a
+// replica.
+func (rc ReplicaChange) isPromoDemo() bool {
+	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0 &&
+		rc.prev.ReplicaType.ReplicaType != rc.next.ReplicaType.ReplicaType
 }
 
 func makeLeaseTransferChanges(
 	rangeID roachpb.RangeID,
-	existingReplicas []storeIDAndReplicaState,
-	rLoad rangeLoad,
-	addStoreID, removeStoreID roachpb.StoreID,
-) [2]replicaChange {
+	existingReplicas []StoreIDAndReplicaState,
+	rLoad RangeLoad,
+	addTarget, removeTarget roachpb.ReplicationTarget,
+) [2]ReplicaChange {
 	addIdx, removeIdx := -1, -1
 	for i, replica := range existingReplicas {
-		if replica.StoreID == addStoreID {
+		if replica.StoreID == addTarget.StoreID {
 			addIdx = i
 		}
-		if replica.StoreID == removeStoreID {
+		if replica.StoreID == removeTarget.StoreID {
 			removeIdx = i
 		}
 	}
@@ -176,35 +198,49 @@ func makeLeaseTransferChanges(
 	}
 	if addIdx == -1 {
 		panic(fmt.Sprintf(
-			"new leaseholder replica doesn't exist on store %v", addStoreID))
+			"new leaseholder replica doesn't exist on store %v", addTarget))
 	}
+
 	remove := existingReplicas[removeIdx]
 	add := existingReplicas[addIdx]
+	// Sanity check the lease transfer, we cannot transfer a lease to a replica
+	// that is already a leaseholder, nor can we transfer a lease from a replica
+	// that is not the leaseholder.
+	if !remove.IsLeaseholder {
+		panic(fmt.Sprintf(
+			"r%v lease transfer-from target %v isn't the leaseholder %v replicas=%v",
+			rangeID, removeTarget, remove.ReplicaState, existingReplicas))
+	}
+	if add.IsLeaseholder {
+		panic(fmt.Sprintf(
+			"r%v lease transfer-to target %v is already the leaseholder %v replicas=%v",
+			rangeID, addTarget, add.ReplicaState, existingReplicas))
+	}
 
-	removeLease := replicaChange{
-		storeID: removeStoreID,
+	removeLease := ReplicaChange{
+		target:  removeTarget,
 		rangeID: rangeID,
-		prev:    remove.replicaState,
-		next:    remove.replicaIDAndType,
+		prev:    remove.ReplicaState,
+		next:    remove.ReplicaIDAndType,
 	}
-	addLease := replicaChange{
-		storeID: addStoreID,
+	addLease := ReplicaChange{
+		target:  addTarget,
 		rangeID: rangeID,
-		prev:    add.replicaState,
-		next:    add.replicaIDAndType,
+		prev:    add.ReplicaState,
+		next:    add.ReplicaIDAndType,
 	}
-	removeLease.next.isLeaseholder = false
-	addLease.next.isLeaseholder = true
-	removeLease.secondaryLoadDelta[leaseCount] = -1
-	addLease.secondaryLoadDelta[leaseCount] = 1
+	removeLease.next.IsLeaseholder = false
+	addLease.next.IsLeaseholder = true
+	removeLease.secondaryLoadDelta[LeaseCount] = -1
+	addLease.secondaryLoadDelta[LeaseCount] = 1
 
 	// Only account for the leaseholder CPU, all other primary load dimensions
 	// are ignored. Byte size and write bytes are not impacted by having a range
 	// lease.
-	nonRaftCPU := rLoad.load[cpu] - rLoad.raftCPU
-	removeLease.loadDelta[cpu] = -nonRaftCPU
-	addLease.loadDelta[cpu] = nonRaftCPU
-	return [2]replicaChange{removeLease, addLease}
+	nonRaftCPU := rLoad.Load[CPURate] - rLoad.RaftCPU
+	removeLease.loadDelta[CPURate] = -nonRaftCPU
+	addLease.loadDelta[CPURate] = loadToAdd(nonRaftCPU)
+	return [2]ReplicaChange{removeLease, addLease}
 }
 
 // makeAddReplicaChange creates a replica change which adds the replica type
@@ -212,29 +248,39 @@ func makeLeaseTransferChanges(
 // account for whether the replica is becoming the leaseholder or not.
 //
 // TODO(kvoli,sumeerbhola): Add promotion/demotion changes.
+//
+// TODO: makeAddReplicaChange and makeRemoveReplicaChange are not quite
+// symmetrical. Former takes a roachpb.ReplicaType parameter and the latter a
+// ReplicaState parameter. Hence the latter knows whether it is a leaseholder,
+// but then ignores whether it is a leaseholder in the loadDelta computation,
+// leaving it to the caller to fix it. We should be doing the correct
+// computation here by accepting a ReplicaState parameter in both cases.
 func makeAddReplicaChange(
-	rangeID roachpb.RangeID, rLoad rangeLoad, addStoreID roachpb.StoreID, rType roachpb.ReplicaType,
-) replicaChange {
-	addReplica := replicaChange{
-		storeID: addStoreID,
+	rangeID roachpb.RangeID,
+	rLoad RangeLoad,
+	rType roachpb.ReplicaType,
+	addTarget roachpb.ReplicationTarget,
+) ReplicaChange {
+	addReplica := ReplicaChange{
+		target:  addTarget,
 		rangeID: rangeID,
-		prev: replicaState{
-			replicaIDAndType: replicaIDAndType{
+		prev: ReplicaState{
+			ReplicaIDAndType: ReplicaIDAndType{
 				ReplicaID: noReplicaID,
 			},
 		},
-		next: replicaIDAndType{
+		next: ReplicaIDAndType{
 			ReplicaID: unknownReplicaID,
-			replicaType: replicaType{
-				replicaType: rType,
+			ReplicaType: ReplicaType{
+				ReplicaType: rType,
 			},
 		},
 	}
 
-	addReplica.loadDelta.add(rLoad.load)
+	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
 	// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
 	// assume is associated with the lease.
-	addReplica.loadDelta[cpu] = rLoad.raftCPU
+	addReplica.loadDelta[CPURate] = loadToAdd(rLoad.RaftCPU)
 	return addReplica
 }
 
@@ -242,57 +288,185 @@ func makeAddReplicaChange(
 // given. The load impact of removing the replica does not account for whether
 // the replica was the previous leaseholder or not.
 func makeRemoveReplicaChange(
-	rangeID roachpb.RangeID, rLoad rangeLoad, remove storeIDAndReplicaState,
-) replicaChange {
-	removeReplica := replicaChange{
-		storeID: remove.StoreID,
+	rangeID roachpb.RangeID,
+	rLoad RangeLoad,
+	replicaState ReplicaState,
+	removeTarget roachpb.ReplicationTarget,
+) ReplicaChange {
+	removeReplica := ReplicaChange{
+		target:  removeTarget,
 		rangeID: rangeID,
-		prev:    remove.replicaState,
-		next: replicaIDAndType{
+		prev:    replicaState,
+		next: ReplicaIDAndType{
 			ReplicaID: noReplicaID,
 		},
 	}
-	removeReplica.loadDelta.subtract(rLoad.load)
+	removeReplica.loadDelta.subtract(rLoad.Load)
 	// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
 	// assume is associated with the lease.
-	removeReplica.loadDelta[cpu] = -rLoad.raftCPU
+	removeReplica.loadDelta[CPURate] = -rLoad.RaftCPU
 	return removeReplica
 }
 
 // makeRebalanceReplicaChanges creates to replica changes, adding a replica and
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
-//
-// TODO(kvoli,sumeerbhola): If the leaseholder is being rebalanced, we need to
-// ensure the incoming replica is eligible to take the lease.
 func makeRebalanceReplicaChanges(
 	rangeID roachpb.RangeID,
-	existingReplicas []storeIDAndReplicaState,
-	rLoad rangeLoad,
-	addStoreID, removeStoreID roachpb.StoreID,
-) [2]replicaChange {
-	var remove storeIDAndReplicaState
+	existingReplicas []StoreIDAndReplicaState,
+	rLoad RangeLoad,
+	addTarget, removeTarget roachpb.ReplicationTarget,
+) [2]ReplicaChange {
+	var remove StoreIDAndReplicaState
 	for _, replica := range existingReplicas {
-		if replica.StoreID == removeStoreID {
+		if replica.StoreID == removeTarget.StoreID {
 			remove = replica
 		}
 	}
-
-	addReplicaChange := makeAddReplicaChange(rangeID, rLoad, addStoreID, remove.replicaType.replicaType)
-	removeReplicaChange := makeRemoveReplicaChange(rangeID, rLoad, remove)
-	if remove.isLeaseholder {
-		// The existing leaseholder is being removed. The incoming replica will
-		// take the lease load, in addition to the replica load.
-		addReplicaChange.next.isLeaseholder = true
-		addReplicaChange.loadDelta = loadVector{}
-		removeReplicaChange.loadDelta = loadVector{}
-		addReplicaChange.loadDelta.add(rLoad.load)
-		removeReplicaChange.loadDelta.subtract(rLoad.load)
-		addReplicaChange.secondaryLoadDelta[leaseCount] = 1
-		removeReplicaChange.secondaryLoadDelta[leaseCount] = -1
+	if remove == (StoreIDAndReplicaState{}) {
+		log.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
 	}
 
-	return [2]replicaChange{addReplicaChange, removeReplicaChange}
+	addReplicaChange := makeAddReplicaChange(rangeID, rLoad, remove.ReplicaType.ReplicaType, addTarget)
+	removeReplicaChange := makeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
+	if remove.IsLeaseholder {
+		// The existing leaseholder is being removed. The incoming replica will
+		// take the lease load, in addition to the replica load.
+		addReplicaChange.next.IsLeaseholder = true
+		addReplicaChange.loadDelta = LoadVector{}
+		removeReplicaChange.loadDelta = LoadVector{}
+		addReplicaChange.loadDelta.add(loadVectorToAdd(rLoad.Load))
+		removeReplicaChange.loadDelta.subtract(rLoad.Load)
+		addReplicaChange.secondaryLoadDelta[LeaseCount] = 1
+		removeReplicaChange.secondaryLoadDelta[LeaseCount] = -1
+	}
+	return [2]ReplicaChange{addReplicaChange, removeReplicaChange}
+}
+
+// PendingRangeChange is a proposed set of change(s) to a range. It can consist
+// of multiple pending replica changes, such as adding or removing replicas, or
+// transferring the lease.
+//
+// TODO: The intention is to use these to applying changes by the enacting
+// module.
+type PendingRangeChange struct {
+	RangeID               roachpb.RangeID
+	pendingReplicaChanges []*pendingReplicaChange
+}
+
+func (prc PendingRangeChange) String() string {
+	return redact.StringWithoutMarkers(prc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+//
+// TODO: This is adhoc for debugging. A nicer string format would include the
+// previous state and next state.
+func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%v=[", prc.RangeID)
+	found := false
+	if prc.IsTransferLease() {
+		w.Printf("transfer_to=%v", prc.LeaseTransferTarget())
+		found = true
+	}
+	if prc.IsChangeReplicas() {
+		w.Printf("change_replicas=%v", prc.ReplicationChanges())
+		found = true
+	}
+	if !found {
+		panic("unknown change type")
+	}
+	w.Print(" cids=")
+	for i, c := range prc.pendingReplicaChanges {
+		if i > 0 {
+			w.Print(",")
+		}
+		w.Printf("%v", c.ChangeID)
+	}
+	w.Print("]")
+}
+
+// ChangeIDs returns the list of ChangeIDs associated with the pending range
+// change.
+func (prc PendingRangeChange) ChangeIDs() []ChangeID {
+	cids := make([]ChangeID, len(prc.pendingReplicaChanges))
+	for i, c := range prc.pendingReplicaChanges {
+		cids[i] = c.ChangeID
+	}
+	return cids
+}
+
+// IsChangeReplicas returns true if the pending range change is a change
+// replicas operation.
+func (prc PendingRangeChange) IsChangeReplicas() bool {
+	for _, c := range prc.pendingReplicaChanges {
+		if c.isAddition() || c.isRemoval() || c.isPromoDemo() {
+			continue
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+// IsTransferLease returns true if the pending range change is a transfer lease
+// operation.
+func (prc PendingRangeChange) IsTransferLease() bool {
+	if len(prc.pendingReplicaChanges) != 2 {
+		return false
+	}
+	var foundAddLease, foundRemoveLease bool
+	for _, c := range prc.pendingReplicaChanges {
+		if c.isAddition() || c.isRemoval() || c.isPromoDemo() {
+			// Any changes to the replica type or replicaID are not lease transfers,
+			// since they require a replication change.
+			return false
+		}
+		if c.prev.IsLeaseholder && !c.next.IsLeaseholder {
+			foundRemoveLease = true
+		} else if !c.prev.IsLeaseholder && c.next.IsLeaseholder {
+			foundAddLease = true
+		} else {
+			return false
+		}
+	}
+	return foundAddLease && foundRemoveLease
+}
+
+// ReplicationChanges returns the replication changes for the pending range
+// change. It panics if the pending range change is not a change replicas
+// operation.
+//
+// TODO: Support for promotion/demotion changes.
+func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
+	if !prc.IsChangeReplicas() {
+		panic("RangeChange is not a change replicas")
+	}
+	chgs := make([]kvpb.ReplicationChange, len(prc.pendingReplicaChanges))
+	for i, c := range prc.pendingReplicaChanges {
+		chgs[i].Target = c.target
+		if c.prev.ReplicaID == noReplicaID {
+			chgs[i].ChangeType = roachpb.ADD_VOTER
+		} else if c.next.ReplicaID == noReplicaID {
+			chgs[i].ChangeType = roachpb.REMOVE_VOTER
+		}
+	}
+	return chgs
+}
+
+// LeaseTransferTarget returns the store ID of the store that is the target of
+// the lease transfer. It panics if the pending range change is not a transfer
+// lease operation.
+func (prc PendingRangeChange) LeaseTransferTarget() roachpb.StoreID {
+	if !prc.IsTransferLease() {
+		panic("pendingRangeChange is not a lease transfer")
+	}
+	for _, c := range prc.pendingReplicaChanges {
+		if !c.prev.IsLeaseholder && c.next.IsLeaseholder {
+			return c.target.StoreID
+		}
+	}
+	panic("unreachable")
 }
 
 // pendingReplicaChange is a proposed change to a single replica. Some
@@ -306,8 +480,8 @@ func makeRebalanceReplicaChanges(
 // one store to another -- that pairing is not captured here, and captured in
 // the changes suggested by the allocator to the external entity.
 type pendingReplicaChange struct {
-	changeID
-	replicaChange
+	ChangeID
+	ReplicaChange
 
 	// The wall time at which this pending change was initiated. Used for
 	// expiry.
@@ -377,7 +551,8 @@ func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
 //
 // TODO(sumeer): unit test.
 //
-// TODO(sumeer,kvoli): integrate this into the rest of mma.
+// TODO(sumeer,kvoli): integrate this into the rest of mma properly, and without
+// peering into its state.
 
 // enactedReplicaChange is information about a change at a store that was
 // enacted. It is an internal implementation detail of storeEnactedHistory and
@@ -388,16 +563,16 @@ type enactedReplicaChange struct {
 	enactedAtTime time.Time
 	// The load this change adds to a store. The values are always positive,
 	// even for load subtraction.
-	loadDelta      loadVector
-	secondaryDelta secondaryLoadVector
+	loadDelta      LoadVector
+	secondaryDelta SecondaryLoadVector
 }
 
 // storeEnactedHistory is a member of storeState. Users should only call
 // addEnactedChange and allowLoadBasedChanges.
 type storeEnactedHistory struct {
 	changes        []enactedReplicaChange
-	totalDelta     loadVector
-	totalSecondary secondaryLoadVector
+	totalDelta     LoadVector
+	totalSecondary SecondaryLoadVector
 	allowChanges   bool
 }
 
@@ -411,8 +586,8 @@ func (h *storeEnactedHistory) addEnactedChange(change *pendingReplicaChange) {
 			c.loadDelta[i] = -l
 		}
 	}
-	if change.prev.isLeaseholder != change.next.isLeaseholder {
-		c.secondaryDelta[leaseCount] = 1
+	if change.prev.IsLeaseholder != change.next.IsLeaseholder {
+		c.secondaryDelta[LeaseCount] = 1
 	}
 	h.changes = append(h.changes, c)
 	slices.SortFunc(h.changes, func(a, b enactedReplicaChange) int {
@@ -500,14 +675,14 @@ func (crl *storeChangeRateLimiter) updateForRebalancePass(h *storeEnactedHistory
 	}
 	h.allowChanges = true
 	for i := range h.totalDelta {
-		projectedDelta := h.totalDelta[i] * loadValue(crl.numAllocators)
+		projectedDelta := h.totalDelta[i] * LoadValue(crl.numAllocators)
 		if float64(projectedDelta) > 0.5*float64(crl.clusterMean.load[i]) {
 			h.allowChanges = false
 			return
 		}
 	}
 	for i := range h.totalSecondary {
-		projectedDelta := h.totalSecondary[i] * loadValue(crl.numAllocators)
+		projectedDelta := h.totalSecondary[i] * LoadValue(crl.numAllocators)
 		if float64(projectedDelta) > 0.5*float64(crl.clusterMean.secondaryLoad[i]) {
 			h.allowChanges = false
 			return
@@ -521,8 +696,8 @@ type storeState struct {
 	storeMembership
 	storeLoad
 	adjusted struct {
-		load          loadVector
-		secondaryLoad secondaryLoadVector
+		load          LoadVector
+		secondaryLoad SecondaryLoadVector
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
 		//
@@ -545,25 +720,28 @@ type storeState struct {
 		// Only the case where enactment happened is where a load pending change
 		// can live on -- but since that will set enactedAtTime, we are guaranteed
 		// to eventually remove it.
-		loadPendingChanges map[changeID]*pendingReplicaChange
+		loadPendingChanges map[ChangeID]*pendingReplicaChange
 		// replicas is computed from the authoritative information provided by
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
-		replicas map[roachpb.RangeID]replicaState
-		// topKRanges along some load dimensions. If the store is closer to
-		// hitting the resource limit on some resource ranges that are higher in
-		// that resource dimension should be over-represented in this map. It
+		//
+		// NB: this can include LEARNER and VOTER_DEMOTING_LEARNER replicas.
+		replicas map[roachpb.RangeID]ReplicaState
+		// topKRanges along some load dimension. If the store is closer to hitting
+		// the resource limit on some resource ranges that are higher in that
+		// resource dimension should be over-represented in this slice. It
 		// includes ranges whose replicas are being removed via pending changes,
 		// since those pending changes may be reversed, and we don't want to
 		// bother recomputing the top-k.
 		//
-		// We need to keep this top-k up-to-date incrementally. Since
-		// storeLeaseholderMsg is incremental about the ranges it reports, that
+		// We may decide to to keep this top-k up-to-date incrementally. Since
+		// StoreLeaseholderMsg is incremental about the ranges it reports, that
 		// may provide a building block for the incremental computation.
 		//
-		// TODO(sumeer): figure out at least one reasonable way to do this, even
-		// if we postpone it to a later code iteration.
-		topKRanges map[roachpb.RangeID]rangeLoad
+		// The key in this map is a local store-id.
+		//
+		// NB: this does not include LEARNER and VOTER_DEMOTING_LEARNER replicas.
+		topKRanges map[roachpb.StoreID]*topKReplicas
 		// TODO(kvoli,sumeerbhola): Update enactedHistory when integrating the
 		// storeChangeRateLimiter.
 		enactedHistory storeEnactedHistory
@@ -574,7 +752,7 @@ type storeState struct {
 	// storeLoadSummary stored in meansForStoreSet.
 	loadSeqNum uint64
 
-	// max(|1-(adjustedLoad[i]/reportedLoad[i])|)
+	// max(|1-(adjusted.load[i]/reportedLoad[i])|)
 	//
 	// If maxFractionPending is greater than some threshold, we don't add or
 	// remove more load unless we are shedding load due to failure detection.
@@ -583,7 +761,16 @@ type storeState struct {
 	// these nodes due to making the change.
 	maxFractionPending float64
 
+	// TODO: also need a maxFractionPending at the node level since with many
+	// stores on a node, some stores may have used up all the budget for changes
+	// at the node.
+
 	localityTiers
+
+	// lastLeaseShedAt is the time at which the store last reported that it shed
+	// leases during rebalancing. This is used to determine whether the store,
+	// when remote, can shed replicas to reduce CPU load.
+	lastLeaseShedAt time.Time
 }
 
 // The time duration between a change happening at a store, and when the
@@ -622,6 +809,21 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 	return changes
 }
 
+func (ss *storeState) computeMaxFractionPending() {
+	frac := 0.0
+	for i := range ss.reportedLoad {
+		if ss.reportedLoad[i] == 0 {
+			frac = 1000
+			break
+		}
+		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
+		if f > frac {
+			frac = f
+		}
+	}
+	ss.maxFractionPending = frac
+}
+
 func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
 	ss := &storeState{
 		storeLoad: storeLoad{
@@ -629,9 +831,9 @@ func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
 			NodeID:  nodeID,
 		},
 	}
-	ss.adjusted.loadPendingChanges = map[changeID]*pendingReplicaChange{}
-	ss.adjusted.replicas = map[roachpb.RangeID]replicaState{}
-	ss.adjusted.topKRanges = map[roachpb.RangeID]rangeLoad{}
+	ss.adjusted.loadPendingChanges = map[ChangeID]*pendingReplicaChange{}
+	ss.adjusted.replicas = map[roachpb.RangeID]ReplicaState{}
+	ss.adjusted.topKRanges = map[roachpb.StoreID]*topKReplicas{}
 	return ss
 }
 
@@ -672,39 +874,44 @@ func (fds failureDetectionSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 
 type nodeState struct {
 	stores []roachpb.StoreID
-	nodeLoad
-	adjustedCPU loadValue
+	NodeLoad
+	adjustedCPU LoadValue
 
-	// This loadSummary is only based on the cpu. It is incorporated into the
-	// loadSummary computed for each store on this node.
-	loadSummary loadSummary
-	fdSummary   failureDetectionSummary
+	fdSummary failureDetectionSummary
 }
 
 func newNodeState(nodeID roachpb.NodeID) *nodeState {
 	return &nodeState{
 		stores: []roachpb.StoreID{},
-		nodeLoad: nodeLoad{
-			nodeID: nodeID,
+		NodeLoad: NodeLoad{
+			NodeID: nodeID,
 		},
 	}
 }
 
-type storeIDAndReplicaState struct {
+type StoreIDAndReplicaState struct {
 	roachpb.StoreID
 	// Only valid ReplicaTypes are used here.
-	replicaState
+	ReplicaState
+}
+
+func (s StoreIDAndReplicaState) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("s%v:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType)
 }
 
 // rangeState is periodically updated based on reporting by the leaseholder.
 type rangeState struct {
-	rangeID roachpb.RangeID
 	// replicas is the adjusted replicas. It is always consistent with
 	// the storeState.adjusted.replicas in the corresponding stores.
-	replicas []storeIDAndReplicaState
+	replicas []StoreIDAndReplicaState
 	conf     *normalizedSpanConfig
 
-	load rangeLoad
+	load RangeLoad
 
 	// Only 1 or 2 changes (latter represents a least transfer or rebalance that
 	// adds and removes replicas).
@@ -716,6 +923,15 @@ type rangeState struct {
 	// If non-nil, it is up-to-date. Typically, non-nil for a range that has no
 	// pendingChanges and is not satisfying some constraint, since we don't want
 	// to repeat the analysis work every time we consider it.
+	//
+	// REMINDER: rangeAnalyzedConstraints ignores LEARNER and
+	// VOTER_DEMOTING_LEARNER replicas. So if a voter/non-voter is being added
+	// and is currently a LEARNER, calling one of the methods on
+	// rangeAnalyzedConstraints that tells us about an unsatisfied constraint
+	// can give us something that is already pending. Our expectation is that
+	// the pending changes will be reflected in pendingChanges. Then it becomes
+	// the responsibility of a higher layer (allocator) to notice that the
+	// rangeState has pendingChanges, and not make any more changes.
 	constraints *rangeAnalyzedConstraints
 
 	// TODO(sumeer): populate and use.
@@ -724,15 +940,15 @@ type rangeState struct {
 
 func newRangeState() *rangeState {
 	return &rangeState{
-		replicas:       []storeIDAndReplicaState{},
+		replicas:       []StoreIDAndReplicaState{},
 		pendingChanges: []*pendingReplicaChange{},
 	}
 }
 
-func (rs *rangeState) setReplica(repl storeIDAndReplicaState) {
+func (rs *rangeState) setReplica(repl StoreIDAndReplicaState) {
 	for i := range rs.replicas {
 		if rs.replicas[i].StoreID == repl.StoreID {
-			rs.replicas[i].replicaState = repl.replicaState
+			rs.replicas[i].ReplicaState = repl.ReplicaState
 			return
 		}
 	}
@@ -751,6 +967,17 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) {
 	}
 }
 
+func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
+	n := len(rs.pendingChanges)
+	for i := 0; i < n; i++ {
+		if rs.pendingChanges[i].ChangeID == changeID {
+			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
+			rs.pendingChanges = rs.pendingChanges[:n-1]
+			break
+		}
+	}
+}
+
 // clusterState is the state of the cluster known to the allocator, including
 // adjustments based on pending changes. It does not include additional
 // indexing needed for constraint matching, or for tracking ranges that may
@@ -764,77 +991,101 @@ type clusterState struct {
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
 	//
-	// Removed from based on rangeMsg, explicit rejection by enacting module, or
+	// Removed from based on RangeMsg, explicit rejection by enacting module, or
 	// time-based GC. There is no explicit acceptance by enacting module since
 	// the single source of truth of a rangeState is the leaseholder.
-	pendingChanges map[changeID]*pendingReplicaChange
-	changeSeqGen   changeID
+	pendingChanges map[ChangeID]*pendingReplicaChange
+	changeSeqGen   ChangeID
 
 	*constraintMatcher
 	*localityTierInterner
+	meansMemo *meansMemo
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
-	return &clusterState{
+	cs := &clusterState{
 		ts:                   ts,
 		nodes:                map[roachpb.NodeID]*nodeState{},
 		stores:               map[roachpb.StoreID]*storeState{},
 		ranges:               map[roachpb.RangeID]*rangeState{},
-		pendingChanges:       map[changeID]*pendingReplicaChange{},
+		pendingChanges:       map[ChangeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
 	}
+	cs.meansMemo = newMeansMemo(cs, cs.constraintMatcher)
+	return cs
 }
 
-func (cs *clusterState) processNodeLoadMsg(msg *nodeLoadMsg) {
+func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
-	ns := cs.nodes[msg.nodeID]
+	ns := cs.nodes[storeMsg.NodeID]
+	ss := cs.stores[storeMsg.StoreID]
 	// Handle the node load, updating the reported load and set the adjusted load
 	// to be equal to the reported load initially. Any remaining pending changes
 	// will be re-applied to the reported load.
-	ns.reportedCPU = msg.reportedCPU
-	ns.adjustedCPU = msg.reportedCPU
-	ns.nodeLoad = msg.nodeLoad
-	for _, storeMsg := range msg.stores {
-		ss := cs.stores[storeMsg.StoreID]
-
-		// The store's load seqeunce number is incremented on each load change. The
-		// store's load is updated below.
-		ss.loadSeqNum++
-		ss.storeLoad.reportedLoad = storeMsg.load
-		ss.storeLoad.capacity = storeMsg.capacity
-		ss.storeLoad.reportedSecondaryLoad = storeMsg.secondaryLoad
-
-		// Reset the adjusted load to be the reported load. We will re-apply any
-		// remaining pending change deltas to the updated adjusted load.
-		ss.adjusted.load = storeMsg.load
-		ss.adjusted.secondaryLoad = storeMsg.secondaryLoad
-
-		// Find any pending changes for range's which involve this store. These
-		// pending changes can now be removed from the loadPendingChanges. We don't
-		// need to undo the corresponding delta adjustment as the reported load
-		// already contains the effect.
-		for _, change := range ss.computePendingChangesReflectedInLatestLoad(msg.loadTime) {
-			delete(ss.adjusted.loadPendingChanges, change.changeID)
-			delete(cs.pendingChanges, change.changeID)
-		}
-
-		for _, change := range ss.adjusted.loadPendingChanges {
-			// The pending change hasn't been reported as done, re-apply the load
-			// delta to the adjusted load and include it in the new adjusted load
-			// replicas.
-			cs.applyChangeLoadDelta(change.replicaChange)
-		}
+	if ns == nil {
+		panic(fmt.Sprintf("node %d not found storeMsg=%v", storeMsg.NodeID, *storeMsg))
 	}
+	if ss == nil {
+		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
+	}
+	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
+	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
+	// Undo the adjustment for the store. We will apply the adjustment again
+	// below.
+	ns.adjustedCPU += storeMsg.Load[CPURate] - ss.adjusted.load[CPURate]
+
+	// The store's load sequence number is incremented on each load change. The
+	// store's load is updated below.
+	ss.loadSeqNum++
+	if storeMsg.ShedLeasesInLastRebalance {
+		// TODO(kvoli): Cases to think through:
+		// - Upon first hearing about this store.
+		ss.lastLeaseShedAt = storeMsg.LoadTime
+	}
+	ss.storeLoad.reportedLoad = storeMsg.Load
+	ss.storeLoad.capacity = storeMsg.Capacity
+	ss.storeLoad.reportedSecondaryLoad = storeMsg.SecondaryLoad
+
+	// Reset the adjusted load to be the reported load. We will re-apply any
+	// remaining pending change deltas to the updated adjusted load.
+	ss.adjusted.load = storeMsg.Load
+	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
+	ss.maxFractionPending = 0
+
+	// Find any pending changes for range's which involve this store. These
+	// pending changes can now be removed from the loadPendingChanges. We don't
+	// need to undo the corresponding delta adjustment as the reported load
+	// already contains the effect.
+	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
+		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
+		delete(cs.pendingChanges, change.ChangeID)
+		cs.ranges[change.rangeID].removePendingChangeTracking(change.ChangeID)
+	}
+
+	for _, change := range ss.adjusted.loadPendingChanges {
+		// The pending change hasn't been reported as done, re-apply the load
+		// delta to the adjusted load and include it in the new adjusted load
+		// replicas.
+		cs.applyChangeLoadDelta(change.ReplicaChange)
+	}
+	log.Infof(context.Background(), "s%d load %s(%s) adjusted %s", storeMsg.StoreID,
+		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
-func (cs *clusterState) processStoreLeaseholderMsg(msg *storeLeaseholderMsg) {
+func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
+	cs.processStoreLeaseholderMsgInternal(msg, numTopKReplicas)
+}
+
+func (cs *clusterState) processStoreLeaseholderMsgInternal(
+	msg *StoreLeaseholderMsg, numTopKReplicas int,
+) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
-	for _, rangeMsg := range msg.ranges {
+	for _, rangeMsg := range msg.Ranges {
 		rs, ok := cs.ranges[rangeMsg.RangeID]
 		if !ok {
 			// This is the first time we've seen this range.
@@ -844,25 +1095,29 @@ func (cs *clusterState) processStoreLeaseholderMsg(msg *storeLeaseholderMsg) {
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
-		rs.load = rangeMsg.rangeLoad
-		rs.replicas = rangeMsg.replicas
+		rs.load = rangeMsg.RangeLoad
 		for _, replica := range rs.replicas {
+			ss := cs.stores[replica.StoreID]
+			if ss == nil {
+				panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
+			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
 		}
-		for _, replica := range rangeMsg.replicas {
-			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.replicaState
+		rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
+		for _, replica := range rangeMsg.Replicas {
+			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
 		}
 
 		// Find any pending changes which are now enacted, according to the
 		// leaseholder.
 		var remainingChanges, enactedChanges []*pendingReplicaChange
 		for _, change := range rs.pendingChanges {
-			ss := cs.stores[change.storeID]
+			ss := cs.stores[change.target.StoreID]
 			adjustedReplicas, ok := ss.adjusted.replicas[rangeMsg.RangeID]
 			if !ok {
 				adjustedReplicas.ReplicaID = noReplicaID
 			}
-			if adjustedReplicas.subsumesChange(change.prev.replicaIDAndType, change.next) {
+			if adjustedReplicas.subsumesChange(change.prev.ReplicaIDAndType, change.next) {
 				// The change has been enacted according to the leaseholder.
 				enactedChanges = append(enactedChanges, change)
 			} else {
@@ -875,19 +1130,116 @@ func (cs *clusterState) processStoreLeaseholderMsg(msg *storeLeaseholderMsg) {
 			// corresponding load adjustments. The store load message will do that,
 			// or GC, indiciating that the change is been reflected in the store
 			// load.
-			cs.markPendingChangeEnacted(change.changeID, now)
+			cs.markPendingChangeEnacted(change.ChangeID, now)
 		}
 		// Re-apply the remaining changes.
 		for _, change := range remainingChanges {
-			cs.applyReplicaChange(change.replicaChange)
+			cs.applyReplicaChange(change.ReplicaChange)
 		}
-		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.conf, cs.constraintMatcher.interner)
+		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
 		if err != nil {
 			// TODO(kvoli): Should we log as a warning here, or return further back out?
 			panic(err)
 		}
 		rs.conf = normSpanConfig
+		// NB: Always recompute the analyzed range constraints for any range,
+		// assuming the leaseholder wouldn't have sent the message if there was no
+		// change.
+		rs.constraints = nil
 	}
+	localss := cs.stores[msg.StoreID]
+	cs.meansMemo.clear()
+	clusterMeans := cs.meansMemo.getMeans(nil)
+	for _, ss := range cs.stores {
+		topk := ss.adjusted.topKRanges[msg.StoreID]
+		if topk == nil {
+			topk = &topKReplicas{k: numTopKReplicas}
+			ss.adjusted.topKRanges[msg.StoreID] = topk
+		}
+		topk.startInit()
+		sls := cs.computeLoadSummary(ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
+		if ss.StoreID == localss.StoreID {
+			topk.dim = CPURate
+		} else {
+			topk.dim = WriteBandwidth
+		}
+		if sls.highDiskSpaceUtilization {
+			topk.dim = ByteSize
+		} else if sls.sls > loadNoChange {
+			// If multiple dimensions are contributing the same loadSummary, we will pick
+			// CPURate before WriteBandwidth before ByteSize.
+			for i := range sls.dimSummary {
+				if sls.dimSummary[i] == sls.sls {
+					topk.dim = LoadDimension(i)
+					break
+				}
+			}
+		}
+		// TODO: setting a threshold such that only ranges > some threshold of the
+		// store's load in the top-k dimension are included in the top-k. We
+		// should actually be using the min of this threshold and the n-th ranked
+		// load (across all ranges) per dimension reported by the store in
+		// StoreDescriptor, where say n is 50 (since it is possible that the store
+		// has a massive range that consumes 50% of the load, and another 100
+		// ranges that consume 0.5% each, and the only way to restore health is to
+		// shed those 100 ranges).
+		const (
+			// minLeaseLoadFraction is the minimum fraction of the local store's load a
+			// lease must contribute, in order to consider it worthwhile rebalancing when
+			// overfull.
+			minLeaseLoadFraction = 0.005
+			// minReplicaLoadFraction is the minimum fraction of the local store's load a
+			// replica (lease included) must contribute, in order to consider it
+			// worthwhile rebalancing when overfull.
+			minReplicaLoadFraction = 0.02
+		)
+		fraction := minReplicaLoadFraction
+		if ss.StoreID == msg.StoreID && topk.dim == CPURate {
+			// We are assuming we will be able to shed leases, but if we can't we
+			// will start shedding replicas, so this is just a heuristic.
+			fraction = minLeaseLoadFraction
+		}
+		topk.threshold = LoadValue(float64(ss.adjusted.load[topk.dim]) * fraction)
+	}
+	// TODO: replica is already adjusted for some ongoing changes, which may be
+	// undone. So if s10 is a replica for range r1 whose leaseholder is the
+	// local store s1 that is trying to transfer the lease away, s10 will not
+	// see r1 below.
+	for rangeID, state := range localss.adjusted.replicas {
+		if !state.IsLeaseholder {
+			// We may have transferred the lease away previously but still have a
+			// replica. We don't want to add this replica to the topKReplicas as it
+			// controls which ranges are eligible to be shed. When no longer the
+			// leaseholder, we cannot shed a replica or lease.
+			continue
+		}
+		rs := cs.ranges[rangeID]
+		// TODO: replicas is also already adjusted.
+		for _, replica := range rs.replicas {
+			typ := replica.ReplicaState.ReplicaType.ReplicaType
+			if isVoter(typ) || isNonVoter(typ) {
+				ss := cs.stores[replica.StoreID]
+				topk := ss.adjusted.topKRanges[msg.StoreID]
+				switch topk.dim {
+				case CPURate:
+					l := rs.load.Load[CPURate]
+					if !replica.ReplicaState.IsLeaseholder {
+						l = rs.load.RaftCPU
+					}
+					topk.addReplica(rangeID, l)
+				case WriteBandwidth:
+					topk.addReplica(rangeID, rs.load.Load[WriteBandwidth])
+				case ByteSize:
+					topk.addReplica(rangeID, rs.load.Load[ByteSize])
+				}
+			}
+		}
+	}
+	for _, ss := range cs.stores {
+		topk := ss.adjusted.topKRanges[msg.StoreID]
+		topk.doneInit()
+	}
+
 }
 
 // If the pending change does not happen within this GC duration, we
@@ -897,10 +1249,10 @@ const pendingChangeGCDuration = 5 * time.Minute
 // Called periodically by allocator.
 func (cs *clusterState) gcPendingChanges(now time.Time) {
 	gcBeforeTime := now.Add(-pendingChangeGCDuration)
-	var removeChangeIds []changeID
+	var removeChangeIds []ChangeID
 	for _, pendingChange := range cs.pendingChanges {
 		if !pendingChange.startTime.After(gcBeforeTime) {
-			removeChangeIds = append(removeChangeIds, pendingChange.changeID)
+			removeChangeIds = append(removeChangeIds, pendingChange.ChangeID)
 		}
 	}
 	for _, rmChange := range removeChangeIds {
@@ -909,7 +1261,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 }
 
 // Called by enacting module.
-func (cs *clusterState) pendingChangesRejected(changes []changeID) {
+func (cs *clusterState) pendingChangesRejected(changes []ChangeID) {
 	// Wipe rejected changes, including load adjustments, tracking and replica
 	// changes.
 	for _, changeID := range changes {
@@ -917,13 +1269,13 @@ func (cs *clusterState) pendingChangesRejected(changes []changeID) {
 	}
 }
 
-func (cs *clusterState) markPendingChangeEnacted(cid changeID, enactedAt time.Time) {
+func (cs *clusterState) markPendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
 	change := cs.pendingChanges[cid]
 	change.enactedAtTime = enactedAt
 }
 
 // undoPendingChange reverses the change with ID cid.
-func (cs *clusterState) undoPendingChange(cid changeID) {
+func (cs *clusterState) undoPendingChange(cid ChangeID) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(fmt.Sprintf("change %v not found", cid))
@@ -934,28 +1286,18 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 	}
 	// Wipe the analyzed constraints, as the range has changed.
 	rs.constraints = nil
-
-	// Undo the change delta as well as the replica change.
-	cs.undoReplicaChange(change.replicaChange)
-	i := 0
-	n := len(rs.pendingChanges)
-	for ; i < n; i++ {
-		if rs.pendingChanges[i].changeID == cid {
-			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
-			rs.pendingChanges = rs.pendingChanges[:n-1]
-			break
-		}
-	}
-	delete(cs.pendingChanges, change.changeID)
-	delete(cs.stores[change.storeID].adjusted.loadPendingChanges, change.changeID)
+	// Undo the change delta as well as the replica change and remove the pending
+	// change from all tracking (range, store, cluster).
+	cs.undoReplicaChange(change.ReplicaChange)
+	rs.removePendingChangeTracking(cid)
+	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
+	delete(cs.pendingChanges, change.ChangeID)
 }
 
-// createPendingChanges takes a set of changes for a range and applies the
-// changes as pending. The application updates the adjusted load, tracked
-// pending changes and changeID to reflect the pending application.
-func (cs *clusterState) createPendingChanges(
-	rangeID roachpb.RangeID, changes ...replicaChange,
-) []*pendingReplicaChange {
+// createPendingChanges takes a set of changes applies the changes as pending.
+// The application updates the adjusted load, tracked pending changes and
+// changeID to reflect the pending application.
+func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendingReplicaChange {
 	var pendingChanges []*pendingReplicaChange
 	now := cs.ts.Now()
 
@@ -964,12 +1306,12 @@ func (cs *clusterState) createPendingChanges(
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
 		pendingChange := &pendingReplicaChange{
-			changeID:      cid,
-			replicaChange: change,
+			ChangeID:      cid,
+			ReplicaChange: change,
 			startTime:     now,
 			enactedAtTime: time.Time{},
 		}
-		storeState := cs.stores[change.storeID]
+		storeState := cs.stores[change.target.StoreID]
 		rangeState := cs.ranges[change.rangeID]
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
@@ -979,10 +1321,10 @@ func (cs *clusterState) createPendingChanges(
 	return pendingChanges
 }
 
-func (cs *clusterState) applyReplicaChange(change replicaChange) {
-	storeState, ok := cs.stores[change.storeID]
+func (cs *clusterState) applyReplicaChange(change ReplicaChange) {
+	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
-		panic(fmt.Sprintf("store %v not found in cluster state", change.storeID))
+		panic(fmt.Sprintf("store %v not found in cluster state", change.target.StoreID))
 	}
 	rangeState, ok := cs.ranges[change.rangeID]
 	if !ok {
@@ -991,23 +1333,23 @@ func (cs *clusterState) applyReplicaChange(change replicaChange) {
 
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
-		rangeState.removeReplica(change.storeID)
+		rangeState.removeReplica(change.target.StoreID)
 	} else if change.isAddition() {
-		pendingRepl := storeIDAndReplicaState{
-			StoreID: change.storeID,
-			replicaState: replicaState{
-				replicaIDAndType: change.next,
+		pendingRepl := StoreIDAndReplicaState{
+			StoreID: change.target.StoreID,
+			ReplicaState: ReplicaState{
+				ReplicaIDAndType: change.next,
 			},
 		}
-		storeState.adjusted.replicas[change.rangeID] = pendingRepl.replicaState
+		storeState.adjusted.replicas[change.rangeID] = pendingRepl.ReplicaState
 		rangeState.setReplica(pendingRepl)
 	} else if change.isUpdate() {
 		replState := storeState.adjusted.replicas[change.rangeID]
-		replState.replicaIDAndType = change.next
+		replState.ReplicaIDAndType = change.next
 		storeState.adjusted.replicas[change.rangeID] = replState
-		rangeState.setReplica(storeIDAndReplicaState{
-			StoreID:      change.storeID,
-			replicaState: replState,
+		rangeState.setReplica(StoreIDAndReplicaState{
+			StoreID:      change.target.StoreID,
+			ReplicaState: replState,
 		})
 	} else {
 		panic(fmt.Sprintf("unknown replica change %+v", change))
@@ -1015,24 +1357,24 @@ func (cs *clusterState) applyReplicaChange(change replicaChange) {
 	cs.applyChangeLoadDelta(change)
 }
 
-func (cs *clusterState) undoReplicaChange(change replicaChange) {
+func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 	rangeState := cs.ranges[change.rangeID]
-	storeState := cs.stores[change.storeID]
+	storeState := cs.stores[change.target.StoreID]
 	if change.isRemoval() {
-		prevRepl := storeIDAndReplicaState{
-			StoreID:      change.storeID,
-			replicaState: change.prev,
+		prevRepl := StoreIDAndReplicaState{
+			StoreID:      change.target.StoreID,
+			ReplicaState: change.prev,
 		}
 		rangeState.setReplica(prevRepl)
-		storeState.adjusted.replicas[change.rangeID] = prevRepl.replicaState
+		storeState.adjusted.replicas[change.rangeID] = prevRepl.ReplicaState
 	} else if change.isAddition() {
 		delete(storeState.adjusted.replicas, change.rangeID)
-		rangeState.removeReplica(change.storeID)
+		rangeState.removeReplica(change.target.StoreID)
 	} else if change.isUpdate() {
 		replState := change.prev
-		rangeState.setReplica(storeIDAndReplicaState{
-			StoreID:      change.storeID,
-			replicaState: replState,
+		rangeState.setReplica(StoreIDAndReplicaState{
+			StoreID:      change.target.StoreID,
+			ReplicaState: replState,
 		})
 		storeState.adjusted.replicas[change.rangeID] = replState
 	} else {
@@ -1048,26 +1390,32 @@ func (cs *clusterState) undoReplicaChange(change replicaChange) {
 
 // applyChangeLoadDelta adds the change load delta to the adjusted load of the
 // store and node affected.
-func (cs *clusterState) applyChangeLoadDelta(change replicaChange) {
-	ss := cs.stores[change.storeID]
+func (cs *clusterState) applyChangeLoadDelta(change ReplicaChange) {
+	ss := cs.stores[change.target.StoreID]
 	ss.adjusted.load.add(change.loadDelta)
 	ss.adjusted.secondaryLoad.add(change.secondaryLoadDelta)
 	ss.loadSeqNum++
-
-	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[cpu]
+	ss.computeMaxFractionPending()
+	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[CPURate]
 }
 
 // undoChangeLoadDelta subtracts the change load delta from the adjusted load
 // of the store and node affected.
-func (cs *clusterState) undoChangeLoadDelta(change replicaChange) {
-	ss := cs.stores[change.storeID]
+func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
+	ss := cs.stores[change.target.StoreID]
 	ss.adjusted.load.subtract(change.loadDelta)
 	ss.adjusted.secondaryLoad.subtract(change.secondaryLoadDelta)
 	ss.loadSeqNum++
-
-	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[cpu]
+	ss.computeMaxFractionPending()
+	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[CPURate]
 }
 
+// setStore updates the store descriptor in the cluster state. If the store
+// hasn't been seen before, it is also added to the cluster state.
+//
+// TODO: We currently assume that the locality and attributes associated with a
+// store/node are fixed. This is a reasonable assumption for the locality,
+// however it is not for the attributes.
 func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 	ns, ok := cs.nodes[desc.Node.NodeID]
 	if !ok {
@@ -1075,14 +1423,18 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 		ns = newNodeState(desc.Node.NodeID)
 		cs.nodes[desc.Node.NodeID] = ns
 	}
-	ns.stores = append(ns.stores, desc.StoreID)
 	ss, ok := cs.stores[desc.StoreID]
 	if !ok {
 		// This is the first time seeing this store.
 		ss = newStoreState(desc.StoreID, desc.Node.NodeID)
 		ss.localityTiers = cs.localityTierInterner.intern(desc.Locality())
+		// TODO(kvoli): If we left this uninitialized, the local allocator could
+		// immediately begin shedding replicas from this store if it were CPU
+		// overloaded. Yet, this is hacky.
+		ss.lastLeaseShedAt = cs.ts.Now()
 		cs.constraintMatcher.setStore(desc)
 		cs.stores[desc.StoreID] = ss
+		ns.stores = append(ns.stores, desc.StoreID)
 	}
 	ss.StoreDescriptor = desc
 }
@@ -1118,19 +1470,61 @@ func (cs *clusterState) getStoreReportedLoad(storeID roachpb.StoreID) *storeLoad
 	return nil
 }
 
-func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *nodeLoad {
+func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	if nodeState, ok := cs.nodes[nodeID]; ok {
-		return &nodeState.nodeLoad
+		return &nodeState.NodeLoad
 	}
 	return nil
 }
 
-// canAddLoad returns true if the delta can be added to the store without
-// causing it to be overloaded (or the node to be overloaded). It does not
-// change any state between the call and return.
-func (cs *clusterState) canAddLoad(ss *storeState, delta loadVector, means *meansForStoreSet) bool {
-	// TODO(sumeer):
-	return false
+// canShedAndAddLoad returns true if the delta can be added to the target
+// store and removed from the src store, such that the relative load summaries
+// will not get worse.
+//
+// It does not change any state between the call and return.
+func (cs *clusterState) canShedAndAddLoad(
+	ctx context.Context,
+	srcSS *storeState,
+	targetSS *storeState,
+	delta LoadVector,
+	means *meansForStoreSet,
+) bool {
+	targetNS := cs.nodes[targetSS.NodeID]
+	// Add the delta.
+	deltaToAdd := loadVectorToAdd(delta)
+	targetSS.adjusted.load.add(deltaToAdd)
+	targetNS.adjustedCPU += deltaToAdd[CPURate]
+	targetSLS := computeLoadSummary(targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	// Undo the addition.
+	targetSS.adjusted.load.subtract(deltaToAdd)
+	targetNS.adjustedCPU -= deltaToAdd[CPURate]
+
+	// Remove the delta.
+	srcNS := cs.nodes[srcSS.NodeID]
+	srcSS.adjusted.load.subtract(delta)
+	srcNS.adjustedCPU -= delta[CPURate]
+	srcSLS := computeLoadSummary(srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
+	// Undo the removal.
+	srcSS.adjusted.load.add(delta)
+	srcNS.adjustedCPU += delta[CPURate]
+
+	// If there is no pending change in targetSS, we are willing to tolerate
+	// this move as long as targetSS is no worst than srcSS. Else we are
+	// stricter and expect targetSS to be better than loadNoChange -- this will
+	// delay making a potentially non-ideal choice of targetSS until it has no
+	// pending changes.
+	canAddLoad := !targetSLS.highDiskSpaceUtilization &&
+		((targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange) ||
+			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
+				targetSLS.nls <= srcSLS.nls))
+	// We already filtered out stores >= loadNoChange before attempting to add
+	// this load, so we could allow everyone <= loadNoChange now, since those
+	// equal to loadNoChange must be due to this addition. But loadNoChange
+	// implies this addition is going above the mean, so don't allow that.
+	// canAddLoad := targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange
+	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
+	return canAddLoad
 }
 
 func (cs *clusterState) computeLoadSummary(
@@ -1138,29 +1532,43 @@ func (cs *clusterState) computeLoadSummary(
 ) storeLoadSummary {
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
+	return computeLoadSummary(ss, ns, msl, mnl)
+}
+
+func computeLoadSummary(
+	ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
+) storeLoadSummary {
 	sls := loadLow
+	var highDiskSpaceUtil bool
+	var dimSummary [NumLoadDimensions]loadSummary
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
 		ls := loadSummaryForDimension(ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
-		if ls < sls {
+		if ls > sls {
 			sls = ls
 		}
+		dimSummary[i] = ls
+		switch LoadDimension(i) {
+		case ByteSize:
+			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+		}
 	}
-	nls := loadSummaryForDimension(ns.adjustedCPU, ns.capacityCPU, mnl.loadCPU, mnl.utilCPU)
+	nls := loadSummaryForDimension(ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		sls:        sls,
-		nls:        nls,
-		fd:         ns.fdSummary,
-		loadSeqNum: ss.loadSeqNum,
+		sls:                      sls,
+		nls:                      nls,
+		dimSummary:               dimSummary,
+		highDiskSpaceUtilization: highDiskSpaceUtil,
+		fd:                       ns.fdSummary,
+		maxFractionPending:       ss.maxFractionPending,
+		loadSeqNum:               ss.loadSeqNum,
 	}
 }
 
 // Avoid unused lint errors.
-var _ = replicaState{}.voterIsLagging
+var _ = ReplicaState{}.VoterIsLagging
 var _ = storeState{}.maxFractionPending
-var _ = nodeState{}.loadSummary
 var _ = rangeState{}.diversityIncreaseLastFailedAttempt
-var _ = rangeState{}.rangeID
 var _ = enactedReplicaChange{}
 var _ = storeEnactedHistory{}.changes
 var _ = storeEnactedHistory{}.totalDelta
@@ -1175,4 +1583,3 @@ var _ = storeChangeRateLimiter{}.clusterMean
 var _ = newStoreChangeRateLimiter
 var _ = (*storeChangeRateLimiter).initForRebalancePass
 var _ = (*storeChangeRateLimiter).updateForRebalancePass
-var _ = (*clusterState).canAddLoad

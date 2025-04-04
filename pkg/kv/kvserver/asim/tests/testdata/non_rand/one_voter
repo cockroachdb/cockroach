@@ -3,7 +3,7 @@
 gen_cluster nodes=2
 ----
 
-gen_ranges ranges=100 repl_factor=1 placement_skew=true
+gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 ----
 
 eval duration=20m seed=42

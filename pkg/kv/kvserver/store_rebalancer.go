@@ -75,6 +75,7 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingOff:               "off",
 		LBRebalancingLeasesOnly:        "leases",
 		LBRebalancingLeasesAndReplicas: "leases and replicas",
+		LBRebalancingMultiMetric:       "multi-metric",
 	},
 	settings.WithPublic)
 
@@ -92,6 +93,10 @@ const (
 	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
+	// LBRebalancingMultiMetric means that the store rebalancer yields to the
+	// multi-metric store rebalancer, balancing both leases and replicas based on
+	// store-level load imbalances.
+	LBRebalancingMultiMetric
 )
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
@@ -193,7 +198,8 @@ func NewStoreRebalancer(
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 		disabled: func() bool {
-			return LoadBasedRebalancingMode.Get(&st.SV) == LBRebalancingOff ||
+			mode := LoadBasedRebalancingMode.Get(&st.SV)
+			return mode == LBRebalancingOff || mode == LBRebalancingMultiMetric ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -478,6 +484,14 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 	if rctx == nil {
 		log.KvDistribution.Warningf(ctx,
 			"no rebalance context given, bailing out of rebalancing store, will try again later")
+		return false
+	}
+
+	if !(rctx.mode == LBRebalancingLeasesOnly || rctx.mode == LBRebalancingLeasesAndReplicas) {
+		// There's nothing to do, the store rebalancer is disabled. Note that this
+		// is is redundant when called via the store rebalancer's Start method, but
+		// it's necessary when called from tests, which don't start the store
+		// rebalancer loop, such as the asim pkg.
 		return false
 	}
 
