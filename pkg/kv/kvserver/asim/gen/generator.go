@@ -194,7 +194,7 @@ type BasicCluster struct {
 	StoreByteCapacity   int64
 	NodeCPURateCapacity int64
 	Region              []string
-	NodesPerRegion      []int64
+	NodesPerRegion      []int
 }
 
 func (bc BasicCluster) String() string {
@@ -208,13 +208,12 @@ func (bc BasicCluster) info() state.ClusterInfo {
 	}
 
 	regionNodeWeights := make([]float64, len(bc.NodesPerRegion))
-	totalNodes := int64(0)
+	totalNodes := 0
 	for i, nodes := range bc.NodesPerRegion {
-		fmt.Printf("nodes: %d, totalNodes: %d\n", nodes, totalNodes)
 		regionNodeWeights[i] = float64(nodes) / float64(bc.Nodes)
 		totalNodes += nodes
 	}
-	if totalNodes != int64(bc.Nodes) {
+	if totalNodes != bc.Nodes {
 		panic(fmt.Sprintf("total nodes %d does not match expected nodes %d", totalNodes, bc.Nodes))
 	}
 	return state.ClusterInfoWithRegions(bc.Nodes, bc.StoresPerNode, bc.Region, regionNodeWeights)
