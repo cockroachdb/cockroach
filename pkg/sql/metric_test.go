@@ -216,6 +216,12 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 		accum := initializeQueryCounter(s)
 
+		// The test injects a retry error after the interceptors, so we need to
+		// disable write buffers for the request to make it to the server.
+		if _, err := sqlDB.Exec("SET kv_transaction_buffered_writes_enabled = false"); err != nil {
+			t.Fatal(err)
+		}
+
 		if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 			t.Fatal(err)
 		}

@@ -899,6 +899,9 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 
 	var fooTableId uint32
 	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	// The test injects a retry error after the interceptors, so we need to
+	// disable write buffers for the request to make it to the server.
+	testDB.Exec(t, "SET kv_transaction_buffered_writes_enabled = false")
 	testDB.Exec(t, "CREATE TABLE bar (a INT PRIMARY KEY)")
 	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
 	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
