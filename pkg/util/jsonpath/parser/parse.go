@@ -7,8 +7,11 @@ package parser
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,6 +27,11 @@ func init() {
 
 var (
 	ReCache = tree.NewRegexpCache(64)
+
+	errCurrentInRoot = pgerror.Newf(pgcode.Syntax,
+		"@ is not allowed in root expressions")
+	errLastInNonArray = pgerror.Newf(pgcode.Syntax,
+		"LAST is allowed only in array subscripts")
 )
 
 type Parser struct {
@@ -101,5 +109,78 @@ func (p *Parser) Parse(jsonpath string) (statements.JsonpathStatement, error) {
 // Parse parses a jsonpath string and returns a jsonpath.Jsonpath object.
 func Parse(jsonpath string) (statements.JsonpathStatement, error) {
 	var p Parser
-	return p.Parse(jsonpath)
+	stmt, err := p.Parse(jsonpath)
+	if err != nil {
+		return statements.JsonpathStatement{}, err
+	}
+	// Similar to flattenJsonPathParseItem in postgres, we do a pass over the AST
+	// to perform some semantic checks.
+	if err := walkAST(stmt.AST.Path); err != nil {
+		return statements.JsonpathStatement{}, err
+	}
+	return stmt, nil
+}
+
+// TODO(normanchenn): Similarly to flattenJsonPathParseItem, we could use this to
+// generate a normalized jsonpath string, rather than calling stmt.AST.String().
+func walkAST(path jsonpath.Path) error {
+	return walk(path, 0 /* nestingLevel */, false /* insideArraySubscript */)
+}
+
+func walk(path jsonpath.Path, nestingLevel int, insideArraySubscript bool) error {
+	switch path := path.(type) {
+	case jsonpath.Paths:
+		for _, p := range path {
+			if err := walk(p, nestingLevel, insideArraySubscript); err != nil {
+				return err
+			}
+		}
+		return nil
+	case jsonpath.ArrayList:
+		for _, p := range path {
+			if err := walk(p, nestingLevel, true /* insideArraySubscript */); err != nil {
+				return err
+			}
+		}
+		return nil
+	case jsonpath.ArrayIndexRange:
+		if err := walk(path.Start, nestingLevel, insideArraySubscript); err != nil {
+			return err
+		}
+		if err := walk(path.End, nestingLevel, insideArraySubscript); err != nil {
+			return err
+		}
+		return nil
+	case jsonpath.Operation:
+		if err := walk(path.Left, nestingLevel, insideArraySubscript); err != nil {
+			return err
+		}
+		if path.Right != nil {
+			if err := walk(path.Right, nestingLevel, insideArraySubscript); err != nil {
+				return err
+			}
+		}
+		return nil
+	case jsonpath.Filter:
+		if err := walk(path.Condition, nestingLevel+1, insideArraySubscript); err != nil {
+			return err
+		}
+		return nil
+	case jsonpath.Current:
+		if nestingLevel <= 0 {
+			return errCurrentInRoot
+		}
+		return nil
+	case jsonpath.Last:
+		if !insideArraySubscript {
+			return errLastInNonArray
+		}
+		return nil
+	case jsonpath.Root, jsonpath.Key, jsonpath.Wildcard, jsonpath.Regex,
+		jsonpath.AnyKey, jsonpath.Scalar:
+		// These are leaf nodes that don't require any further checks.
+		return nil
+	default:
+		panic(errors.AssertionFailedf("unhandled path type: %T", path))
+	}
 }
