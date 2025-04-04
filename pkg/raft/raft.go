@@ -1084,6 +1084,55 @@ func (r *raft) reset(term uint64) {
 	r.uncommittedSize = 0
 }
 
+// resetBecomeLeader resets the raft state to become a leader.
+// It is almost identical to r.reset(), but has additional logic to transfer
+// states of some voters to stateReplicate early if possible.
+func (r *raft) resetBecomeLeader(term uint64) {
+	if r.Term != term {
+		assertTrue(!r.supportingFortifiedLeader(),
+			"should not be changing terms when supporting a fortified leader")
+		r.setTerm(term)
+	}
+
+	r.lead = None
+	r.electionElapsed = 0
+	r.heartbeatElapsed = 0
+	r.resetRandomizedElectionTimeout()
+
+	r.abortLeaderTransfer()
+
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		next := r.raftLog.lastIndex() + 1
+		conflictEntry, isMatch, ok := r.electionTracker.GetGuessMatchEntryID(id)
+		if ok && r.electionTracker.GetVote(id) {
+			next = conflictEntry.Index + 1
+		}
+
+		*pr = tracker.Progress{
+			Match:       0,
+			MatchCommit: 0,
+			Next:        next,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
+		}
+		if id == r.id {
+			pr.Match = r.raftLog.lastIndex()
+		}
+		if isMatch {
+			// NB: this is a bit of a hack, but we need to set the Next again since
+			// r.becomeReplicate will set pr.Next to match + 1. Where match is 0 in
+			// this case.
+			r.becomeReplicate(pr)
+			pr.Next = next
+		}
+	})
+
+	r.electionTracker.ResetVotes()
+
+	r.pendingConfIndex = 0
+	r.uncommittedSize = 0
+}
+
 func (r *raft) setTerm(term uint64) {
 	if term == r.Term {
 		return
@@ -1336,7 +1385,7 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term)
+	r.resetBecomeLeader(r.Term)
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
@@ -1359,11 +1408,14 @@ func (r *raft) becomeLeader() {
 			return
 		}
 		// All peer flows, except the leader's own, are initially in StateProbe.
+		// However, if discovered during voting that the follower's log matches the
+		// leader's, the follower is set to stateReplicate.
 		// Account the probe state entering in metrics here. All subsequent flow
 		// state changes, while we are the leader, are counted in the corresponding
 		// methods: becomeProbe, becomeReplicate, becomeSnapshot.
-		assertTrue(pr.State == tracker.StateProbe, "peers must be in StateProbe on leader step up")
-		r.metrics.FlowsEnteredStateProbe.Inc(1)
+		if pr.State == tracker.StateProbe {
+			r.metrics.FlowsEnteredStateProbe.Inc(1)
+		}
 	})
 
 	// Conservatively set the pendingConfIndex to the last index in the
@@ -1540,14 +1592,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, hintEntry tracker.EntryID, match bool,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, hintEntry, match)
 	return r.electionTracker.TallyVotes()
 }
 
@@ -1767,7 +1819,13 @@ func (r *raft) Step(m pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+			r.send(pb.Message{
+				To:         m.From,
+				Term:       m.Term,
+				RejectHint: lastID.index,
+				LogTerm:    lastID.term,
+				Type:       voteRespMsgType(m.Type),
+			})
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
@@ -1776,7 +1834,12 @@ func (r *raft) Step(m pb.Message) error {
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
-			r.send(pb.Message{To: m.From, Term: r.Term, Type: voteRespMsgType(m.Type), Reject: true})
+			r.send(pb.Message{
+				To:     m.From,
+				Term:   r.Term,
+				Type:   voteRespMsgType(m.Type),
+				Reject: true,
+			})
 		}
 
 	default:
@@ -2211,7 +2274,30 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
+		voterLastEntryID := entryID{term: m.LogTerm, index: m.RejectHint}
+		// Currently, m.RejectHInt and m.Logterm is populated only if the Vote is non-reject.
+		match := false
+		// The voter voted for us, it is guaranteed that this voter won't accept
+		// another MsgApp for this term. So we can know the voter's log shall stay
+		// the same.
+
+		conflictIndex, conflictTerm := r.raftLog.findConflictByTerm(voterLastEntryID.index, voterLastEntryID.term)
+		if conflictTerm == 0 {
+			conflictIndex = r.raftLog.lastIndex()
+			conflictTerm = r.raftLog.lastEntryID().term
+		}
+
+		if myVoteRespType == pb.MsgVoteResp && !m.Reject && r.raftLog.matchTerm(voterLastEntryID) {
+			match = true
+			conflictIndex = voterLastEntryID.index
+			conflictTerm = voterLastEntryID.term
+		}
+
+		// Currently, all conflictIndex computed are remembered, but they are not
+		// being used if voterLastEntryID is not a match.
+		// Theoretically, we can still use it if they come from rejected votes.
+		gr, rj, res := r.poll(m.From, m.Type, !m.Reject,
+			tracker.EntryID{Index: conflictIndex, Term: conflictTerm}, match)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 		switch res {
 		case quorum.VoteWon:
@@ -2368,6 +2454,11 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 
+	// hack from pav-kv, might need another PR for this change.
+	if ci := r.raftLog.committed; a.prev.index < ci && ci <= a.lastIndex() {
+		// TODO: there should be a safety check that term(ci) == a.termAt(ci).
+		a.LogSlice = a.forward(ci)
+	}
 	if a.prev.index < r.raftLog.committed {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
 			Commit: r.raftLog.committed})
