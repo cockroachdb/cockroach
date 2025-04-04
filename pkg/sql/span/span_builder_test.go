@@ -10,21 +10,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuilder_EncodeConstraintKey(t *testing.T) {
+	const (
+		tableID descpb.ID      = 100
+		indexID descpb.IndexID = 2
+	)
 	var (
-		colDirs1  = []string{"asc", "asc", "asc"}
-		colDirs2  = []string{"desc", "asc", "desc"}
-		intDatum1 = tree.NewDInt(1)
-		intDatum2 = tree.NewDInt(2)
-		textDatum = tree.NewDString("foo")
+		tableIndexBytes = rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableID, indexID)
+		colDirs1        = []string{"asc", "asc", "asc"}
+		colDirs2        = []string{"desc", "asc", "desc"}
+		intDatum1       = tree.NewDInt(1)
+		intDatum2       = tree.NewDInt(2)
+		textDatum       = tree.NewDString("foo")
 	)
 	for tcIdx, tc := range []struct {
 		dirs []string
@@ -63,22 +71,36 @@ func TestBuilder_EncodeConstraintKey(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("case %d", tcIdx+1), func(t *testing.T) {
-			b := Builder{}
-			b.keyAndPrefixCols = make([]fetchpb.IndexFetchSpec_KeyColumn, len(tc.dirs))
-			valDirs := make([]encoding.Direction, len(tc.dirs))
-			for i, dir := range tc.dirs {
-				if dir == "asc" {
-					b.keyAndPrefixCols[i].Direction = catenumpb.IndexColumn_ASC
-					valDirs[i] = encoding.Ascending
-				} else {
-					b.keyAndPrefixCols[i].Direction = catenumpb.IndexColumn_DESC
-					valDirs[i] = encoding.Descending
-				}
+			for _, usePrefix := range []bool{true, false} {
+				t.Run(fmt.Sprintf("usePrefix=%t", usePrefix), func(t *testing.T) {
+					b := Builder{
+						KeyPrefix:        tableIndexBytes,
+						keyAndPrefixCols: make([]fetchpb.IndexFetchSpec_KeyColumn, len(tc.dirs)),
+					}
+					valDirs := make([]encoding.Direction, len(tc.dirs))
+					for i, dir := range tc.dirs {
+						if dir == "asc" {
+							b.keyAndPrefixCols[i].Direction = catenumpb.IndexColumn_ASC
+							valDirs[i] = encoding.Ascending
+						} else {
+							b.keyAndPrefixCols[i].Direction = catenumpb.IndexColumn_DESC
+							valDirs[i] = encoding.Descending
+						}
+					}
+					if usePrefix {
+						prefixDirs := []encoding.Direction{encoding.Ascending, encoding.Ascending}
+						valDirs = append(prefixDirs, valDirs...)
+					}
+					outKey, _, err := b.encodeConstraintKey(tc.in, usePrefix)
+					require.NoError(t, err)
+					vals, _ := encoding.PrettyPrintValuesWithTypes(valDirs, outKey)
+					expected := tc.out
+					if usePrefix && !tc.in.IsEmpty() {
+						expected = fmt.Sprintf("/%d/%d%s", tableID, indexID, expected)
+					}
+					require.Equal(t, expected, "/"+strings.Join(vals, "/"))
+				})
 			}
-			outKey, _, err := b.encodeConstraintKey(tc.in)
-			require.NoError(t, err)
-			vals, _ := encoding.PrettyPrintValuesWithTypes(valDirs, outKey)
-			require.Equal(t, tc.out, "/"+strings.Join(vals, "/"))
 		})
 	}
 }
