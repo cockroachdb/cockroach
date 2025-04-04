@@ -450,6 +450,7 @@ go_test(
         "//pkg/workload/examples",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_google_pprof//profile",
         "@com_github_pmezard_go_difflib//difflib",
