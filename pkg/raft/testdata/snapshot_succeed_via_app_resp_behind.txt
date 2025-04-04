@@ -26,17 +26,100 @@ process-ready 1
 ----
 ok
 
-stabilize 3
-----
-ok
-
-stabilize 1 2
-----
-ok
-
 log-level debug
 ----
 ok
+
+stabilize 3
+----
+> 3 receiving messages
+  1->3 MsgVote Term:1 Log:1/10
+  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
+  INFO 3 became follower at term 1
+  DEBUG 3 reset election elapsed to 0
+  INFO 3 [logterm: 1, index: 5, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 3 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:5 Lead:0 LeadEpoch:0
+  OnSync:
+  3->1 MsgVoteResp Term:1 Log:1/0 Hint:1/5
+
+# Drop the MsgVoteResp from n3 to n1 which carries a hint from n3.
+# If n1 receives this message, it will use the hint to update pr.Next for n3,
+# ultimately making the test ineffective for its original purpose.
+# Dropping it ensures n1 relies on n2's MsgVoteResp to become leader, which
+# ignores the hint in MsgVoteResp from n3. This preserves the original behavior
+# of the test. As n1 does not set n3's pr.Next to the hint when becoming leader.
+deliver-msgs drop=(1)
+----
+dropped: 3->1 MsgVoteResp Term:1 Log:1/0 Hint:1/5
+
+stabilize 1 2
+----
+> 2 receiving messages
+  1->2 MsgVote Term:1 Log:1/10
+  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
+  INFO 2 became follower at term 1
+  DEBUG 2 reset election elapsed to 0
+  INFO 2 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 2 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  OnSync:
+  2->1 MsgVoteResp Term:1 Log:1/0 Hint:1/10
+> 1 receiving messages
+  2->1 MsgVoteResp Term:1 Log:1/0 Hint:1/10
+  INFO 1 received MsgVoteResp from 2 at term 1
+  INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
+  INFO 1 became leader at term 1
+> 1 handling Ready
+  Ready:
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+> 2 receiving messages
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 2 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  OnSync:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  Committed: (10,11]
+  Messages:
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  Applying:
+  1/11 EntryNormal ""
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+> 2 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  Committed: (10,11]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  Applying:
+  1/11 EntryNormal ""
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
 # We now have a leader at index 11 (it appended an empty entry when elected). 3
 # is still at index 5, and has not received any MsgApp from the leader yet.
@@ -73,13 +156,50 @@ propose 1 "foo"
 ----
 ok
 
-stabilize 1 2
-----
-ok
-
 log-level debug
 ----
 ok
+
+stabilize 1 2
+----
+> 1 handling Ready
+  Ready:
+  Entries:
+  1/12 EntryNormal "\"foo\""
+  Messages:
+  1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "\"foo\""]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/12 Commit:11
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "\"foo\""]
+> 2 handling Ready
+  Ready:
+  Entries:
+  1/12 EntryNormal "\"foo\""
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:11
+> 1 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
+  Committed: (11,12]
+  Messages:
+  1->2 MsgApp Term:1 Log:1/12 Commit:12
+  Applying:
+  1/12 EntryNormal "\"foo\""
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/12 Commit:12
+> 2 handling Ready
+  Ready:
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
+  Committed: (11,12]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:12
+  Applying:
+  1/12 EntryNormal "\"foo\""
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:12
 
 status 1
 ----
@@ -102,7 +222,7 @@ process-ready 3
 Ready:
 HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:0
 OnSync:
-3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
+3->1 MsgAppResp Term:1 Log:1/10 Rejected Hint:1/5 Commit:5
 
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
 deliver-msgs 3
@@ -121,7 +241,7 @@ INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
+  3->1 MsgAppResp Term:1 Log:1/10 Rejected Hint:1/5 Commit:5
   DEBUG 1 received MsgAppResp(rejected, hint: (index 5, term 1)) from 3 for index 10
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
   DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
