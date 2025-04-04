@@ -68,7 +68,8 @@ func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserialization
 func (desc *wrapper) HasConcurrentSchemaChanges() bool {
 	return (desc.DeclarativeSchemaChangerState != nil &&
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID) ||
-		len(desc.MutationJobs) > 0
+		len(desc.MutationJobs) > 0 ||
+		desc.SchemaLockedJobID != catpb.InvalidJobID
 }
 
 // ConcurrentSchemaChangeJobIDs implements catalog.Descriptor.
@@ -81,6 +82,10 @@ func (desc *wrapper) ConcurrentSchemaChangeJobIDs() (ret []catpb.JobID) {
 		for _, mutationJob := range desc.MutationJobs {
 			ret = append(ret, mutationJob.JobID)
 		}
+	}
+	// Return the schema locked job ID if no others exist.
+	if desc.SchemaLockedJobID != catpb.InvalidJobID && len(ret) == 0 {
+		ret = append(ret, desc.SchemaLockedJobID)
 	}
 	return ret
 }
