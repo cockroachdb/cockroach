@@ -292,7 +292,7 @@ stabilize 2
 > 2 handling Ready
   Ready:
   OnSync:
-  2->1 MsgPreVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  2->1 MsgPreVoteResp Term:2 Log:0/0 Rejected
 
 stabilize log-level=none
 ----
