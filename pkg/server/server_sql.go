@@ -434,6 +434,22 @@ var vmoduleSetting = settings.RegisterStringSetting(
 	"",
 )
 
+var AppNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.application_name_metrics.enabled",
+	"when enabled, SQL metrics would export application name as and additional label as part of child metrics."+
+		" The number of unique label combinations is limited to 5000 by default.",
+	false, /* default */
+	settings.WithPublic)
+
+var DBNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.database_name_metrics.enabled",
+	"when enabled, SQL metrics would export database name as and additional label as part of child metrics."+
+		" The number of unique label combinations is limited to 5000 by default.",
+	false, /* default */
+	settings.WithPublic)
+
 // newRootSQLMemoryMonitor returns a started BytesMonitor and corresponding
 // metrics.
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
@@ -1406,6 +1422,16 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
+
+	AppNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.LabelValueConfig.SetAppNameLabelEnabled(AppNameLabelEnabled.Get(&cfg.Settings.SV))
+		cfg.registry.ReinitialiseChildMetrics(pgServer.SQLServer.LabelValueConfig)
+	})
+
+	DBNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.LabelValueConfig.SetDBNameLabelEnabled(DBNameLabelEnabled.Get(&cfg.Settings.SV))
+		cfg.registry.ReinitialiseChildMetrics(pgServer.SQLServer.LabelValueConfig)
+	})
 
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
