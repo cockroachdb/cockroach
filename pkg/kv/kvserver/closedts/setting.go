@@ -61,6 +61,18 @@ var RangeClosedTimestampPolicyRefreshInterval = settings.RegisterDurationSetting
 	settings.NonNegativeDuration,
 )
 
+// RangeClosedTimestampPolicyLatencyRefreshInterval determines how often the
+// system updates the latency cache based on observed latencies between nodes.
+// This cache is then used by ranges to select an appropriate closed timestamp
+// policy when auto-tuning is enabled.
+var RangeClosedTimestampPolicyLatencyRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.policy_latency_refresh_interval",
+	"interval at which the system refreshes the latency cache based on observed latencies between nodes",
+	4*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 // LeadForGlobalReadsAutoTuneEnabled determines whether ranges configured to
 // serve global reads would be assigned policies based on observed latency
 // between their leaseholder and furthest follower. This dynamic adjustment
