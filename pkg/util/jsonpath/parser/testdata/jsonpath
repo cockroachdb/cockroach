@@ -347,11 +347,10 @@ $.abc ? ($.a[1] > 2)
 ----
 $."abc"?(($."a"[1] > 2)) -- normalized!
 
-# TODO(normanchenn): this should be not allowed
-parse
+error
 @
 ----
-@
+@ is not allowed in root expressions
 
 parse
 $.a[*] ? (@.b > 100)
@@ -502,12 +501,10 @@ DETAIL: source SQL:
 $ ? (@ like_regex "(invalid pattern")
                                     ^
 
-# TODO(normanchenn): This shouldn't be parsed, as the last keyword isn't within
-# array subscripts.
-parse
+error
 last
 ----
-last
+LAST is allowed only in array subscripts
 
 parse
 $[last]
