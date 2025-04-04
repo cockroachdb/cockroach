@@ -64,6 +64,14 @@ func ms(i int) time.Time {
 	return ts.Add(time.Duration(i) * time.Millisecond)
 }
 
+func newSplitterMetrics() *LoadSplitterMetrics {
+	return &LoadSplitterMetrics{
+		PopularKeyCount:     metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount:     metric.NewCounter(metric.Metadata{}),
+		ClearDirectionCount: metric.NewCounter(metric.Metadata{}),
+	}
+}
+
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -76,10 +84,7 @@ func TestDecider(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	},
+	Init(&d, &loadSplitConfig, newSplitterMetrics(),
 		SplitQPS,
 	)
 
@@ -242,10 +247,7 @@ func TestDecider_MaxStat(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitQPS)
+	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
 
 	assertMaxStat := func(i int, expMaxStat float64, expOK bool) {
 		t.Helper()
@@ -408,10 +410,7 @@ func TestSplitStatisticsGeneral(t *testing.T) {
 				statThreshold: 1,
 			}
 
-			Init(&decider, &loadSplitConfig, &LoadSplitterMetrics{
-				PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-				NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-			}, SplitCPU)
+			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 			for i := 1; i <= 1000; i++ {
 				k := i
@@ -462,10 +461,7 @@ func TestSplitStatisticsPopularKey(t *testing.T) {
 				statThreshold: 1,
 			}
 
-			Init(&decider, &loadSplitConfig, &LoadSplitterMetrics{
-				PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-				NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-			}, SplitCPU)
+			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 			for i := 1; i <= 1000; i++ {
 				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
@@ -491,12 +487,9 @@ func TestDeciderMetrics(t *testing.T) {
 		statThreshold: 1,
 	}
 
-	Init(&dPopular, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
+	Init(&dPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
-	// No split key, popular key
+	// No split key, popular key, clear direction
 	for i := 0; i < 20; i++ {
 		dPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
@@ -510,13 +503,11 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(2))
 	assert.Equal(t, dPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
+	assert.Equal(t, dPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(2))
 
-	// No split key, not popular key
+	// No split key, not popular key, clear direction
 	var dNotPopular Decider
-	Init(&dNotPopular, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
+	Init(&dNotPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 	for i := 0; i < 20; i++ {
 		dNotPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
@@ -531,13 +522,29 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dNotPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
 	assert.Equal(t, dNotPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
+	assert.Equal(t, dNotPopular.loadSplitterMetrics.ClearDirectionCount.Count(), int64(2))
+
+	// no split key, no popular key, no clear direction
+	var dNoClearDirection Decider
+	Init(&dNoClearDirection, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	for i := 0; i < 20; i++ {
+		dNoClearDirection.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i))}
+		})
+	}
+	for i := 1; i <= 2000; i++ {
+		dNoClearDirection.Record(context.Background(), ms(timeStart+i*1000), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i % 20))}
+		})
+	}
+
+	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
+	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
+	assert.Equal(t, dNoClearDirection.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
 
 	// No split key, all insufficient counters
 	var dAllInsufficientCounters Decider
-	Init(&dAllInsufficientCounters, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
+	Init(&dAllInsufficientCounters, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 	for i := 0; i < 20; i++ {
 		dAllInsufficientCounters.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
@@ -551,4 +558,6 @@ func TestDeciderMetrics(t *testing.T) {
 
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
+	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
+
 }
