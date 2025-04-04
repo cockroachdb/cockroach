@@ -72,7 +72,7 @@ type StatExporter interface {
 		from time.Time,
 		to time.Time,
 		queries []AggQuery,
-		benchmarkFns ...func(map[string]StatSummary) (string, float64),
+		benchmarkFns ...func(map[string]StatSummary) *roachtestutil.AggregatedMetric,
 	) (*ClusterStatRun, error)
 }
 
@@ -93,8 +93,9 @@ type StatSummary struct {
 // stat information collected during the run. This struct is mirrored in
 // cockroachdb/roachperf for deserialization.
 type ClusterStatRun struct {
-	Total map[string]float64     `json:"total"`
-	Stats map[string]StatSummary `json:"stats"`
+	Total            map[string]float64                        `json:"total"`
+	Stats            map[string]StatSummary                    `json:"stats"`
+	BenchmarkMetrics map[string]roachtestutil.AggregatedMetric `json:"-"` // Not serialized to JSON
 }
 
 // statsWriter writes the stats buffer to the file. This is used in unit test
@@ -137,13 +138,47 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	return statsWriter(ctx, t, c, report, dest)
 }
 
+// createReport returns a ClusterStatRun struct that encompases the results of
+// the run.
+func createReport(
+	summaries map[string]StatSummary,
+	summaryStats map[string]float64,
+	benchmarkMetrics map[string]roachtestutil.AggregatedMetric,
+) *ClusterStatRun {
+	testRun := ClusterStatRun{
+		Stats:            make(map[string]StatSummary),
+		BenchmarkMetrics: benchmarkMetrics,
+	}
+
+	for tag, summary := range summaries {
+		testRun.Stats[tag] = summary
+	}
+	testRun.Total = summaryStats
+	return &testRun
+}
+
+// serializeOpenmetricsReport serializes the passed in statistics into an openmetrics
+// parseable performance artifact format.
 func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.Buffer, error) {
 	var buffer bytes.Buffer
 
 	// Emit summary metrics from Total
 	for metricName, value := range r.Total {
 		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
-		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeMetricName(metricName), *labelString, value, timeutil.Now().UTC().Unix()))
+
+		// Add labels from benchmark metrics if available
+		additionalLabels := ""
+		if benchmarkMetric, ok := r.BenchmarkMetrics[metricName]; ok {
+			additionalLabels += fmt.Sprintf(",unit=\"%s\"", util.SanitizeValue(benchmarkMetric.Unit))
+			additionalLabels += fmt.Sprintf(",is_higher_better=\"%t\"", benchmarkMetric.IsHigherBetter)
+		}
+
+		buffer.WriteString(fmt.Sprintf("%s{%s%s} %f %d\n",
+			util.SanitizeMetricName(metricName),
+			*labelString,
+			additionalLabels,
+			value,
+			timeutil.Now().UTC().Unix()))
 	}
 
 	// Emit histogram metrics from Stats
@@ -179,20 +214,6 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 	return &buffer, nil
 }
 
-// createReport returns a ClusterStatRun struct that encompases the results of
-// the run.
-func createReport(
-	summaries map[string]StatSummary, summaryStats map[string]float64,
-) *ClusterStatRun {
-	testRun := ClusterStatRun{Stats: make(map[string]StatSummary)}
-
-	for tag, summary := range summaries {
-		testRun.Stats[tag] = summary
-	}
-	testRun.Total = summaryStats
-	return &testRun
-}
-
 // Export collects, serializes and saves a roachperf file, with statistics
 // collect from - to time, for the AggQuery(s) given. The format is described
 // in the doc.go and the AggQuery definition. In addition to the AggQuery(s),
@@ -208,20 +229,37 @@ func (cs *clusterStatCollector) Export(
 	from time.Time,
 	to time.Time,
 	queries []AggQuery,
-	benchmarkFns ...func(summaries map[string]StatSummary) (string, float64),
+	benchmarkFns ...func(summaries map[string]StatSummary) *roachtestutil.AggregatedMetric,
 ) (testRun *ClusterStatRun, err error) {
 	l := t.L()
 	summaries := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
 
-	summaryValues := make(map[string]float64)
-	for _, scalarFn := range benchmarkFns {
-		t, result := scalarFn(summaries)
-		summaryValues[t] = result
+	// Cache this value to avoid calling the function multiple times
+	isOpenMetricsEnabled := t.ExportOpenmetrics()
+
+	// Initialize benchmarkMetrics as nil when OpenMetrics is disabled
+	var benchmarkMetrics map[string]roachtestutil.AggregatedMetric
+	if isOpenMetricsEnabled {
+		benchmarkMetrics = make(map[string]roachtestutil.AggregatedMetric)
 	}
 
-	testRun = createReport(summaries, summaryValues)
+	// Summary values for total are always collected
+	summaryValues := map[string]float64{}
+	for _, benchMarkFn := range benchmarkFns {
+		benchmarkMetric := benchMarkFn(summaries)
+		if benchmarkMetric != nil {
+			summaryValues[benchmarkMetric.Name] = float64(benchmarkMetric.Value)
+
+			// Only populate BenchmarkMetrics when OpenMetrics export is enabled
+			if isOpenMetricsEnabled {
+				benchmarkMetrics[benchmarkMetric.Name] = *benchmarkMetric
+			}
+		}
+	}
+
+	testRun = createReport(summaries, summaryValues, benchmarkMetrics)
 	if !dryRun {
-		err = testRun.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics())
+		err = testRun.SerializeOutRun(ctx, t, c, isOpenMetricsEnabled)
 	}
 	return testRun, err
 }
