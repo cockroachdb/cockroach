@@ -249,7 +249,7 @@ func TestBackfillWithProtectedTS(t *testing.T) {
 				ForceProductionValues: true,
 			},
 			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-				RunBeforeBackfill: func() error {
+				RunBeforeBackfill: func(_ []scexec.BackfillProgress) error {
 					// Cause the backfill to pause before adding the protected
 					// timestamp. This knob is for testing schema changes that
 					// are on the declarative schema changer.
