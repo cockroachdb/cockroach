@@ -2730,6 +2730,10 @@ func (sc *SchemaChanger) txn(ctx context.Context, f func(context.Context, descs.
 	return sc.execCfg.InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
+		// A job ID will not be populated for in txn schema cghanges.
+		if sc.job != nil {
+			txn.Descriptors().SetSchemaLockedJobID(sc.job.ID())
+		}
 		return f(ctx, txn)
 	}, isql.WithPriority(admissionpb.BulkNormalPri))
 }
