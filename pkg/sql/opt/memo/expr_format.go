@@ -1068,12 +1068,22 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			n := tp.Child("body")
 			for i := range def.Body {
 				stmtNode := n
-				if i == 0 && def.CursorDeclaration != nil {
-					// The first statement is opening a cursor.
-					stmtNode = n.Child("open-cursor")
+				if i == 0 {
+					if def.FirstStmtOutput.CursorDeclaration != nil {
+						// The first statement is opening a cursor.
+						stmtNode = n.Child("open-cursor")
+					} else if def.FirstStmtOutput.TargetBufferID != 0 {
+						// The first statement is writing to a target buffer.
+						stmtNode = n.Child("add-to-srf-result")
+					}
 				}
 				prevTailCalls := f.tailCalls
-				if i == len(def.Body)-1 {
+
+				// Routine calls in the last body statement may be tail calls if
+				// ResultBufferID is unset. If it is set, the result of the last body
+				// statement is not directly used as the result of the UDF call, so it
+				// cannot contain tail calls.
+				if i == len(def.Body)-1 && def.ResultBufferID == 0 {
 					f.tailCalls = make(map[opt.ScalarExpr]struct{})
 					ExtractTailCalls(def.Body[i], f.tailCalls)
 				}

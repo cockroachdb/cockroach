@@ -22,7 +22,11 @@ import (
 // A RoutinePlanGenerator must return an error if the RoutinePlanGeneratedFunc
 // returns an error.
 type RoutinePlanGenerator func(
-	_ context.Context, _ RoutineExecFactory, args Datums, fn RoutinePlanGeneratedFunc,
+	_ context.Context,
+	_ RoutineExecFactory,
+	_ RoutineResultWriter,
+	args Datums,
+	fn RoutinePlanGeneratedFunc,
 ) error
 
 // RoutinePlanGeneratedFunc is the function type that is called for each plan
@@ -43,6 +47,12 @@ type RoutinePlan interface{}
 // exec.Factory. We use the empty interface here rather than exec.Factory to
 // avoid import cycles.
 type RoutineExecFactory interface{}
+
+// RoutineResultWriter maps to *sql.RowResultWriter. It is used for planning
+// PL/pgSQL set-generating functions, which need to be able to write to the
+// result set at arbitrary points during execution. We use the empty interface
+// here rather than *sql.RowResultWriter to avoid import cycles.
+type RoutineResultWriter interface{}
 
 // RoutineExpr represents sequential execution of multiple statements. For
 // example, it is used to represent execution of statements in the body of a
@@ -114,6 +124,12 @@ type RoutineExpr struct {
 	// Generator is true if the function may output a set of rows.
 	Generator bool
 
+	// DiscardLastStmtResult is true if the routine should not add the output of
+	// the last body statement into the result set. This is used for set-returning
+	// PL/pgSQL functions, for which sub-routines will add to the result set
+	// during execution (implementing RETURN NEXT and RETURN QUERY).
+	DiscardLastStmtResult bool
+
 	// TailCall is true if the routine is in a tail-call position in a parent
 	// routine. This means that once execution reaches this routine, the parent
 	// routine will return the result of evaluating this routine with no further
@@ -141,6 +157,11 @@ type RoutineExpr struct {
 	// CursorDeclaration contains the information needed to open a SQL cursor with
 	// the result of the *first* body statement. It may be unset.
 	CursorDeclaration *RoutineOpenCursor
+
+	// FirstStmtResultWriter is the optional result writer that will store the
+	// result of the *first* body statement. It may be unset. Only one of this or
+	// CursorDeclaration may be set.
+	FirstStmtResultWriter RoutineResultWriter
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -153,28 +174,32 @@ func NewTypedRoutineExpr(
 	calledOnNullInput bool,
 	multiColOutput bool,
 	generator bool,
+	discardLastStmtResult bool,
 	tailCall bool,
 	procedure bool,
 	triggerFunc bool,
 	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
+	firstStmtResultWriter RoutineResultWriter,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Args:              args,
-		ForEachPlan:       gen,
-		Typ:               typ,
-		EnableStepping:    enableStepping,
-		Name:              name,
-		CalledOnNullInput: calledOnNullInput,
-		MultiColOutput:    multiColOutput,
-		Generator:         generator,
-		TailCall:          tailCall,
-		Procedure:         procedure,
-		TriggerFunc:       triggerFunc,
-		BlockStart:        blockStart,
-		BlockState:        blockState,
-		CursorDeclaration: cursorDeclaration,
+		Args:                  args,
+		ForEachPlan:           gen,
+		Typ:                   typ,
+		EnableStepping:        enableStepping,
+		Name:                  name,
+		CalledOnNullInput:     calledOnNullInput,
+		MultiColOutput:        multiColOutput,
+		Generator:             generator,
+		DiscardLastStmtResult: discardLastStmtResult,
+		TailCall:              tailCall,
+		Procedure:             procedure,
+		TriggerFunc:           triggerFunc,
+		BlockStart:            blockStart,
+		BlockState:            blockState,
+		CursorDeclaration:     cursorDeclaration,
+		FirstStmtResultWriter: firstStmtResultWriter,
 	}
 }
 
