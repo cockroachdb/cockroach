@@ -1182,6 +1182,13 @@ func TestReadCommittedLogic_jsonb_path_query(
 	runLogicTest(t, "jsonb_path_query")
 }
 
+func TestReadCommittedLogic_jsonb_path_query_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_array")
+}
+
 func TestReadCommittedLogic_jsonpath(
 	t *testing.T,
 ) {

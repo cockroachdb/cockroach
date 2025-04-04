@@ -1694,18 +1694,9 @@ type jsonPathQueryGenerator struct {
 func makeJsonpathQueryGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	target := tree.MustBeDJSON(args[0])
-	path := tree.MustBeDJsonpath(args[1])
-	vars := tree.EmptyDJSON
-	silent := tree.DBool(false)
-	if len(args) > 2 {
-		vars = tree.MustBeDJSON(args[2])
-		if vars.Type() != json.ObjectJSONType {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue, `"vars" argument is not an object`)
-		}
-	}
-	if len(args) > 3 {
-		silent = tree.MustBeDBool(args[3])
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
 	}
 	return &jsonPathQueryGenerator{
 		target: target,
