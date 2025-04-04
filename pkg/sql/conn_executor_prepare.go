@@ -60,7 +60,7 @@ func (ex *connExecutor) execPrepare(
 
 	// The anonymous statement can be overwritten.
 	if parseCmd.Name != "" {
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(parseCmd.Name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", parseCmd.Name,
@@ -105,7 +105,7 @@ func (ex *connExecutor) addPreparedStmt(
 	rawTypeHints []oid.Oid,
 	origin prep.StatementOrigin,
 ) (*prep.Statement, error) {
-	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+	if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 		return nil, pgerror.Newf(
 			pgcode.DuplicatePreparedStatement,
 			"prepared statement %q already exists", name,
@@ -129,26 +129,7 @@ func (ex *connExecutor) addPreparedStmt(
 		prepared.MemAcc().Close(ctx)
 		return nil, err
 	}
-	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
-	ex.extraTxnState.prepStmtsNamespace.addLRUEntry(name, prepared.MemAcc().Allocated())
-
-	// Check if we're over prepared_statements_cache_size.
-	cacheSize := ex.sessionData().PreparedStatementsCacheSize
-	if cacheSize != 0 {
-		lru := ex.extraTxnState.prepStmtsNamespace.prepStmtsLRU
-		// While we're over the cache size, deallocate the LRU prepared statement.
-		for tail := lru[prepStmtsLRUTail]; tail.prev != prepStmtsLRUHead && tail.prev != name; tail = lru[prepStmtsLRUTail] {
-			if ex.extraTxnState.prepStmtsNamespace.prepStmtsLRUAlloc <= cacheSize {
-				break
-			}
-			log.VEventf(
-				ctx, 1,
-				"prepared statements are using more than prepared_statements_cache_size (%s), "+
-					"automatically deallocating %s", string(humanizeutil.IBytes(cacheSize)), tail.prev,
-			)
-			ex.deletePreparedStmt(ctx, tail.prev)
-		}
-	}
+	ex.extraTxnState.prepStmtsNamespace.prepStmts.Add(name, prepared, prepared.MemAcc().Allocated())
 
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe. First, try to preserve the hints sent by the client.
@@ -357,12 +338,10 @@ func (ex *connExecutor) execBind(
 	}
 
 	var ok bool
-	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(bindCmd.PreparedStatementName)
 	if !ok {
 		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
-
-	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
 	// Otherwise, for user-defined types we won't take the correct leases and
@@ -584,14 +563,7 @@ func (ex *connExecutor) exhaustPortal(portalName string) {
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
-	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
-	if !ok {
-		return
-	}
-	alloc := ps.MemAcc().Allocated()
-	ps.DecRef(ctx)
-	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
-	ex.extraTxnState.prepStmtsNamespace.delLRUEntry(name, alloc)
+	ex.getPrepStmtsAccessor().Delete(ctx, name)
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
@@ -608,8 +580,7 @@ func (ex *connExecutor) execDelPrepStmt(
 ) (fsm.Event, fsm.EventPayload) {
 	switch delCmd.Type {
 	case pgwirebase.PrepareStatement:
-		_, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[delCmd.Name]
-		if !ok {
+		if !ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(delCmd.Name) {
 			// The spec says "It is not an error to issue Close against a nonexistent
 			// statement or portal name". See
 			// https://www.postgresql.org/docs/current/static/protocol-flow.html.
@@ -640,19 +611,18 @@ func (ex *connExecutor) execDescribe(
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(descCmd.Name)]
+		prepStmts := ex.extraTxnState.prepStmtsNamespace.prepStmts
+		ps, ok := prepStmts.Get(string(descCmd.Name))
 		if !ok {
 			return retErr(newPreparedStmtDNEError(ex.sessionData(), string(descCmd.Name)))
 		}
-		// Not currently counting this as an LRU touch on prepStmtsLRU for
-		// prepared_statements_cache_size (but maybe we should?).
 
 		ast := ps.AST
 		if execute, ok := ast.(*tree.Execute); ok {
 			// If we're describing an EXECUTE, we need to look up the statement type
 			// of the prepared statement that the EXECUTE refers to, or else we'll
 			// return the wrong information for describe.
-			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
+			innerPs, found := prepStmts.Get(string(execute.Name))
 			if !found {
 				return retErr(newPreparedStmtDNEError(ex.sessionData(), string(execute.Name)))
 			}
