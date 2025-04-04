@@ -124,6 +124,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 1
 │ vectorized batch count: 0
+│ execution time: 0µs
 │ estimated row count: 0 (missing stats)
 │ table: xy
 │ set: x, y
@@ -146,6 +147,7 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 0
         │ vectorized batch count: 0
+        │ execution time: 0µs
         │ estimated row count: 10 (missing stats)
         │ filter: f IS DISTINCT FROM NULL
         │
@@ -182,6 +184,7 @@ quality of service: regular
                     │ regions: <hidden>
                     │ actual row count: 0
                     │ vectorized batch count: 0
+                    │ execution time: 0µs
                     │ estimated row count: 10 (missing stats)
                     │ filter: y = 2
                     │
@@ -338,6 +341,7 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ execution time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -347,6 +351,7 @@ quality of service: regular
 │       │ regions: <hidden>
 │       │ actual row count: 0
 │       │ vectorized batch count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • filter
@@ -355,6 +360,7 @@ quality of service: regular
 │           │ regions: <hidden>
 │           │ actual row count: 0
 │           │ vectorized batch count: 0
+│           │ execution time: 0µs
 │           │ estimated row count: 10 (missing stats)
 │           │ filter: y = 2
 │           │
@@ -411,6 +417,7 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ execution time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -420,6 +427,7 @@ quality of service: regular
 │       │ regions: <hidden>
 │       │ actual row count: 1
 │       │ vectorized batch count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • filter
@@ -428,6 +436,7 @@ quality of service: regular
 │           │ regions: <hidden>
 │           │ actual row count: 1
 │           │ vectorized batch count: 0
+│           │ execution time: 0µs
 │           │ estimated row count: 10 (missing stats)
 │           │ filter: y = 2
 │           │
@@ -478,6 +487,7 @@ quality of service: regular
                       regions: <hidden>
                       actual row count: 1
                       vectorized batch count: 0
+                      execution time: 0µs
                       estimated row count: 1
                       label: buffer 1000000
 
@@ -683,6 +693,7 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ execution time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -693,6 +704,7 @@ quality of service: regular
 │       │ regions: <hidden>
 │       │ actual row count: 0
 │       │ vectorized batch count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -755,6 +767,7 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ execution time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -765,6 +778,7 @@ quality of service: regular
 │       │ regions: <hidden>
 │       │ actual row count: 1
 │       │ vectorized batch count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -805,6 +819,7 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ execution time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ table: child
         │   │ set: fk
@@ -818,6 +833,7 @@ quality of service: regular
         │       │ regions: <hidden>
         │       │ actual row count: 1
         │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
         │       │ label: buffer 1
         │       │
         │       └── • filter
@@ -826,6 +842,7 @@ quality of service: regular
         │           │ regions: <hidden>
         │           │ actual row count: 1
         │           │ vectorized batch count: 0
+        │           │ execution time: 0µs
         │           │ estimated row count: 3 (missing stats)
         │           │ filter: f IS DISTINCT FROM NULL
         │           │
@@ -865,6 +882,7 @@ quality of service: regular
         │                           │ regions: <hidden>
         │                           │ actual row count: 1
         │                           │ vectorized batch count: 0
+        │                           │ execution time: 0µs
         │                           │ estimated max memory allocated: 0 B
         │                           │ estimated max sql temp disk usage: 0 B
         │                           │ estimated row count: 3 (missing stats)
@@ -896,6 +914,7 @@ quality of service: regular
         │                               │ regions: <hidden>
         │                               │ actual row count: 1
         │                               │ vectorized batch count: 0
+        │                               │ execution time: 0µs
         │                               │ estimated row count: 0
         │                               │ filter: k IS DISTINCT FROM k_new
         │                               │
@@ -905,6 +924,7 @@ quality of service: regular
         │                                     regions: <hidden>
         │                                     actual row count: 1
         │                                     vectorized batch count: 0
+        │                                     execution time: 0µs
         │                                     estimated row count: 1
         │                                     label: buffer 1000000
         │
@@ -916,6 +936,7 @@ quality of service: regular
         │       │ regions: <hidden>
         │       │ actual row count: 0
         │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
         │       │
         │       └── • lookup join (anti)
         │           │ columns: (fk_new)
@@ -930,6 +951,7 @@ quality of service: regular
         │           │ KV pairs read: 2
         │           │ KV bytes read: 8 B
         │           │ KV gRPC calls: 1
+        │           │ execution time: 0µs
         │           │ estimated max memory allocated: 0 B
         │           │ MVCC step count (ext/int): 0/0
         │           │ MVCC seek count (ext/int): 0/0
@@ -944,6 +966,7 @@ quality of service: regular
         │               │ regions: <hidden>
         │               │ actual row count: 1
         │               │ vectorized batch count: 0
+        │               │ execution time: 0µs
         │               │ estimated row count: 3 (missing stats)
         │               │ filter: fk_new IS NOT NULL
         │               │
@@ -956,6 +979,7 @@ quality of service: regular
         │                         regions: <hidden>
         │                         actual row count: 1
         │                         vectorized batch count: 0
+        │                         execution time: 0µs
         │                         estimated row count: 3 (missing stats)
         │                         label: buffer 1
         │
@@ -990,6 +1014,7 @@ quality of service: regular
                               regions: <hidden>
                               actual row count: 1
                               vectorized batch count: 0
+                              execution time: 0µs
                               estimated row count: 1
                               label: buffer 1000000
 
@@ -1024,6 +1049,7 @@ quality of service: regular
 │     regions: <hidden>
 │     actual row count: 1
 │     vectorized batch count: 0
+│     execution time: 0µs
 │     estimated row count: 0 (missing stats)
 │     from: parent
 │     spans: /2/0
@@ -1040,6 +1066,7 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ execution time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ from: child
         │   │
@@ -1052,6 +1079,7 @@ quality of service: regular
         │       │ regions: <hidden>
         │       │ actual row count: 1
         │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
         │       │ label: buffer 1
         │       │
         │       └── • filter
@@ -1060,6 +1088,7 @@ quality of service: regular
         │           │ regions: <hidden>
         │           │ actual row count: 1
         │           │ vectorized batch count: 0
+        │           │ execution time: 0µs
         │           │ estimated row count: 10 (missing stats)
         │           │ filter: f IS DISTINCT FROM NULL
         │           │
@@ -1090,6 +1119,7 @@ quality of service: regular
         │                           │ regions: <hidden>
         │                           │ actual row count: 1
         │                           │ vectorized batch count: 0
+        │                           │ execution time: 0µs
         │                           │ estimated row count: 10 (missing stats)
         │                           │ filter: fk = 2
         │                           │
@@ -1140,6 +1170,7 @@ quality of service: regular
                               regions: <hidden>
                               actual row count: 1
                               vectorized batch count: 0
+                              execution time: 0µs
                               estimated row count: 1
                               label: buffer 1000000
 
