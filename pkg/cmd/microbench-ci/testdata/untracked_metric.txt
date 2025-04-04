@@ -1,0 +1,198 @@
+# B/op has a regression here but it's not a tracked metric
+config old=abcdef123 new=qwerty456
+benchmarks:
+  - display_name: Sysbench
+    labels: ["KV", "3node", "oltp_write_only"]
+    name: "BenchmarkSysbench/KV/3node/oltp_write_only"
+    package: "pkg/sql/tests"
+    runner_group: 1
+    count: 15
+    iterations: 3000
+    compare_alpha: 0.025
+    retries: 3
+    metrics:
+      - name: "sec/op"
+        threshold: .4
+      - name: "allocs/op"
+        threshold: .1
+
+----
+
+logs name=BenchmarkSysbench/KV/3node/oltp_write_only path=/abcdef123/bin/pkg_sql_tests
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 2010583 ns/op 0 errs/op 717706 B/op 3919 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 2005436 ns/op 0 errs/op 716050 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1981209 ns/op 0 errs/op 715962 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1987300 ns/op 0 errs/op 715946 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1974348 ns/op 0 errs/op 716478 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1983581 ns/op 0 errs/op 717322 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1994232 ns/op 0 errs/op 716922 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1983097 ns/op 0 errs/op 715641 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1982270 ns/op 0 errs/op 716610 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1980803 ns/op 0 errs/op 715987 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1992155 ns/op 0 errs/op 717364 B/op 3919 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1972700 ns/op 0 errs/op 717226 B/op 3918 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1998160 ns/op 0 errs/op 716602 B/op 3914 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1996845 ns/op 0 errs/op 717028 B/op 3920 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1968723 ns/op 0 errs/op 717026 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1981820 ns/op 0 errs/op 717480 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1969319 ns/op 0 errs/op 716572 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1977508 ns/op 0 errs/op 716006 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1964868 ns/op 0 errs/op 716440 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1980378 ns/op 0 errs/op 716154 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1989629 ns/op 0 errs/op 716370 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1983806 ns/op 0 errs/op 716039 B/op 3914 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1979153 ns/op 0 errs/op 717207 B/op 3914 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1986316 ns/op 0 errs/op 716790 B/op 3915 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1986306 ns/op 0 errs/op 716253 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985084 ns/op 0 errs/op 715918 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1979732 ns/op 0 errs/op 716557 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1977564 ns/op 0 errs/op 715952 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1961340 ns/op 0 errs/op 716488 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1976378 ns/op 0 errs/op 716275 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 2011667 ns/op 0 errs/op 717283 B/op 3916 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1990182 ns/op 0 errs/op 716692 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1972881 ns/op 0 errs/op 716424 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978773 ns/op 0 errs/op 715860 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 2002254 ns/op 0 errs/op 716303 B/op 3917 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1963199 ns/op 0 errs/op 716159 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1999707 ns/op 0 errs/op 716553 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1990646 ns/op 0 errs/op 716526 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1972422 ns/op 0 errs/op 715956 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978369 ns/op 0 errs/op 716951 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1991775 ns/op 0 errs/op 716621 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1987556 ns/op 0 errs/op 716506 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1990526 ns/op 0 errs/op 717152 B/op 3915 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1991222 ns/op 0 errs/op 716889 B/op 3907 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1980741 ns/op 0 errs/op 717213 B/op 3911 allocs/op
+
+----
+
+logs name=BenchmarkSysbench/KV/3node/oltp_write_only path=/qwerty456/bin/pkg_sql_tests
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1986895 ns/op 0 errs/op 724798 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1995839 ns/op 0 errs/op 724829 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1987508 ns/op 0 errs/op 724196 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1984248 ns/op 0 errs/op 724730 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1991809 ns/op 0 errs/op 724011 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1984626 ns/op 0 errs/op 724361 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1993185 ns/op 0 errs/op 723414 B/op 3903 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1980299 ns/op 0 errs/op 724307 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1993854 ns/op 0 errs/op 724590 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1995498 ns/op 0 errs/op 723605 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1977474 ns/op 0 errs/op 723423 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985457 ns/op 0 errs/op 725141 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1988712 ns/op 0 errs/op 724529 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1990460 ns/op 0 errs/op 724658 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978531 ns/op 0 errs/op 723692 B/op 3903 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1982988 ns/op 0 errs/op 724105 B/op 3907 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1979725 ns/op 0 errs/op 724580 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1969740 ns/op 0 errs/op 725165 B/op 3907 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978476 ns/op 0 errs/op 723907 B/op 3907 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1986046 ns/op 0 errs/op 724690 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1983005 ns/op 0 errs/op 723630 B/op 3903 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985877 ns/op 0 errs/op 725046 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985969 ns/op 0 errs/op 724280 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1990456 ns/op 0 errs/op 724112 B/op 3914 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1974094 ns/op 0 errs/op 724271 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1970782 ns/op 0 errs/op 724034 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978738 ns/op 0 errs/op 724649 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1979672 ns/op 0 errs/op 724220 B/op 3913 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1984406 ns/op 0 errs/op 724720 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978842 ns/op 0 errs/op 725047 B/op 3917 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1968689 ns/op 0 errs/op 724048 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1993203 ns/op 0 errs/op 724026 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1999129 ns/op 0 errs/op 725372 B/op 3911 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1979229 ns/op 0 errs/op 724394 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1994094 ns/op 0 errs/op 724728 B/op 3910 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1978132 ns/op 0 errs/op 725382 B/op 3906 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1992907 ns/op 0 errs/op 724435 B/op 3912 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1987388 ns/op 0 errs/op 723936 B/op 3902 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985245 ns/op 0 errs/op 723979 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1972526 ns/op 0 errs/op 725111 B/op 3908 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1985051 ns/op 0 errs/op 724535 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1969862 ns/op 0 errs/op 724386 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1969139 ns/op 0 errs/op 724111 B/op 3905 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1986218 ns/op 0 errs/op 724252 B/op 3909 allocs/op
+BenchmarkSysbench/KV/3node/oltp_write_only-4 3000 1984661 ns/op 0 errs/op 724847 B/op 3909 allocs/op
+
+----
+
+run group=1
+----
+----
+
+<details><summary><strong>⚪ Sysbench</strong> [KV, 3node, oltp_write_only]</summary>
+
+| Metric                      | Old Commit     | New Commit     | Delta      | Note         |
+|-----------------------------|----------------|----------------|------------|--------------|
+| ⚪ **sec/op** | 1.984m ±1% | 1.988m ±0% | ~ | p=0.806 n=15    |
+| ⚪ **allocs/op** | 3.910k ±0% | 3.910k ±0% | ~ | p=0.251 n=15    |
+
+<details><summary>Reproduce</summary>
+
+**benchdiff binaries**:
+```shell
+mkdir -p benchdiff/qwerty4/bin/1058449141
+gcloud storage cp gs://cockroach-microbench-ci/builds/qwerty456/bin/pkg_sql_tests benchdiff/qwerty4/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+chmod +x benchdiff/qwerty4/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+mkdir -p benchdiff/abcdef1/bin/1058449141
+gcloud storage cp gs://cockroach-microbench-ci/builds/abcdef123/bin/pkg_sql_tests benchdiff/abcdef1/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+chmod +x benchdiff/abcdef1/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
+```
+**benchdiff command**:
+```shell
+benchdiff --run=^BenchmarkSysbench/KV/3node/oltp_write_only$ --old=abcdef1 --new=qwerty4 ./pkg/sql/tests
+```
+
+</details>
+
+</details>
+
+<details><summary>Artifacts</summary>
+
+**download**:
+```shell
+mkdir -p new
+gcloud storage cp gs://cockroach-microbench-ci/artifacts/qwerty456//\* new/
+mkdir -p old
+gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
+```
+
+</details>
+
+<details><summary>Legend</summary>
+
+- ⚪ **Neutral:** No significant performance change.
+- 🔴 **Regression:** Likely performance regression, requiring investigation.
+- 🟢 **Improvement:** Likely performance gain.
+
+</details>
+
+No regressions detected!
+
+_built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
+----
+----
+
+tree
+----
+----
+
+/abcdef123
+/abcdef123/artifacts
+/abcdef123/artifacts/cleaned_Sysbench_KV_3node_oltp_write_only.log
+/abcdef123/artifacts/cpu_Sysbench_KV_3node_oltp_write_only_merged.prof
+/abcdef123/artifacts/memory_Sysbench_KV_3node_oltp_write_only_merged.prof
+/abcdef123/artifacts/mutex_Sysbench_KV_3node_oltp_write_only_merged.prof
+/abcdef123/artifacts/raw_Sysbench_KV_3node_oltp_write_only.log
+/github-summary.md
+/qwerty456
+/qwerty456/artifacts
+/qwerty456/artifacts/cleaned_Sysbench_KV_3node_oltp_write_only.log
+/qwerty456/artifacts/cpu_Sysbench_KV_3node_oltp_write_only_merged.prof
+/qwerty456/artifacts/memory_Sysbench_KV_3node_oltp_write_only_merged.prof
+/qwerty456/artifacts/mutex_Sysbench_KV_3node_oltp_write_only_merged.prof
+/qwerty456/artifacts/raw_Sysbench_KV_3node_oltp_write_only.log
+/suite.yml
+/summary.json
+----
+----
