@@ -70,6 +70,11 @@ type scopeColumn struct {
 	// exprStr contains a stringified representation of expr, or the original
 	// column name if expr is nil. It is populated lazily inside getExprStr().
 	exprStr string
+
+	// resolveErr, if non-nil, is the error to be returned when the column is
+	// successfully resolved. This is used to provide a helpful error message for
+	// a column that is not allowed to be referenced.
+	resolveErr error
 }
 
 // columnVisibility is an extension of cat.ColumnVisibility.

@@ -4119,6 +4119,10 @@ func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
 	m.data.OptimizerUseDeleteRangeFastPath = val
 }
 
+func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
+	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

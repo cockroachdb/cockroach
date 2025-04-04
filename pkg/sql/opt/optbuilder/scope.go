@@ -872,7 +872,7 @@ func (s *scope) FindSourceProvidingColumn(
 			if candidate.ambiguous {
 				return nil, nil, -1, s.newAmbiguousColumnError(colName, candidate.matchClass)
 			}
-			return &col.table, col, int(col.id), nil
+			return &col.table, col, int(col.id), col.resolveErr
 		}
 		// No matches in this scope; proceed to the parent scope.
 	}
@@ -1015,7 +1015,7 @@ func (s *scope) Resolve(
 		if col.visibility != inaccessible &&
 			col.name.MatchesReferenceName(colName) &&
 			sourceNameMatches(*prefix, col.table) {
-			return col, nil
+			return col, col.resolveErr
 		}
 	}
 

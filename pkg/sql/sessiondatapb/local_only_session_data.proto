@@ -648,6 +648,11 @@ message LocalOnlySessionData {
   // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
   // should try to use the delete range fast-path when possible.
   bool optimizer_use_delete_range_fast_path = 164;
+  // AllowCreateTriggerFunctionWithArgvReferences, when true, allows triggers to
+  // be created with trigger functions that use the TG_ARGV parameter even
+  // though it currently doesn't have Postgres-compatible 0-based indexing
+  // behavior.
+  bool allow_create_trigger_function_with_argv_references = 165;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -216,15 +216,20 @@ func (b *Builder) buildFunctionForTrigger(
 	// The trigger function takes a set of implicitly-defined parameters, two of
 	// which are determined by the table's record type. Add them to the trigger
 	// function scope.
-	numStaticParams := len(triggerFuncStaticParams)
-	triggerFuncParams := make([]routineParam, numStaticParams, numStaticParams+2)
-	copy(triggerFuncParams, triggerFuncStaticParams)
+	triggerFuncParams := make([]routineParam, 0, len(triggerFuncStaticParams)+2)
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColNew, typ: tableTyp})
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColOld, typ: tableTyp})
+	triggerFuncParams = append(triggerFuncParams, triggerFuncStaticParams...)
 	for i, param := range triggerFuncParams {
 		paramColName := funcParamColName(param.name, i)
 		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
 		col.setParamOrd(i)
+		if i == triggerArgvColIdx {
+			// Due to #135311, we disallow references to the TG_ARGV param for now.
+			if !b.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
+				col.resolveErr = unimplementedArgvErr
+			}
+		}
 	}
 
 	// Now that the transition relations and table type are known, fully build and
@@ -240,7 +245,8 @@ func (b *Builder) buildFunctionForTrigger(
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 		plBuilder := newPLpgSQLBuilder(
 			b, ct.FuncName.String(), stmt.AST.Label, nil /* colRefs */, triggerFuncParams, tableTyp,
-			false /* isProcedure */, false /* isDoBlock */, true /* buildSQL */, nil, /* outScope */
+			false /* isProcedure */, false, /* isDoBlock */
+			true /* isTriggerFn */, true /* buildSQL */, nil, /* outScope */
 		)
 		funcScope = plBuilder.buildRootBlock(stmt.AST, funcScope, triggerFuncParams)
 	})
@@ -330,6 +336,10 @@ var triggerFuncStaticParams = []routineParam{
 	{name: "tg_argv", typ: types.StringArray, class: tree.RoutineParamIn},
 }
 
+// The trigger function parameters consist of OLD and NEW, followed by the
+// static parameters. The TG_ARGV parameter is last.
+var triggerArgvColIdx = len(triggerFuncStaticParams) + 1
+
 const triggerColNew = "new"
 const triggerColOld = "old"
 
@@ -369,4 +379,6 @@ var (
 		"column lists are not yet supported for triggers")
 	unimplementedViewTriggerErr = unimplemented.NewWithIssue(135658,
 		"triggers on views are not yet supported")
+	unimplementedArgvErr = unimplemented.NewWithIssue(135311,
+		"referencing the TG_ARGV trigger function parameter is not yet supported")
 )

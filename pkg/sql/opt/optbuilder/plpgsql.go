@@ -192,6 +192,7 @@ type plpgsqlBuilder struct {
 	routineName  string
 	isProcedure  bool
 	isDoBlock    bool
+	isTriggerFn  bool
 	buildSQL     bool
 	identCounter int
 }
@@ -209,7 +210,7 @@ func newPLpgSQLBuilder(
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
-	isProcedure, isDoBlock, buildSQL bool,
+	isProcedure, isDoBlock, isTriggerFn, buildSQL bool,
 	outScope *scope,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
@@ -221,6 +222,7 @@ func newPLpgSQLBuilder(
 		routineName: routineName,
 		isProcedure: isProcedure,
 		isDoBlock:   isDoBlock,
+		isTriggerFn: isTriggerFn,
 		buildSQL:    buildSQL,
 		outScope:    outScope,
 	}
@@ -2017,7 +2019,14 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
+		paramOrd := len(params)
 		col.setParamOrd(len(params))
+		if b.ob.insideFuncDef && b.isTriggerFn && paramOrd == triggerArgvColIdx {
+			// Due to #135311, we disallow references to the TG_ARGV param for now.
+			if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
+				col.resolveErr = unimplementedArgvErr
+			}
+		}
 		params = append(params, col.id)
 	}
 	// Invariant: the variables of a child block always follow those of a parent
@@ -2166,7 +2175,9 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 		block := &b.blocks[i]
 		for _, name := range block.vars {
 			_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
-			if err != nil {
+			if err != nil && !errors.Is(err, unimplementedArgvErr) {
+				// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
+				// parameter when calling a continuation.
 				panic(err)
 			}
 			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
