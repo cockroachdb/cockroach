@@ -464,7 +464,7 @@ func makeCloudStorageSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
