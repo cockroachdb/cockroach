@@ -43,6 +43,8 @@ type blockingBuffer struct {
 		canFlush   bool
 		queue      *bufferEventChunkQueue // Queue of added events.
 	}
+
+	knobs BlockingBufferTestingKnobs
 }
 
 // NewMemBuffer returns a new in-memory buffer which will store events.
@@ -50,9 +52,12 @@ type blockingBuffer struct {
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
 func NewMemBuffer(
-	acc mon.BoundAccount, sv *settings.Values, metrics *PerBufferMetricsWithCompat,
+	acc mon.BoundAccount,
+	sv *settings.Values,
+	metrics *PerBufferMetricsWithCompat,
+	options ...BlockingBufferOption,
 ) Buffer {
-	return newMemBuffer(acc, sv, metrics, nil)
+	return newMemBuffer(acc, sv, metrics, nil, options...)
 }
 
 // TestingNewMemBuffer allows test to construct buffer which will invoked
@@ -71,6 +76,7 @@ func newMemBuffer(
 	sv *settings.Values,
 	metrics *PerBufferMetricsWithCompat,
 	onWaitStart quotapool.OnWaitStartFunc,
+	options ...BlockingBufferOption,
 ) Buffer {
 	const slowAcquisitionThreshold = 5 * time.Second
 
@@ -109,14 +115,31 @@ func newMemBuffer(
 		metrics:      metrics,
 	}
 
+	for _, opt := range options {
+		opt(b)
+	}
+
 	return b
 }
 
 var _ Buffer = (*blockingBuffer)(nil)
 
+type BlockingBufferOption func(b *blockingBuffer)
+
+func WithBlockingBufferTestingKnobs(knobs BlockingBufferTestingKnobs) BlockingBufferOption {
+	return func(b *blockingBuffer) {
+		b.knobs = knobs
+	}
+}
+
 func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
+	if b.knobs.BeforePop != nil {
+		b.knobs.BeforePop()
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	if b.mu.closed {
 		return Event{}, false, ErrBufferClosed{reason: b.mu.reason}
 	}
@@ -143,6 +166,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		close(b.mu.drainCh)
 		b.mu.drainCh = nil
 	}
+
 	return e, ok, nil
 }
 
@@ -254,6 +278,10 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
+	if b.knobs.BeforeAdd != nil {
+		ctx, e = b.knobs.BeforeAdd(ctx, e)
+	}
+
 	if log.V(2) {
 		log.Infof(ctx, "Add event: %s", e.String())
 	}
@@ -290,7 +318,16 @@ func (b *blockingBuffer) tryDrain() chan struct{} {
 }
 
 // Drain implements Writer interface.
-func (b *blockingBuffer) Drain(ctx context.Context) error {
+func (b *blockingBuffer) Drain(ctx context.Context) (err error) {
+	if b.knobs.BeforeDrain != nil {
+		ctx = b.knobs.BeforeDrain(ctx)
+	}
+	if b.knobs.AfterDrain != nil {
+		defer func() {
+			b.knobs.AfterDrain(err)
+		}()
+	}
+
 	if drained := b.tryDrain(); drained != nil {
 		select {
 		case <-ctx.Done():
@@ -304,7 +341,13 @@ func (b *blockingBuffer) Drain(ctx context.Context) error {
 }
 
 // CloseWithReason implements Writer interface.
-func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) error {
+func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) (err error) {
+	if b.knobs.AfterCloseWithReason != nil {
+		defer func() {
+			b.knobs.AfterCloseWithReason(err)
+		}()
+	}
+
 	// Close quota pool -- any requests waiting to acquire will receive an error.
 	b.qp.Close("blocking buffer closing")
 
