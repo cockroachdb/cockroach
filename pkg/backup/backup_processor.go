@@ -439,6 +439,9 @@ func runBackupProcessor(
 		todo <- chunk
 	}
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
+		ctx, sp := tracing.ChildSpan(ctx, "backup.worker")
+		defer sp.Finish()
+
 		readTime := spec.BackupEndTime.GoTime()
 
 		// Passing a nil pacer is effectively a noop if CPU control is disabled.
