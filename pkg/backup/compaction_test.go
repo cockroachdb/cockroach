@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,6 +50,11 @@ func TestBackupCompaction(t *testing.T) {
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
+				Knobs: base.TestingKnobs{
+					BackupRestore: &sql.BackupRestoreTestingKnobs{
+						RunAfterResolvingManifests: containsCompactedBackup,
+					},
+				},
 			},
 		},
 	)
@@ -71,7 +79,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 	t.Run("basic operations insert, update, and delete", func(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
-			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "DROP TABLE IF EXISTS foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		start := getTime(t)
@@ -441,6 +449,13 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 					}},
 				},
 			},
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					BackupRestore: &sql.BackupRestoreTestingKnobs{
+						RunAfterResolvingManifests: containsCompactedBackup,
+					},
+				},
+			},
 		},
 	)
 	defer cleanupDB()
@@ -757,4 +772,13 @@ func getTime(t *testing.T) int64 {
 	time, err := strconv.ParseFloat(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime(), 64)
 	require.NoError(t, err)
 	return int64(time)
+}
+
+func containsCompactedBackup(manifests []backuppb.BackupManifest) error {
+	if !slices.ContainsFunc(manifests, func(m backuppb.BackupManifest) bool {
+		return m.IsCompacted
+	}) {
+		return errors.Newf("expected to find a compacted manifest")
+	}
+	return nil
 }

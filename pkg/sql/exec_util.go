@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1896,6 +1897,10 @@ type BackupRestoreTestingKnobs struct {
 	BackupMemMonitor *mon.BytesMonitor
 
 	RestoreDistSQLRetryPolicy *retry.Options
+
+	// RunAfterResolvingManifests is called once the restore chain for a restore
+	// has been resolved.
+	RunAfterResolvingManifests func(manifests []backuppb.BackupManifest) error
 
 	RunBeforeRestoreFlow func() error
 

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -886,7 +887,16 @@ func ValidateEndTimeAndTruncate(
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	includeSkipped bool,
+	includeCompacted bool,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	if !includeCompacted {
+		mainBackupManifests = util.Filter(
+			mainBackupManifests,
+			func(manifest backuppb.BackupManifest) bool {
+				return !manifest.IsCompacted
+			},
+		)
+	}
 
 	if endTime.IsEmpty() {
 		if includeSkipped {
@@ -896,7 +906,7 @@ func ValidateEndTimeAndTruncate(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if err := validateContinuity(manifests, endTime); err != nil {
+		if err := validateContinuity(manifests); err != nil {
 			return nil, nil, nil, err
 		}
 		return uris, manifests, locality, nil
@@ -933,6 +943,16 @@ func ValidateEndTimeAndTruncate(
 					"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
 						" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
 				)
+			} else if slices.ContainsFunc(mainBackupManifests, func(m backuppb.BackupManifest) bool {
+				// A key assumption that we are making is that even if `includeCompacted` is
+				// true, if this is a revision history restore, we will not have any compacted
+				// backups in the list of backups since revision history is not supported by
+				// compaction.
+				return m.IsCompacted
+			}) {
+				return nil, nil, nil, errors.AssertionFailedf(
+					"unexpected compacted backup found in chain of revision history restore",
+				)
 			}
 		}
 		if includeSkipped {
@@ -944,11 +964,10 @@ func ValidateEndTimeAndTruncate(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if err := validateContinuity(manifests, endTime); err != nil {
+		if err := validateContinuity(manifests); err != nil {
 			return nil, nil, nil, err
 		}
 		return uris, manifests, locality, nil
-
 	}
 
 	return nil, nil, nil, errors.Errorf(
@@ -956,9 +975,8 @@ func ValidateEndTimeAndTruncate(
 	)
 }
 
-// ValidateContinuity checks that the backups are continuous and cover the
-// requested end time.
-func validateContinuity(manifests []backuppb.BackupManifest, endTime hlc.Timestamp) error {
+// ValidateContinuity checks that the backups are continuous.
+func validateContinuity(manifests []backuppb.BackupManifest) error {
 	if len(manifests) == 0 {
 		return errors.AssertionFailedf("an empty chain of backups cannot cover an end time")
 	}
@@ -968,15 +986,6 @@ func validateContinuity(manifests []backuppb.BackupManifest, endTime hlc.Timesta
 				"backups are not continuous: %dth backup ends at %+v, %dth backup starts at %+v",
 				i, manifests[i].EndTime,
 				i+1, manifests[i+1].StartTime,
-			)
-		}
-	}
-	if !endTime.IsEmpty() {
-		lastManifest := manifests[len(manifests)-1]
-		if !lastManifest.StartTime.Less(endTime) || !endTime.LessEq(lastManifest.EndTime) {
-			return errors.AssertionFailedf(
-				"requested time %s is not covered by the last backup",
-				endTime,
 			)
 		}
 	}
@@ -1000,7 +1009,8 @@ func ElideSkippedLayers(
 			j--
 		}
 		// If there are backups between i and j, remove them.
-		if j != i-1 {
+		// If j is less than 0, then no parent was found so nothing to skip.
+		if j != i-1 && j >= 0 {
 			uris = slices.Delete(uris, j+1, i)
 			backups = slices.Delete(backups, j+1, i)
 			loc = slices.Delete(loc, j+1, i)
