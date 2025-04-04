@@ -131,21 +131,21 @@ process-ready 4 5 6
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
-    4->3 MsgVoteResp Term:2 Log:0/0
+    4->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 > 5 handling Ready
   Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
-    5->3 MsgVoteResp Term:2 Log:0/0
+    5->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 > 6 handling Ready
   Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
-    6->3 MsgVoteResp Term:2 Log:0/0
+    6->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 
 process-append-thread 3 4 5 6
@@ -159,30 +159,30 @@ process-append-thread 3 4 5 6
   Processing:
   4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
-  4->3 MsgVoteResp Term:2 Log:0/0
+  4->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 > 5 processing append thread
   Processing:
   5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
-  5->3 MsgVoteResp Term:2 Log:0/0
+  5->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 > 6 processing append thread
   Processing:
   6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
-  6->3 MsgVoteResp Term:2 Log:0/0
+  6->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 
 deliver-msgs 3
 ----
 3->3 MsgVoteResp Term:2 Log:0/0
 INFO 3 received MsgVoteResp from 3 at term 2
 INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
-4->3 MsgVoteResp Term:2 Log:0/0
+4->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 3 received MsgVoteResp from 4 at term 2
 INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
-5->3 MsgVoteResp Term:2 Log:0/0
+5->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 3 received MsgVoteResp from 5 at term 2
 INFO 3 has received 3 MsgVoteResp votes and 0 vote rejections
-6->3 MsgVoteResp Term:2 Log:0/0
+6->3 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 3 received MsgVoteResp from 6 at term 2
 INFO 3 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 3 became leader at term 2
@@ -306,21 +306,21 @@ process-ready 5 6 7
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
-    5->4 MsgVoteResp Term:3 Log:0/0
+    5->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 > 6 handling Ready
   Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
-    6->4 MsgVoteResp Term:3 Log:0/0
+    6->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 > 7 handling Ready
   Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
-    7->4 MsgVoteResp Term:3 Log:0/0
+    7->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
   ]
 
 process-append-thread 4 5 6 7
@@ -334,30 +334,30 @@ process-append-thread 4 5 6 7
   Processing:
   5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
-  5->4 MsgVoteResp Term:3 Log:0/0
+  5->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 > 6 processing append thread
   Processing:
   6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
-  6->4 MsgVoteResp Term:3 Log:0/0
+  6->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 > 7 processing append thread
   Processing:
   7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
-  7->4 MsgVoteResp Term:3 Log:0/0
+  7->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 
 deliver-msgs 4
 ----
 4->4 MsgVoteResp Term:3 Log:0/0
 INFO 4 received MsgVoteResp from 4 at term 3
 INFO 4 has received 1 MsgVoteResp votes and 0 vote rejections
-5->4 MsgVoteResp Term:3 Log:0/0
+5->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 4 received MsgVoteResp from 5 at term 3
 INFO 4 has received 2 MsgVoteResp votes and 0 vote rejections
-6->4 MsgVoteResp Term:3 Log:0/0
+6->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 4 received MsgVoteResp from 6 at term 3
 INFO 4 has received 3 MsgVoteResp votes and 0 vote rejections
-7->4 MsgVoteResp Term:3 Log:0/0
+7->4 MsgVoteResp Term:3 Log:1/0 RejectIndex:11 RejectTerm:1
 INFO 4 received MsgVoteResp from 7 at term 3
 INFO 4 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 4 became leader at term 3
@@ -417,9 +417,9 @@ Messages:
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->2 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
+4->5 MsgApp Term:3 Log:3/12 Commit:11
+4->6 MsgApp Term:3 Log:3/12 Commit:11
+4->7 MsgApp Term:3 Log:3/12 Commit:11
 4->AppendThread MsgStorageAppend Term:0 Log:0/0 Responses:[
   4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 ]
