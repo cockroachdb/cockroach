@@ -55,7 +55,7 @@ func serializeSessionState(
 	prepStmtsState eval.PreparedStatementState,
 	sd *sessiondata.SessionData,
 	execCfg *ExecutorConfig,
-) (*tree.DBytes, error) {
+) (_ *tree.DBytes, err error) {
 	if inExplicitTxn {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
@@ -88,7 +88,9 @@ func serializeSessionState(
 	m.SessionData = sd.SessionData
 	sessiondata.MarshalNonLocal(sd, &m.SessionData)
 	m.LocalOnlySessionData = sd.LocalOnlySessionData
-	m.PreparedStatements = prepStmtsState.MigratablePreparedStatements()
+	if m.PreparedStatements, err = prepStmtsState.MigratablePreparedStatements(); err != nil {
+		return nil, err
+	}
 
 	b, err := protoutil.Marshal(&m)
 	if err != nil {

@@ -535,7 +535,7 @@ type PreparedStatementState interface {
 	// HasActivePortals returns true if there are portals in the session.
 	HasActivePortals() bool
 	// MigratablePreparedStatements returns a mapping of all prepared statements.
-	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
+	MigratablePreparedStatements() ([]sessiondatapb.MigratableSession_PreparedStatement, error)
 	// HasPortal returns true if there exists a given named portal in the session.
 	HasPortal(s string) bool
 }

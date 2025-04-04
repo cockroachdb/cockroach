@@ -74,7 +74,7 @@ func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnPrepare); err != nil {
 		return err
 	}
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
 	// Validate the global ID.
 	globalID := s.Transaction.RawString()
