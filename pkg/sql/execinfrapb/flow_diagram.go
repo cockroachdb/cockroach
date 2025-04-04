@@ -777,6 +777,29 @@ func (i *IngestStoppedSpec) summary() (string, []string) {
 	return "IngestStoppedSpec", []string{detail}
 }
 
+// summary implements the diagramCellType interface.
+func (m *CompactBackupsSpec) summary() (string, []string) {
+	var spanStr strings.Builder
+	if len(m.Spans) > 0 {
+		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.AssignedSpans)))
+		const limit = 3
+		for i := 0; i < len(m.AssignedSpans) && i < limit; i++ {
+			if i > 0 {
+				spanStr.WriteString(", ")
+			}
+			spanStr.WriteString(m.AssignedSpans[i].String())
+		}
+		if len(m.Spans) > limit {
+			spanStr.WriteString("...")
+		}
+	}
+
+	details := []string{
+		spanStr.String(),
+	}
+	return "CompactBackupsSpec", details
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

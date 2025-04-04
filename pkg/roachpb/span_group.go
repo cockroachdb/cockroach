@@ -119,6 +119,14 @@ func (g *SpanGroup) ForEach(op func(span Span) error) error {
 	})
 }
 
+// Clear clears all of the spans from the SpanGroup, resetting it to be used
+// again.
+func (g *SpanGroup) Clear() {
+	if g.rg != nil {
+		g.rg.Clear()
+	}
+}
+
 // s2r converts a Span to an interval.Range.  Since the Key and
 // interval.Comparable types are both just aliases of []byte,
 // we don't have to perform any other conversion.

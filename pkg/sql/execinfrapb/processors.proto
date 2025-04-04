@@ -125,9 +125,10 @@ message ProcessorCoreUnion {
   optional LogicalReplicationOfflineScanSpec logicalReplicationOfflineScan = 46;
   optional VectorSearchSpec vectorSearch = 47;
   optional VectorMutationSearchSpec vectorMutationSearch = 48;
+  optional CompactBackupsSpec compactBackups = 49;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 49.
+  // NEXT ID: 50.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
