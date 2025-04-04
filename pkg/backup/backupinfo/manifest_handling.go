@@ -939,10 +939,15 @@ func ValidateEndTimeAndTruncate(
 	)
 }
 
-// ElideSkippedLayers removes backups that are skipped in the backup chain.
+// ElideSkippedLayers removes backups that are skipped in the backup chain and
+// ensures only backups that will be used in the restore are returned.
+//
+// Note: This assumes that the provided backups are sorted in increasing order
+// by end time, and then sorted in increasing order by start time to break ties.
 func ElideSkippedLayers(
 	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	uris, backups, loc = elideDuplicateEndTimes(uris, backups, loc)
 	i := len(backups) - 1
 	for i > 0 {
 		// Find j such that backups[j] is parent of backups[i].
@@ -961,6 +966,34 @@ func ElideSkippedLayers(
 	}
 
 	return uris, backups, loc, nil
+}
+
+// elideDuplicateEndTimes ensures that backups in a list of backups are
+// functionally unique by removing any duplicates that have the same end time,
+// choosing backups with earlier start times and eliding the rest.
+//
+// Note: This assumes that the provided backups are sorted in increasing order
+// by end time, and then sorted in increasing order by start time to break ties.
+// This is the case for backups being returned by storage clients due to us
+// encoding backup paths in a way that ensures this order.
+func elideDuplicateEndTimes(
+	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo) {
+	for i := range len(backups) - 1 {
+		j := i + 1
+		// Find j such that backups[j] no longer shares the same end time as
+		// backups[i].
+		for j < len(backups) && backups[i].EndTime.Equal(backups[j].EndTime) {
+			j++
+		}
+		// If there exists backups between i and j, remove them.
+		if j > i+1 {
+			uris = slices.Delete(uris, i+1, j)
+			backups = slices.Delete(backups, i+1, j)
+			loc = slices.Delete(loc, i+1, j)
+		}
+	}
+	return uris, backups, loc
 }
 
 // GetBackupIndexAtTime returns the index of the latest backup in
