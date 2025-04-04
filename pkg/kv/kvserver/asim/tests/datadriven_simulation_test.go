@@ -274,7 +274,7 @@ func TestDataDriven(t *testing.T) {
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
 				var nodeCPURateCapacity int64
 				var locality []string
-				var nodesPerRegion []int64
+				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
