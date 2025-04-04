@@ -310,6 +310,8 @@ const (
 )
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
+// TODO: maybe add validation on the buffer size that it's below raft command
+// size and in reverse?
 var MaxCommandSize = settings.RegisterByteSizeSetting(
 	settings.SystemVisible, // used by SQL/bulk to determine mutation batch sizes
 	"kv.raft.command.max_size",
