@@ -581,7 +581,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the store of this lease.
 	if iAmTheLeaseHolder {
-		r.store.registerLeaseholder(ctx, r, newLease.Sequence)
+		r.store.registerLeaseholderAndRefreshPolicy(ctx, r, newLease.Sequence)
 	} else {
 		r.store.unregisterLeaseholder(ctx, r)
 	}

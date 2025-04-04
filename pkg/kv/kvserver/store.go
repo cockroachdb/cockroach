@@ -4147,9 +4147,10 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 	return errors.Newf("unable to subscribe to span configs")
 }
 
-// registerLeaseholder registers the provided replica as a leaseholder in the
-// node's closed timestamp side transport.
-func (s *Store) registerLeaseholder(
+// registerLeaseholderAndRefreshPolicy registers the provided replica as a
+// leaseholder in the node's closed timestamp side transport and refreshes its
+// closed timestamp policy as a post-action to the lease acquisition.
+func (s *Store) registerLeaseholderAndRefreshPolicy(
 	ctx context.Context, r *Replica, leaseSeq roachpb.LeaseSequence,
 ) {
 	if s.ctSender != nil {
