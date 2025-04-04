@@ -35,21 +35,7 @@ type jsonpathCtx struct {
 func JsonpathQuery(
 	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) ([]tree.DJSON, error) {
-	parsedPath, err := parser.Parse(string(path))
-	if err != nil {
-		return nil, err
-	}
-	expr := parsedPath.AST
-
-	ctx := &jsonpathCtx{
-		root:                 target.JSON,
-		vars:                 vars.JSON,
-		strict:               expr.Strict,
-		silent:               bool(silent),
-		innermostArrayLength: -1,
-	}
-
-	j, err := ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
+	j, err := jsonpathQuery(target, path, vars, silent)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +49,46 @@ func JsonpathQuery(
 func JsonpathExists(
 	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) (tree.DBool, error) {
-	j, err := JsonpathQuery(target, path, vars, silent)
+	j, err := jsonpathQuery(target, path, vars, silent)
 	if err != nil {
 		return false, err
 	}
 	return len(j) > 0, nil
+}
+
+func JsonpathQueryArray(
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+) (tree.DJSON, error) {
+	j, err := jsonpathQuery(target, path, vars, silent)
+	if err != nil {
+		return tree.DJSON{}, err
+	}
+
+	b := json.NewArrayBuilder(len(j))
+	for _, j := range j {
+		b.Add(j)
+	}
+	return tree.DJSON{JSON: b.Build()}, nil
+}
+
+func jsonpathQuery(
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+) ([]json.JSON, error) {
+	parsedPath, err := parser.Parse(string(path))
+	if err != nil {
+		return []json.JSON{}, err
+	}
+	expr := parsedPath.AST
+
+	ctx := &jsonpathCtx{
+		root:                 target.JSON,
+		vars:                 vars.JSON,
+		strict:               expr.Strict,
+		silent:               bool(silent),
+		innermostArrayLength: -1,
+	}
+
+	return ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
 }
 
 func (ctx *jsonpathCtx) eval(
