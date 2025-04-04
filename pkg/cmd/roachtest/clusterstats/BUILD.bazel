@@ -63,6 +63,7 @@ go_test(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
+        "//pkg/cmd/roachtest/roachtestutil",
     ],
 )
 

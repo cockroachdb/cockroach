@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -366,13 +367,13 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 		restoreStats.workloadStartTime,
 		endTime,
 		[]clusterstats.AggQuery{sqlServiceLatencyP95Agg, queriesThroughputAgg},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			var timeToHealth time.Time
 			healthyLatencyRatio := 1.25
 			n := len(stats[latencyQueryKey].Value)
 			rd.t.L().Printf("aggregating latency over %d data points", n)
 			if n == 0 {
-				return "", 0
+				return nil // Return nil for no data points
 			}
 			healthyLatency := stats[latencyQueryKey].Value[n-1]
 			latestHealthyValue := healthyLatency
@@ -394,7 +395,14 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 			description := "Time to within 1.25x of regular p95 latency (mins)"
 			rd.t.L().Printf("%s: %.2f minutes, compared to link + download phase time %.2f", description, rto, fullRestoreTime)
 			rd.t.L().Printf("Latency at Recovery Time %.0f ms; at end of test %.0f ms", latestHealthyValue, healthyLatency)
-			return description, rto
+
+			return &roachtestutil.AggregatedMetric{
+				Name:             description,
+				Value:            roachtestutil.MetricPoint(rto),
+				Unit:             "minutes",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
 	)
 	if err != nil {
