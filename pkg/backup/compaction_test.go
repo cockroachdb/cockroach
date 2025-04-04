@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -590,6 +591,110 @@ func TestScheduledBackupCompaction(t *testing.T) {
 			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup']", backupPath),
 	).Scan(&numBackups)
 	require.Equal(t, 4, numBackups)
+}
+
+func TestCompactionCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// These two channels are for having the test wait until the compaction job
+	// writes a checkpoint and to pause the compaction job until the test is
+	// ready to resume, respectively.
+	// We block the job from continuing to prevent the job from completing before
+	// we can pause it.
+	hitCheckpoint := make(chan struct{})
+	blockCompaction := make(chan struct{})
+	doBlockCheckpoint := true
+
+	// These two channels are for having the test wait until the compaction job
+	// has loaded a manifest after resuming a job and to pause the job until the
+	// test is ready to resume, respectively.
+	// We block resuming because otherwise we have a race condition where the
+	// manifest is updated by the job before we can check its files.
+	loadedManifest := make(chan struct{})
+	blockResume := make(chan struct{})
+	doBlockResume := true
+	var manifest *backuppb.BackupManifest
+
+	defer func() {
+		close(hitCheckpoint)
+		close(blockCompaction)
+		close(loadedManifest)
+		close(blockResume)
+	}()
+	// Need a large enough backup so that it doesn't finish in one iteration
+	const numAccounts = 10000
+	tc, db, _, cleanup := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					BackupRestore: &sql.BackupRestoreTestingKnobs{
+						AfterLoadingManifestOnResume: func(m *backuppb.BackupManifest) {
+							if doBlockResume {
+								manifest = m
+								loadedManifest <- struct{}{}
+								<-blockResume
+							}
+						},
+						AfterCompactBackupsCheckpoint: func() {
+							if doBlockCheckpoint {
+								hitCheckpoint <- struct{}{}
+								<-blockCompaction
+							}
+						},
+					},
+				},
+			},
+		},
+	)
+	defer cleanup()
+	writeQueries := func() {
+		db.Exec(t, "UPDATE data.bank SET balance = balance + 1")
+	}
+	db.Exec(t, "SET CLUSTER SETTING bulkio.backup.checkpoint_interval = '10ms'")
+	start := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME %d", start))
+	writeQueries()
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	writeQueries()
+	end := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME %d", end))
+
+	var backupPath string
+	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+
+	var jobID jobspb.JobID
+	db.QueryRow(
+		t,
+		"SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], $1, ''::BYTES, $2, $3)",
+		backupPath, start, end,
+	).Scan(&jobID)
+	// Ensure that the very first manifest when the job is initially started has
+	// no files.
+	<-loadedManifest
+	require.Equal(t, 0, len(manifest.Files))
+	blockResume <- struct{}{}
+
+	// Pause after first checkpoint and then resume the job from that checkpoint.
+	<-hitCheckpoint
+	db.Exec(t, "PAUSE JOB $1", jobID)
+	// Wait for the job to pause.
+	jobutils.WaitForJobToPause(t, db, jobID)
+	doBlockCheckpoint = false // Don't bother pausing on other checkpoints.
+	blockCompaction <- struct{}{}
+	db.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToRun(t, db, jobID)
+
+	// Now that the job has been paused and resumed after previously hitting a
+	// checkpoint, the initial manifest at the start of the job should have
+	// some files from before the pause.
+	<-loadedManifest
+	require.NotEmpty(t, manifest.Files)
+	doBlockResume = false
+	blockResume <- struct{}{}
+
+	waitForSuccessfulJob(t, tc, jobID)
+	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end)
 }
 
 // Start and end are unix epoch in nanoseconds.
