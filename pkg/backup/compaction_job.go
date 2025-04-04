@@ -68,10 +68,23 @@ func maybeStartCompactionJob(
 	triggerJob jobspb.BackupDetails,
 ) (jobspb.JobID, error) {
 	threshold := backupCompactionThreshold.Get(&execCfg.Settings.SV)
-	if threshold == 0 || triggerJob.RevisionHistory ||
-		triggerJob.StartTime.IsEmpty() || triggerJob.ScheduleID == 0 {
+	if threshold == 0 || triggerJob.StartTime.IsEmpty() {
 		return 0, nil
 	}
+
+	switch {
+	case len(triggerJob.ExecutionLocality.Tiers) != 0:
+		return 0, errors.New("execution locality not supported for compaction")
+	case triggerJob.RevisionHistory:
+		return 0, errors.New("revision history not supported for compaction")
+	case triggerJob.ScheduleID == 0:
+		return 0, errors.New("only scheduled backups can be compacted")
+	case len(triggerJob.Destination.IncrementalStorage) != 0:
+		return 0, errors.New("custom incremental storage location not supported for compaction")
+	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
+		return 0, errors.New("backups of tenants not supported for compaction")
+	}
+
 	env := scheduledjobs.ProdJobSchedulerEnv
 	knobs := execCfg.JobsKnobs()
 	if knobs != nil && knobs.JobSchedulerEnv != nil {

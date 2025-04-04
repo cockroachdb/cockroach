@@ -82,6 +82,15 @@ func (c ComponentAggregatorStats) DeepCopy() ComponentAggregatorStats {
 	return mapCopy
 }
 
+func sortedKeys[T any](m map[string]T) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // FlushTracingAggregatorStats persists the following files to the
 // `system.job_info` table for consumption by job observability tools:
 //
@@ -116,7 +125,8 @@ func FlushTracingAggregatorStats(
 
 		// Print span stats.
 		perNode.WriteString("## Span Totals\n\n")
-		for name, stats := range nodeStats.SpanTotals {
+		for _, name := range sortedKeys(nodeStats.SpanTotals) {
+			stats := nodeStats.SpanTotals[name]
 			fmt.Fprintf(&perNode, "- %-40s (%d):\t%s\n", name, stats.Count, stats.Duration)
 		}
 		perNode.WriteString("\n")
@@ -127,7 +137,8 @@ func FlushTracingAggregatorStats(
 		}
 
 		perNode.WriteString("## Aggregate Stats\n\n")
-		for name, event := range nodeStats.Events {
+		for _, name := range sortedKeys(nodeStats.Events) {
+			event := nodeStats.Events[name]
 			msg, err := protoreflect.DecodeMessage(name, event)
 			if err != nil {
 				continue
@@ -149,13 +160,14 @@ func FlushTracingAggregatorStats(
 	var combined bytes.Buffer
 	combined.WriteString("# Cluster-wide\n\n")
 	combined.WriteString("## Span Totals\n\n")
-	for name, stats := range clusterWideSpanStats {
+	for _, name := range sortedKeys(clusterWideSpanStats) {
+		stats := clusterWideSpanStats[name]
 		fmt.Fprintf(&combined, " - %-40s (%d):\t%s\n", name, stats.Count, stats.Duration)
 	}
 	combined.WriteString("\n")
 	combined.WriteString("## Aggregate Stats\n\n")
-	for name, ev := range clusterWideAggregatorStats {
-		fmt.Fprintf(&combined, " - %s:\n%s\n", name, ev)
+	for _, name := range sortedKeys(clusterWideAggregatorStats) {
+		fmt.Fprintf(&combined, " - %s:\n%s\n", name, clusterWideAggregatorStats[name])
 	}
 	combined.WriteString("\n")
 
