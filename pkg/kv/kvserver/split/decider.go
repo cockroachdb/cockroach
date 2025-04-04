@@ -9,6 +9,7 @@ package split
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
 	"time"
 
@@ -140,8 +141,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount *metric.Counter
-	NoSplitKeyCount *metric.Counter
+	PopularKeyCount     *metric.Counter
+	NoSplitKeyCount     *metric.Counter
+	ClearDirectionCount *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -282,6 +284,13 @@ func (d *Decider) recordLocked(
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
+						}
+						accessDirection := d.mu.splitFinder.AccessDirection()
+						direction := directionStr(accessDirection)
+						log.KvDistribution.Infof(ctx, "%s, access balance between left and right for sampled keys: %s-biased %d%%",
+							causeMsg, direction, int(math.Abs(accessDirection)*100))
+						if math.Abs(accessDirection) >= clearDirectionThreshold {
+							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
@@ -541,4 +550,17 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
+}
+
+// Returns the absolute percentage and direction of accesses
+// as a string to be used in a log statement.
+func directionStr(direction float64) string {
+	dstr := "right"
+	if direction == 0 {
+		dstr = "even"
+	}
+	if direction < 0 {
+		dstr = "left"
+	}
+	return dstr
 }
