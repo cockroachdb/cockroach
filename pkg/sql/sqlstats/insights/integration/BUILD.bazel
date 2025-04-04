@@ -15,6 +15,7 @@ go_test(
         "//pkg/sql/clusterunique",
         "//pkg/sql/contention",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

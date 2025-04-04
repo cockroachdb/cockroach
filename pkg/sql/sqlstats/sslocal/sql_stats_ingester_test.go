@@ -70,8 +70,9 @@ func (s *sqlStatsTestSink) ObserveTransaction(
 }
 
 type testEvent struct {
-	sessionID                  string
-	transactionID, statementID uint64
+	sessionID     string
+	transactionID uint64
+	statementID   uint64
 }
 
 func ingestEventsSync(ingester *SQLStatsIngester, events []testEvent) {
@@ -155,7 +156,7 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(testSink)
+			ingester := NewSQLStatsIngester(nil, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -188,7 +189,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ingesterCtx)
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(testSink)
+	ingester := NewSQLStatsIngester(nil, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -231,7 +232,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 	defer stopper.Stop(ctx)
 
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(sink)
+	ingester := NewSQLStatsIngester(nil, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -273,7 +274,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(sink)
+	ingester := NewSQLStatsIngester(nil, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -310,7 +311,7 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			SessionID: sessionB,
 		}
 		// Create an ingester with no sinks.
-		ingester := NewSQLStatsIngester()
+		ingester := NewSQLStatsIngester(nil)
 		ingester.IngestStatement(statementA)
 		ingester.IngestStatement(statementB)
 		require.Len(t, ingester.statementsBySessionID, 2)
