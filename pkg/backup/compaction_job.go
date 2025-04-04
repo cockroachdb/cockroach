@@ -702,7 +702,7 @@ func getBackupChain(
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
 		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false,
+		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
