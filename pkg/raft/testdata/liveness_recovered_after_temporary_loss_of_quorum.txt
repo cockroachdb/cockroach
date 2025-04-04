@@ -227,10 +227,10 @@ stabilize
   HardState Term:2 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   OnSync:
   2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
+  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) RejectIndex:11 RejectTerm:1 Commit:11
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
+  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) RejectIndex:11 RejectTerm:1 Commit:11
 > 1 handling Ready
   Ready:
   Messages:

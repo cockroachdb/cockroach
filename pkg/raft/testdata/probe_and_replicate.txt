@@ -580,10 +580,10 @@ stabilize 1 2
   HardState Term:8 Vote:1 Commit:18 Lead:1 LeadEpoch:2
   OnSync:
   2->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) Commit:18
+  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) RejectIndex:19 RejectTerm:6 Commit:18
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) Commit:18
+  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) RejectIndex:19 RejectTerm:6 Commit:18
 > 1 handling Ready
   Ready:
   Messages:
@@ -616,10 +616,10 @@ stabilize 1 3
   HardState Term:8 Vote:1 Commit:14 Lead:1 LeadEpoch:2
   OnSync:
   3->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) Commit:14
+  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) RejectIndex:14 RejectTerm:4 Commit:14
 > 1 receiving messages
   3->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) Commit:14
+  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) RejectIndex:14 RejectTerm:4 Commit:14
 > 1 handling Ready
   Ready:
   Messages:
@@ -719,10 +719,10 @@ stabilize 1 5
   HardState Term:8 Commit:18 Lead:1 LeadEpoch:2
   OnSync:
   5->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) Commit:18
+  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) RejectIndex:18 RejectTerm:6 Commit:18
 > 1 receiving messages
   5->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) Commit:18
+  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) RejectIndex:18 RejectTerm:6 Commit:18
 > 1 handling Ready
   Ready:
   Messages:
@@ -766,10 +766,10 @@ stabilize 1 6
   HardState Term:8 Vote:1 Commit:15 Lead:1 LeadEpoch:2
   OnSync:
   6->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) Commit:15
+  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) RejectIndex:17 RejectTerm:4 Commit:15
 > 1 receiving messages
   6->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) Commit:15
+  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) RejectIndex:17 RejectTerm:4 Commit:15
 > 1 handling Ready
   Ready:
   Messages:
