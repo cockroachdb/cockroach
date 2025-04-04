@@ -299,7 +299,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	var err error
 	var containsNull bool
 	// Encode each logical part of the start key.
-	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey())
+	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey(), true /* includePrefix */)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +312,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		span.Key = span.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey())
+	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey(), true /* includePrefix */)
 	if err != nil {
 		return nil, err
 	}
@@ -337,13 +337,18 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key.
+//
+// includePrefix is true if the KeyPrefix bytes should be included in the
+// returned key.
 func (s *Builder) encodeConstraintKey(
-	ck constraint.Key,
+	ck constraint.Key, includePrefix bool,
 ) (key roachpb.Key, containsNull bool, _ error) {
 	if ck.IsEmpty() {
 		return key, containsNull, nil
 	}
-	key = append(key, s.KeyPrefix...)
+	if includePrefix {
+		key = append(key, s.KeyPrefix...)
+	}
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
 		if val == tree.DNull {
@@ -494,8 +499,10 @@ func (s *Builder) KeysFromVectorPrefixConstraint(
 		if !span.HasSingleKey(ctx, s.evalCtx) {
 			return nil, errors.AssertionFailedf("constraint span %s does not have a single key", span)
 		}
+		// Do not include the /Table/Index prefix bytes - we only want the portion
+		// of the prefix that corresponds to the prefix columns.
 		var err error
-		prefixKeys[i], _, err = s.encodeConstraintKey(span.StartKey())
+		prefixKeys[i], _, err = s.encodeConstraintKey(span.StartKey(), false /* includePrefix */)
 		if err != nil {
 			return nil, err
 		}

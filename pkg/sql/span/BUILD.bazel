@@ -41,6 +41,7 @@ go_test(
     embed = [":span"],
     deps = [
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -51,6 +52,7 @@ go_test(
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/opt/constraint",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/util/encoding",
