@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -144,6 +145,11 @@ type Collection struct {
 	// txn. This guarantees the generation for long-running transactions
 	// this value stays the same for the life of the transaction.
 	leaseGeneration int64
+
+	// schemaLockedJobID allows a schema change to access descriptors
+	// with a schema locked job ID set. If this is missing the schema
+	// change will retry on any mutable access.
+	schemaLockedJobID jobspb.JobID
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is
@@ -261,7 +267,11 @@ func (tc *Collection) HasUncommittedDescriptors() bool {
 // IsNewUncommitedDescriptor returns true if the descriptor is newly created
 // within this txn.
 func (tc *Collection) IsNewUncommitedDescriptor(id descpb.ID) bool {
-	if desc := tc.uncommitted.mutable.Get(id); desc != nil && desc.(catalog.MutableDescriptor).IsNew() {
+	desc := tc.uncommitted.mutable.Get(id)
+	if desc == nil {
+		return false
+	}
+	if mut, ok := desc.(catalog.MutableDescriptor); ok && mut.IsNew() {
 		return true
 	}
 	return false
@@ -1375,6 +1385,13 @@ func (tc *Collection) LockDescriptorWithLease(
 		return 0, ErrDescCannotBeLeased{id: id}
 	}
 	return uint64(desc.GetVersion()), err
+}
+
+// SetSchemaLockedJobID sets the schema locked job ID, which will
+// allow this descriptor to modify descriptors with a matching job
+// ID.
+func (tc *Collection) SetSchemaLockedJobID(id jobspb.JobID) {
+	tc.schemaLockedJobID = id
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.
