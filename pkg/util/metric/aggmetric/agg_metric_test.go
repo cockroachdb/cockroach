@@ -282,7 +282,7 @@ func TestAggHistogramRotate(t *testing.T) {
 	}
 }
 
-func TestAggMetricClear(t *testing.T) {
+func TestAggMetricReinitialise(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r := metric.NewRegistry()
@@ -290,30 +290,32 @@ func TestAggMetricClear(t *testing.T) {
 
 	c := NewCounter(metric.Metadata{
 		Name: "foo_counter",
-	}, "tenant_id")
+	}, "db_name")
 	r.AddMetric(c)
 
-	d := NewCounter(metric.Metadata{
+	d := NewCounterWithCacheStorageType(metric.Metadata{
 		Name: "bar_counter",
-	}, "tenant_id")
-	d.initWithCacheStorageType([]string{"tenant_id"})
+	}, "db_name")
 	r.AddMetric(d)
 
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
-	t.Run("before clear", func(t *testing.T) {
+	t.Run("before reinitialisation", func(t *testing.T) {
 		c1.Inc(2)
 		d.Inc(2, "3")
-		testFile := "aggMetric_pre_clear.txt"
+		testFile := "aggMetric_pre_reinitialisation.txt"
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
-	c.clear()
-	d.clear()
+	c.reinitialise("db_name", "app_name")
+	d.reinitialise("db_name", "app_name")
 
-	t.Run("post clear", func(t *testing.T) {
-		testFile := "aggMetric_post_clear.txt"
+	t.Run("post reinitialisation", func(t *testing.T) {
+		c1 = c.AddChild("default_db", "default_app")
+		c1.Inc(2)
+		d.Inc(2, "default_db", "default_app")
+		testFile := "aggMetric_post_reinitialisation.txt"
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 }
@@ -368,4 +370,110 @@ func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 		return strings.Join(lines, "\n")
 	}
 	return writePrometheusMetrics
+}
+
+func TestReinitialiseChildMetrics(t *testing.T) {
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	aggGaugeWithCacheStorage := NewGaugeWithCacheStorageType(metric.Metadata{Name: "test.gauge.cache"})
+	r.AddMetric(aggGaugeWithCacheStorage)
+
+	aggGaugeFloatWithCacheStorage := NewGaugeFloat64WithCacheStorageType(metric.Metadata{Name: "test.gauge.float.cache"})
+	r.AddMetric(aggGaugeFloatWithCacheStorage)
+
+	aggCounterWithCacheStorage := NewCounterWithCacheStorageType(metric.Metadata{Name: "test.counter.cache"})
+	r.AddMetric(aggCounterWithCacheStorage)
+
+	aggCounterFloatWithCacheStorage := NewCounterFloat64WithCacheStorageType(metric.Metadata{Name: "test.counter.float.cache"})
+	r.AddMetric(aggCounterFloatWithCacheStorage)
+
+	aggHistogramWithCacheStorage := NewHistogramWithCacheStorage(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "test.histogram.cache",
+		},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Percent100Buckets,
+	})
+	r.AddMetric(aggHistogramWithCacheStorage)
+
+	tenant := roachpb.MustMakeTenantID(1)
+
+	aggGaugeWithBtreeStorage := NewGauge(metric.Metadata{Name: "test.gauge.btree"}, "tenant_id")
+	r.AddMetric(aggGaugeWithBtreeStorage)
+	g1 := aggGaugeWithBtreeStorage.AddChild(tenant.String())
+
+	aggGaugeFloatWithBtreeStorage := NewGaugeFloat64(metric.Metadata{Name: "test.gauge.float.btree"}, "tenant_id")
+	r.AddMetric(aggGaugeFloatWithBtreeStorage)
+	g2 := aggGaugeFloatWithBtreeStorage.AddChild(tenant.String())
+
+	aggCounterWithBtreeStorage := NewCounter(metric.Metadata{Name: "test.counter.btree"}, "tenant_id")
+	r.AddMetric(aggCounterWithBtreeStorage)
+	c1 := aggCounterWithBtreeStorage.AddChild(tenant.String())
+
+	aggCounterFloatWithBtreeStorage := NewCounterFloat64(metric.Metadata{Name: "test.counter.float.btree"}, "tenant_id")
+	r.AddMetric(aggCounterFloatWithBtreeStorage)
+	c2 := aggCounterFloatWithBtreeStorage.AddChild(tenant.String())
+
+	aggHistogramWithBtreeStorage := NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "test.histogram.btree",
+		},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Percent100Buckets,
+	}, "tenant_id")
+	r.AddMetric(aggHistogramWithBtreeStorage)
+	h := aggHistogramWithBtreeStorage.AddChild(tenant.String())
+
+	labelValueConfig := metric.NewLabelValueConfig()
+	labelValueConfig.SetDBNameLabelEnabled(false)
+	labelValueConfig.SetAppNameLabelEnabled(false)
+	r.ReinitialiseChildMetrics(labelValueConfig)
+
+	t.Run("before invoking reinitialise child metrics", func(t *testing.T) {
+		g1.Update(1)
+		g2.Update(1.5)
+		c1.Inc(1)
+		c2.Inc(1.5)
+		h.RecordValue(1)
+		aggGaugeWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggGaugeFloatWithCacheStorage.Update(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggCounterWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggCounterFloatWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggHistogramWithCacheStorage.RecordValue(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		testFile := "aggMetric_pre_reinitialise_child_metrics.txt"
+		if metric.HdrEnabled() {
+			testFile = "aggMetric_pre_reinitialise_child_metrics_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+
+	labelValueConfig.SetDBNameLabelEnabled(true)
+	labelValueConfig.SetAppNameLabelEnabled(true)
+	r.ReinitialiseChildMetrics(labelValueConfig)
+
+	t.Run("after invoking reinitialise child metrics", func(t *testing.T) {
+		g1.Update(1)
+		g2.Update(1.5)
+		c1.Inc(1)
+		c2.Inc(1.5)
+		h.RecordValue(1)
+		aggGaugeWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggGaugeFloatWithCacheStorage.Update(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggCounterWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggCounterFloatWithCacheStorage.Inc(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		aggHistogramWithCacheStorage.RecordValue(5, labelValueConfig.GetLabelValues("test_db", "test_app")...)
+		testFile := "aggMetric_post_reinitialise_child_metrics.txt"
+		if metric.HdrEnabled() {
+			testFile = "aggMetric_post_reinitialise_child_metrics_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+
+	//r.ReinitialiseChildMetrics(labelValueConfig)
+
 }

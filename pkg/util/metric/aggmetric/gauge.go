@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -30,8 +29,16 @@ var _ metric.PrometheusExportable = (*AggGauge)(nil)
 
 // NewGauge constructs a new AggGauge.
 func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
+	return initGauge(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewGaugeWithCacheStorageType(metadata metric.Metadata, childLabels ...string) *AggGauge {
+	return initGauge(metadata, StorageTypeCache, childLabels)
+}
+
+func initGauge(metadata metric.Metadata, storageType StorageType, childLabels []string) *AggGauge {
 	g := &AggGauge{g: *metric.NewGauge(metadata)}
-	g.initWithBTreeStorageType(childLabels)
+	g.initChildSet(childLabels, storageType)
 	return g
 }
 
@@ -102,7 +109,7 @@ func (g *AggGauge) AddChild(labelVals ...string) *Gauge {
 		parent:           g,
 		labelValuesSlice: labelValuesSlice(labelVals),
 	}
-	g.add(child)
+	g.add(withLock, child)
 	return child
 }
 
@@ -115,34 +122,73 @@ func (g *AggGauge) AddFunctionalChild(fn func() int64, labelVals ...string) *Gau
 		labelValuesSlice: labelValuesSlice(labelVals),
 		fn:               fn,
 	}
-	g.add(child)
+	g.add(withLock, child)
 	return child
 }
 
 // Inc increments the Gauge value by i for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
+// Gauge and increments it. It will increment only the parent gauge in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (g *AggGauge) Inc(i int64, labelVals ...string) {
-	child := g.getOrCreateChild(labelVals...)
+	if !g.isLabelCountMatched(labelVals) || len(labelVals) == 0 {
+		g.g.Inc(i)
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	child := g.getOrAddChild(labelVals...)
 	child.Inc(i)
 }
 
 // Dec decrements the Gauge value by i for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and decrements it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
+// Gauge and decrements it. It will decrement only the parent gauge in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (g *AggGauge) Dec(i int64, labelVals ...string) {
-	child := g.getOrCreateChild(labelVals...)
+	if !g.isLabelCountMatched(labelVals) || len(labelVals) == 0 {
+		g.g.Dec(i)
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	child := g.getOrAddChild(labelVals...)
 	child.Dec(i)
 }
 
 // Update updates the Gauge value by val for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and updates it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
+// Gauge and updates it. It will update only the parent gauge in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (g *AggGauge) Update(val int64, labelVals ...string) {
-	child := g.getOrCreateChild(labelVals...)
+	if !g.isLabelCountMatched(labelVals) || len(labelVals) == 0 {
+		g.g.Update(val)
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	child := g.getOrAddChild(labelVals...)
 	child.Update(val)
 }
 
@@ -151,25 +197,32 @@ func (g *AggGauge) Update(val int64, labelVals ...string) {
 // Gauge and updates it. Panics if the number of label values doesn't
 // match the number of labels defined for this Gauge.
 func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
-	child := g.getOrCreateChild(labelVals...)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	child := g.getOrAddChild(labelVals...)
 	child.UpdateFn(f)
 }
 
-func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
-	if len(g.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(g.labels), g.labels))
-	}
-
-	// If the child already exists then return it.
+// GetOrAddChild adds a Gauge to this AggGauge if not exists. Otherwise,
+// method returns existing Gauge child.
+func (g *AggGauge) getOrAddChild(labelVals ...string) *Gauge {
+	// If the child already exists, return it.
 	if child, ok := g.get(labelVals...); ok {
 		return child.(*Gauge)
 	}
 
-	// Otherwise, create a new child then return it.
-	child := g.AddChild(labelVals...)
+	child := &Gauge{
+		parent:           g,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+
+	g.add(withoutLock, child)
 	return child
+}
+
+func (g *AggGauge) isLabelCountMatched(labelVals []string) bool {
+	return len(g.mu.labels) == len(labelVals)
 }
 
 // RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
@@ -177,6 +230,16 @@ func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
 func (g *AggGauge) RemoveChild(labelVals ...string) {
 	key := &Gauge{labelValuesSlice: labelValuesSlice(labelVals)}
 	g.remove(key)
+}
+
+// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+// This is used when the children storage type is StorageTypeCache. If the storage type
+// is StorageTypeBTree, this method is no-op.
+func (g *AggGauge) ReinitialiseChildMetrics(labelVals []string) {
+	if g.mu.children.GetStorageType() == StorageTypeBTree {
+		return
+	}
+	g.reinitialise(labelVals...)
 }
 
 // Gauge is a child of a AggGauge. When it is incremented or decremented, so
@@ -254,8 +317,20 @@ var _ metric.PrometheusExportable = (*AggGaugeFloat64)(nil)
 
 // NewGaugeFloat64 constructs a new AggGaugeFloat64.
 func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeFloat64 {
+	return initGaugeFloat64(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewGaugeFloat64WithCacheStorageType(
+	metadata metric.Metadata, childLabels ...string,
+) *AggGaugeFloat64 {
+	return initGaugeFloat64(metadata, StorageTypeCache, childLabels)
+}
+
+func initGaugeFloat64(
+	metadata metric.Metadata, storageType StorageType, childLabels []string,
+) *AggGaugeFloat64 {
 	g := &AggGaugeFloat64{g: *metric.NewGaugeFloat64(metadata)}
-	g.initWithBTreeStorageType(childLabels)
+	g.initChildSet(childLabels, storageType)
 	return g
 }
 
@@ -304,34 +379,57 @@ func (g *AggGaugeFloat64) AddChild(labelVals ...string) *GaugeFloat64 {
 		parent:           g,
 		labelValuesSlice: labelValuesSlice(labelVals),
 	}
-	g.add(child)
+	g.add(withLock, child)
+	return child
+}
+
+// GetOrAddChild adds a GaugeFloat64 to this AggGaugeFloat64 if not exists. Otherwise,
+// method returns existing GaugeFloat64 child.
+func (g *AggGaugeFloat64) GetOrAddChild(labelVals ...string) *GaugeFloat64 {
+	// If the child already exists, return it.
+	if child, ok := g.get(labelVals...); ok {
+		return child.(*GaugeFloat64)
+	}
+
+	child := &GaugeFloat64{
+		parent:           g,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+
+	g.add(withoutLock, child)
 	return child
 }
 
 // Update updates the Gauge value by val for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and updates it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
+// Gauge and updates it. It will update only the parent gauge in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (g *AggGaugeFloat64) Update(val float64, labelVals ...string) {
-	child := g.GetOrCreateChild(labelVals...)
+	if len(g.mu.labels) != len(labelVals) || len(labelVals) == 0 {
+		g.g.Update(val)
+		return
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	child := g.GetOrAddChild(labelVals...)
 	child.Update(val)
 }
 
-func (g *AggGaugeFloat64) GetOrCreateChild(labelVals ...string) *GaugeFloat64 {
-	if len(g.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(g.labels), g.labels))
+// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+// This is used when the children storage type is StorageTypeCache. If the storage type
+// is StorageTypeBTree, this method is no-op.
+func (g *AggGaugeFloat64) ReinitialiseChildMetrics(labelVals []string) {
+	if g.mu.children.GetStorageType() == StorageTypeBTree {
+		return
 	}
-
-	// If the child already exists then return it.
-	if child, ok := g.get(labelVals...); ok {
-		return child.(*GaugeFloat64)
-	}
-
-	// Otherwise, create a new child then return it.
-	child := g.AddChild(labelVals...)
-	return child
+	g.reinitialise(labelVals...)
 }
 
 // GaugeFloat64 is a child of a AggGaugeFloat64. When it is incremented or

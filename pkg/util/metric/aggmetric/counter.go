@@ -29,8 +29,18 @@ var _ metric.PrometheusExportable = (*AggCounter)(nil)
 
 // NewCounter constructs a new AggCounter.
 func NewCounter(metadata metric.Metadata, childLabels ...string) *AggCounter {
+	return initCounter(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewCounterWithCacheStorageType(metadata metric.Metadata, childLabels ...string) *AggCounter {
+	return initCounter(metadata, StorageTypeCache, childLabels)
+}
+
+func initCounter(
+	metadata metric.Metadata, storageType StorageType, childLabels []string,
+) *AggCounter {
 	c := &AggCounter{g: *metric.NewCounter(metadata)}
-	c.initWithBTreeStorageType(childLabels)
+	c.initChildSet(childLabels, storageType)
 	return c
 }
 
@@ -79,38 +89,72 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 		parent:           c,
 		labelValuesSlice: labelValuesSlice(labelVals),
 	}
-	c.add(child)
+	c.add(withLock, child)
+	return child
+}
+
+// GetOrAddChild adds a Counter to this AggCounter if not exists. Otherwise,
+// method returns existing Counter child.
+func (c *AggCounter) GetOrAddChild(labelVals ...string) *Counter {
+	// If the child already exists, return it.
+	if child, ok := c.get(labelVals...); ok {
+		return child.(*Counter)
+	}
+
+	child := &Counter{
+		parent:           c,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+
+	c.add(withoutLock, child)
 	return child
 }
 
 // Inc increments the counter value by i for the given label values. If a
 // counter with the given label values doesn't exist yet, it creates a new
-// counter and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this counter and if the storage type
-// is not StorageTypeCache.
+// counter and increments it. It will increment only the parent counter in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (c *AggCounter) Inc(i int64, labelVals ...string) {
-	if len(c.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(c.labels), c.labels))
-	}
-
-	// If the child already exists, increment it.
-	if child, ok := c.get(labelVals...); ok {
-		child.(*Counter).Inc(i)
+	if len(c.mu.labels) != len(labelVals) || len(labelVals) == 0 {
+		c.g.Inc(i)
 		return
 	}
 
-	// Otherwise, create a new child and increment it.
-	child := c.AddChild(labelVals...)
+	// If the labelVals are empty, increment the parent counter
+	// as there are no children with label values.
+	if len(labelVals) == 0 {
+		c.g.Inc(i)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	child := c.GetOrAddChild(labelVals...)
 	child.Inc(i)
 }
 
 // RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
 // does not exist for this set of labelVals.
-func (g *AggCounter) RemoveChild(labelVals ...string) {
+func (c *AggCounter) RemoveChild(labelVals ...string) {
 	key := &Counter{labelValuesSlice: labelValuesSlice(labelVals)}
-	g.remove(key)
+	c.remove(key)
+}
+
+// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+// This is used when the children storage type is StorageTypeCache. If the storage type
+// is StorageTypeBTree, this method is no-op.
+func (c *AggCounter) ReinitialiseChildMetrics(labelVals []string) {
+	if c.mu.children.GetStorageType() == StorageTypeBTree {
+		return
+	}
+
+	c.reinitialise(labelVals...)
 }
 
 // Counter is a child of a AggCounter. When it is incremented, so too is the
@@ -168,8 +212,20 @@ var _ metric.PrometheusExportable = (*AggCounterFloat64)(nil)
 
 // NewCounterFloat64 constructs a new AggCounterFloat64.
 func NewCounterFloat64(metadata metric.Metadata, childLabels ...string) *AggCounterFloat64 {
+	return initCounterFloat64(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewCounterFloat64WithCacheStorageType(
+	metadata metric.Metadata, childLabels ...string,
+) *AggCounterFloat64 {
+	return initCounterFloat64(metadata, StorageTypeCache, childLabels)
+}
+
+func initCounterFloat64(
+	metadata metric.Metadata, storageType StorageType, childLabels []string,
+) *AggCounterFloat64 {
 	c := &AggCounterFloat64{g: *metric.NewCounterFloat64(metadata)}
-	c.initWithBTreeStorageType(childLabels)
+	c.initChildSet(childLabels, storageType)
 	return c
 }
 
@@ -218,8 +274,65 @@ func (c *AggCounterFloat64) AddChild(labelVals ...string) *CounterFloat64 {
 		parent:           c,
 		labelValuesSlice: labelValuesSlice(labelVals),
 	}
-	c.add(child)
+	c.add(withLock, child)
 	return child
+}
+
+// GetOrAddChild adds a CounterFloat64 to this AggCounterFloat64 if not exists. Otherwise,
+// method returns existing CounterFloat64 child.
+func (c *AggCounterFloat64) getOrAddChild(labelVals ...string) *CounterFloat64 {
+	// If the child already exists, return it.
+	if child, ok := c.get(labelVals...); ok {
+		return child.(*CounterFloat64)
+	}
+
+	child := &CounterFloat64{
+		parent:           c,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+
+	c.add(withoutLock, child)
+	return child
+}
+
+// Inc increments the counter value by i for the given label values. If a
+// counter with the given label values doesn't exist yet, it creates a new
+// counter and increments it. It will increment only the parent counter in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
+func (c *AggCounterFloat64) Inc(i float64, labelVals ...string) {
+	if len(c.mu.labels) != len(labelVals) {
+		panic(errors.AssertionFailedf(
+			"cannot increment child with %d label values %v to a metric with %d labels %v",
+			len(labelVals), labelVals, len(c.mu.labels), c.mu.labels))
+	}
+
+	// If the labelVals are empty, increment the parent counter
+	// as there are no children with label values.
+	if len(labelVals) == 0 {
+		c.g.Inc(i)
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	child := c.getOrAddChild(labelVals...)
+	child.Inc(i)
+}
+
+// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+// This is used when the children storage type is StorageTypeCache. If the storage type
+// is StorageTypeBTree, this method is no-op.
+func (c *AggCounterFloat64) ReinitialiseChildMetrics(labelVals []string) {
+	if c.mu.children.GetStorageType() == StorageTypeBTree {
+		return
+	}
+	c.reinitialise(labelVals...)
 }
 
 // CounterFloat64 is a child of a AggCounter. When it is incremented, so too is the

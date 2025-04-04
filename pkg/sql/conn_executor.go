@@ -391,6 +391,8 @@ type Server struct {
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
+	LabelValueConfig *metric.LabelValueConfig
+
 	mu struct {
 		syncutil.Mutex
 		connectionCount     int64
@@ -486,6 +488,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
+		LabelValueConfig:        metric.NewLabelValueConfig(),
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
