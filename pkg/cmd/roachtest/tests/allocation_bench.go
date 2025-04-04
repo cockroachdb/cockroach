@@ -395,28 +395,43 @@ func runAllocationBenchSample(
 		true, /* dryRun */
 		startTime, endTime,
 		joinSummaryQueries(resourceMinMaxSummary, overloadMaxSummary, rebalanceCostSummary),
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) clusterstats.BenchmarkMetric {
 			ret, name := 0.0, "cpu(%)"
 			if stat, ok := stats[cpuStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return clusterstats.BenchmarkMetric{
+				Name:           name,
+				Value:          ret,
+				Unit:           "percent",
+				IsHigherBetter: false,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) clusterstats.BenchmarkMetric {
 			ret, name := 0.0, "write(%)"
 			if stat, ok := stats[ioWriteStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return clusterstats.BenchmarkMetric{
+				Name:           name,
+				Value:          ret,
+				Unit:           "percent",
+				IsHigherBetter: false,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) clusterstats.BenchmarkMetric {
 			rebalanceMb := 0.0
 			values := stats[rebalanceSnapshotSentStat.Query].Value
 			if len(values) > 0 {
 				startMB, endMB := values[0], values[len(values)-1]
 				rebalanceMb = roundFraction(endMB-startMB, 1024, 2)
 			}
-			return "cost(gb)", rebalanceMb
+			return clusterstats.BenchmarkMetric{
+				Name:           "cost(gb)",
+				Value:          rebalanceMb,
+				Unit:           "GB",
+				IsHigherBetter: false,
+			}
 		},
 	)
 }

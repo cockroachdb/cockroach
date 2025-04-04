@@ -366,13 +366,18 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 		restoreStats.workloadStartTime,
 		endTime,
 		[]clusterstats.AggQuery{sqlServiceLatencyP95Agg, queriesThroughputAgg},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) clusterstats.BenchmarkMetric {
 			var timeToHealth time.Time
 			healthyLatencyRatio := 1.25
 			n := len(stats[latencyQueryKey].Value)
 			rd.t.L().Printf("aggregating latency over %d data points", n)
 			if n == 0 {
-				return "", 0
+				return clusterstats.BenchmarkMetric{
+					Name:           "",
+					Value:          0,
+					Unit:           "",
+					IsHigherBetter: false,
+				}
 			}
 			healthyLatency := stats[latencyQueryKey].Value[n-1]
 			latestHealthyValue := healthyLatency
@@ -394,7 +399,13 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 			description := "Time to within 1.25x of regular p95 latency (mins)"
 			rd.t.L().Printf("%s: %.2f minutes, compared to link + download phase time %.2f", description, rto, fullRestoreTime)
 			rd.t.L().Printf("Latency at Recovery Time %.0f ms; at end of test %.0f ms", latestHealthyValue, healthyLatency)
-			return description, rto
+
+			return clusterstats.BenchmarkMetric{
+				Name:           description,
+				Value:          rto,
+				Unit:           "minutes",
+				IsHigherBetter: false,
+			}
 		},
 	)
 	if err != nil {

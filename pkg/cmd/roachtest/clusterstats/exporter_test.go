@@ -199,9 +199,14 @@ var (
 	}
 
 	benchMarkFn = func(totalKey string, totalValue float64) func(
-		summaries map[string]StatSummary) (string, float64) {
-		return func(summaries map[string]StatSummary) (string, float64) {
-			return totalKey, totalValue
+		summaries map[string]StatSummary) BenchmarkMetric {
+		return func(summaries map[string]StatSummary) BenchmarkMetric {
+			return BenchmarkMetric{
+				Name:           totalKey,
+				Value:          totalValue,
+				Unit:           "count",
+				IsHigherBetter: true,
+			}
 		}
 	}
 )
