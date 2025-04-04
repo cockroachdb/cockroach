@@ -431,8 +431,15 @@ func (ca *changeAggregator) startKVFeed(
 	cfg := ca.flowCtx.Cfg
 	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon)
 	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
+
+	var options []kvevent.BlockingBufferOption
+	if ca.knobs.MakeKVFeedToAggregatorBufferKnobs != nil {
+		options = append(options,
+			kvevent.WithBlockingBufferTestingKnobs(ca.knobs.MakeKVFeedToAggregatorBufferKnobs()))
+	}
 	buf := kvevent.NewThrottlingBuffer(
-		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics.AggregatorBufferMetricsWithCompat),
+		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV,
+			&ca.metrics.KVFeedMetrics.AggregatorBufferMetricsWithCompat, options...),
 		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
