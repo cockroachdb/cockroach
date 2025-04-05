@@ -936,7 +936,6 @@ quality of service: regular
         │       └── • lookup join (anti)
         │           │ columns: (fk_new)
         │           │ sql nodes: <hidden>
-        │           │ kv nodes: <hidden>
         │           │ regions: <hidden>
         │           │ actual row count: 0
         │           │ vectorized batch count: 0
