@@ -1626,6 +1626,69 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+func (ef *execFactory) ConstructUpdateSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	// TODO(radu): the execution code has an annoying limitation that the fetch
+	// columns must be a superset of the update columns, even when the "old" value
+	// of a column is not necessary. The optimizer code for pruning columns is
+	// aware of this limitation.
+	if !updateColOrdSet.SubsetOf(fetchColOrdSet) {
+		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
+	}
+
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+
+	upd := updateSwapNodePool.Get().(*updateSwapNode)
+	*upd = updateSwapNode{
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+	}
+
+	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
+	if rowsNeeded {
+		returnCols = makeColList(table, returnColOrdSet)
+		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		// Add the passthrough columns to the returning columns.
+		upd.columns = append(upd.columns, passthrough...)
+	}
+
+	// Create the table updater, which does the bulk of the work.
+	if err := ef.constructUpdateRun(
+		&upd.run, table, fetchColOrdSet, updateColOrdSet, returnColOrdSet, rowsNeeded,
+		returnCols, checks, passthrough, uniqueWithTombstoneIndexes, lockedIndexes,
+	); err != nil {
+		return nil, err
+	}
+
+	if autoCommit {
+		upd.enableAutoCommit()
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{
+			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: upd}},
+		}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: upd}, nil
+}
+
 func (ef *execFactory) constructUpdateRun(
 	run *updateRun,
 	table cat.Table,
@@ -1798,6 +1861,58 @@ func (ef *execFactory) ConstructDelete(
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
 	*del = deleteNode{
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+	}
+
+	// If rows are not needed, no columns are returned.
+	var returnCols []catalog.Column
+	if rowsNeeded {
+		returnCols = makeColList(table, returnColOrdSet)
+		// Delete returns the non-mutation columns specified, in the same
+		// order they are defined in the table.
+		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		// Add the passthrough columns to the returning columns.
+		del.columns = append(del.columns, passthrough...)
+	}
+
+	// Create the table deleter, which does the bulk of the work.
+	ef.constructDeleteRun(
+		&del.run, table, fetchColOrdSet, rowsNeeded, returnCols, passthrough, lockedIndexes,
+	)
+
+	if autoCommit {
+		del.enableAutoCommit()
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{
+			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: del}},
+		}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: del}, nil
+}
+
+func (ef *execFactory) ConstructDeleteSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+
+	// Now make a delete node. We use a pool.
+	del := deleteSwapNodePool.Get().(*deleteSwapNode)
+	*del = deleteSwapNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 	}
 
