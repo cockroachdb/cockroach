@@ -398,6 +398,7 @@ var nodeNames = [...]string{
 	createViewOp:           "create view",
 	deleteOp:               "delete",
 	deleteRangeOp:          "delete range",
+	deleteSwapOp:           "delete swap",
 	distinctOp:             "distinct",
 	errorIfRowsOp:          "error if rows",
 	explainOp:              "explain",
@@ -435,6 +436,7 @@ var nodeNames = [...]string{
 	sortOp:                 "sort",
 	topKOp:                 "top-k",
 	updateOp:               "update",
+	updateSwapOp:           "update swap",
 	upsertOp:               "upsert",
 	valuesOp:               "", // This node does not have a fixed name.
 	vectorSearchOp:         "vector search",
@@ -1116,8 +1118,44 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		e.emitPolicies(ob, a.Table, n)
 
+	case updateSwapOp:
+		a := n.args.(*updateSwapArgs)
+		ob.Attrf("table", "%s", a.Table.Name())
+		ob.Attr("set", printColumns(tableColumns(a.Table, a.UpdateCols)))
+		if a.AutoCommit {
+			ob.Attr("auto commit", "")
+		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventUpdate),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
+		e.emitPolicies(ob, a.Table, n)
+
 	case deleteOp:
 		a := n.args.(*deleteArgs)
+		ob.Attrf("from", "%s", a.Table.Name())
+		if a.AutoCommit {
+			ob.Attr("auto commit", "")
+		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventDelete),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
+
+	case deleteSwapOp:
+		a := n.args.(*deleteSwapArgs)
 		ob.Attrf("from", "%s", a.Table.Name())
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
