@@ -855,43 +855,50 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 	mb.outScope = pb.Finish()
 }
 
+type checkConstraintInput struct {
+	includeNormalChecks   bool
+	includeRLSBase        bool
+	includeRLSUpsertRead  bool
+	includeRLSUpsertWrite bool
+	isUpdate              bool
+	policyCmdScope        cat.PolicyCommandScope // Optional, only used for RLS when processing RLS base.
+}
+
 // addCheckConstraintCols synthesizes a boolean output column for each check
 // constraint defined on the target table. The mutation operator will report a
 // constraint violation error if the value of the column is false.
 //
 // Synthesized check columns are not necessary for UPDATE mutations if the
+// columns referenced in the check expression are not being mutated. If
 // columns referenced in the check expression are not being mutated. If isUpdate
 // is true, check columns that do not reference mutation columns are not added
 // to checkColIDs, which allows pruning normalization rules to remove the
 // unnecessary projected column.
-func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
+func (mb *mutationBuilder) addCheckConstraintCols(ip checkConstraintInput) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 		mutationCols := mb.mutationColumnIDs()
-		var seenRLSConstraint bool
+		var rlsConstraintCount cat.RLSConstraintType
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			check := mb.tab.Check(i)
+			resolveScope := mb.outScope
 
 			// For tables with RLS enabled, we create a synthetic check constraint
 			// to enforce the policies. Since this check varies based on the role
 			// and command used, it must be generated each time it is needed rather
 			// than being included with the table's actual check constraints.
 			if check.IsRLSConstraint() {
-				if seenRLSConstraint {
-					panic(errors.AssertionFailedf("a table should only have one RLS constraint"))
+				rlsConstraintCount++
+				check, resolveScope = mb.processRLSConstraint(ip, rlsConstraintCount)
+				if check == nil {
+					// Skip if this constraint is not relevant for the current scope.
+					continue
 				}
-				seenRLSConstraint = true
-				chkBuilder := optRLSConstraintBuilder{
-					tab:      mb.tab,
-					md:       mb.md,
-					tabMeta:  mb.md.TableMeta(mb.tabID),
-					oc:       mb.b.catalog,
-					user:     mb.b.checkPrivilegeUser,
-					isUpdate: isUpdate,
-				}
-				check = chkBuilder.Build(mb.b.ctx)
+			} else if !ip.includeNormalChecks {
+				// Skip all non-RLS constraints if handling only RLS constraint types.
+				continue
 			}
 
 			expr, err := parser.ParseExpr(check.Constraint())
@@ -899,13 +906,13 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 				panic(err)
 			}
 
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+			texpr := resolveScope.resolveAndRequireType(expr, types.Bool)
 
 			// Use an anonymous name because the column cannot be referenced
 			// in other expressions.
 			colName := scopeColName("")
 			if check.IsRLSConstraint() {
-				colName = colName.WithMetadataName("rls")
+				colName = colName.WithMetadataName(fmt.Sprintf("rls%d", rlsConstraintCount))
 			} else {
 				colName = colName.WithMetadataName(fmt.Sprintf("check%d", i+1))
 			}
@@ -926,7 +933,7 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 			//   expressions can exist for read and write operations. This means it's
 			//   possible to read a row whose column values would violate the write
 			//   expression.
-			if !isUpdate || check.IsRLSConstraint() || referencedCols.Intersects(mutationCols) {
+			if !ip.isUpdate || check.IsRLSConstraint() || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
 
 				// TODO(michae2): Under weaker isolation levels we need to use shared
@@ -969,7 +976,61 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
+
+		if !(rlsConstraintCount == cat.RLSConstraintUnused || rlsConstraintCount == cat.RLSConstraintTypeCount) {
+			panic(errors.AssertionFailedf("a table should have exactly %d RLS constraints or none at all: %d",
+				cat.RLSConstraintTypeCount, rlsConstraintCount))
+		}
 	}
+}
+
+// processRLSConstraint handles a single synthetic RLS constraint.
+// The constraintType parameter indicates which specific constraint is being
+// processed.
+func (mb *mutationBuilder) processRLSConstraint(
+	ip checkConstraintInput, constraintType cat.RLSConstraintType,
+) (cat.CheckConstraint, *scope) {
+	if !ip.includeRLSBase && !ip.includeRLSUpsertRead && !ip.includeRLSUpsertWrite {
+		return nil, nil
+	}
+
+	// Set a default scope to use to evaluate the expression. It's always the
+	// outscope unless overridden.
+	exprScope := mb.outScope
+	shouldProcess := false
+	var cmdScope cat.PolicyCommandScope
+	switch constraintType {
+	case cat.RLSBaseConstraint:
+		shouldProcess = ip.includeRLSBase
+		cmdScope = ip.policyCmdScope
+	case cat.RLSUpsertConflictExistingRowConstraint:
+		shouldProcess = ip.includeRLSUpsertRead
+		cmdScope = cat.PolicyScopeUpsertConflictScan
+		// Use the scope that scanned the table for conflicts.
+		exprScope = mb.fetchScope
+	case cat.RLSUpsertConflictNewRowConstraint:
+		shouldProcess = ip.includeRLSUpsertWrite
+		cmdScope = cat.PolicyScopeUpdate
+	case cat.RLSUpsertNoConflictConstraint:
+		shouldProcess = ip.includeRLSUpsertWrite
+		cmdScope = cat.PolicyScopeInsertWithSelect
+	default:
+		panic(errors.AssertionFailedf("a table should have at most %d RLS constraints, but processing %d",
+			cat.RLSConstraintTypeCount, constraintType))
+	}
+
+	if !shouldProcess {
+		return nil, nil
+	}
+	chkBuilder := optRLSConstraintBuilder{
+		tab:                mb.tab,
+		md:                 mb.md,
+		tabMeta:            mb.md.TableMeta(mb.tabID),
+		oc:                 mb.b.catalog,
+		user:               mb.b.checkPrivilegeUser,
+		policyCommandScope: cmdScope,
+	}
+	return chkBuilder.Build(mb.b.ctx), exprScope
 }
 
 // getColumnFamilySet gets the set of column families represented in colOrdinals.

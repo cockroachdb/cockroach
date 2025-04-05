@@ -1194,15 +1194,17 @@ func (tt *Table) findPolicyByName(policyName tree.Name) (*cat.Policy, tree.Polic
 	return nil, tree.PolicyTypePermissive, -1
 }
 
-// addRLSConstraint will add a special constraint in the table to enforce
+// addRLSConstraint will add special constraints in the table to enforce
 // policies for new rows.
 func (tt *Table) addRLSConstraint() {
 	if tt.findRLSConstraint() >= 0 {
 		panic(errors.AssertionFailedf("table already has an RLS constraint"))
 	}
-	tt.Checks = append(tt.Checks, &CheckConstraint{
-		isRLSConstraint: true,
-	})
+	for ct := cat.RLSBaseConstraint; ct <= cat.RLSConstraintTypeCount; ct++ {
+		tt.Checks = append(tt.Checks, &CheckConstraint{
+			isRLSConstraint: true,
+		})
+	}
 }
 
 // removeRLSConstraint will remove the special row-level constraint in the table.

@@ -78,9 +78,9 @@ update t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  ├── update-mapping:
  │    └── c1_new:13 => c1:1
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+      ├── columns: rls1:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
       ├── project
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
@@ -97,7 +97,7 @@ update t1
       │    └── projections
       │         └── c1:7 * 2 [as=c1_new:13]
       └── projections
-           └── ((c1_new:13 % 2) = 0) AND false [as=rls:14]
+           └── ((c1_new:13 % 2) = 0) AND false [as=rls1:14]
 
 exec-ddl
 CREATE POLICY p2 on t1 FOR UPDATE USING (c1 < 100);
@@ -111,9 +111,9 @@ update t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  ├── update-mapping:
  │    └── c1_new:13 => c1:1
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+      ├── columns: rls1:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
       ├── project
       │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
@@ -130,7 +130,7 @@ update t1
       │    └── projections
       │         └── c1:7 * 2 [as=c1_new:13]
       └── projections
-           └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+           └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls1:14]
 
 # Verify a DELETE won't use policies for UPDATE.
 
@@ -244,9 +244,9 @@ insert t1
  │    ├── c2_default:8 => c2:2
  │    ├── c3_default:9 => c3:3
  │    └── rowid_default:10 => rowid:4
- ├── check columns: rls:11
+ ├── check columns: rls1:11
  └── project
-      ├── columns: rls:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── columns: rls1:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
       ├── project
       │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
       │    ├── values
@@ -259,7 +259,7 @@ insert t1
       │         ├── NULL::DATE [as=c3_default:9]
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
-           └── column1:7 > 0 [as=rls:11]
+           └── column1:7 > 0 [as=rls1:11]
 
 # Verify policies apply to table with an existing check constraint.
 
@@ -284,9 +284,9 @@ insert t1_with_check
  │    ├── column1:6 => c1:1
  │    ├── c2_default:7 => c2:2
  │    └── rowid_default:8 => rowid:3
- ├── check columns: check1:9 rls:10
+ ├── check columns: check1:9 rls1:10
  └── project
-      ├── columns: check1:9!null rls:10 column1:6!null c2_default:7 rowid_default:8
+      ├── columns: check1:9!null rls1:10 column1:6!null c2_default:7 rowid_default:8
       ├── project
       │    ├── columns: c2_default:7 rowid_default:8 column1:6!null
       │    ├── values
@@ -297,7 +297,7 @@ insert t1_with_check
       │         └── unique_rowid() [as=rowid_default:8]
       └── projections
            ├── column1:6 > 0 [as=check1:9]
-           └── c2_default:7 > 2 [as=rls:10]
+           └── c2_default:7 > 2 [as=rls1:10]
 
 # Verify a policy that has no WITH CHECK will use the USING expression for new rows.
 
@@ -323,9 +323,9 @@ insert t1
  │    ├── c2_default:8 => c2:2
  │    ├── c3_default:9 => c3:3
  │    └── rowid_default:10 => rowid:4
- ├── check columns: rls:11
+ ├── check columns: rls1:11
  └── project
-      ├── columns: rls:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── columns: rls1:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
       ├── project
       │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
       │    ├── values
@@ -336,7 +336,7 @@ insert t1
       │         ├── NULL::DATE [as=c3_default:9]
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
-           └── (c2_default:8 = 'Hello, World') OR (c3_default:9 = '2024-12-24') [as=rls:11]
+           └── (c2_default:8 = 'Hello, World') OR (c3_default:9 = '2024-12-24') [as=rls1:11]
 
 build
 UPDATE t1 SET c2 = 'new val';
@@ -346,9 +346,9 @@ update t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  ├── update-mapping:
  │    └── c2_new:13 => c2:2
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14 c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
+      ├── columns: rls1:14 c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
       ├── project
       │    ├── columns: c2_new:13!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
@@ -361,7 +361,7 @@ update t1
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── (true OR ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24')) [as=rls:14]
+           └── (true OR ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24')) [as=rls1:14]
 
 # Verify insert and update code path when no policy applies to role.
 
@@ -379,9 +379,9 @@ insert t1
  │    ├── c2_default:8 => c2:2
  │    ├── c3_default:9 => c3:3
  │    └── rowid_default:10 => rowid:4
- ├── check columns: rls:11
+ ├── check columns: rls1:11
  └── project
-      ├── columns: rls:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── columns: rls1:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
       ├── project
       │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
       │    ├── values
@@ -392,7 +392,7 @@ insert t1
       │         ├── NULL::DATE [as=c3_default:9]
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
-           └── false [as=rls:11]
+           └── false [as=rls1:11]
 
 build
 UPDATE t1 SET c2 = 'new val';
@@ -402,9 +402,9 @@ update t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  ├── update-mapping:
  │    └── c2_new:13 => c2:2
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
+      ├── columns: rls1:14!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c2_new:13!null
       ├── project
       │    ├── columns: c2_new:13!null c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
@@ -417,7 +417,7 @@ update t1
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── true AND false [as=rls:14]
+           └── true AND false [as=rls1:14]
 
 # Verify that an INSERT ... SELECT statement applies the RLS check constraint
 # and uses different policies for the SELECT and INSERT portions of the query.
@@ -444,9 +444,9 @@ insert t1
  │    ├── c2:8 => c2:2
  │    ├── c3:9 => c3:3
  │    └── rowid_default:13 => rowid:4
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14 c1:7 c2:8 c3:9!null rowid_default:13
+      ├── columns: rls1:14 c1:7 c2:8 c3:9!null rowid_default:13
       ├── project
       │    ├── columns: rowid_default:13 c1:7 c2:8 c3:9!null
       │    ├── project
@@ -460,7 +460,7 @@ insert t1
       │    └── projections
       │         └── unique_rowid() [as=rowid_default:13]
       └── projections
-           └── char_length(c2:8) < 10 [as=rls:14]
+           └── char_length(c2:8) < 10 [as=rls1:14]
 
 exec-ddl
 DROP POLICY p_select on t1;
@@ -489,9 +489,9 @@ update t1
  ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
  ├── update-mapping:
  │    └── c1_new:13 => c1:1
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14 c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13
+      ├── columns: rls1:14 c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13
       ├── project
       │    ├── columns: c1_new:13 c1:7 c2:8 c3:9!null rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── select
@@ -504,7 +504,7 @@ update t1
       │    └── projections
       │         └── c1:7 + 1 [as=c1_new:13]
       └── projections
-           └── true AND (c2:8 LIKE '%') [as=rls:14]
+           └── true AND (c2:8 LIKE '%') [as=rls1:14]
 
 # Show that SELECT with the locking clauses causes the UPDATE policies to be applied.
 build
@@ -538,7 +538,6 @@ DROP POLICY p_update on t1;
 ----
 
 # Verify an upsert operation.
-# TODO(141998): There is more work needed to enforce the proper policies for upsert.
 
 exec-ddl
 CREATE TABLE t1_explicit_pk (C1 INT NOT NULL PRIMARY KEY, C2 TEXT, C3 DATE);
@@ -560,19 +559,46 @@ build
 UPSERT INTO t1_explicit_pk VALUES (1, 'first', '2010-08-08');
 ----
 upsert t1_explicit_pk
+ ├── arbiter indexes: t1_explicit_pk_pkey
  ├── columns: <none>
- ├── upsert-mapping:
+ ├── canary column: c1:9
+ ├── fetch columns: c1:9 c2:10 c3:11
+ ├── insert-mapping:
  │    ├── column1:6 => c1:1
  │    ├── column2:7 => c2:2
  │    └── column3:8 => c3:3
- ├── check columns: rls:9
+ ├── update-mapping:
+ │    ├── column2:7 => c2:2
+ │    └── column3:8 => c3:3
+ ├── check columns: rls2:15 rls3:16 rls4:17
  └── project
-      ├── columns: rls:9!null column1:6!null column2:7!null column3:8!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    └── (1, 'first', '2010-08-08')
+      ├── columns: rls2:15!null rls3:16!null rls4:17!null column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 upsert_c1:14
+      ├── project
+      │    ├── columns: upsert_c1:14 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    └── (1, 'first', '2010-08-08')
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column3:8]
+      │    │    │              └── column3:8
+      │    │    ├── scan t1_explicit_pk
+      │    │    │    ├── columns: c1:9!null c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = c1:9
+      │    └── projections
+      │         └── CASE WHEN c1:9 IS NULL THEN column1:6 ELSE c1:9 END [as=upsert_c1:14]
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:9]
+           ├── false AND false [as=rls2:15]
+           ├── false AND (column3:8 >= '2000-01-01') [as=rls3:16]
+           └── (column3:8 != '2023-05-02') AND false [as=rls4:17]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT DO NOTHING;
@@ -584,9 +610,9 @@ insert t1_explicit_pk
  │    ├── column1:6 => c1:1
  │    ├── column2:7 => c2:2
  │    └── column3:8 => c3:3
- ├── check columns: rls:14
+ ├── check columns: rls1:14
  └── project
-      ├── columns: rls:14!null column1:6!null column2:7!null column3:8!null
+      ├── columns: rls1:14!null column1:6!null column2:7!null column3:8!null
       ├── upsert-distinct-on
       │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    ├── grouping columns: column1:6!null
@@ -606,7 +632,7 @@ insert t1_explicit_pk
       │         └── first-agg [as=column3:8]
       │              └── column3:8
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:14]
+           └── (column3:8 != '2023-05-02') AND false [as=rls1:14]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT (c1) DO UPDATE SET c2 = 'updated';
@@ -622,9 +648,9 @@ upsert t1_explicit_pk
  │    └── column3:8 => c3:3
  ├── update-mapping:
  │    └── upsert_c2:16 => c2:2
- ├── check columns: rls:18
+ ├── check columns: rls2:18 rls3:19 rls4:20
  └── project
-      ├── columns: rls:18 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 c2_new:14!null upsert_c1:15 upsert_c2:16!null upsert_c3:17
+      ├── columns: rls2:18!null rls3:19 rls4:20 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 c2_new:14!null upsert_c1:15 upsert_c2:16!null upsert_c3:17
       ├── project
       │    ├── columns: upsert_c1:15 upsert_c2:16!null upsert_c3:17 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 c2_new:14!null
       │    ├── project
@@ -654,7 +680,9 @@ upsert t1_explicit_pk
       │         ├── CASE WHEN c1:9 IS NULL THEN column2:7 ELSE c2_new:14 END [as=upsert_c2:16]
       │         └── CASE WHEN c1:9 IS NULL THEN column3:8 ELSE c3:11 END [as=upsert_c3:17]
       └── projections
-           └── upsert_c3:17 != '2023-05-02' [as=rls:18]
+           ├── false AND false [as=rls2:18]
+           ├── false AND (upsert_c3:17 >= '2000-01-01') [as=rls3:19]
+           └── (upsert_c3:17 != '2023-05-02') AND false [as=rls4:20]
 
 exec-ddl
 DROP POLICY p_insert ON t1_explicit_pk;
@@ -715,14 +743,14 @@ insert t1_explicit_pk
  │    ├── column1:6 => c1:1
  │    ├── column2:7 => c2:2
  │    └── column3:8 => c3:3
- ├── check columns: rls:9
+ ├── check columns: rls1:9
  └── project
-      ├── columns: rls:9!null column1:6!null column2:7!null column3:8!null
+      ├── columns: rls1:9!null column1:6!null column2:7!null column3:8!null
       ├── values
       │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    └── (8, 'eight', '2002-05-04')
       └── projections
-           └── (((((column1:6 = 1) OR (column1:6 = 2)) OR (column1:6 = 3)) OR (column1:6 = 4)) AND ((column1:6 % 2) = 0)) AND ((column1:6 % 3) = 0) [as=rls:9]
+           └── (((((column1:6 = 1) OR (column1:6 = 2)) OR (column1:6 = 3)) OR (column1:6 = 4)) AND ((column1:6 % 2) = 0)) AND ((column1:6 % 3) = 0) [as=rls1:9]
 
 build
 UPDATE t1_explicit_pk SET c3 = now() WHERE c1 = 18;
@@ -732,9 +760,9 @@ update t1_explicit_pk
  ├── fetch columns: c1:6 c2:7 c3:8
  ├── update-mapping:
  │    └── c3_new:11 => c3:3
- ├── check columns: rls:12
+ ├── check columns: rls1:12
  └── project
-      ├── columns: rls:12!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10 c3_new:11
+      ├── columns: rls1:12!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10 c3_new:11
       ├── project
       │    ├── columns: c3_new:11 c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── select
@@ -751,7 +779,7 @@ update t1_explicit_pk
       │    └── projections
       │         └── now() [as=c3_new:11]
       └── projections
-           └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) [as=rls:12]
+           └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) [as=rls1:12]
 
 # Show that the owner, who is not admin, is exempt from policies unless FORCE
 # option is set.
@@ -791,9 +819,9 @@ insert t1
  │    ├── c2_default:8 => c2:2
  │    ├── c3_default:9 => c3:3
  │    └── rowid_default:10 => rowid:4
- ├── check columns: rls:11
+ ├── check columns: rls1:11
  └── project
-      ├── columns: rls:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── columns: rls1:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
       ├── project
       │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
       │    ├── values
@@ -804,7 +832,7 @@ insert t1
       │         ├── NULL::DATE [as=c3_default:9]
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
-           └── true [as=rls:11]
+           └── true [as=rls1:11]
 
 exec-ddl
 ALTER TABLE t1 FORCE ROW LEVEL SECURITY
@@ -837,9 +865,9 @@ insert t1
  │    ├── c2_default:8 => c2:2
  │    ├── c3_default:9 => c3:3
  │    └── rowid_default:10 => rowid:4
- ├── check columns: rls:11
+ ├── check columns: rls1:11
  └── project
-      ├── columns: rls:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── columns: rls1:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
       ├── project
       │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
       │    ├── values
@@ -850,4 +878,4 @@ insert t1
       │         ├── NULL::DATE [as=c3_default:9]
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
-           └── c3_default:9 >= '2025-01-01' [as=rls:11]
+           └── c3_default:9 >= '2025-01-01' [as=rls1:11]

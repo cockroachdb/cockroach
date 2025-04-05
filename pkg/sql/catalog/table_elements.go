@@ -550,6 +550,14 @@ type CheckConstraint interface {
 	IsHashShardingConstraint() bool
 }
 
+type MutationOpType int8
+
+const (
+	MutationOpInsert MutationOpType = iota
+	MutationOpUpdate
+	MutationOpUpsert
+)
+
 // CheckConstraintValidator interface is designed for evaluating whether check
 // constraints are violated. It represents a subset of the CheckConstraint
 // interface, excluding certain elements that are not applicable to synthetic
@@ -564,6 +572,10 @@ type CheckConstraintValidator interface {
 	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
 	// to enforce row-level security policies.
 	IsRLSConstraint() bool
+
+	// ShouldEvaluate returns true if the check constraint should be evaluated
+	// for the given mutation.
+	ShouldEvaluate(op MutationOpType, hasConflict bool) bool
 
 	// IsCheckFailed returns true if the constraint was violated based on the
 	// input given.

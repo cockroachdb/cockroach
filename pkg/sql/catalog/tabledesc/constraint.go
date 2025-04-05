@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -81,6 +82,9 @@ func (c checkConstraint) IsNotNullColumnConstraint() bool {
 // IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
 func (c checkConstraint) IsRLSConstraint() bool { return false }
 
+// ShouldEvaluate implements the catalog.CheckConstraintValidator interface.
+func (c checkConstraint) ShouldEvaluate(catalog.MutationOpType, bool) bool { return true }
+
 // IsCheckFailed implements the catalog.CheckConstraintValidator interface.
 func (c checkConstraint) IsCheckFailed(boolVal, isNull bool) bool {
 	// This is a standard CHECK constraint.
@@ -137,6 +141,7 @@ func (c checkConstraint) IsEnforced() bool {
 // rlsSyntheticCheckConstraint is an implementation of CheckConstraintValidator
 // for use with tables that have row-level security enabled.
 type rlsSyntheticCheckConstraint struct {
+	constraintType cat.RLSConstraintType
 }
 
 var _ catalog.CheckConstraintValidator = (*rlsSyntheticCheckConstraint)(nil)
@@ -148,6 +153,23 @@ func (r rlsSyntheticCheckConstraint) GetExpr() string {
 
 // IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
 func (r rlsSyntheticCheckConstraint) IsRLSConstraint() bool { return true }
+
+// ShouldEvaluate implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) ShouldEvaluate(
+	op catalog.MutationOpType, hasConflict bool,
+) bool {
+	switch r.constraintType {
+	case cat.RLSBaseConstraint:
+		// Always applicable on INSERT/UPDATE/UPSERT.
+		return true
+	case cat.RLSUpsertConflictExistingRowConstraint, cat.RLSUpsertConflictNewRowConstraint:
+		return op == catalog.MutationOpUpsert && hasConflict
+	case cat.RLSUpsertNoConflictConstraint:
+		return op == catalog.MutationOpUpsert && !hasConflict
+	default:
+		panic(errors.AssertionFailedf("unexpected constraint type: %d", r.constraintType))
+	}
+}
 
 // IsCheckFailed implements the catalog.CheckConstraintValidator interface.
 func (r rlsSyntheticCheckConstraint) IsCheckFailed(boolVal, isNull bool) bool {
@@ -529,10 +551,11 @@ func newConstraintCache(
 			c.fkBackRefs[i] = &fkBackRefBackingStructs[i]
 		}
 	}
-	// Populate the check constraint for row-level security to enforce RLS policies.
+	// Populate the check constraints for row-level security to enforce RLS policies.
 	if desc.RowLevelSecurityEnabled {
-		ck := rlsSyntheticCheckConstraint{}
-		c.checkValidators = append(c.checkValidators, ck)
+		for ct := cat.RLSBaseConstraint; ct <= cat.RLSConstraintTypeCount; ct++ {
+			c.checkValidators = append(c.checkValidators, rlsSyntheticCheckConstraint{constraintType: ct})
+		}
 	}
 	return &c
 }
