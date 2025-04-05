@@ -142,3 +142,7 @@ func (d *deleteSwapNode) Close(ctx context.Context) {
 func (d *deleteSwapNode) rowsWritten() int64 {
 	return d.run.td.rowsWritten
 }
+
+func (d *deleteSwapNode) enableAutoCommit() {
+	d.run.td.enableAutoCommit()
+}
