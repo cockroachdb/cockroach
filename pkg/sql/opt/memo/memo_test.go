@@ -553,6 +553,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 0
 	notStale()
 
+	evalCtx.SessionData().InsertFastPath = true
+	stale()
+	evalCtx.SessionData().InsertFastPath = false
+	notStale()
+
 	evalCtx.SessionData().Internal = true
 	stale()
 	evalCtx.SessionData().Internal = false
