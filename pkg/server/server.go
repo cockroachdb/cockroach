@@ -2316,6 +2316,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		s.status,
 		*s.sqlServer.internalExecutor,
 		s.ClusterSettings(),
+		nil,
 	); err != nil {
 		return err
 	}
