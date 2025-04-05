@@ -27,6 +27,8 @@ func NewFailureRegistry() *FailureRegistry {
 }
 
 func (r *FailureRegistry) Register() {
+	registerCgroupDiskStall(r)
+	registerDmsetupDiskStall(r)
 	registerIPTablesPartitionFailure(r)
 	registerNetworkLatencyFailure(r)
 }
