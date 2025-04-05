@@ -13,6 +13,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 )
 
+func findBoundaryBasedOnPolicy(policy ctpb.RangeClosedTimestampPolicy) {
+	switch {
+	case policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS:
+		// Calculate bucket number and return its midpoint RTT
+		bucket := int(policy) - int(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)
+		return time.Duration(bucket) * closedTimestampPolicyLatencyInterval / 2
+	default:
+		panic(fmt.Sprintf("unknown closed timestamp policy: %s", policy))
+	}
+}
+
+// Boundary instead.
+func DeltaExceedsThreshold(
+	oldLatency time.Duration, currLatency time.Duration, requiredMinDeltaPercent float64,
+) bool {
+	return math.Abs(float64(oldLatency.Milliseconds()-currLatency.Milliseconds())) <
+		requiredMinDeltaPercent*float64(closedTimestampPolicyLatencyInterval)
+}
+
 // FindBucketBasedOnNetworkRTT maps a network RTT to a closed timestamp policy bucket.
 // It divides RTT by policy interval, adds 1 for zero-based indexing, and offsets by
 // the base policy enum value.

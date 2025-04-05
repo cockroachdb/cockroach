@@ -1084,11 +1084,21 @@ type Replica struct {
 		pendingGCThreshold hlc.Timestamp
 	}
 
-	// cachedClosedTimestampPolicy is the cached closed timestamp policy of the
-	// range. It is updated asynchronously by listening on span configuration
-	// changes, leaseholder changes, and periodically at the interval of
-	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
-	cachedClosedTimestampPolicy atomic.Int32
+	closedTsPolicy struct {
+		// activePolicy stores the range's closed timestamp policy
+		// (type ctpb.RangeClosedTimestampPolicy). It is updated asynchronously by
+		// listening on span configuration changes, leaseholder changes, and
+		// periodically at the interval of kv.closed_timestamp.policy_refresh_interval
+		// by PolicyRefresher.
+		activePolicy atomic.Int32
+		// oldObservedMaxLatency tracks the latency (in nanoseconds) associated with
+		// the activePolicy. It is used to determine whether latency delta is
+		// significant enough to justify a policy change to avoid changing policies
+		// too frequently for replicas near the latency bucket boundary.
+		// observedLatency is thread-safe since it is updated from one goroutine
+		// after initialization.
+		observedLatency time.Duration
+	}
 }
 
 // String returns the string representation of the replica using an
@@ -1334,7 +1344,7 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 	if r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	return ctpb.RangeClosedTimestampPolicy(r.closedTsPolicy.activePolicy.Load())
 }
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
@@ -1348,7 +1358,16 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 // using the provided map and sets an appropriate policy bucket which will
 // control how far in the future timestamps should be closed for global reads.
 func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
+	// Helper function to check if a policy is in the latency-based range.
+	isLatencyBasedPolicy := func(policy ctpb.RangeClosedTimestampPolicy) bool {
+		return policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
+			policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS
+	}
+
+	// Calculate the new policy based on current state and latencies.
 	policy := func() ctpb.RangeClosedTimestampPolicy {
+		oldPolicy := ctpb.RangeClosedTimestampPolicy(r.closedTsPolicy.activePolicy.Load())
+		oldLatency := r.closedTsPolicy.observedLatency
 		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
@@ -1372,11 +1391,24 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 				maxLatency = max(maxLatency, peerLatency)
 			}
 		}
-		// FindBucketBasedOnNetworkRTT returns LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
-		// if maxLatency is negative (i.e. no peer latency is provided).
-		return closedts.FindBucketBasedOnNetworkRTT(maxLatency)
+
+		// Get appropriate policy bucket based on the current max latency.
+		newPolicy := closedts.FindBucketBasedOnNetworkRTT(maxLatency)
+
+		// The policy should be updated unless both old and new policies are
+		// latency-based. In that case, the policy is only updated if the delta
+		// between the current max latency and the observed latency is significant.
+		if isLatencyBasedPolicy(oldPolicy) && isLatencyBasedPolicy(newPolicy) {
+			threshold := closedts.LatencyBasedPolicyChangeWhenLatencyDeltaExceedsFraction.Get(&r.store.cfg.Settings.SV)
+			if !closedts.DeltaExceedsThreshold(oldLatency, maxLatency, threshold) {
+				return oldPolicy
+			}
+		}
+		r.closedTsPolicy.observedLatency = maxLatency
+		return newPolicy
 	}
-	r.cachedClosedTimestampPolicy.Store(int32(policy()))
+
+	r.closedTsPolicy.activePolicy.Store(int32(policy()))
 }
 
 // NodeID returns the ID of the node this replica belongs to.

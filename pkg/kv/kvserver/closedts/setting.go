@@ -89,3 +89,13 @@ var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic,
 )
+
+var LatencyBasedPolicyChangeWhenLatencyDeltaExceedsFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.closed_timestamp.latency_based_policy.latency_delta_threshold",
+	"the fraction from the last gossiped store capacity values which need be "+
+		"exceeded before the store will gossip immediately without waiting for "+
+		"the periodic gossip interval, at most kv.store_gossip.max_frequency "+
+		"frequency",
+	0.2,
+)
