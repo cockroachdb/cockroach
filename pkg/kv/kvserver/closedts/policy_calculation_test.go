@@ -360,11 +360,215 @@ func TestNetworkRTTAndPolicyCalculations(t *testing.T) {
 				"expected policy %v for RTT %v, got %v",
 				tc.expectedPolicy, tc.networkRTT, policy)
 
+			// Test RTT -> Policy with 0 percent dampening. We expect the same outcome
+			// as FindBucketBasedOnNetworkRTT regardless of oldPolicy.
+			for oldPolicy := ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO; oldPolicy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS; oldPolicy++ {
+				newPolicy := FindBucketBasedOnNetworkRTTWithDampening(oldPolicy, tc.networkRTT, 0)
+				require.Equal(t, tc.expectedPolicy, newPolicy,
+					"expected policy %v for RTT %v, got %v",
+					tc.expectedPolicy, tc.networkRTT, policy)
+			}
+
 			// Test Policy -> RTT conversion.
 			rtt := computeNetworkRTTBasedOnPolicy(policy)
 			require.Equal(t, tc.expectedRTT, rtt,
 				"expected RTT %v for policy %v, got %v",
 				tc.expectedRTT, policy, rtt)
+		})
+	}
+}
+
+// TestRefreshPolicyWithDampening tests the RefreshPolicy method of
+// replica.RefreshPolicy works expectedly with different dampening fractions.
+func TestRefreshPolicyWithDampening(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name              string
+		dampeningFraction float64
+		oldPolicy         ctpb.RangeClosedTimestampPolicy
+		networkRTT        time.Duration
+		expectedPolicy    ctpb.RangeClosedTimestampPolicy
+	}{
+		{
+			name:              "from no latency info to low latency",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			networkRTT:        10 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "from low latency to no latency info",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+			networkRTT:        -1 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+		},
+		{
+			name:              "latency increases but below the lower bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// 42ms is above 40ms but below the 40+20ms*0.2=44ms boundary.
+			networkRTT:     42 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency increases and above the lower bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// 44ms is above the 40+20ms*0.2=44ms boundary.
+			networkRTT:     44 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "latency increases to next bucket and above its upper bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+			// 38 is above 20ms+20*0.2=24ms and above the 40-20*0.2=36ms threshold.
+			networkRTT:     38 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency drops to previous bucket but above the upper bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// 18ms is below 20ms but above the 20ms-20ms*0.2=16ms boundary.
+			networkRTT:     18 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency drops to previous bucket and below the upper bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// 14ms is below 20ms and below the 20ms-20ms*0.2=16ms boundary.
+			networkRTT:     14 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "latency drops to previous bucket and below the lower bound threshold",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// 3ms is below 20ms and below the 20ms-20ms*0.2=16ms boundary and below 20ms*0.2=5ms.
+			networkRTT:     3 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "boundary case at 300ms",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			// 300ms is below the 300ms+20ms*0.2=304ms boundary.
+			networkRTT:     300 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+		},
+		{
+			name:              "boundary case at 320ms",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			// 320ms is above the 300ms+20ms*0.2=304ms boundary.
+			networkRTT:     320 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS,
+		},
+		{
+			name:              "jump to higher bucket case at 600ms",
+			dampeningFraction: 0.2,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			// 600ms is above the 300ms+20ms*0.2=304ms boundary.
+			networkRTT:     600 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS,
+		},
+		// Zero Dampening Cases (Most Sensitive)
+		{
+			name:              "zero dampening - tiny increase",
+			dampeningFraction: 0.0,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			networkRTT:        40 * time.Millisecond, // Tiny increase
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "zero dampening - tiny decrease",
+			dampeningFraction: 0.0,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+			networkRTT:        39 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		// 100% Dampening Cases (Most Conservative)
+		{
+			name:              "full dampening - significant increase",
+			dampeningFraction: 1.0,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			networkRTT:        58 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "full dampening - multi-bucket jump",
+			dampeningFraction: 1.0,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			networkRTT:        60 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS,
+		},
+		// 0.001 Dampening Cases (Very Sensitive but not quite zero)
+		{
+			name:              "0.001 dampening - small increase",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// Just barely above 40ms + (20ms * 0.001) = 40.02ms.
+			networkRTT:     41 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "0.001 dampening - small decrease",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+			// Just barely below 40ms - (20ms * 0.001) = 39.98ms.
+			networkRTT:     39 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "0.001 dampening - no change on small increase",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			// Just below 40ms + (20ms * 0.001) = 40.02ms.
+			networkRTT:     40 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "0.001 dampening - no change on small decrease",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+			// Just above 40ms - (20ms * 0.001) = 39.98ms.
+			networkRTT:     time.Duration(39.99 * float64(time.Millisecond)),
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "0.001 dampening - boundary at 300ms",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			// Just barely above 300ms + (20ms * 0.001) = 300.02ms.
+			networkRTT:     301 * time.Millisecond,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS,
+		},
+		{
+			name:              "0.001 dampening - multi-bucket jump to higher latency",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			networkRTT:        100 * time.Millisecond,
+			expectedPolicy:    ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS,
+		},
+		{
+			name:              "0.001 dampening - multi-bucket jump to lower latency",
+			dampeningFraction: 0.001,
+			oldPolicy:         ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS,
+			// Above 40ms - (20ms * 0.001) = 39.98ms, but it is a multi-bucket jump.
+			networkRTT:     time.Duration(39.99 * float64(time.Millisecond)),
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			newPolicy := FindBucketBasedOnNetworkRTTWithDampening(tc.oldPolicy, tc.networkRTT, tc.dampeningFraction)
+			require.Equal(t, tc.expectedPolicy, newPolicy)
 		})
 	}
 }
