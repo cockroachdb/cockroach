@@ -7,8 +7,12 @@ syntax = "proto3";
 package cockroach.util.timeutil.pgdate;
 option go_package = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate";
 
+import "gogoproto/gogo.proto";
+
 // DateStyle refers to the PostgreSQL DateStyle allowed variables.
 message DateStyle {
+  option (gogoproto.equal) = true;
+
   // Style refers to the style to print output dates.
   Style style = 1;
   // Order refers to the order of day, month and year components.
