@@ -30,6 +30,64 @@ Value:
   └────────────────────────┴────────────────────────┘
 */
 
+type VectorIndexKey struct {
+	Prefix       cspann.TreeKey
+	PartitionKey cspann.PartitionKey
+	Level        cspann.Level
+	Suffix       []byte
+}
+
+func KeyExtract(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKey, err error) {
+	prefixLen := 0
+	for i := 0; i < numPrefixColumns; i++ {
+		columnWidth, err := encoding.PeekLength(keyBytes[prefixLen:])
+		if err != nil {
+			return vecIndexKey, err
+		}
+		prefixLen += columnWidth
+	}
+	if prefixLen > 0 {
+		vecIndexKey.Prefix = keyBytes[:prefixLen]
+		keyBytes = keyBytes[prefixLen:]
+	}
+
+	partitionKey, keyBytes, err := DecodePartitionKey(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.PartitionKey = partitionKey
+
+	level, keyBytes, err := DecodePartitionLevel(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.Level = level
+
+	if len(keyBytes) > 0 {
+		vecIndexKey.Suffix = keyBytes
+	}
+
+	return vecIndexKey, nil
+}
+
+func (vik *VectorIndexKey) Encode(appendTo []byte) []byte {
+	appendTo = append(appendTo, vik.Prefix...)
+	appendTo = EncodePartitionKey(appendTo, vik.PartitionKey)
+	appendTo = EncodePartitionLevel(appendTo, vik.Level)
+	return append(appendTo, vik.Suffix...)
+}
+
+func EncodedValueSideLen(vectorData []byte, compositeData []byte) int {
+	return len(vectorData) + len(compositeData)
+}
+
+func EncodeValueSide(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
+	// The value side is encoded as a concatenation of the vector data and the
+	// composite data.
+	appendTo = append(appendTo, vectorData...)
+	return append(appendTo, compositeData...)
+}
+
 // EncodePartitionMetadata encodes the metadata for a partition.
 func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
 	// The encoding consists of 8 bytes for the level, and a 4-byte length,
@@ -144,6 +202,18 @@ func DecodeRaBitQVectorToSet(
 	return encVector, nil
 }
 
+func DecodeUnquantizedVector(encVector []byte) (vector.T, []byte, error) {
+	encVector, _, err := encoding.DecodeUntaggedFloat32Value(encVector)
+	if err != nil {
+		return nil, nil, err
+	}
+	encVector, v, err := vector.Decode(encVector)
+	if err != nil {
+		return nil, nil, err
+	}
+	return v, encVector, nil
+}
+
 // DecodeUnquantizedVectorToSet decodes a full vector entry into the given
 // UnQuantizedVectorSet. The vector set must have been initialized with the
 // correct number of dimensions. It returns the remainder of the input buffer.
@@ -178,4 +248,21 @@ func DecodeChildKey(encChildKey []byte, level cspann.Level) (cspann.ChildKey, er
 		}
 		return cspann.ChildKey{PartitionKey: cspann.PartitionKey(childPartitionKey)}, nil
 	}
+}
+
+func DecodePartitionKey(encodedPartitionKey []byte) (cspann.PartitionKey, []byte, error) {
+	remainingBytes, partitionKey, err := encoding.DecodeUvarintAscending(encodedPartitionKey)
+	if err != nil {
+		return 0, nil, err
+	}
+	return cspann.PartitionKey(partitionKey), remainingBytes, nil
+}
+
+func DecodePartitionLevel(encodedLevel []byte) (cspann.Level, []byte, error) {
+	remainingBytes, level, err := encoding.DecodeUvarintAscending(encodedLevel)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return cspann.Level(level), remainingBytes, nil
 }
