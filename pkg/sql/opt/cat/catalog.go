@@ -241,6 +241,10 @@ type Catalog interface {
 	// NOLOGIN instead of LOGIN.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 
+	// UserHasGlobalPrivilegeOrRoleOption returns a bool representing whether the given user
+	// has a global privilege or the corresponding legacy role option.
+	UserHasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind, user username.SQLUsername) (bool, error)
+
 	// FullyQualifiedName retrieves the fully qualified name of a data source.
 	// Note that:
 	//  - this call may involve a database operation so it shouldn't be used in

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -42,9 +43,14 @@ func (b *Builder) addRowLevelSecurityFilter(
 	if err != nil {
 		panic(err)
 	}
-	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID, isOwnerAndNotForced)
+	bypassRLS, err := b.catalog.UserHasGlobalPrivilegeOrRoleOption(b.ctx, privilege.BYPASSRLS, b.checkPrivilegeUser)
+	if err != nil {
+		panic(err)
+	}
+	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID,
+		isOwnerAndNotForced, bypassRLS)
 	// Check if RLS filtering is exempt.
-	if isAdmin || isOwnerAndNotForced {
+	if isAdmin || isOwnerAndNotForced || bypassRLS {
 		return
 	}
 
@@ -225,8 +231,12 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 	if err != nil {
 		panic(err)
 	}
-	r.md.SetRLSEnabled(r.user, isAdmin, r.tabMeta.MetaID, isOwnerAndNotForced)
-	if isAdmin || isOwnerAndNotForced {
+	bypassRLS, err := r.oc.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, r.user)
+	if err != nil {
+		panic(err)
+	}
+	r.md.SetRLSEnabled(r.user, isAdmin, r.tabMeta.MetaID, isOwnerAndNotForced, bypassRLS)
+	if isAdmin || isOwnerAndNotForced || bypassRLS {
 		// Return a constraint check that always passes.
 		return "true", nil
 	}

@@ -89,6 +89,10 @@ type AuthorizationAccessor interface {
 	// has a global privilege or the corresponding legacy role option.
 	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
 
+	// UserHasGlobalPrivilegeOrRoleOption is like HasGlobalPrivilegeOrRoleOption,
+	// except that it is for a specific user.
+	UserHasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind, user username.SQLUsername) (bool, error)
+
 	// CheckGlobalPrivilegeOrRoleOption checks if the current user has a global privilege
 	// or the corresponding legacy role option, and returns an error if the user does not.
 	CheckGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) error
@@ -692,7 +696,15 @@ func (p *planner) CheckRoleOption(ctx context.Context, roleOption roleoption.Opt
 func (p *planner) HasGlobalPrivilegeOrRoleOption(
 	ctx context.Context, privilege privilege.Kind,
 ) (bool, error) {
-	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, p.User())
+	return p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege, p.User())
+}
+
+// UserHasGlobalPrivilegeOrRoleOption is like HasGlobalPrivilegeOrRoleOption, but
+// is for a specific user.
+func (p *planner) UserHasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
+) (bool, error) {
+	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
 	if err != nil {
 		return false, err
 	}
@@ -701,7 +713,7 @@ func (p *planner) HasGlobalPrivilegeOrRoleOption(
 	}
 	maybeRoleOptionName := string(privilege.DisplayName())
 	if roleOption, ok := roleoption.ByName[maybeRoleOptionName]; ok {
-		return p.HasRoleOption(ctx, roleOption)
+		return p.UserHasRoleOption(ctx, user, roleOption)
 	}
 	return false, nil
 }
