@@ -153,6 +153,12 @@ $."a"?((@."b" == 1))."c"?((@."d" == 2))
 statement error pgcode 2201B pq: could not parse .* invalid regular expression: error parsing regexp: missing closing \)
 SELECT '$ ? (@ like_regex "(invalid pattern")'::JSONPATH
 
+statement error pgcode 42601 pq: could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
+SELECT 'last'::JSONPATH
+
+statement error pgcode 42601 pq: could not parse "@" as type jsonpath: @ is not allowed in root expressions
+SELECT '@'::JSONPATH
+
 ## When we allow table creation
 
 # statement ok
