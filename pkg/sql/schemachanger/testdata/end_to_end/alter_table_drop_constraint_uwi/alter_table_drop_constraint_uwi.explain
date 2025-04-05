@@ -9,33 +9,48 @@ EXPLAIN (DDL) ALTER TABLE t DROP CONSTRAINT unique_j;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹unique_j›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
- │         └── 2 Mutation operations
+ │         └── 3 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicUniqueWithoutIndexConstraintValidated {"ConstraintID":2,"TableID":104}
  │              └── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
  │    │    │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
- │         └── 4 Mutation operations
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicUniqueWithoutIndexConstraintValidated {"ConstraintID":2,"TableID":104}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── VALIDATED → ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── VALIDATED → ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-), ReferencedColumnIDs: [2]}
+      │    └── 3 Mutation operations
+      │         ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
            └── 3 Mutation operations
-                ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -270,10 +270,17 @@ func makePostCommitPlan(
 	if err := deps.WithTxnInJob(ctx, do); err != nil {
 		return scplan.Plan{}, err
 	}
+	// Ensure rollbacks always start in non-revertible phase. Previously,
+	// the rollback relied on hitting not revertible operations for this to
+	// happen.
+	initialPhase := scop.PostCommitPhase
+	if state.InRollback {
+		initialPhase = scop.PostCommitNonRevertiblePhase
+	}
 	// Plan the schema change.
 	return scplan.MakePlan(ctx, state, scplan.Params{
 		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
-		ExecutionPhase:             scop.PostCommitPhase,
+		ExecutionPhase:             initialPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 		SkipPlannerSanityChecks:    true,
 		InRollback:                 state.InRollback,

@@ -2567,6 +2567,14 @@ func newTableDesc(
 		}
 		ttl.ScheduleID = j.ScheduleID()
 	}
+
+	// Set schema locked by default if it has been requested.
+	if !ret.IsView() && !ret.IsSequence() &&
+		params.p.SessionData().CreateTableWithSchemaLocked &&
+		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		ret.SchemaLocked = true
+	}
+
 	return ret, nil
 }
 

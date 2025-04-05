@@ -8,6 +8,7 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
 )
@@ -54,6 +55,12 @@ func (i *immediateVisitor) NotImplementedForPublicObjects(
 	desc := i.MaybeGetCheckedOutDescriptor(op.DescID)
 	if desc == nil || desc.Dropped() {
 		return nil
+	}
+	if op.TriggerID != 0 {
+		// Validate that the trigger is dropped.
+		if catalog.FindTriggerByID(desc.(catalog.TableDescriptor), op.TriggerID) == nil {
+			return nil
+		}
 	}
 	return errors.AssertionFailedf("not implemented operation was hit "+
 		"unexpectedly, no dropped descriptor was found. %v", op.ElementType)

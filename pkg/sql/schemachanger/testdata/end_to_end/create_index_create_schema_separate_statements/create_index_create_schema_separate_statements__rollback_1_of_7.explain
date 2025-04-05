@@ -45,9 +45,12 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT  → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
            ├── 1 element transitioning toward ABSENT
-           │    └── DROPPED → ABSENT Schema:{DescID: 105 (sc-)}
-           └── 5 Mutation operations
+           │    └── DROPPED → ABSENT           Schema:{DescID: 105 (sc-)}
+           └── 6 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── DeleteDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":100}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}

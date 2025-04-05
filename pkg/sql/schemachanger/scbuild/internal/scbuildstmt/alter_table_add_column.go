@@ -173,7 +173,8 @@ func alterTableAddColumn(
 		))
 	}
 	if desc.IsComputed() {
-		expr := b.WrapExpression(tbl.TableID, b.ComputedColumnExpression(tbl, d))
+		validExpr, _ := b.ComputedColumnExpression(tbl, d, tree.ComputedColumnExprContext(d.IsVirtual()))
+		expr := b.WrapExpression(tbl.TableID, validExpr)
 		if spec.colType.ElementCreationMetadata.In_24_3OrLater {
 			spec.compute = &scpb.ColumnComputeExpression{
 				TableID:    tbl.TableID,
