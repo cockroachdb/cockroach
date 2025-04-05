@@ -1373,7 +1373,11 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 			}
 			maxLatency = max(maxLatency, peerLatency)
 		}
-		return closedts.FindBucketBasedOnNetworkRTT(maxLatency)
+		return closedts.FindBucketBasedOnNetworkRTTWithDampening(
+			ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load()),
+			maxLatency,
+			closedts.PolicySwitchWhenLatencyExceedsBucketFraction.Get(&r.store.GetStoreConfig().Settings.SV),
+		)
 	}
 	r.cachedClosedTimestampPolicy.Store(int32(policy()))
 }

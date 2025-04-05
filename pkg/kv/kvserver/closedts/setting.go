@@ -85,3 +85,16 @@ var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled", false),
 	settings.WithPublic,
 )
+
+// PolicySwitchWhenLatencyExceedsBucketFraction determines the threshold for
+// changing the closed timestamp policy based on observed latency between
+// leaseholders and their furthest follower. This is used to prevent
+// frequent changes in the closed timestamp policy when the latency is close
+// to the boundary of the policy bucket. By default, this is disabled (0).
+var PolicySwitchWhenLatencyExceedsBucketFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.closed_timestamp.policy_switch_latency_bucket_exceed_threshold",
+	"the fraction of the closed timestamp policy bucket width which need be "+
+		"exceeded before the closed timestamp policy will be changed",
+	0.2,
+)
