@@ -163,6 +163,18 @@ type Store interface {
 		childKeys []ChildKey,
 		expected PartitionMetadata,
 	) (removed bool, err error)
+
+	// TryClearPartition removes all vectors in the specified partition and
+	// returns the number of vectors that were cleared. It returns
+	// ErrPartitionNotFound if the partition does not exist.
+	//
+	// Before performing any action, TryClearPartition checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If the partition does not exist, it returns
+	// ErrPartitionNotFound.
+	TryClearPartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, expected PartitionMetadata,
+	) (count int, err error)
 }
 
 // Txn enables callers to make changes to the stored index in a transactional

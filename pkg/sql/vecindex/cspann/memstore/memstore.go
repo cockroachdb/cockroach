@@ -544,6 +544,34 @@ func (s *Store) TryRemoveFromPartition(
 	return removed, err
 }
 
+// TryClearPartition implements the Store interface.
+func (s *Store) TryClearPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expected cspann.PartitionMetadata,
+) (count int, err error) {
+	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, true /* isExclusive */)
+	if memPart == nil {
+		// Partition does not exist.
+		return -1, cspann.ErrPartitionNotFound
+	}
+	defer memPart.lock.Release()
+
+	// Check precondition.
+	partition := memPart.lock.partition
+	existing := partition.Metadata()
+	if !existing.Equal(&expected) {
+		return -1, cspann.NewConditionFailedError(*existing)
+	}
+
+	// Remove vectors from the partition and update partition count.
+	count = partition.Clear()
+	memPart.count.Store(0)
+
+	return count, nil
+}
+
 // EnsureUniquePartitionKey checks that the given partition key is not being
 // used yet and also ensures it won't be given out in the future. This is used
 // for testing.
