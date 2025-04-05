@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -132,6 +133,7 @@ type leaseholder struct {
 // Replica represents a *Replica object, but with only the capabilities needed
 // by the closed timestamp side transport to accomplish its job.
 type Replica interface {
+	policyrefresher.Replica
 	// Accessors.
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
@@ -472,6 +474,18 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 
 	// Return the publication time, for tests.
 	return now
+}
+
+// GetLeaseholders returns a slice of all replicas that are currently
+// leaseholders on this node.
+func (s *Sender) GetLeaseholders() []policyrefresher.Replica {
+	s.leaseholdersMu.Lock()
+	defer s.leaseholdersMu.Unlock()
+	leaseholders := make([]policyrefresher.Replica, 0, len(s.leaseholdersMu.leaseholders))
+	for _, lh := range s.leaseholdersMu.leaseholders {
+		leaseholders = append(leaseholders, lh.Replica)
+	}
+	return leaseholders
 }
 
 // GetSnapshot generates an update that contains all the sender's state (as

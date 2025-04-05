@@ -277,6 +277,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
+	r.RefreshPolicy(nil)
 	return r
 }
 
