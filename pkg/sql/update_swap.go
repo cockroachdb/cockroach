@@ -142,3 +142,7 @@ func (u *updateSwapNode) Close(ctx context.Context) {
 func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.tu.rowsWritten
 }
+
+func (u *updateSwapNode) enableAutoCommit() {
+	u.run.tu.enableAutoCommit()
+}
