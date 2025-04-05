@@ -837,6 +837,28 @@ func (t transformation) toResp(
 			getResp.Value.IsPresent(),
 			req.AllowIfDoesNotExist,
 		)
+		if condFailedErr == nil {
+			// If we didn't hit an error on the server, we need to check whether
+			// the condition is satisfied against the latest buffered write (if
+			// there is one) on this key. This is needed to detect
+			// intra-transaction conflicts.
+			it := twb.buffer.MakeIter()
+			seek := twb.seekItemForSpan(req.Key, nil /* endKey */)
+			it.FirstOverlap(seek)
+			if it.Valid() {
+				// We have buffered some writes to this key, so evaluate the
+				// condition against the last one (which has the highest
+				// sequence number).
+				bw := it.Cur()
+				lastValue := &bw.vals[len(bw.vals)-1].val
+				condFailedErr = evalFn(
+					req.ExpBytes,
+					lastValue,
+					lastValue.IsPresent(),
+					req.AllowIfDoesNotExist,
+				)
+			}
+		}
 		if condFailedErr != nil {
 			pErr := kvpb.NewErrorWithTxn(condFailedErr, txn)
 			pErr.SetErrorIndex(int32(t.index))
