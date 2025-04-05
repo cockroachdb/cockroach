@@ -1073,8 +1073,13 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 			if debug {
 				b.Log(DescribeReady(rd, nil))
 			}
-			if !rd.Committed.Empty() {
+			if span := rd.Committed; !span.Empty() {
 				applied = uint64(rd.Committed.Last)
+				entries, err := rn.LogSnapshot().Slice(span, noLimit)
+				if err != nil {
+					panic(err)
+				}
+				rn.AckApplied(entries)
 			}
 			s.Append(rd.Entries)
 			for _, m := range rd.Messages {
