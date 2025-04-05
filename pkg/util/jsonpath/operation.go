@@ -29,6 +29,7 @@ const (
 	OpMinus
 	OpExists
 	OpIsUnknown
+	OpStartsWith
 )
 
 var OperationTypeStrings = map[OperationType]string{
@@ -51,6 +52,7 @@ var OperationTypeStrings = map[OperationType]string{
 	OpMinus:            "-",
 	OpExists:           "exists",
 	OpIsUnknown:        "is unknown",
+	OpStartsWith:       "starts with",
 }
 
 type Operation struct {
