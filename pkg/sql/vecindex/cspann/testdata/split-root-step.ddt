@@ -595,3 +595,182 @@ force-split partition-key=2 parent-partition-key=1
     ├───• vec5 (10, 5)
     ├───• vec2 (7, 4)
     └───• vec7 (8, 8)
+
+# ----------------------------------------------------------------------
+# Delete from the tree when the root is in splitting states.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=4 beam-size=2 discard-fixups new-fixups
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+├───• vec9 (6, 5)
+└───• vec10 (5, 8)
+----
+Loaded 10 vectors.
+
+# Delete vector in Splitting state.
+force-split partition-key=1 steps=1
+----
+• 1 (0, 0) [Splitting:2,3]
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+├───• vec9 (6, 5)
+└───• vec10 (5, 8)
+
+delete discard-fixups
+vec1
+----
+• 1 (0, 0) [Splitting:2,3]
+│
+├───• vec10 (5, 8)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+└───• vec9 (6, 5)
+
+# Delete vector in DrainingForSplit state where the sub-partitions are still
+# empty. This will result in a dangling vector in the root partition, since the
+# full vector is deleted in the primary index.
+force-split partition-key=1 steps=3
+----
+• 1 (0, 0) [DrainingForSplit:2,3]
+│
+├───• vec10 (5, 8)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+└───• vec9 (6, 5)
+
+delete discard-fixups
+vec2
+----
+• 1 (0, 0) [DrainingForSplit:2,3]
+│
+├───• vec10 (5, 8)
+├───• vec2 (MISSING)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+└───• vec9 (6, 5)
+
+# Delete vector after vectors have been copied to sub-partitions. This should
+# delete the vector in sub-partition #2, but leave it danging in the root
+# partition.
+force-split partition-key=1 steps=4
+----
+• 1 (0, 0) [DrainingForSplit:2,3]
+│
+├───• vec10 (5, 8)
+├───• vec2 (MISSING)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+└───• vec9 (6, 5)
+
+format-tree root=2
+----
+• 2 (5.3333, 6.6667)
+│
+├───• vec10 (5, 8)
+├───• vec3 (4, 3)
+├───• vec4 (8, 11)
+├───• vec7 (3, 5)
+└───• vec8 (6, 8)
+
+delete discard-fixups
+vec3
+----
+• 1 (0, 0) [DrainingForSplit:2,3]
+│
+├───• vec10 (5, 8)
+├───• vec2 (MISSING)
+├───• vec3 (MISSING)
+├───• vec4 (8, 11)
+├───• vec5 (14, 1)
+├───• vec6 (8, 6)
+├───• vec7 (3, 5)
+├───• vec8 (6, 8)
+└───• vec9 (6, 5)
+
+format-tree root=2
+----
+• 2 (5.3333, 6.6667)
+│
+├───• vec10 (5, 8)
+├───• vec8 (6, 8)
+├───• vec4 (8, 11)
+└───• vec7 (3, 5)
+
+# Delete vector after vectors have been cleared in the root. This should remove
+# the vector from sub-partition #3.
+force-split partition-key=1 steps=1
+----
+• 1 (0, 0) [DrainingForSplit:2,3]
+
+delete discard-fixups root=3
+vec4
+----
+• 3 (9.6667, 3.6667)
+│
+├───• vec9 (6, 5)
+├───• vec5 (14, 1)
+└───• vec6 (8, 6)
+
+# Delete vector in AddingLevel state. This should remove the vector from
+# sub-partition #3.
+force-split partition-key=1 steps=1
+----
+• 1 (0, 0) [AddingLevel:2,3]
+
+delete discard-fixups root=3
+vec5
+----
+• 3 (9.6667, 3.6667)
+│
+├───• vec9 (6, 5)
+└───• vec6 (8, 6)
+
+# Finish split of root partition.
+force-split partition-key=1
+----
+• 1 (0, 0)
+│
+├───• 2 (5.3333, 6.6667)
+│   │
+│   ├───• vec10 (5, 8)
+│   ├───• vec8 (6, 8)
+│   └───• vec7 (3, 5)
+│
+└───• 3 (9.6667, 3.6667)
+    │
+    ├───• vec9 (6, 5)
+    └───• vec6 (8, 6)
