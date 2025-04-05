@@ -70,6 +70,8 @@ type updateRun struct {
 	// regionLocalInfo handles erroring out the UPDATE when the
 	// enforce_home_region setting is on.
 	regionLocalInfo regionLocalInfoType
+
+	mustValidateOldPKValues bool
 }
 
 func (r *updateRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
@@ -240,7 +242,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, false /* mustValidateOldPKValues */, r.traceKV,
+		params.ctx, oldValues, updateValues, pm, vh, r.mustValidateOldPKValues, r.traceKV,
 	)
 	if err != nil {
 		return err
