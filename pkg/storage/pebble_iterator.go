@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/sstable"
 )
 
@@ -38,7 +39,7 @@ type pebbleIterator struct {
 	upperBoundBuf      []byte
 	rangeKeyMaskingBuf []byte
 	// Filter to use if masking is enabled.
-	maskFilter mvccWallTimeIntervalRangeKeyMask
+	maskFilter cockroachkvs.MVCCWallTimeIntervalRangeKeyMask
 	// [minTimestamp,maxTimestamp] contain the encoded timestamp bounds of the
 	// iterator, if any. This iterator will not return keys outside these
 	// timestamps. These are encoded because lexicographic comparison on encoded
@@ -250,7 +251,7 @@ func (p *pebbleIterator) setOptions(
 		p.rangeKeyMaskingBuf = mvccencoding.EncodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
-		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, MVCCBlockIntervalSuffixReplacer{})
+		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, cockroachkvs.MVCCBlockIntervalSuffixReplacer{})
 		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
@@ -284,10 +285,9 @@ func (p *pebbleIterator) setOptions(
 		// of the slice should be at least one more than the length, for a
 		// Pebble-internal performance optimization.
 		pkf := [2]pebble.BlockPropertyFilter{
-			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
+			cockroachkvs.NewMVCCTimeIntervalFilter(
 				uint64(opts.MinTimestamp.WallTime),
 				uint64(opts.MaxTimestamp.WallTime)+1,
-				MVCCBlockIntervalSuffixReplacer{},
 			),
 		}
 		p.options.PointKeyFilters = pkf[:1:2]
