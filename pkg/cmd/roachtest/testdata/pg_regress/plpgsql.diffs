@@ -262,42 +262,37 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE INSERT on all slots
  -- *	- Check name prefix
-@@ -336,14 +434,34 @@
+@@ -336,14 +434,29 @@
  ' language plpgsql;
  create trigger tg_chkslotname before insert
      on PSlot for each row execute procedure tg_chkslotname('PS');
-+ERROR:  no data source matches prefix: new in this context
-+HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
-+--
-+See: https://go.crdb.dev/issue-v/114687/_version_
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  create trigger tg_chkslotname before insert
      on WSlot for each row execute procedure tg_chkslotname('WS');
-+ERROR:  no data source matches prefix: new in this context
-+HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
-+--
-+See: https://go.crdb.dev/issue-v/114687/_version_
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  create trigger tg_chkslotname before insert
      on PLine for each row execute procedure tg_chkslotname('PL');
-+ERROR:  no data source matches prefix: new in this context
-+HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
-+--
-+See: https://go.crdb.dev/issue-v/114687/_version_
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  create trigger tg_chkslotname before insert
      on IFace for each row execute procedure tg_chkslotname('IF');
-+ERROR:  no data source matches prefix: new in this context
-+HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
-+--
-+See: https://go.crdb.dev/issue-v/114687/_version_
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  create trigger tg_chkslotname before insert
      on PHone for each row execute procedure tg_chkslotname('PH');
-+ERROR:  no data source matches prefix: new in this context
-+HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
-+--
-+See: https://go.crdb.dev/issue-v/114687/_version_
++ERROR:  unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/135311/_version_
  -- ************************************************************
  -- * BEFORE INSERT or UPDATE on all slots with slotlink
  -- *	- Set slotlink to empty string if NULL value given
-@@ -358,14 +476,34 @@
+@@ -358,14 +471,34 @@
  ' language plpgsql;
  create trigger tg_chkslotlink before insert or update
      on PSlot for each row execute procedure tg_chkslotlink();
@@ -332,7 +327,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE INSERT or UPDATE on all slots with backlink
  -- *	- Set backlink to empty string if NULL value given
-@@ -380,10 +518,22 @@
+@@ -380,10 +513,22 @@
  ' language plpgsql;
  create trigger tg_chkbacklink before insert or update
      on PSlot for each row execute procedure tg_chkbacklink();
@@ -355,7 +350,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on PSlot
  -- *	- do delete/insert instead of update if name changes
-@@ -410,6 +560,10 @@
+@@ -410,6 +555,10 @@
  ' language plpgsql;
  create trigger tg_pslot_bu before update
      on PSlot for each row execute procedure tg_pslot_bu();
@@ -366,7 +361,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on WSlot
  -- *	- do delete/insert instead of update if name changes
-@@ -436,6 +590,10 @@
+@@ -436,6 +585,10 @@
  ' language plpgsql;
  create trigger tg_wslot_bu before update
      on WSlot for each row execute procedure tg_Wslot_bu();
@@ -377,7 +372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on PLine
  -- *	- do delete/insert instead of update if name changes
-@@ -462,6 +620,10 @@
+@@ -462,6 +615,10 @@
  ' language plpgsql;
  create trigger tg_pline_bu before update
      on PLine for each row execute procedure tg_pline_bu();
@@ -388,7 +383,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on IFace
  -- *	- do delete/insert instead of update if name changes
-@@ -488,6 +650,10 @@
+@@ -488,6 +645,10 @@
  ' language plpgsql;
  create trigger tg_iface_bu before update
      on IFace for each row execute procedure tg_iface_bu();
@@ -399,7 +394,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on HSlot
  -- *	- do delete/insert instead of update if name changes
-@@ -514,6 +680,10 @@
+@@ -514,6 +675,10 @@
  ' language plpgsql;
  create trigger tg_hslot_bu before update
      on HSlot for each row execute procedure tg_hslot_bu();
@@ -410,7 +405,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * BEFORE UPDATE on PHone
  -- *	- do delete/insert instead of update if name changes
-@@ -538,6 +708,10 @@
+@@ -538,6 +703,10 @@
  ' language plpgsql;
  create trigger tg_phone_bu before update
      on PHone for each row execute procedure tg_phone_bu();
@@ -421,7 +416,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * AFTER INSERT or UPDATE or DELETE on slot with backlink
  -- *	- Ensure that the opponent correctly points back to us
-@@ -577,10 +751,13 @@
+@@ -577,10 +746,13 @@
  ' language plpgsql;
  create trigger tg_backlink_a after insert or update or delete
      on PSlot for each row execute procedure tg_backlink_a('PS');
@@ -435,7 +430,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Support function to set the opponents backlink field
  -- * if it does not already point to the requested slot
-@@ -635,6 +812,9 @@
+@@ -635,6 +807,9 @@
      raise exception ''illegal backlink beginning with %'', mytype;
  end;
  ' language plpgsql;
@@ -445,7 +440,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Support function to clear out the backlink field if
  -- * it still points to specific slot
-@@ -680,6 +860,11 @@
+@@ -680,6 +855,11 @@
      end if;
  end
  ' language plpgsql;
@@ -457,7 +452,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * AFTER INSERT or UPDATE or DELETE on slot with slotlink
  -- *	- Ensure that the opponent correctly points back to us
-@@ -719,14 +904,19 @@
+@@ -719,14 +899,19 @@
  ' language plpgsql;
  create trigger tg_slotlink_a after insert or update or delete
      on PSlot for each row execute procedure tg_slotlink_a('PS');
@@ -477,7 +472,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Support function to set the opponents slotlink field
  -- * if it does not already point to the requested slot
-@@ -811,6 +1001,11 @@
+@@ -811,6 +996,11 @@
      raise exception ''illegal slotlink beginning with %'', mytype;
  end;
  ' language plpgsql;
@@ -489,7 +484,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Support function to clear out the slotlink field if
  -- * it still points to specific slot
-@@ -876,6 +1071,11 @@
+@@ -876,6 +1066,11 @@
      end if;
  end;
  ' language plpgsql;
@@ -501,7 +496,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Describe the backside of a patchfield slot
  -- ************************************************************
-@@ -919,6 +1119,9 @@
+@@ -919,6 +1114,9 @@
      return rec.backlink;
  end;
  ' language plpgsql;
@@ -511,7 +506,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * Describe the front of a patchfield slot
  -- ************************************************************
-@@ -953,54 +1156,83 @@
+@@ -953,54 +1151,83 @@
      return psrec.slotlink;
  end;
  ' language plpgsql;
@@ -536,11 +531,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +    select into psrec * from PSlot where slotname = $1;
      if not found then
 -        return '''';
-+        return '';
-     end if;
+-    end if;
 -    if rec.slotlink = '''' then
 -        return ''-'';
--    end if;
++        return '';
+     end if;
 -    sltype := substr(rec.slotlink, 1, 2);
 -    if sltype = ''PH'' then
 -        select into rec * from PHone where slotname = rec.slotlink;
@@ -635,7 +630,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ************************************************************
  -- * View of a patchfield describing backside and patches
  -- ************************************************************
-@@ -1008,6 +1240,8 @@
+@@ -1008,6 +1235,8 @@
  	pslot_backlink_view(PF.slotname) as backside,
  	pslot_slotlink_view(PF.slotname) as patch
      from PSlot PF;
@@ -644,7 +639,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- First we build the house - so we create the rooms
  --
-@@ -1146,8 +1380,8 @@
+@@ -1146,8 +1375,8 @@
  select * from WSlot where roomno = '001' order by slotname;
         slotname       |  roomno  |       slotlink       |       backlink       
  ----------------------+----------+----------------------+----------------------
@@ -655,7 +650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.2a            | 001      |                      |                     
   WS.001.2b            | 001      |                      |                     
   WS.001.3a            | 001      |                      |                     
-@@ -1169,9 +1403,9 @@
+@@ -1169,9 +1398,9 @@
  select * from WSlot where roomno = '001' order by slotname;
         slotname       |  roomno  |       slotlink       |       backlink       
  ----------------------+----------+----------------------+----------------------
@@ -667,7 +662,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.2b            | 001      |                      |                     
   WS.001.3a            | 001      |                      |                     
   WS.001.3b            | 001      |                      |                     
-@@ -1192,9 +1426,9 @@
+@@ -1192,9 +1421,9 @@
  select * from WSlot where roomno = '001' order by slotname;
         slotname       |  roomno  |       slotlink       |       backlink       
  ----------------------+----------+----------------------+----------------------
@@ -680,7 +675,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.2b            | 001      |                      |                     
   WS.001.3a            | 001      |                      |                     
   WS.001.3b            | 001      |                      |                     
-@@ -1221,9 +1455,9 @@
+@@ -1221,9 +1450,9 @@
  select * from WSlot where roomno = '001' order by slotname;
         slotname       |  roomno  |       slotlink       |       backlink       
  ----------------------+----------+----------------------+----------------------
@@ -693,7 +688,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.2b            | 001      |                      | PS.base.a4          
   WS.001.3a            | 001      |                      | PS.base.a6          
   WS.001.3b            | 001      |                      |                     
-@@ -1235,20 +1469,20 @@
+@@ -1235,20 +1464,20 @@
   PS.base.a1           | PF0_1  |                      | WS.001.1a           
   PS.base.a2           | PF0_1  |                      | WS.001.1b           
   PS.base.a3           | PF0_1  |                      | WS.001.2a           
@@ -720,7 +715,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.3b            | 001      |                      | PS.base.a6          
  (6 rows)
  
-@@ -1258,18 +1492,18 @@
+@@ -1258,18 +1487,18 @@
   PS.base.a1           | PF0_1  |                      | WS.001.1a           
   PS.base.a2           | PF0_1  |                      | WS.001.1b           
   PS.base.a3           | PF0_1  |                      | WS.001.2a           
@@ -744,7 +739,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   WS.001.2b            | 001      |                      | PS.base.a4          
   WS.001.3a            | 001      |                      | PS.base.a5          
   WS.001.3b            | 001      |                      | PS.base.a6          
-@@ -1281,9 +1515,9 @@
+@@ -1281,9 +1510,9 @@
   PS.base.a1           | PF0_1  |                      | WS.001.1a           
   PS.base.a2           | PF0_1  |                      | WS.001.1b           
   PS.base.a3           | PF0_1  |                      | WS.001.2a           
@@ -757,7 +752,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (6 rows)
  
  insert into PField values ('PF1_2', 'Phonelines first floor');
-@@ -1309,9 +1543,9 @@
+@@ -1309,9 +1538,9 @@
   PS.base.a1           | PF0_1  |                      | WS.001.1a           
   PS.base.a2           | PF0_1  |                      | WS.001.1b           
   PS.base.a3           | PF0_1  |                      | WS.001.2a           
@@ -770,7 +765,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   PS.base.b1           | PF0_1  |                      | WS.002.1a           
   PS.base.b2           | PF0_1  |                      | WS.002.1b           
   PS.base.b3           | PF0_1  |                      | WS.002.2a           
-@@ -1324,18 +1558,18 @@
+@@ -1324,18 +1553,18 @@
   PS.base.c4           | PF0_1  |                      | WS.003.2b           
   PS.base.c5           | PF0_1  |                      | WS.003.3a           
   PS.base.c6           | PF0_1  |                      | WS.003.3b           
@@ -801,7 +796,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
   PS.first.a1          | PF1_1  |                      | WS.101.1a           
   PS.first.a2          | PF1_1  |                      | WS.101.1b           
   PS.first.a3          | PF1_1  |                      | WS.101.2a           
-@@ -1377,48 +1611,48 @@
+@@ -1377,48 +1606,48 @@
  select * from WSlot order by slotname;
         slotname       |  roomno  |       slotlink       |       backlink       
  ----------------------+----------+----------------------+----------------------
@@ -889,7 +884,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (42 rows)
  
  --
-@@ -1471,82 +1705,22 @@
+@@ -1471,82 +1700,22 @@
  -- Now we take a look at the patchfield
  --
  select * from PField_v1 where pfname = 'PF0_1' order by slotname;
@@ -974,7 +969,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- The following tests are unrelated to the scenario outlined above;
  -- they merely exercise specific parts of PL/pgSQL
-@@ -1564,12 +1738,9 @@
+@@ -1564,12 +1733,9 @@
      END IF;
      RETURN rslt;
  END;' LANGUAGE plpgsql;
@@ -989,7 +984,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test the FOUND magic variable
  --
-@@ -1609,22 +1780,13 @@
+@@ -1609,22 +1775,13 @@
    end if;
    return true;
    end;' language plpgsql;
@@ -1017,7 +1012,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  
  --
  -- Test set-returning functions for PL/pgSQL
-@@ -1638,17 +1800,11 @@
+@@ -1638,17 +1795,11 @@
  	END LOOP;
  	RETURN;
  END;' language plpgsql;
@@ -1039,7 +1034,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function test_table_func_row() returns setof found_test_tbl as '
  DECLARE
  	row found_test_tbl%ROWTYPE;
-@@ -1658,17 +1814,11 @@
+@@ -1658,17 +1809,11 @@
  	END LOOP;
  	RETURN;
  END;' language plpgsql;
@@ -1061,7 +1056,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function test_ret_set_scalar(int,int) returns setof int as '
  DECLARE
  	i int;
-@@ -1678,21 +1828,11 @@
+@@ -1678,21 +1823,11 @@
  	END LOOP;
  	RETURN;
  END;' language plpgsql;
@@ -1087,7 +1082,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function test_ret_set_rec_dyn(int) returns setof record as '
  DECLARE
  	retval RECORD;
-@@ -1708,20 +1848,21 @@
+@@ -1708,20 +1843,21 @@
  	END IF;
  	RETURN;
  END;' language plpgsql;
@@ -1121,7 +1116,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function test_ret_rec_dyn(int) returns record as '
  DECLARE
  	retval RECORD;
-@@ -1734,18 +1875,21 @@
+@@ -1734,18 +1870,21 @@
  		RETURN retval;
  	END IF;
  END;' language plpgsql;
@@ -1153,7 +1148,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test some simple polymorphism cases.
  --
-@@ -1753,31 +1897,37 @@
+@@ -1753,31 +1892,37 @@
  begin
    return x + 1;
  end$$ language plpgsql;
@@ -1207,7 +1202,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function f1(x anyarray) returns anyelement as $$
  begin
    return x[1];
-@@ -1789,7 +1939,10 @@
+@@ -1789,7 +1934,10 @@
  (1 row)
  
  select f1(stavalues1) from pg_statistic;  -- fail, can't infer element type
@@ -1219,7 +1214,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop function f1(x anyarray);
  create function f1(x anyarray) returns anyarray as $$
  begin
-@@ -1802,72 +1955,61 @@
+@@ -1802,72 +1950,61 @@
  (1 row)
  
  select f1(stavalues1) from pg_statistic;  -- fail, can't infer element type
@@ -1311,7 +1306,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function f1(a anyelement, b anyarray,
                     c anycompatible, d anycompatible,
                     OUT x anyarray, OUT y anycompatiblearray)
-@@ -1876,35 +2018,30 @@
+@@ -1876,35 +2013,30 @@
    x := a || b;
    y := array[c, d];
  end$$ language plpgsql;
@@ -1361,7 +1356,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test handling of OUT parameters, including polymorphic cases.
  -- Note that RETURN is optional with OUT params; we try both ways.
-@@ -1915,8 +2052,6 @@
+@@ -1915,8 +2047,6 @@
    return i+1;
  end$$ language plpgsql;
  ERROR:  RETURN cannot have a parameter in function with OUT parameters
@@ -1370,7 +1365,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function f1(in i int, out j int) as $$
  begin
    j := i+1;
-@@ -1959,14 +2094,13 @@
+@@ -1959,14 +2089,13 @@
    return next;
    return;
  end$$ language plpgsql;
@@ -1390,7 +1385,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function f1(in i int, out j int, out k text) as $$
  begin
    j := i;
-@@ -1995,14 +2129,13 @@
+@@ -1995,14 +2124,13 @@
    k := 'foot';
    return next;
  end$$ language plpgsql;
@@ -1410,7 +1405,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function duplic(in i anyelement, out j anyelement, out k anyarray) as $$
  begin
    j := i;
-@@ -2028,19 +2161,13 @@
+@@ -2028,19 +2156,13 @@
    k := array[lower(i),upper(i)];
    return;
  end$$ language plpgsql;
@@ -1434,7 +1429,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- test PERFORM
  --
-@@ -2057,6 +2184,7 @@
+@@ -2057,6 +2179,7 @@
  		RETURN FALSE;
  	END IF;
  END;' language plpgsql;
@@ -1442,7 +1437,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function perform_test_func() returns void as '
  BEGIN
  	IF FOUND then
-@@ -2077,19 +2205,32 @@
+@@ -2077,19 +2200,32 @@
  
  	RETURN;
  END;' language plpgsql;
@@ -1457,7 +1452,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +	IF FOUND then
 +		INSERT INTO perform_test VALUES (100, 100);
 +	END IF;
- 
++
 +	PERFORM perform_simple_func(5);
 +                               ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
@@ -1468,7 +1463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +SELECT perform_test_func();
@@ -1486,7 +1481,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  
  drop table perform_test;
  --
-@@ -2103,19 +2244,12 @@
+@@ -2103,19 +2239,12 @@
    if found then return x; end if;
    return 0;
  end$$ language plpgsql stable;
@@ -1509,7 +1504,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function sp_add_user(a_login text) returns int as $$
  declare my_id_user int;
  begin
-@@ -2130,38 +2264,21 @@
+@@ -2130,38 +2259,21 @@
    END IF;
    RETURN my_id_user;
  end$$ language plpgsql;
@@ -1556,7 +1551,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- tests for refcursors
  --
-@@ -2185,12 +2302,13 @@
+@@ -2185,12 +2297,13 @@
      return x.a;
  end
  $$ language plpgsql;
@@ -1575,7 +1570,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function return_refcursor(rc refcursor) returns refcursor as $$
  begin
      open rc for select a from rc_test;
-@@ -2203,33 +2321,31 @@
+@@ -2203,33 +2316,31 @@
      return $1;
  end
  $$ language plpgsql;
@@ -1629,7 +1624,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  commit;
  -- should fail
  fetch next from test1;
-@@ -2249,13 +2365,25 @@
+@@ -2249,13 +2360,25 @@
      end if;
  end
  $$ language plpgsql;
@@ -1660,7 +1655,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- should fail
  create function constant_refcursor() returns refcursor as $$
  declare
-@@ -2266,8 +2394,11 @@
+@@ -2266,8 +2389,11 @@
  end
  $$ language plpgsql;
  select constant_refcursor();
@@ -1674,7 +1669,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- but it's okay like this
  create or replace function constant_refcursor() returns refcursor as $$
  declare
-@@ -2301,13 +2432,25 @@
+@@ -2301,13 +2427,25 @@
      end if;
  end
  $$ language plpgsql;
@@ -1705,7 +1700,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- mixing named and positional argument notations
  create function namedparmcursor_test2(int, int) returns boolean as $$
  declare
-@@ -2324,12 +2467,24 @@
+@@ -2324,12 +2462,24 @@
      end if;
  end
  $$ language plpgsql;
@@ -1735,7 +1730,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- mixing named and positional: param2 is given twice, once in named notation
  -- and second time in positional notation. Should throw an error at parse time
  create function namedparmcursor_test3() returns void as $$
-@@ -2339,9 +2494,22 @@
+@@ -2339,9 +2489,22 @@
      open c1(param2 := 20, 21);
  end
  $$ language plpgsql;
@@ -1761,7 +1756,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- mixing named and positional: same as previous test, but param1 is duplicated
  create function namedparmcursor_test4() returns void as $$
  declare
-@@ -2350,9 +2518,22 @@
+@@ -2350,9 +2513,22 @@
      open c1(20, param1 := 21);
  end
  $$ language plpgsql;
@@ -1787,7 +1782,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- duplicate named parameter, should throw an error at parse time
  create function namedparmcursor_test5() returns void as $$
  declare
-@@ -2362,9 +2543,22 @@
+@@ -2362,9 +2538,22 @@
    open c1 (p2 := 77, p2 := 42);
  end
  $$ language plpgsql;
@@ -1813,7 +1808,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- not enough parameters, should throw an error at parse time
  create function namedparmcursor_test6() returns void as $$
  declare
-@@ -2374,9 +2568,22 @@
+@@ -2374,9 +2563,22 @@
    open c1 (p2 := 77);
  end
  $$ language plpgsql;
@@ -1839,7 +1834,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- division by zero runtime error, the context given in the error message
  -- should be sensible
  create function namedparmcursor_test7() returns void as $$
-@@ -2386,10 +2593,24 @@
+@@ -2386,10 +2588,24 @@
  begin
    open c1 (p2 := 77, p1 := 42/0);
  end $$ language plpgsql;
@@ -1867,7 +1862,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- check that line comments work correctly within the argument list (there
  -- is some special handling of this case in the code: the newline after the
  -- comment must be preserved when the argument-evaluating query is
-@@ -2406,12 +2627,24 @@
+@@ -2406,12 +2622,24 @@
    fetch c1 into n;
    return n;
  end $$ language plpgsql;
@@ -1889,15 +1884,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +select namedparmcursor_test8();
 +ERROR:  unknown function: namedparmcursor_test8()
  -- cursor parameter name can match plpgsql variable or unreserved keyword
  create function namedparmcursor_test9(p1 int) returns int4 as $$
  declare
-@@ -2425,12 +2658,24 @@
+@@ -2425,12 +2653,24 @@
    fetch c1 into n;
    return n;
  end $$ language plpgsql;
@@ -1916,10 +1911,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +select namedparmcursor_test9(6);
@@ -1927,7 +1922,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- tests for "raise" processing
  --
-@@ -2441,28 +2686,22 @@
+@@ -2441,28 +2681,22 @@
  end;
  $$ language plpgsql;
  ERROR:  too many parameters specified for RAISE
@@ -1959,7 +1954,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Test re-RAISE inside a nested exception block.  This case is allowed
  -- by Oracle's PL/SQL but was handled differently by PG before 9.1.
  CREATE FUNCTION reraise_test() RETURNS void AS $$
-@@ -2484,14 +2723,30 @@
+@@ -2484,14 +2718,30 @@
         raise notice 'WRONG - exception % caught in outer block', sqlerrm;
  END;
  $$ LANGUAGE plpgsql;
@@ -1982,7 +1977,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +               RAISE;
 +                    ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
- 
++
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
@@ -1991,13 +1986,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +using the support form.
 +
 +We appreciate your feedback.
-+
+ 
 +SELECT reraise_test();
 +ERROR:  unknown function: reraise_test()
  --
  -- reject function definitions that contain malformed SQL queries at
  -- compile-time, where possible
-@@ -2504,9 +2759,17 @@
+@@ -2504,9 +2754,17 @@
      a := 10;
      return a;
  end$$ language plpgsql;
@@ -2018,7 +2013,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function bad_sql2() returns int as $$
  declare r record;
  begin
-@@ -2515,81 +2778,115 @@
+@@ -2515,81 +2773,115 @@
      end loop;
      return 5;
  end;$$ language plpgsql;
@@ -2079,10 +2074,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +-- select void_return_expr();
@@ -2176,7 +2171,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- SQLSTATE and SQLERRM test
  --
-@@ -2597,14 +2894,11 @@
+@@ -2597,14 +2889,11 @@
  begin
      raise notice '% %', sqlstate, sqlerrm;
  end; $$ language plpgsql;
@@ -2193,7 +2188,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function excpt_test2() returns void as $$
  begin
      begin
-@@ -2613,13 +2907,10 @@
+@@ -2613,13 +2902,10 @@
          end;
      end;
  end; $$ language plpgsql;
@@ -2209,7 +2204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function excpt_test3() returns void as $$
  begin
      begin
-@@ -2639,31 +2930,61 @@
+@@ -2639,31 +2925,61 @@
  	    raise notice '% %', sqlstate, sqlerrm;
      end;
  end; $$ language plpgsql;
@@ -2238,10 +2233,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +select excpt_test3();
@@ -2266,10 +2261,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +select excpt_test4();
@@ -2285,7 +2280,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- parameters of raise stmt can be expressions
  create function raise_exprs() returns void as $$
  declare
-@@ -2714,13 +3035,11 @@
+@@ -2714,13 +3030,11 @@
    insert into foo values(5,6) returning * into x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2303,7 +2298,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2728,10 +3047,11 @@
+@@ -2728,10 +3042,11 @@
    insert into foo values(7,8),(9,10) returning * into x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2318,7 +2313,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2739,13 +3059,11 @@
+@@ -2739,13 +3054,11 @@
    execute 'insert into foo values(5,6) returning *' into x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2336,7 +2331,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2753,23 +3071,17 @@
+@@ -2753,23 +3066,17 @@
    execute 'insert into foo values(7,8),(9,10) returning *' into x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2365,7 +2360,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  
  create or replace function stricttest() returns void as $$
  declare x record;
-@@ -2778,13 +3090,11 @@
+@@ -2778,13 +3085,11 @@
    select * from foo where f1 = 3 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2383,7 +2378,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2792,9 +3102,11 @@
+@@ -2792,9 +3097,11 @@
    select * from foo where f1 = 0 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2397,7 +2392,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2802,10 +3114,11 @@
+@@ -2802,10 +3109,11 @@
    select * from foo where f1 > 3 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2412,7 +2407,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2813,13 +3126,11 @@
+@@ -2813,13 +3121,11 @@
    execute 'select * from foo where f1 = 3' into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2430,7 +2425,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2827,9 +3138,11 @@
+@@ -2827,9 +3133,11 @@
    execute 'select * from foo where f1 = 0' into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2444,7 +2439,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2837,12 +3150,17 @@
+@@ -2837,12 +3145,17 @@
    execute 'select * from foo where f1 > 3' into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2464,7 +2459,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare
  x record;
-@@ -2853,10 +3171,11 @@
+@@ -2853,10 +3166,11 @@
    select * from foo where f1 = p1 and f1::text = p3 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2479,7 +2474,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare
  x record;
-@@ -2867,10 +3186,11 @@
+@@ -2867,10 +3181,11 @@
    select * from foo where f1 = p1 and f1::text = p3 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2494,7 +2489,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare
  x record;
-@@ -2881,11 +3201,11 @@
+@@ -2881,11 +3196,11 @@
    select * from foo where f1 > p1 or f1::text = p3  into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2510,7 +2505,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2893,10 +3213,11 @@
+@@ -2893,10 +3208,11 @@
    select * from foo where f1 > 3 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2525,7 +2520,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2904,10 +3225,11 @@
+@@ -2904,10 +3220,11 @@
    execute 'select * from foo where f1 = $1 or f1::text = $2' using 0, 'foo' into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2540,7 +2535,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2915,10 +3237,11 @@
+@@ -2915,10 +3232,11 @@
    execute 'select * from foo where f1 > $1' using 1 into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2555,7 +2550,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  declare x record;
  begin
-@@ -2926,9 +3249,11 @@
+@@ -2926,9 +3244,11 @@
    execute 'select * from foo where f1 > 3' into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2569,7 +2564,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function stricttest() returns void as $$
  -- override the global
  #print_strict_params off
-@@ -2941,10 +3266,12 @@
+@@ -2941,10 +3261,12 @@
    select * from foo where f1 > p1 or f1::text = p3  into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2585,7 +2580,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  reset plpgsql.print_strict_params;
  create or replace function stricttest() returns void as $$
  -- override the global
-@@ -2958,11 +3285,12 @@
+@@ -2958,11 +3280,12 @@
    select * from foo where f1 > p1 or f1::text = p3  into strict x;
    raise notice 'x.f1 = %, x.f2 = %', x.f1, x.f2;
  end$$ language plpgsql;
@@ -2602,7 +2597,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test warnings and errors
  set plpgsql.extra_warnings to 'all';
  set plpgsql.extra_warnings to 'none';
-@@ -2979,23 +3307,14 @@
+@@ -2979,23 +3302,14 @@
  begin
  end
  $$ language plpgsql;
@@ -2631,7 +2626,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function shadowtest(in1 int)
  	returns table (out1 int) as $$
  declare
-@@ -3004,18 +3323,13 @@
+@@ -3004,18 +3318,13 @@
  begin
  end
  $$ language plpgsql;
@@ -2655,7 +2650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- shadowing in a second DECLARE block
  create or replace function shadowtest()
  	returns void as $$
-@@ -3027,10 +3341,13 @@
+@@ -3027,10 +3336,13 @@
  	begin
  	end;
  end$$ language plpgsql;
@@ -2672,7 +2667,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- several levels of shadowing
  create or replace function shadowtest(in1 int)
  	returns void as $$
-@@ -3042,13 +3359,13 @@
+@@ -3042,13 +3354,13 @@
  	begin
  	end;
  end$$ language plpgsql;
@@ -2692,7 +2687,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- shadowing in cursor definitions
  create or replace function shadowtest()
  	returns void as $$
-@@ -3057,34 +3374,49 @@
+@@ -3057,34 +3369,49 @@
  c1 cursor (f1 int) for select 1;
  begin
  end$$ language plpgsql;
@@ -2757,7 +2752,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- runtime extra checks
  set plpgsql.extra_warnings to 'too_many_rows';
  do $$
-@@ -3093,8 +3425,6 @@
+@@ -3093,8 +3420,6 @@
    select v from generate_series(1,2) g(v) into x;
  end;
  $$;
@@ -2766,7 +2761,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  set plpgsql.extra_errors to 'too_many_rows';
  do $$
  declare x int;
-@@ -3102,9 +3432,6 @@
+@@ -3102,9 +3427,6 @@
    select v from generate_series(1,2) g(v) into x;
  end;
  $$;
@@ -2776,7 +2771,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  reset plpgsql.extra_errors;
  reset plpgsql.extra_warnings;
  set plpgsql.extra_warnings to 'strict_multi_assignment';
-@@ -3118,12 +3445,6 @@
+@@ -3118,12 +3440,6 @@
    select 1,2,3 into x, y;
  end
  $$;
@@ -2789,7 +2784,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  set plpgsql.extra_errors to 'strict_multi_assignment';
  do $$
  declare
-@@ -3135,10 +3456,6 @@
+@@ -3135,10 +3451,6 @@
    select 1,2,3 into x, y;
  end
  $$;
@@ -2800,7 +2795,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create table test_01(a int, b int, c int);
  alter table test_01 drop column a;
  -- the check is active only when source table is not empty
-@@ -3154,10 +3471,6 @@
+@@ -3154,10 +3466,6 @@
  end;
  $$;
  NOTICE:  ok
@@ -2811,7 +2806,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  do $$
  declare
    t test_01;
-@@ -3168,10 +3481,6 @@
+@@ -3168,10 +3476,6 @@
  end;
  $$;
  NOTICE:  ok
@@ -2822,7 +2817,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  do $$
  declare
    t test_01;
-@@ -3179,10 +3488,6 @@
+@@ -3179,10 +3483,6 @@
    select 1 into t; -- should fail;
  end;
  $$;
@@ -2833,7 +2828,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop table test_01;
  reset plpgsql.extra_errors;
  reset plpgsql.extra_warnings;
-@@ -3201,16 +3506,11 @@
+@@ -3201,16 +3501,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2854,7 +2849,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c no scroll cursor for select f1 from int4_tbl;
-@@ -3225,10 +3525,11 @@
+@@ -3225,10 +3520,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2869,7 +2864,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c refcursor;
-@@ -3243,16 +3544,11 @@
+@@ -3243,16 +3539,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2890,7 +2885,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c refcursor;
-@@ -3267,14 +3563,11 @@
+@@ -3267,14 +3558,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2909,7 +2904,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c refcursor;
-@@ -3290,13 +3583,11 @@
+@@ -3290,13 +3578,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2927,7 +2922,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c cursor for select * from generate_series(1, 10);
-@@ -3316,14 +3607,11 @@
+@@ -3316,14 +3602,11 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2946,7 +2941,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function sc_test() returns setof integer as $$
  declare
    c cursor for select * from generate_series(1, 10);
-@@ -3338,13 +3626,13 @@
+@@ -3338,13 +3621,13 @@
    close c;
  end;
  $$ language plpgsql;
@@ -2965,7 +2960,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test qualified variable names
  create function pl_qual_names (param1 int) returns void as $$
  <<outerblock>>
-@@ -3362,17 +3650,15 @@
+@@ -3362,17 +3645,15 @@
    end;
  end;
  $$ language plpgsql;
@@ -2990,7 +2985,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- tests for RETURN QUERY
  create function ret_query1(out int, out int) returns setof record as $$
  begin
-@@ -3383,24 +3669,11 @@
+@@ -3383,24 +3664,11 @@
      return next;
  end;
  $$ language plpgsql;
@@ -3019,7 +3014,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create type record_type as (x text, y int, z boolean);
  create or replace function ret_query2(lim int) returns setof record_type as $$
  begin
-@@ -3408,20 +3681,11 @@
+@@ -3408,20 +3676,11 @@
                   from generate_series(-8, lim) s (x) where s.x % 2 = 0;
  end;
  $$ language plpgsql;
@@ -3044,7 +3039,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test EXECUTE USING
  create function exc_using(int, text) returns int as $$
  declare i int;
-@@ -3433,19 +3697,27 @@
+@@ -3433,19 +3692,27 @@
    return i;
  end
  $$ language plpgsql;
@@ -3066,14 +3061,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +  for i in execute 'select * from generate_series(1,$1)' using $1+1 loop
 +        ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
- 
++
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +select exc_using(5, 'foobar');
@@ -3083,7 +3078,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function exc_using(int) returns void as $$
  declare
    c refcursor;
-@@ -3461,19 +3733,29 @@
+@@ -3461,19 +3728,29 @@
    return;
  end;
  $$ language plpgsql;
@@ -3111,12 +3106,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
- 
++
 +select exc_using(5);
 +ERROR:  unknown function: exc_using()
  drop function exc_using(int);
@@ -3124,7 +3119,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test FOR-over-cursor
  create or replace function forc01() returns void as $$
  declare
-@@ -3513,32 +3795,28 @@
+@@ -3513,32 +3790,28 @@
    return;
  end;
  $$ language plpgsql;
@@ -3160,12 +3155,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
-+
+ 
 +select forc01();
 +ERROR:  unknown function: forc01()
  -- try updating the cursor's current row
@@ -3175,7 +3170,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function forc01() returns void as $$
  declare
    c cursor for select * from forc_test;
-@@ -3549,35 +3827,39 @@
+@@ -3549,35 +3822,39 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -3202,14 +3197,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +  for r in c loop
 +        ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
- 
++
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +select forc01();
@@ -3242,7 +3237,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (10 rows)
  
  -- same, with a cursor whose portal name doesn't match variable name
-@@ -3595,38 +3877,42 @@
+@@ -3595,38 +3872,42 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -3312,7 +3307,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- it's okay to re-use a cursor variable name, even when bound
  do $$
  declare cnt int := 0;
-@@ -3642,7 +3928,24 @@
+@@ -3642,7 +3923,24 @@
    end loop;
    raise notice 'cnt = %', cnt;
  end $$;
@@ -3338,7 +3333,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- fail because cursor has no query bound to it
  create or replace function forc_bad() returns void as $$
  declare
-@@ -3653,9 +3956,24 @@
+@@ -3653,9 +3951,24 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -3366,7 +3361,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test RETURN QUERY EXECUTE
  create or replace function return_dquery()
  returns setof int as $$
-@@ -3664,16 +3982,13 @@
+@@ -3664,16 +3977,13 @@
    return query execute 'select * from (values($1),($2)) f' using 40,50;
  end;
  $$ language plpgsql;
@@ -3388,7 +3383,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test RETURN QUERY with dropped columns
  create table tabwithcols(a int, b int, c int, d int);
  insert into tabwithcols values(10,20,30,40),(50,60,70,80);
-@@ -3684,46 +3999,22 @@
+@@ -3684,46 +3994,22 @@
    return query execute 'select * from tabwithcols';
  end;
  $$ language plpgsql;
@@ -3443,7 +3438,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop table tabwithcols;
  --
  -- Tests for composite-type results
-@@ -3753,6 +4044,9 @@
+@@ -3753,6 +4039,9 @@
    return v;
  end;
  $$ language plpgsql;
@@ -3453,7 +3448,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  select compos();
    compos   
  -----------
-@@ -3778,9 +4072,11 @@
+@@ -3778,9 +4067,11 @@
  end;
  $$ language plpgsql;
  select compos();
@@ -3468,7 +3463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ... but this does
  create or replace function compos() returns compostype as $$
  begin
-@@ -3803,12 +4099,11 @@
+@@ -3803,12 +4094,11 @@
    return v;
  end;
  $$ language plpgsql;
@@ -3485,7 +3480,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test: return row expr in return statement.
  create or replace function composrec() returns record as $$
  begin
-@@ -3833,26 +4128,22 @@
+@@ -3833,26 +4123,22 @@
    return next (2, 'goodbye')::compostype;
  end;
  $$ language plpgsql;
@@ -3519,7 +3514,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- RETURN variable is a different code path ...
  create or replace function compos() returns compostype as $$
  declare x int := 42;
-@@ -3861,8 +4152,7 @@
+@@ -3861,8 +4147,7 @@
  end;
  $$ language plpgsql;
  select * from compos();
@@ -3529,7 +3524,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop function compos();
  -- test: invalid use of composite variable in scalar-returning function
  create or replace function compos() returns int as $$
-@@ -3874,8 +4164,7 @@
+@@ -3874,8 +4159,7 @@
  end;
  $$ language plpgsql;
  select compos();
@@ -3539,7 +3534,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test: invalid use of composite expression in scalar-returning function
  create or replace function compos() returns int as $$
  begin
-@@ -3883,8 +4172,7 @@
+@@ -3883,8 +4167,7 @@
  end;
  $$ language plpgsql;
  select compos();
@@ -3549,7 +3544,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop function compos();
  drop type compostype;
  --
-@@ -3904,7 +4192,6 @@
+@@ -3904,7 +4187,6 @@
  HINT:  some hint
  ERROR:  1 2 3
  DETAIL:  some detail info
@@ -3557,7 +3552,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Since we can't actually see the thrown SQLSTATE in default psql output,
  -- test it like this; this also tests re-RAISE
  create or replace function raise_test() returns void as $$
-@@ -3917,11 +4204,33 @@
+@@ -3917,11 +4199,33 @@
        raise;
  end;
  $$ language plpgsql;
@@ -3594,7 +3589,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise 'check me'
-@@ -3932,11 +4241,33 @@
+@@ -3932,11 +4236,33 @@
        raise;
  end;
  $$ language plpgsql;
@@ -3631,7 +3626,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- SQLSTATE specification in WHEN
  create or replace function raise_test() returns void as $$
  begin
-@@ -3948,11 +4279,33 @@
+@@ -3948,11 +4274,33 @@
        raise;
  end;
  $$ language plpgsql;
@@ -3668,7 +3663,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise division_by_zero using detail = 'some detail info';
-@@ -3962,11 +4315,32 @@
+@@ -3962,11 +4310,32 @@
        raise;
  end;
  $$ language plpgsql;
@@ -3704,7 +3699,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise division_by_zero;
-@@ -3974,7 +4348,6 @@
+@@ -3974,7 +4343,6 @@
  $$ language plpgsql;
  select raise_test();
  ERROR:  division_by_zero
@@ -3712,7 +3707,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise sqlstate '1234F';
-@@ -3982,7 +4355,6 @@
+@@ -3982,7 +4350,6 @@
  $$ language plpgsql;
  select raise_test();
  ERROR:  1234F
@@ -3720,7 +3715,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise division_by_zero using message = 'custom' || ' message';
-@@ -3990,7 +4362,6 @@
+@@ -3990,7 +4357,6 @@
  $$ language plpgsql;
  select raise_test();
  ERROR:  custom message
@@ -3728,7 +3723,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise using message = 'custom' || ' message', errcode = '22012';
-@@ -3998,34 +4369,48 @@
+@@ -3998,34 +4364,48 @@
  $$ language plpgsql;
  select raise_test();
  ERROR:  custom message
@@ -3784,7 +3779,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test access to exception data
  create function zero_divide() returns int as $$
  declare v int := 0;
-@@ -4033,6 +4418,7 @@
+@@ -4033,6 +4413,7 @@
    return 10 / v;
  end;
  $$ language plpgsql;
@@ -3792,7 +3787,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function raise_test() returns void as $$
  begin
    raise exception 'custom exception'
-@@ -4055,13 +4441,27 @@
+@@ -4055,13 +4436,27 @@
      _sqlstate, _message, replace(_context, E'\n', ' <- ');
  end;
  $$ language plpgsql;
@@ -3815,18 +3810,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
- 
++
 +select stacked_diagnostics_test();
 +ERROR:  unknown function: stacked_diagnostics_test()
  create or replace function stacked_diagnostics_test() returns void as $$
  declare _detail text;
          _hint text;
-@@ -4076,13 +4476,27 @@
+@@ -4076,13 +4471,27 @@
    raise notice 'message: %, detail: %, hint: %', _message, _detail, _hint;
  end;
  $$ language plpgsql;
@@ -3849,18 +3844,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
- 
++
 +select stacked_diagnostics_test();
 +ERROR:  unknown function: stacked_diagnostics_test()
  -- fail, cannot use stacked diagnostics statement outside handler
  create or replace function stacked_diagnostics_test() returns void as $$
  declare _detail text;
-@@ -4096,11 +4510,25 @@
+@@ -4096,11 +4505,25 @@
    raise notice 'message: %, detail: %, hint: %', _message, _detail, _hint;
  end;
  $$ language plpgsql;
@@ -3888,7 +3883,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- check cases where implicit SQLSTATE variable could be confused with
  -- SQLSTATE as a keyword, cf bug #5524
  create or replace function raise_test() returns void as $$
-@@ -4112,10 +4540,26 @@
+@@ -4112,10 +4535,26 @@
      raise sqlstate '22012' using message = 'substitute message';
  end;
  $$ language plpgsql;
@@ -3918,7 +3913,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop function raise_test();
  -- test passing column_name, constraint_name, datatype_name, table_name
  -- and schema_name error fields
-@@ -4143,14 +4587,23 @@
+@@ -4143,14 +4582,23 @@
      _column_name, _constraint_name, _datatype_name, _table_name, _schema_name;
  end;
  $$ language plpgsql;
@@ -3935,10 +3930,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +select stacked_diagnostics_test();
@@ -3948,7 +3943,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- test variadic functions
  create or replace function vari(variadic int[])
  returns void as $$
-@@ -4159,36 +4612,34 @@
+@@ -4159,36 +4607,34 @@
      raise notice '%', $1[i];
    end loop; end;
  $$ language plpgsql;
@@ -4008,7 +4003,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- coercion test
  create or replace function pleast(variadic numeric[])
  returns numeric as $$
-@@ -4200,30 +4651,20 @@
+@@ -4200,30 +4646,20 @@
    return aux;
  end;
  $$ language plpgsql immutable strict;
@@ -4049,7 +4044,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- in case of conflict, non-variadic version is preferred
  create or replace function pleast(numeric)
  returns numeric as $$
-@@ -4232,31 +4673,24 @@
+@@ -4232,31 +4668,24 @@
    return $1;
  end;
  $$ language plpgsql immutable strict;
@@ -4089,7 +4084,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function tftest(a1 int) returns table(a int, b int) as $$
  begin
    a := a1; b := a1 + 1;
-@@ -4265,14 +4699,13 @@
+@@ -4265,14 +4694,13 @@
    return next;
  end;
  $$ language plpgsql immutable strict;
@@ -4109,7 +4104,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function rttest()
  returns setof int as $$
  declare rc int;
-@@ -4291,19 +4724,11 @@
+@@ -4291,19 +4719,11 @@
    raise notice '% %', found, rc;
  end;
  $$ language plpgsql;
@@ -4133,7 +4128,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- check some error cases, too
  create or replace function rttest()
  returns setof int as $$
-@@ -4311,25 +4736,26 @@
+@@ -4311,25 +4731,26 @@
    return query select 10 into no_such_table;
  end;
  $$ language plpgsql;
@@ -4168,7 +4163,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Test for proper cleanup at subtransaction exit.  This example
  -- exposed a bug in PG 8.2.
  CREATE FUNCTION leaker_1(fail BOOL) RETURNS INTEGER AS $$
-@@ -4344,6 +4770,7 @@
+@@ -4344,6 +4765,7 @@
    RETURN 1;
  END;
  $$ LANGUAGE plpgsql;
@@ -4176,7 +4171,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE FUNCTION leaker_2(fail BOOL, OUT error_code INTEGER, OUT new_id INTEGER)
    RETURNS RECORD AS $$
  BEGIN
-@@ -4356,18 +4783,11 @@
+@@ -4356,18 +4778,11 @@
  END;
  $$ LANGUAGE plpgsql;
  SELECT * FROM leaker_1(false);
@@ -4198,7 +4193,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  DROP FUNCTION leaker_2(bool);
  -- Test for appropriate cleanup of non-simple expression evaluations
  -- (bug in all versions prior to August 2010)
-@@ -4385,13 +4805,27 @@
+@@ -4385,13 +4800,27 @@
    RETURN arr;
  END;
  $$ LANGUAGE plpgsql;
@@ -4231,7 +4226,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE FUNCTION nonsimple_expr_test() RETURNS integer AS $$
  declare
     i integer NOT NULL := 0;
-@@ -4405,13 +4839,13 @@
+@@ -4405,13 +4834,13 @@
    return i;
  end;
  $$ LANGUAGE plpgsql;
@@ -4250,7 +4245,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test cases involving recursion and error recovery in simple expressions
  -- (bugs in all versions before October 2010).  The problems are most
-@@ -4427,15 +4861,13 @@
+@@ -4427,15 +4856,13 @@
    end if;
  end;
  $$ language plpgsql;
@@ -4269,7 +4264,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function error1(text) returns text language sql as
  $$ SELECT relname::text FROM pg_class c WHERE c.oid = $1::regclass $$;
  create function error2(p_name_table text) returns text language plpgsql as $$
-@@ -4444,12 +4876,13 @@
+@@ -4444,12 +4871,13 @@
  end$$;
  BEGIN;
  create table public.stuffs (stuff text);
@@ -4286,7 +4281,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  select error2('public.stuffs');
   error2 
  --------
-@@ -4457,13 +4890,30 @@
+@@ -4457,13 +4885,30 @@
  (1 row)
  
  rollback;
@@ -4317,7 +4312,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function cast_invoker(integer) returns date as $$
  begin
    return $1;
-@@ -4471,56 +4921,67 @@
+@@ -4471,56 +4916,67 @@
  select cast_invoker(20150717);
   cast_invoker 
  --------------
@@ -4396,7 +4391,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Test handling of cast cache inside DO blocks
  -- (to check the original crash case, this must be a cast not previously
  -- used in this session)
-@@ -4534,45 +4995,29 @@
+@@ -4534,45 +4990,29 @@
    return 1/0;
  end
  $$;
@@ -4453,7 +4448,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (1 row)
  
  create or replace function strtest() returns text as $$
-@@ -4625,21 +5070,26 @@
+@@ -4625,21 +5065,26 @@
          RAISE NOTICE '%, %', r.roomno, r.comment;
      END LOOP;
  END$$;
@@ -4493,7 +4488,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  DO $$
  DECLARE r record;
  BEGIN
-@@ -4648,11 +5098,23 @@
+@@ -4648,11 +5093,23 @@
          RAISE NOTICE '%, %', r.roomno, r.comment;
      END LOOP;
  END$$;
@@ -4522,7 +4517,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Check handling of errors thrown from/into anonymous code blocks.
  do $outer$
  begin
-@@ -4672,16 +5134,19 @@
+@@ -4672,16 +5129,19 @@
    end loop;
  end;
  $outer$;
@@ -4552,7 +4547,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Check variable scoping -- a var is not available in its own or prior
  -- default expressions, but it is available in later ones.
  do $$
-@@ -4691,10 +5156,6 @@
+@@ -4691,10 +5151,6 @@
  end;
  $$;
  ERROR:  column "x" does not exist
@@ -4563,7 +4558,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  do $$
  declare y int := x + 1;  -- error
          x int := 42;
-@@ -4703,10 +5164,6 @@
+@@ -4703,10 +5159,6 @@
  end;
  $$;
  ERROR:  column "x" does not exist
@@ -4574,7 +4569,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  do $$
  declare x int := 42;
          y int := x + 1;
-@@ -4726,7 +5183,11 @@
+@@ -4726,7 +5178,11 @@
    end;
  end;
  $$;
@@ -4587,7 +4582,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Check handling of conflicts between plpgsql vars and table columns.
  set plpgsql.variable_conflict = error;
  create function conflict_test() returns setof int8_tbl as $$
-@@ -4738,13 +5199,11 @@
+@@ -4738,13 +5194,11 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -4605,7 +4600,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function conflict_test() returns setof int8_tbl as $$
  #variable_conflict use_variable
  declare r record;
-@@ -4755,16 +5214,11 @@
+@@ -4755,16 +5209,11 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -4626,7 +4621,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function conflict_test() returns setof int8_tbl as $$
  #variable_conflict use_column
  declare r record;
-@@ -4775,17 +5229,13 @@
+@@ -4775,17 +5224,13 @@
    end loop;
  end;
  $$ language plpgsql;
@@ -4649,7 +4644,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Check that an unreserved keyword can be used as a variable name
  create function unreserved_test() returns int as $$
  declare
-@@ -4795,12 +5245,15 @@
+@@ -4795,12 +5240,15 @@
    return forward;
  end
  $$ language plpgsql;
@@ -4670,7 +4665,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function unreserved_test() returns int as $$
  declare
    return int := 42;
-@@ -4809,12 +5262,20 @@
+@@ -4809,12 +5257,20 @@
    return return;
  end
  $$ language plpgsql;
@@ -4696,7 +4691,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function unreserved_test() returns int as $$
  declare
    comment int := 21;
-@@ -4824,19 +5285,26 @@
+@@ -4824,19 +5280,26 @@
    return comment;
  end
  $$ language plpgsql;
@@ -4733,7 +4728,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test FOREACH over arrays
  --
-@@ -4850,26 +5318,27 @@
+@@ -4850,26 +5313,27 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4779,7 +4774,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function foreach_test(anyarray)
  returns void as $$
  declare x int;
-@@ -4880,13 +5349,28 @@
+@@ -4880,13 +5344,28 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4812,7 +4807,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function foreach_test(anyarray)
  returns void as $$
  declare x int[];
-@@ -4897,21 +5381,27 @@
+@@ -4897,21 +5376,27 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4853,7 +4848,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- higher level of slicing
  create or replace function foreach_test(anyarray)
  returns void as $$
-@@ -4923,26 +5413,31 @@
+@@ -4923,26 +5408,31 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4900,7 +4895,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create type xy_tuple AS (x int, y int);
  -- iteration over array of records
  create or replace function foreach_test(anyarray)
-@@ -4955,25 +5450,27 @@
+@@ -4955,25 +5445,27 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4945,7 +4940,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function foreach_test(anyarray)
  returns void as $$
  declare x int; y int;
-@@ -4984,25 +5481,27 @@
+@@ -4984,25 +5476,27 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -4990,7 +4985,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- slicing over array of composite types
  create or replace function foreach_test(anyarray)
  returns void as $$
-@@ -5014,22 +5513,29 @@
+@@ -5014,22 +5508,29 @@
    end loop;
    end;
  $$ language plpgsql;
@@ -5033,7 +5028,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  drop type xy_tuple;
  --
  -- Assorted tests for array subscript assignment
-@@ -5043,28 +5549,30 @@
+@@ -5043,28 +5544,30 @@
    r.ar[2] := 'replace';
    return r.ar;
  end$$;
@@ -5080,7 +5075,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create function testoa(x1 int, x2 int, x3 int) returns orderedarray
  language plpgsql as $$
  declare res orderedarray;
-@@ -5073,26 +5581,19 @@
+@@ -5073,26 +5576,19 @@
    res[2] := x3;
    return res;
  end$$;
@@ -5114,7 +5109,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test handling of expanded arrays
  --
-@@ -5116,17 +5617,11 @@
+@@ -5116,17 +5612,11 @@
  select i, a from
    (select returns_rw_array(1) as a offset 0) ss,
    lateral consumes_rw_array(a) i;
@@ -5137,7 +5132,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  select i, a from
    (select returns_rw_array(1) as a offset 0) ss,
    lateral consumes_rw_array(a) i;
-@@ -5137,13 +5632,11 @@
+@@ -5137,13 +5627,11 @@
  
  explain (verbose, costs off)
  select consumes_rw_array(a), a from returns_rw_array(1) a;
@@ -5156,7 +5151,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  select consumes_rw_array(a), a from returns_rw_array(1) a;
   consumes_rw_array |   a   
  -------------------+-------
-@@ -5153,12 +5646,11 @@
+@@ -5153,12 +5641,11 @@
  explain (verbose, costs off)
  select consumes_rw_array(a), a from
    (values (returns_rw_array(1)), (returns_rw_array(2))) v(a);
@@ -5174,7 +5169,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  select consumes_rw_array(a), a from
    (values (returns_rw_array(1)), (returns_rw_array(2))) v(a);
   consumes_rw_array |   a   
-@@ -5190,6 +5682,19 @@
+@@ -5190,6 +5677,19 @@
    return 2 * $1;
  end;
  $$ language plpgsql;
@@ -5194,7 +5189,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function outer_func(int)
  returns int as $$
  declare
-@@ -5201,6 +5706,7 @@
+@@ -5201,6 +5701,7 @@
    return myresult;
  end;
  $$ language plpgsql;
@@ -5202,7 +5197,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function outer_outer_func(int)
  returns int as $$
  declare
-@@ -5212,44 +5718,18 @@
+@@ -5212,44 +5713,18 @@
    return myresult;
  end;
  $$ language plpgsql;
@@ -5253,7 +5248,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- access to call stack from exception
  create function inner_func(int)
  returns int as $$
-@@ -5272,6 +5752,26 @@
+@@ -5272,6 +5747,26 @@
    return 2 * $1;
  end;
  $$ language plpgsql;
@@ -5280,7 +5275,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function outer_func(int)
  returns int as $$
  declare
-@@ -5283,6 +5783,7 @@
+@@ -5283,6 +5778,7 @@
    return myresult;
  end;
  $$ language plpgsql;
@@ -5288,7 +5283,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  create or replace function outer_outer_func(int)
  returns int as $$
  declare
-@@ -5294,44 +5795,18 @@
+@@ -5294,44 +5790,18 @@
    return myresult;
  end;
  $$ language plpgsql;
@@ -5339,7 +5334,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- Test pg_routine_oid
  create function current_function(text)
  returns regprocedure as $$
-@@ -5342,13 +5817,17 @@
+@@ -5342,13 +5812,17 @@
    return fn_oid;
  end;
  $$ language plpgsql;
@@ -5362,7 +5357,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- shouldn't fail in DO, even though there's no useful data
  do $$
  declare
-@@ -5358,7 +5837,13 @@
+@@ -5358,7 +5832,13 @@
    raise notice 'pg_routine_oid = %', fn_oid;
  end;
  $$;
@@ -5377,7 +5372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test ASSERT
  --
-@@ -5367,20 +5852,55 @@
+@@ -5367,20 +5847,55 @@
    assert 1=1;  -- should succeed
  end;
  $$;
@@ -5437,7 +5432,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- check controlling GUC
  set plpgsql.check_asserts = off;
  do $$
-@@ -5388,6 +5908,19 @@
+@@ -5388,6 +5903,19 @@
    assert 1=0;  -- won't be tested
  end;
  $$;
@@ -5457,7 +5452,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  reset plpgsql.check_asserts;
  -- test custom message
  do $$
-@@ -5396,8 +5929,19 @@
+@@ -5396,8 +5924,19 @@
    assert 1=0, format('assertion failed, var = "%s"', var);
  end;
  $$;
@@ -5479,7 +5474,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- ensure assertions are not trapped by 'others'
  do $$
  begin
-@@ -5406,32 +5950,55 @@
+@@ -5406,32 +5945,55 @@
    null; -- do nothing
  end;
  $$;
@@ -5539,7 +5534,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  do $$
  declare v_test plpgsql_arr_domain;
  begin
-@@ -5439,14 +6006,14 @@
+@@ -5439,14 +6001,14 @@
    v_test := v_test || 2;
  end;
  $$;
@@ -5556,7 +5551,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- test usage of transition tables in AFTER triggers
  --
-@@ -5472,25 +6039,40 @@
+@@ -5472,25 +6034,40 @@
    RETURN new;
  END;
  $$;
@@ -5604,7 +5599,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE OR REPLACE FUNCTION transition_table_base_upd_func()
    RETURNS trigger
    LANGUAGE plpgsql
-@@ -5512,30 +6094,42 @@
+@@ -5512,30 +6089,42 @@
    RETURN new;
  END;
  $$;
@@ -5657,7 +5652,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE TABLE transition_table_level2
  (
        level2_no serial NOT NULL ,
-@@ -5543,6 +6137,7 @@
+@@ -5543,6 +6132,7 @@
        level1_node_name varchar(255),
         PRIMARY KEY (level2_no)
  ) WITHOUT OIDS;
@@ -5665,7 +5660,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE TABLE transition_table_status
  (
        level int NOT NULL,
-@@ -5563,11 +6158,29 @@
+@@ -5563,11 +6153,29 @@
      RETURN NULL;
    END;
  $$;
@@ -5695,7 +5690,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE FUNCTION transition_table_level1_ri_parent_upd_func()
    RETURNS TRIGGER
    LANGUAGE plpgsql
-@@ -5595,6 +6208,9 @@
+@@ -5595,6 +6203,9 @@
    REFERENCING OLD TABLE AS d NEW TABLE AS i
    FOR EACH STATEMENT EXECUTE PROCEDURE
      transition_table_level1_ri_parent_upd_func();
@@ -5705,7 +5700,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE FUNCTION transition_table_level2_ri_child_insupd_func()
    RETURNS TRIGGER
    LANGUAGE plpgsql
-@@ -5610,16 +6226,37 @@
+@@ -5610,16 +6221,37 @@
      RETURN NULL;
    END;
  $$;
@@ -5743,7 +5738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- create initial test data
  INSERT INTO transition_table_level1 (level1_no)
    SELECT generate_series(1,200);
-@@ -5627,6 +6264,7 @@
+@@ -5627,6 +6259,7 @@
  INSERT INTO transition_table_level2 (level2_no, parent_no)
    SELECT level2_no, level2_no / 50 + 1 AS parent_no
      FROM generate_series(1,9999) level2_no;
@@ -5751,7 +5746,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  ANALYZE transition_table_level2;
  INSERT INTO transition_table_status (level, node_no, status)
    SELECT 1, level1_no, 0 FROM transition_table_level1;
-@@ -5651,30 +6289,23 @@
+@@ -5651,30 +6284,23 @@
    REFERENCING OLD TABLE AS dx
    FOR EACH STATEMENT EXECUTE PROCEDURE
      transition_table_level2_bad_usage_func();
@@ -5786,7 +5781,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  -- attempt modifications which would not break RI (should all succeed)
  DELETE FROM transition_table_level1
    WHERE level1_no BETWEEN 201 AND 1000;
-@@ -5683,7 +6314,7 @@
+@@ -5683,7 +6309,7 @@
  SELECT count(*) FROM transition_table_level1;
   count 
  -------
@@ -5795,7 +5790,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (1 row)
  
  DELETE FROM transition_table_level2
-@@ -5691,7 +6322,7 @@
+@@ -5691,7 +6317,7 @@
  SELECT count(*) FROM transition_table_level2;
   count 
  -------
@@ -5804,7 +5799,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  (1 row)
  
  CREATE TABLE alter_table_under_transition_tables
-@@ -5717,36 +6348,30 @@
+@@ -5717,36 +6343,30 @@
    REFERENCING OLD TABLE AS d NEW TABLE AS i
    FOR EACH STATEMENT EXECUTE PROCEDURE
      alter_table_under_transition_tables_upd_func();
@@ -5845,7 +5840,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Test multiple reference to a transition table
  --
-@@ -5764,19 +6389,37 @@
+@@ -5764,19 +6384,37 @@
  CREATE TRIGGER my_trigger AFTER UPDATE ON multi_test
    REFERENCING NEW TABLE AS new_test OLD TABLE as old_test
    FOR EACH STATEMENT EXECUTE PROCEDURE multi_test_trig();
@@ -5885,7 +5880,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE OR REPLACE FUNCTION get_from_partitioned_table(partitioned_table.a%type)
  RETURNS partitioned_table AS $$
  DECLARE
-@@ -5787,13 +6430,13 @@
+@@ -5787,13 +6425,13 @@
      SELECT * INTO result FROM partitioned_table WHERE a = a_val;
      RETURN result;
  END; $$ LANGUAGE plpgsql;
@@ -5905,7 +5900,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  CREATE OR REPLACE FUNCTION list_partitioned_table()
  RETURNS SETOF partitioned_table.a%TYPE AS $$
  DECLARE
-@@ -5806,14 +6449,13 @@
+@@ -5806,14 +6444,13 @@
      END LOOP;
      RETURN;
  END; $$ LANGUAGE plpgsql;
@@ -5926,7 +5921,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  --
  -- Check argument name is used instead of $n in error message
  --
-@@ -5822,6 +6464,16 @@
+@@ -5822,6 +6459,16 @@
    GET DIAGNOSTICS x = ROW_COUNT;
    RETURN;
  END; $$ LANGUAGE plpgsql;

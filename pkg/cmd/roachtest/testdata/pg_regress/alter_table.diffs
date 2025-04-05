@@ -1630,7 +1630,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 -ERROR:  column "test" is in a primary key
 +ERROR:  column "test" is in a primary index
  alter table atacc1 drop constraint "atacc1_pkey";
-+ERROR:  relation "atacc1" (1984): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "atacc1": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  alter table atacc1 alter column test drop not null;
@@ -5404,7 +5404,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DELETE FROM old_system_table WHERE othercol = 'somedata';
  TRUNCATE old_system_table;
  ALTER TABLE old_system_table DROP CONSTRAINT new_system_table_pkey;
-+ERROR:  relation "old_system_table" (2082): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "old_system_table": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  ALTER TABLE old_system_table DROP COLUMN othercol;
