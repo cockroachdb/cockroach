@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 	"github.com/cockroachdb/datadriven"
@@ -325,10 +324,7 @@ func (dc deciderConfig) makeDecider(randSource rand.Source) *Decider {
 		statThreshold: dc.threshold,
 	}
 
-	Init(d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, dc.objective)
+	Init(d, &loadSplitConfig, newSplitterMetrics(), dc.objective)
 	return d
 }
 

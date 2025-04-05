@@ -7,6 +7,7 @@ package split
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"testing"
 	"time"
@@ -64,6 +65,14 @@ func ms(i int) time.Time {
 	return ts.Add(time.Duration(i) * time.Millisecond)
 }
 
+func newSplitterMetrics() *LoadSplitterMetrics {
+	return &LoadSplitterMetrics{
+		PopularKeyCount:     metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount:     metric.NewCounter(metric.Metadata{}),
+		ClearDirectionCount: metric.NewCounter(metric.Metadata{}),
+	}
+}
+
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -76,10 +85,7 @@ func TestDecider(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	},
+	Init(&d, &loadSplitConfig, newSplitterMetrics(),
 		SplitQPS,
 	)
 
@@ -242,10 +248,7 @@ func TestDecider_MaxStat(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitQPS)
+	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
 
 	assertMaxStat := func(i int, expMaxStat float64, expOK bool) {
 		t.Helper()
@@ -376,75 +379,87 @@ func TestMaxStatTracker(t *testing.T) {
 
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng := rand.New(rand.NewPCG(11, 11))
-	timeStart := 1000
 
-	var dPopular Decider
-	loadSplitConfig := testLoadSplitConfig{
+	rng := rand.New(rand.NewPCG(11, 11))
+	config := testLoadSplitConfig{
 		randSource:    rng,
 		useWeighted:   false,
 		statRetention: time.Second,
 		statThreshold: 1,
 	}
-
-	Init(&dPopular, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
-
-	// No split key, popular key
-	for i := 0; i < 20; i++ {
-		dPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
-	}
-	for i := 1; i <= 2000; i++ {
-		dPopular.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
+	timeStart := 1000
+	key := func(n int) func(int) int {
+		return func(i int) int {
+			return n
+		}
 	}
 
-	assert.Equal(t, dPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(2))
-	assert.Equal(t, dPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
+	for _, test := range []struct {
+		name                string
+		keyFunc             func(int) int // takes the iteration and returns a key to record
+		workIterations      int
+		timeMultiplier      int
+		popularKeyCount     int64
+		noSplitKeyCount     int64
+		clearDirectionCount int64
+	}{
+		{
+			name: "split key, no popular key, no direction",
+			keyFunc: func(i int) int {
+				// should return even distribution
+				return rng.IntN(2000)
+			},
+			workIterations:      2000,
+			timeMultiplier:      50,
+			popularKeyCount:     0,
+			noSplitKeyCount:     0,
+			clearDirectionCount: 0,
+		},
+		{
+			name:                "no split key, popular key, clear direction",
+			keyFunc:             key(0),
+			workIterations:      2000,
+			timeMultiplier:      50,
+			popularKeyCount:     2,
+			noSplitKeyCount:     2,
+			clearDirectionCount: 2,
+		},
+		{
+			name:                "no split key, no popular key, direction",
+			keyFunc:             func(i int) int { return i },
+			workIterations:      2000,
+			timeMultiplier:      50,
+			popularKeyCount:     0,
+			noSplitKeyCount:     2,
+			clearDirectionCount: 2,
+		},
+		{
+			name:                "no split key, insufficient counters",
+			keyFunc:             key(0),
+			workIterations:      80,
+			timeMultiplier:      1000,
+			popularKeyCount:     0,
+			noSplitKeyCount:     0,
+			clearDirectionCount: 0,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var d Decider
+			Init(&d, &config, newSplitterMetrics(), SplitCPU)
 
-	// No split key, not popular key
-	var dNotPopular Decider
-	Init(&dNotPopular, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
+			for i := range test.workIterations {
+				key := test.keyFunc(i)
+				recordTime := ms(timeStart + i*test.timeMultiplier)
 
-	for i := 0; i < 20; i++ {
-		dNotPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+				d.Record(context.Background(), recordTime, ld(1), func() roachpb.Span {
+					return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(key))}
+				})
+			}
+
+			fmt.Println("access direction", d.mu.splitFinder.AccessDirection())
+			assert.Equal(t, test.popularKeyCount, d.loadSplitterMetrics.PopularKeyCount.Count())
+			assert.Equal(t, test.noSplitKeyCount, d.loadSplitterMetrics.NoSplitKeyCount.Count())
+			assert.Equal(t, test.clearDirectionCount, d.loadSplitterMetrics.ClearDirectionCount.Count())
 		})
 	}
-	for i := 1; i <= 2000; i++ {
-		dNotPopular.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i))}
-		})
-	}
-
-	assert.Equal(t, dNotPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
-	assert.Equal(t, dNotPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
-
-	// No split key, all insufficient counters
-	var dAllInsufficientCounters Decider
-	Init(&dAllInsufficientCounters, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, SplitCPU)
-	for i := 0; i < 20; i++ {
-		dAllInsufficientCounters.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
-	}
-	for i := 1; i <= 80; i++ {
-		dAllInsufficientCounters.Record(context.Background(), ms(timeStart+i*1000), ld(1), func() roachpb.Span {
-			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
-		})
-	}
-
-	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
-	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
 }

@@ -9,7 +9,9 @@ package split
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -135,8 +137,9 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount *metric.Counter
-	NoSplitKeyCount *metric.Counter
+	PopularKeyCount     *metric.Counter
+	NoSplitKeyCount     *metric.Counter
+	ClearDirectionCount *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -277,6 +280,13 @@ func (d *Decider) recordLocked(
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
+						}
+						accessDirection := d.mu.splitFinder.AccessDirection()
+						args := directionLogArgs(accessDirection)
+						log.KvDistribution.Infof(ctx, "%s, clear access direction %s%% %s found in samples",
+							causeMsg, args[0], args[1])
+						if math.Abs(accessDirection) >= clearDirectionThreshold {
+							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
@@ -521,4 +531,15 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
+}
+
+// Returns the absolute percentage and direction of accesses
+// as a string to be used in a log statement.
+func directionLogArgs(direction float64) []string {
+	directionStr := "ascending"
+	if direction < 0 {
+		directionStr = "descending"
+	}
+	absDirection := math.Abs(direction)
+	return []string{strconv.Itoa(int(absDirection * 100)), directionStr}
 }
