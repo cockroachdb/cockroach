@@ -675,19 +675,13 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		typ, _, err := raftlog.EncodingOf(ent)
-		if err != nil {
+		if typ, _, err := raftlog.EncodingOf(ent); err != nil {
 			return err
-		}
-		if typ.IsSideloaded() {
-			newEnt, err := MaybeInlineSideloadedRaftCommand(
+		} else if typ.IsSideloaded() {
+			if ent, err = MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
-			)
-			if err != nil {
+			); err != nil {
 				return err
-			}
-			if newEnt != nil {
-				ent = *newEnt
 			}
 		}
 
