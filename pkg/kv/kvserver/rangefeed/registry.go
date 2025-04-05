@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // Disconnector defines an interface for disconnecting a registration. It is
@@ -83,6 +84,7 @@ type registration interface {
 type baseRegistration struct {
 	streamCtx      context.Context
 	span           roachpb.Span
+	startAt        crtime.Mono
 	withDiff       bool
 	withFiltering  bool
 	withOmitRemote bool
