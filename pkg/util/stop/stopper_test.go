@@ -224,12 +224,13 @@ func (tc *testCloser) Close() {
 func TestStopperClosers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	var tc1, tc2 testCloser
-	s.AddCloser(&tc1)
-	s.AddCloser(&tc2)
+	x := 1
+	s.AddCloser(stop.CloserFn(func() { x++ }))
+	s.AddCloser(stop.CloserFn(func() { x *= 10 }))
 	s.Stop(context.Background())
-	if !bool(tc1) || !bool(tc2) {
-		t.Errorf("expected true & true; got %t & %t", tc1, tc2)
+	// Both closers should run in LIFO order, so we should get 11 (and not 20).
+	if expected := 11; x != expected {
+		t.Errorf("expected %d, got %d", expected, x)
 	}
 }
 
