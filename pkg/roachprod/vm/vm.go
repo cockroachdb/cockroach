@@ -41,6 +41,7 @@ const (
 	ArchARM64   = CPUArch("arm64")
 	ArchAMD64   = CPUArch("amd64")
 	ArchFIPS    = CPUArch("fips")
+	ArchS390x   = CPUArch("s390x")
 	ArchUnknown = CPUArch("unknown")
 )
 
@@ -70,6 +71,9 @@ func ParseArch(s string) CPUArch {
 	}
 	if strings.Contains(arch, "fips") {
 		return ArchFIPS
+	}
+	if strings.Contains(arch, "s390x") {
+		return ArchS390x
 	}
 	return ArchUnknown
 }
@@ -174,7 +178,7 @@ var (
 	ErrNoExpiration       = errors.New("could not determine expiration")
 )
 
-var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)
+var regionRE = regexp.MustCompile(`(.*[^-])-?[0-9a-z]$`)
 
 // IsLocal returns true if the VM represents the local host.
 func (vm *VM) IsLocal() bool {
