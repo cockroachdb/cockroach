@@ -53,6 +53,14 @@ const (
 	// stableDuration is the duration which the cluster's load must remain
 	// balanced for to pass.
 	stableDuration = time.Minute
+	// leaseOnlyRebalanceDuration is the duration for which the cluster's load
+	// must balance within in order to pass the lease transfer only rebalancing
+	// variation.
+	leaseOnlyRebalanceDuration = 10 * time.Minute
+	// leaseAndReplicaRebalanceDuration is the duration for which the cluster's
+	// load must balance within in order to pass the replica and lease
+	// rebalancing variation.
+	leaseAndReplicaRebalanceDuration = 15 * time.Minute
 )
 
 func registerRebalanceLoad(r registry.Registry) {
@@ -133,7 +141,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
-				rebalanceLoadRun(ctx, t, c, "leases", 10*time.Minute, concurrency, false /* mixedVersion */)
+				rebalanceLoadRun(ctx, t, c, "leases", leaseOnlyRebalanceDuration, concurrency, false /* mixedVersion */)
 			},
 		},
 	)
@@ -150,7 +158,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
-				rebalanceLoadRun(ctx, t, c, "leases", 10*time.Minute, concurrency, true /* mixedVersion */)
+				rebalanceLoadRun(ctx, t, c, "leases", leaseOnlyRebalanceDuration, concurrency, true /* mixedVersion */)
 			},
 		},
 	)
@@ -168,7 +176,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 				}
 				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, false, /* mixedVersion */
+					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
 				)
 			},
 		},
@@ -187,7 +195,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					t.L().Printf("lowering concurrency to %d in local testing", concurrency)
 				}
 				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, true, /* mixedVersion */
+					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, true, /* mixedVersion */
 				)
 			},
 		},
@@ -212,7 +220,7 @@ func registerRebalanceLoad(r registry.Registry) {
 					t.Fatal("cannot run multi-store in local mode")
 				}
 				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, false, /* mixedVersion */
+					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
 				)
 			},
 		},
