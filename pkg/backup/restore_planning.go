@@ -1367,7 +1367,7 @@ func restorePlanHook(
 					return nil, err
 				}
 				tn := roachpb.TenantName(s)
-				if err := tn.IsValid(); err != nil {
+				if err := tn.Validate(); err != nil {
 					return nil, err
 				}
 				return &tn, nil

@@ -393,7 +393,7 @@ func (a kvAuth) selectAuthzMethod(
 func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb.TenantID) error {
 	containsFn := func(scope security.CertificateUserScope) bool {
 		// Only consider global scopes or scopes that match this server.
-		if !(scope.Global || scope.TenantID == serverTenantID) {
+		if !(scope.Global || scope.TenantIdentity == serverTenantID) {
 			return false
 		}
 
