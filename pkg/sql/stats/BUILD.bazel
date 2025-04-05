@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/container/heap",
         "//pkg/util/encoding",
