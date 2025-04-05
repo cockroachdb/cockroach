@@ -120,6 +120,16 @@ func (cs *childSet) add(metric childMetric) {
 	cs.mu.tree.ReplaceOrInsert(metric)
 }
 
+func (cs *childSet) get(metric childMetric) childMetric {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cm := cs.mu.tree.Get(metric)
+	if cm == nil {
+		return nil
+	}
+	return cm.(childMetric)
+}
+
 func (cs *childSet) remove(metric childMetric) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
