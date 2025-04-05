@@ -34,7 +34,7 @@ import (
 // TestSetCachedClosedTimestampPolicy sets the closed timestamp policy on r to
 // be the given policy. It is a test-only helper method.
 func (r *Replica) TestSetCachedClosedTimestampPolicy(policy ctpb.RangeClosedTimestampPolicy) {
-	r.cachedClosedTimestampPolicy.Store(int32(policy))
+	r.closedTsPolicy.activePolicy.Store(int32(policy))
 }
 
 func TestSideTransportClosed(t *testing.T) {

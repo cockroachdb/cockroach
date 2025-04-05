@@ -13,6 +13,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 )
 
+func DeltaExceedsThreshold(
+	oldLatency time.Duration, currLatency time.Duration, requiredMinDeltaPercent float64,
+) bool {
+	return math.Abs(float64(oldLatency.Milliseconds()-currLatency.Milliseconds())) <
+		requiredMinDeltaPercent*float64(closedTimestampPolicyLatencyInterval)
+}
+
 // FindBucketBasedOnNetworkRTT maps a network RTT to a closed timestamp policy bucket.
 // It divides RTT by policy interval, adds 1 for zero-based indexing, and offsets by
 // the base policy enum value.
