@@ -293,6 +293,17 @@ func (s *Store) TryRemoveFromPartition(
 	return false, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
 }
 
+// TryClearPartition is part of the cspann.Store interface. It removes vectors
+// from an existing partition.
+func (s *Store) TryClearPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expected cspann.PartitionMetadata,
+) (count int, err error) {
+	return -1, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
+}
+
 // encodePartitionKey takes a partition key and creates a KV key to read that
 // partition's metadata. Vector data can be read by scanning from the metadata
 // to the next partition's metadata.

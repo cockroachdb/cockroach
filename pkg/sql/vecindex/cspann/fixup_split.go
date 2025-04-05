@@ -245,7 +245,7 @@ func (fw *fixupWorker) splitPartition(
 			// This is the root partition, so remove all of its vectors rather than
 			// delete the root partition itself. Note that the vectors have already
 			// been copied to the two target partitions.
-			err = fw.clearPartition(ctx, partitionKey, partition)
+			err = fw.clearPartition(ctx, partitionKey, *partition.Metadata())
 			if err != nil {
 				return err
 			}
@@ -374,29 +374,28 @@ func (fw *fixupWorker) addToPartition(
 	return nil
 }
 
-// clearPartition removes all vectors and associated data from the given
-// partition, leaving it empty, on the condition that the partition's state has
-// not changed unexpectedly. If that's the case, it returns errFixupAborted.
+// clearPartition removes all vectors from the given partition. This only
+// happens if the partition's metadata has not changed. If it has changed,
+// clearPartition returns errFixupAborted.
 func (fw *fixupWorker) clearPartition(
-	ctx context.Context, partitionKey PartitionKey, partition *Partition,
+	ctx context.Context, partitionKey PartitionKey, metadata PartitionMetadata,
 ) (err error) {
-	if partition.Metadata().StateDetails.State.AllowAddOrRemove() {
+	if metadata.StateDetails.State.AllowAddOrRemove() {
 		return errors.AssertionFailedf("cannot clear partition in state that allows adds/removes")
 	}
 
 	// Remove all children in the partition.
-	removed, err := fw.index.store.TryRemoveFromPartition(ctx, fw.treeKey,
-		partitionKey, partition.ChildKeys(), *partition.Metadata())
+	count, err := fw.index.store.TryClearPartition(ctx, fw.treeKey, partitionKey, metadata)
 	if err != nil {
 		metadata, err := suppressRaceErrors(err)
 		if err == nil {
 			// Another worker raced to update the metadata, so abort.
 			return errors.Wrapf(errFixupAborted,
-				"clearing % vectors from partition, %d expected %s, found %s", partition.Count(),
+				"clearing vectors from partition %d, expected %s, found %s",
 				partitionKey, metadata.StateDetails.String(), metadata.StateDetails.String())
 		}
 		return errors.Wrap(err, "clearing vectors")
-	} else if fw.singleStep && removed {
+	} else if fw.singleStep && count > 0 {
 		return errFixupAborted
 	}
 
@@ -549,7 +548,7 @@ func (fw *fixupWorker) addToParentPartition(
 func (fw *fixupWorker) deletePartition(
 	ctx context.Context, parentPartitionKey, partitionKey PartitionKey,
 ) (err error) {
-	const format = "deleting partition %d, with parent partition %d (state=%d)"
+	const format = "deleting partition %d (parent=%d, state=%d)"
 	var parentMetadata PartitionMetadata
 
 	defer func() {
