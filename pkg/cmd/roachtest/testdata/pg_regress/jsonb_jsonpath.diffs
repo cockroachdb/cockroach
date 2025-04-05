@@ -2971,7 +2971,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
   jsonb_path_exists 
  -------------------
-@@ -2332,19 +1760,19 @@
+@@ -2332,17 +1760,17 @@
  (1 row)
  
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
@@ -2997,11 +2997,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                                                ^
 +HINT:  try \hf jsonb_path_exists
  SELECT jsonb_path_exists('[{"a": 1}]', '$undefined_var');
--ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_exists(): could not find jsonpath variable "undefined_var"
+ ERROR:  could not find jsonpath variable "undefined_var"
  SELECT jsonb_path_exists('[{"a": 1}]', 'false');
-  jsonb_path_exists 
- -------------------
 @@ -2352,75 +1780,93 @@
  (1 row)
  

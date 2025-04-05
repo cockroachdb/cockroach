@@ -457,10 +457,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  
  DROP TABLE truncate_a;
  SELECT nextval('truncate_a_id1'); -- fail, seq should have been dropped
--ERROR:  relation "truncate_a_id1" does not exist
+ ERROR:  relation "truncate_a_id1" does not exist
 -LINE 1: SELECT nextval('truncate_a_id1');
 -                       ^
-+ERROR:  nextval(): relation "truncate_a_id1" does not exist
  -- partitioned table
  CREATE TABLE truncparted (a int, b char) PARTITION BY LIST (a);
 +ERROR:  at or near "EOF": syntax error

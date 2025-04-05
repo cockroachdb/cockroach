@@ -443,7 +443,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  ERROR:  division by zero
  select abs('-9223372036854775808'::int8);
 -ERROR:  bigint out of range
-+ERROR:  abs(): abs of min integer value (-9223372036854775808) not defined
++ERROR:  abs of min integer value (-9223372036854775808) not defined
  select '9223372036854775800'::int8 + '100'::int4;
 -ERROR:  bigint out of range
 +ERROR:  integer out of range

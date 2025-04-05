@@ -182,25 +182,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  SELECT 'inf'::numeric / '0';
  ERROR:  division by zero
  SELECT '-inf'::numeric / '0';
-@@ -803,49 +745,23 @@
- SELECT '0'::numeric % '0';
- ERROR:  division by zero
- SELECT div('inf'::numeric, '0');
--ERROR:  division by zero
-+ERROR:  div(): division by zero
+@@ -807,45 +749,19 @@
  SELECT div('-inf'::numeric, '0');
--ERROR:  division by zero
-+ERROR:  div(): division by zero
+ ERROR:  division by zero
  SELECT div('nan'::numeric, '0');
 - div 
 ------
 - NaN
 -(1 row)
 -
-+ERROR:  div(): division by zero
++ERROR:  division by zero
  SELECT div('0'::numeric, '0');
--ERROR:  division by zero
-+ERROR:  div(): division by zero
+ ERROR:  division by zero
  WITH v(x) AS
    (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('inf'),('-inf'),('nan'))
  SELECT x, -x as minusx, abs(x), floor(x), ceil(x), sign(x), numeric_inc(x) as inc
@@ -238,7 +231,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- the large values fall into the numeric abbreviation code's maximal classes
  WITH v(x) AS
    (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('1e340'),('-1e340'),
-@@ -853,40 +769,16 @@
+@@ -853,36 +769,12 @@
           ('inf'),('-inf'),('nan'))
  SELECT substring(x::text, 1, 32)
  FROM v ORDER BY x;
@@ -275,15 +268,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT sqrt('-1'::numeric);
--ERROR:  cannot take square root of a negative number
-+ERROR:  sqrt(): cannot take square root of a negative number
+ ERROR:  cannot take square root of a negative number
  SELECT sqrt('-inf'::numeric);
--ERROR:  cannot take square root of a negative number
-+ERROR:  sqrt(): cannot take square root of a negative number
- WITH v(x) AS
-   (VALUES('1'::numeric),('4.2'),('inf'),('nan'))
- SELECT x,
-@@ -894,108 +786,43 @@
+@@ -894,14 +786,7 @@
    log10(x),
    ln(x)
  FROM v;
@@ -297,16 +284,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT ln('0'::numeric);
--ERROR:  cannot take logarithm of zero
-+ERROR:  ln(): cannot take logarithm of zero
+ ERROR:  cannot take logarithm of zero
  SELECT ln('-1'::numeric);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  ln(): cannot take logarithm of a negative number
- SELECT ln('-inf'::numeric);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  ln(): cannot take logarithm of a negative number
- WITH v(x) AS
-   (VALUES('2'::numeric),('4.2'),('inf'),('nan'))
+@@ -913,26 +798,7 @@
  SELECT x1, x2,
    log(x1, x2)
  FROM v AS v1(x1), v AS v2(x2);
@@ -332,28 +312,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT log('0'::numeric, '10');
--ERROR:  cannot take logarithm of zero
-+ERROR:  log(): cannot take logarithm of zero
+ ERROR:  cannot take logarithm of zero
  SELECT log('10'::numeric, '0');
--ERROR:  cannot take logarithm of zero
-+ERROR:  log(): cannot take logarithm of zero
- SELECT log('-inf'::numeric, '10');
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- SELECT log('10'::numeric, '-inf');
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- SELECT log('inf'::numeric, '0');
--ERROR:  cannot take logarithm of zero
-+ERROR:  log(): cannot take logarithm of zero
- SELECT log('inf'::numeric, '-inf');
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- SELECT log('-inf'::numeric, 'inf');
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- WITH v(x) AS
-   (VALUES('0'::numeric),('1'),('2'),('4.2'),('inf'),('nan'))
+@@ -952,46 +818,7 @@
  SELECT x1, x2,
    power(x1, x2)
  FROM v AS v1(x1), v AS v2(x2) WHERE x1 != 0 OR x2 >= 0;
@@ -399,15 +360,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT power('0'::numeric, '-1');
--ERROR:  zero raised to a negative power is undefined
-+ERROR:  power(): zero raised to a negative power is undefined
+ ERROR:  zero raised to a negative power is undefined
  SELECT power('0'::numeric, '-inf');
--ERROR:  zero raised to a negative power is undefined
-+ERROR:  power(): zero raised to a negative power is undefined
- SELECT power('-1'::numeric, 'inf');
-  power 
- -------
-@@ -1003,21 +830,21 @@
+@@ -1003,17 +830,17 @@
  (1 row)
  
  SELECT power('-2'::numeric, '3');
@@ -420,8 +375,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  SELECT power('-2'::numeric, '3.3');
--ERROR:  a negative number raised to a non-integer power yields a complex result
-+ERROR:  power(): a negative number raised to a non-integer power yields a complex result
+ ERROR:  a negative number raised to a non-integer power yields a complex result
  SELECT power('-2'::numeric, '-1');
 -        power        
 ----------------------
@@ -432,20 +386,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  SELECT power('-2'::numeric, '-1.5');
--ERROR:  a negative number raised to a non-integer power yields a complex result
-+ERROR:  power(): a negative number raised to a non-integer power yields a complex result
- SELECT power('-2'::numeric, 'inf');
-   power   
- ----------
-@@ -1055,7 +882,7 @@
- (1 row)
- 
- SELECT power('-inf'::numeric, '4.5');
--ERROR:  a negative number raised to a non-integer power yields a complex result
-+ERROR:  power(): a negative number raised to a non-integer power yields a complex result
- SELECT power('-inf'::numeric, '-2');
-  power 
- -------
 @@ -1109,15 +936,15 @@
  (1 row)
  
@@ -654,15 +594,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 +ERROR:  unknown signature: width_bucket(float, float, float, int)
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT width_bucket('NaN', 3.0, 4.0, 888);
--ERROR:  operand, lower bound, and upper bound cannot be NaN
-+ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be NaN
+ ERROR:  operand, lower bound, and upper bound cannot be NaN
  SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
 -ERROR:  operand, lower bound, and upper bound cannot be NaN
 +ERROR:  unknown signature: width_bucket(float, string, float, int)
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT width_bucket(2.0, 3.0, '-inf', 888);
--ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): lower and upper bounds must be finite
+ ERROR:  lower and upper bounds must be finite
  SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
 -ERROR:  lower and upper bounds must be finite
 +ERROR:  unknown signature: width_bucket(float, string, float, int)
@@ -670,7 +608,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- normal operation
  CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
  COPY width_bucket_test (operand_num) FROM stdin;
-@@ -1386,35 +1212,14 @@
+@@ -1386,29 +1212,8 @@
      width_bucket(operand_num, -25, 25, 10) AS wb_5,
      width_bucket(operand_f8, -25, 25, 10) AS wb_5f
      FROM width_bucket_test;
@@ -702,14 +640,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- Check positive and negative infinity: we require
  -- finite bucket bounds, but allow an infinite operand
  SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
--ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): lower and upper bounds must be finite
- SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
--ERROR:  lower and upper bounds must be finite
-+ERROR:  width_bucket(): lower and upper bounds must be finite
- SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
-        width_bucket('-Infinity'::numeric, 1, 10, 10);
-  width_bucket | width_bucket 
 @@ -1423,81 +1228,46 @@
  (1 row)
  
@@ -2402,7 +2332,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select exp('nan'::numeric);
-@@ -2937,200 +2088,147 @@
+@@ -2937,145 +2088,92 @@
  (1 row)
  
  select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
@@ -2411,14 +2341,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -              0
 -(1 row)
 -
-+ERROR:  exp(): integer power: underflow, subnormal
++ERROR:  integer power: underflow, subnormal
  select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
 - underflows 
 -------------
 -          0
 -(1 row)
 -
-+ERROR:  exp(): integer power: underflow, subnormal
++ERROR:  integer power: underflow, subnormal
  -- cases that used to generate inaccurate results
  select exp(32.999);
 -         exp         
@@ -2593,13 +2523,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for LN()
  --
- -- Invalid inputs
- select ln(-12.34);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  ln(): cannot take logarithm of a negative number
- select ln(0.0);
--ERROR:  cannot take logarithm of zero
-+ERROR:  ln(): cannot take logarithm of zero
+@@ -3086,51 +2184,51 @@
+ ERROR:  cannot take logarithm of zero
  -- Some random tests
  select ln(1.2345678e-28);
 -                   ln                    
@@ -2674,17 +2599,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3138,46 +2236,44 @@
- --
+@@ -3139,45 +2237,43 @@
  -- invalid inputs
  select log(-12.34);
--ERROR:  cannot take logarithm of a negative number
+ ERROR:  cannot take logarithm of a negative number
 -CONTEXT:  SQL function "log" statement 1
-+ERROR:  log(): cannot take logarithm of a negative number
  select log(0.0);
--ERROR:  cannot take logarithm of zero
+ ERROR:  cannot take logarithm of zero
 -CONTEXT:  SQL function "log" statement 1
-+ERROR:  log(): cannot take logarithm of zero
  -- some random tests
  select log(1.234567e-89);
 -                                                 log                                                 
@@ -2741,27 +2663,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3185,243 +2281,115 @@
- --
- -- invalid inputs
- select log(-12.34, 56.78);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- select log(-12.34, -56.78);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- select log(12.34, -56.78);
--ERROR:  cannot take logarithm of a negative number
-+ERROR:  log(): cannot take logarithm of a negative number
- select log(0.0, 12.34);
--ERROR:  cannot take logarithm of zero
-+ERROR:  log(): cannot take logarithm of zero
- select log(12.34, 0.0);
--ERROR:  cannot take logarithm of zero
-+ERROR:  log(): cannot take logarithm of zero
- select log(1.0, 12.34);
--ERROR:  division by zero
-+ERROR:  log(): division by zero
+@@ -3198,230 +2294,102 @@
+ ERROR:  division by zero
  -- some random tests
  select log(1.23e-89, 6.4689e45);
 -                                              log                                               
@@ -3085,9 +2988,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
-+We appreciate your feedback.
 +
++We appreciate your feedback.
+ 
 +SELECT trim_scale(variance(a) * 1e1000) FROM num_variance;
 +ERROR:  unknown function: trim_scale()
  ROLLBACK;

@@ -10,7 +10,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/namespace.out --l
 -  
 -(1 row)
 -
-+ERROR:  set_config(): invalid value for parameter "search_path": " "
++ERROR:  invalid value for parameter "search_path": " "
  CREATE SCHEMA test_ns_schema_1
         CREATE UNIQUE INDEX abc_a_idx ON abc (a)
         CREATE VIEW abc_view AS

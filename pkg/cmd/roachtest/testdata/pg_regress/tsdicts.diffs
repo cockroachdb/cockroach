@@ -850,21 +850,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "ispell_tst" does not exist
++ERROR:  text search configuration "ispell_tst" does not exist
  SELECT to_tsquery('ispell_tst', 'footballklubber');
 -                                to_tsquery                                
 ---------------------------------------------------------------------------
 - 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "ispell_tst" does not exist
++ERROR:  text search configuration "ispell_tst" does not exist
  SELECT to_tsquery('ispell_tst', 'footballyklubber:b & rebookings:A & sky');
 -                               to_tsquery                               
 -------------------------------------------------------------------------
 - 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "ispell_tst" does not exist
++ERROR:  text search configuration "ispell_tst" does not exist
  -- Test ispell dictionary with hunspell affix in configuration
  CREATE TEXT SEARCH CONFIGURATION hunspell_tst (
  						COPY=ispell_tst
@@ -888,35 +888,35 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballklubber');
 -                                to_tsquery                                
 ---------------------------------------------------------------------------
 - 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
 -                               to_tsquery                               
 -------------------------------------------------------------------------
 - 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballyklubber:b <-> sky');
 -                   to_tsquery                    
 --------------------------------------------------
 - ( 'foot':B & 'ball':B & 'klubber':B ) <-> 'sky'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT phraseto_tsquery('hunspell_tst', 'footballyklubber sky');
 -             phraseto_tsquery              
 --------------------------------------------
 - ( 'foot' & 'ball' & 'klubber' ) <-> 'sky'
 -(1 row)
 -
-+ERROR:  phraseto_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  -- Test ispell dictionary with hunspell affix with FLAG long in configuration
  ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
  	REPLACE hunspell WITH hunspell_long;
@@ -931,21 +931,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballklubber');
 -                                to_tsquery                                
 ---------------------------------------------------------------------------
 - 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
 -                               to_tsquery                               
 -------------------------------------------------------------------------
 - 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  -- Test ispell dictionary with hunspell affix with FLAG num in configuration
  ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
  	REPLACE hunspell_long WITH hunspell_num;
@@ -960,21 +960,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballklubber');
 -                                to_tsquery                                
 ---------------------------------------------------------------------------
 - 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
 -                               to_tsquery                               
 -------------------------------------------------------------------------
 - 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
++ERROR:  text search configuration "hunspell_tst" does not exist
  -- Test synonym dictionary in configuration
  CREATE TEXT SEARCH CONFIGURATION synonym_tst (
  						COPY=english
@@ -999,28 +999,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - 'call':4 'often':3 'pgsql':1,6,8,12 'pronounc':10
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
++ERROR:  text search configuration "synonym_tst" does not exist
  SELECT to_tsvector('synonym_tst', 'Most common mistake is to write Gogle instead of Google');
 -                       to_tsvector                        
 -----------------------------------------------------------
 - 'common':2 'googl':7,10 'instead':8 'mistak':3 'write':6
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
++ERROR:  text search configuration "synonym_tst" does not exist
  SELECT to_tsvector('synonym_tst', 'Indexes or indices - Which is right plural form of index?');
 -                 to_tsvector                  
 -----------------------------------------------
 - 'form':8 'index':1,3,10 'plural':7 'right':6
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
++ERROR:  text search configuration "synonym_tst" does not exist
  SELECT to_tsquery('synonym_tst', 'Index & indices');
 -     to_tsquery      
 ----------------------
 - 'index' & 'index':*
 -(1 row)
 -
-+ERROR:  to_tsquery(): text search configuration "synonym_tst" does not exist
++ERROR:  text search configuration "synonym_tst" does not exist
  -- test thesaurus in configuration
  -- see thesaurus_sample.ths to understand 'odd' resulting tsvector
  CREATE TEXT SEARCH CONFIGURATION thesaurus_tst (
@@ -1046,21 +1046,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --lab
 - '1':1,5 '12':3 '123':4 'pgsql':2
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
++ERROR:  text search configuration "thesaurus_tst" does not exist
  SELECT to_tsvector('thesaurus_tst', 'Supernovae star is very new star and usually called supernovae (abbreviation SN)');
 -                         to_tsvector                          
 ---------------------------------------------------------------
 - 'abbrevi':10 'call':8 'new':4 'sn':1,9,11 'star':5 'usual':7
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
++ERROR:  text search configuration "thesaurus_tst" does not exist
  SELECT to_tsvector('thesaurus_tst', 'Booking tickets is looking like a booking a tickets');
 -                      to_tsvector                      
 --------------------------------------------------------
 - 'card':3,10 'invit':2,9 'like':6 'look':5 'order':1,8
 -(1 row)
 -
-+ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
++ERROR:  text search configuration "thesaurus_tst" does not exist
  -- invalid: non-lowercase quoted identifiers
  CREATE TEXT SEARCH DICTIONARY tsdict_case
  (

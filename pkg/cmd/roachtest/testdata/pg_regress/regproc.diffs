@@ -24,7 +24,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 - now
 -(1 row)
 -
-+ERROR:  regproc(): more than one function named 'now'
++ERROR:  more than one function named 'now'
  SELECT regprocedure('abs(numeric)');
   regprocedure 
  --------------
@@ -103,7 +103,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 - now
 -(1 row)
 -
-+ERROR:  regproc(): more than one function named 'now'
++ERROR:  more than one function named 'now'
  SELECT regprocedure('pg_catalog.abs(numeric)');
   regprocedure 
  --------------
@@ -166,7 +166,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 - regress_regrole_test
 -(1 row)
 -
-+ERROR:  regrole(): role '"regress_regrole_test"' does not exist
++ERROR:  role '"regress_regrole_test"' does not exist
  SELECT regnamespace('pg_catalog');
   regnamespace 
  --------------
@@ -179,7 +179,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 - pg_catalog
 -(1 row)
 -
-+ERROR:  regnamespace(): namespace '"pg_catalog"' does not exist
++ERROR:  namespace '"pg_catalog"' does not exist
  SELECT to_regrole('regress_regrole_test');
        to_regrole      
  ----------------------
@@ -221,22 +221,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 -ERROR:  function "know" does not exist
 -LINE 1: SELECT regproc('know');
 -                       ^
-+ERROR:  regproc(): unknown function: know()
++ERROR:  unknown function: know()
  SELECT regprocedure('absinthe(numeric)');
 -ERROR:  function "absinthe(numeric)" does not exist
 -LINE 1: SELECT regprocedure('absinthe(numeric)');
 -                            ^
-+ERROR:  regprocedure(): unknown function: absinthe()
++ERROR:  unknown function: absinthe()
  SELECT regclass('pg_classes');
--ERROR:  relation "pg_classes" does not exist
+ ERROR:  relation "pg_classes" does not exist
 -LINE 1: SELECT regclass('pg_classes');
 -                        ^
-+ERROR:  regclass(): relation "pg_classes" does not exist
  SELECT regtype('int3');
 -ERROR:  type "int3" does not exist
 -LINE 1: SELECT regtype('int3');
 -                       ^
-+ERROR:  regtype(): type 'int3' does not exist
++ERROR:  type 'int3' does not exist
  -- with schemaname
  SELECT regoper('ng_catalog.||/');
 -ERROR:  operator does not exist: ng_catalog.||/
@@ -252,22 +251,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 -ERROR:  function "ng_catalog.now" does not exist
 -LINE 1: SELECT regproc('ng_catalog.now');
 -                       ^
-+ERROR:  regproc(): schema "ng_catalog" does not exist
++ERROR:  schema "ng_catalog" does not exist
  SELECT regprocedure('ng_catalog.abs(numeric)');
 -ERROR:  function "ng_catalog.abs(numeric)" does not exist
 -LINE 1: SELECT regprocedure('ng_catalog.abs(numeric)');
 -                            ^
-+ERROR:  regprocedure(): schema "ng_catalog" does not exist
++ERROR:  schema "ng_catalog" does not exist
  SELECT regclass('ng_catalog.pg_class');
--ERROR:  relation "ng_catalog.pg_class" does not exist
+ ERROR:  relation "ng_catalog.pg_class" does not exist
 -LINE 1: SELECT regclass('ng_catalog.pg_class');
 -                        ^
-+ERROR:  regclass(): relation "ng_catalog.pg_class" does not exist
  SELECT regtype('ng_catalog.int4');
 -ERROR:  schema "ng_catalog" does not exist
 -LINE 1: SELECT regtype('ng_catalog.int4');
 -                       ^
-+ERROR:  regtype(): type 'ng_catalog.int4' does not exist
++ERROR:  type 'ng_catalog.int4' does not exist
  \set VERBOSITY sqlstate \\ -- error message is encoding-dependent
  SELECT regcollation('ng_catalog."POSIX"');
 -ERROR:  42704
@@ -278,42 +276,42 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --lab
 -ERROR:  role "regress_regrole_test" does not exist
 -LINE 1: SELECT regrole('regress_regrole_test');
 -                       ^
-+ERROR:  regrole(): role 'regress_regrole_test' does not exist
++ERROR:  role 'regress_regrole_test' does not exist
  SELECT regrole('"regress_regrole_test"');
 -ERROR:  role "regress_regrole_test" does not exist
 -LINE 1: SELECT regrole('"regress_regrole_test"');
 -                       ^
-+ERROR:  regrole(): role '"regress_regrole_test"' does not exist
++ERROR:  role '"regress_regrole_test"' does not exist
  SELECT regrole('Nonexistent');
 -ERROR:  role "nonexistent" does not exist
 -LINE 1: SELECT regrole('Nonexistent');
 -                       ^
-+ERROR:  regrole(): role 'Nonexistent' does not exist
++ERROR:  role 'Nonexistent' does not exist
  SELECT regrole('"Nonexistent"');
 -ERROR:  role "Nonexistent" does not exist
 -LINE 1: SELECT regrole('"Nonexistent"');
 -                       ^
-+ERROR:  regrole(): role '"Nonexistent"' does not exist
++ERROR:  role '"Nonexistent"' does not exist
  SELECT regrole('foo.bar');
 -ERROR:  invalid name syntax
 -LINE 1: SELECT regrole('foo.bar');
 -                       ^
-+ERROR:  regrole(): role 'foo.bar' does not exist
++ERROR:  role 'foo.bar' does not exist
  SELECT regnamespace('Nonexistent');
 -ERROR:  schema "nonexistent" does not exist
 -LINE 1: SELECT regnamespace('Nonexistent');
 -                            ^
-+ERROR:  regnamespace(): namespace 'Nonexistent' does not exist
++ERROR:  namespace 'Nonexistent' does not exist
  SELECT regnamespace('"Nonexistent"');
 -ERROR:  schema "Nonexistent" does not exist
 -LINE 1: SELECT regnamespace('"Nonexistent"');
 -                            ^
-+ERROR:  regnamespace(): namespace '"Nonexistent"' does not exist
++ERROR:  namespace '"Nonexistent"' does not exist
  SELECT regnamespace('foo.bar');
 -ERROR:  invalid name syntax
 -LINE 1: SELECT regnamespace('foo.bar');
 -                            ^
-+ERROR:  regnamespace(): namespace 'foo.bar' does not exist
++ERROR:  namespace 'foo.bar' does not exist
  /* If objects don't exist, return NULL with no error. */
  -- without schemaname
  SELECT to_regoper('||//');
