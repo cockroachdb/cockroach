@@ -2257,6 +2257,7 @@ quality of service: regular
   sql nodes: <hidden>
   regions: <hidden>
   actual row count: 1
+  execution time: 0µs
   size: 1 column, 1 row
 
 # Tests for EXPLAIN (OPT, MEMO).

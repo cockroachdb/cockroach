@@ -620,12 +620,14 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -634,6 +636,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 size: 3 columns, 2 rows
 │
 ├── • constraint-check
@@ -642,11 +645,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right semi)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (a) = (column1)
@@ -672,6 +677,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -681,11 +687,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (right semi)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ equality: (b, c) = (column2, column3)
@@ -711,6 +719,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
+                  execution time: 0µs
                   estimated row count: 2
                   label: buffer 1
 
@@ -738,12 +747,14 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -752,6 +763,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 size: 3 columns, 2 rows
 │
 ├── • constraint-check
@@ -760,11 +772,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right semi)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (c) = (column3)
@@ -790,6 +804,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -799,11 +814,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right anti)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ equality: (b, c) = (column2, column3)
 │           │
@@ -827,6 +844,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -836,11 +854,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (right anti)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ equality: (a) = (column1)
             │
@@ -864,6 +884,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
+                  execution time: 0µs
                   estimated row count: 2
                   label: buffer 1
 
@@ -2622,6 +2643,7 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │
@@ -2629,6 +2651,7 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -2659,6 +2682,7 @@ quality of service: regular
 │       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
 │       │   │ actual row count: 0
+│       │   │ execution time: 0µs
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c
 │       │   │
@@ -2666,12 +2690,14 @@ quality of service: regular
 │       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 2
+│       │       │ execution time: 0µs
 │       │       │ label: buffer 1
 │       │       │
 │       │       └── • hash join
 │       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 2
+│       │           │ execution time: 0µs
 │       │           │ estimated max memory allocated: 0 B
 │       │           │ equality: (b, c) = (b, c)
 │       │           │
@@ -2695,6 +2721,7 @@ quality of service: regular
 │       │               │ sql nodes: <hidden>
 │       │               │ regions: <hidden>
 │       │               │ actual row count: 2
+│       │               │ execution time: 0µs
 │       │               │ estimated row count: 1
 │       │               │ filter: (b IS DISTINCT FROM b) OR (c IS DISTINCT FROM c_new)
 │       │               │
@@ -2702,6 +2729,7 @@ quality of service: regular
 │       │                     sql nodes: <hidden>
 │       │                     regions: <hidden>
 │       │                     actual row count: 2
+│       │                     execution time: 0µs
 │       │                     estimated row count: 2
 │       │                     label: buffer 1000000
 │       │
@@ -2711,11 +2739,13 @@ quality of service: regular
 │       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 0
+│       │       │ execution time: 0µs
 │       │       │
 │       │       └── • hash join (right semi)
 │       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 0
+│       │           │ execution time: 0µs
 │       │           │ estimated max memory allocated: 0 B
 │       │           │ estimated max sql temp disk usage: 0 B
 │       │           │ equality: (c) = (c_new)
@@ -2741,6 +2771,7 @@ quality of service: regular
 │       │                 sql nodes: <hidden>
 │       │                 regions: <hidden>
 │       │                 actual row count: 2
+│       │                 execution time: 0µs
 │       │                 label: buffer 1
 │       │
 │       └── • constraint-check
@@ -2749,11 +2780,13 @@ quality of service: regular
 │               │ sql nodes: <hidden>
 │               │ regions: <hidden>
 │               │ actual row count: 0
+│               │ execution time: 0µs
 │               │
 │               └── • hash join (right anti)
 │                   │ sql nodes: <hidden>
 │                   │ regions: <hidden>
 │                   │ actual row count: 0
+│                   │ execution time: 0µs
 │                   │ estimated max memory allocated: 0 B
 │                   │ equality: (b, c) = (b, c_new)
 │                   │
@@ -2777,12 +2810,14 @@ quality of service: regular
 │                       │ sql nodes: <hidden>
 │                       │ regions: <hidden>
 │                       │ actual row count: 2
+│                       │ execution time: 0µs
 │                       │ filter: (b IS NOT NULL) AND (c_new IS NOT NULL)
 │                       │
 │                       └── • scan buffer
 │                             sql nodes: <hidden>
 │                             regions: <hidden>
 │                             actual row count: 2
+│                             execution time: 0µs
 │                             label: buffer 1
 │
 └── • constraint-check
@@ -2791,11 +2826,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (semi)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ equality: (b, c_new) = (b, c)
@@ -2805,6 +2842,7 @@ quality of service: regular
             │     sql nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
+            │     execution time: 0µs
             │     label: buffer 1
             │
             └── • scan

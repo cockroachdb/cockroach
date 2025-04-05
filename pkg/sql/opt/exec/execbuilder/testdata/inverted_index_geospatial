@@ -39,6 +39,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -46,6 +47,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -67,6 +69,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
@@ -133,6 +136,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -140,6 +144,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -161,6 +166,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
@@ -211,6 +217,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +k
 │
@@ -218,6 +225,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
+    │ execution time: 0µs
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
     └── • index join (streamer)
@@ -239,6 +247,7 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 2
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ inverted column: geom_inverted_key
