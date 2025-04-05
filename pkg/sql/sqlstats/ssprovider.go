@@ -92,6 +92,7 @@ type RecordedStmtStats struct {
 	EndTime                  time.Time
 	ExecStats                *execstats.QueryLevelStats
 	Indexes                  []string
+	UnderOuterTxn            bool
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
@@ -121,7 +122,8 @@ type RecordedTxnStats struct {
 	TxnErr                  error
 	Application             string
 	// Normalized user name.
-	UserNormalized string
+	UserNormalized   string
+	InternalExecutor bool
 }
 
 // SSDrainer is the interface for draining or resetting sql stats.
