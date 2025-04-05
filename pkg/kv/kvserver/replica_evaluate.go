@@ -324,13 +324,14 @@ func evaluateBatch(
 		// If a unittest filter was installed, check for an injected error; otherwise, continue.
 		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:     ctx,
-				CmdID:   idKey,
-				Index:   index,
-				Sid:     rec.StoreID(),
-				Req:     args,
-				Version: rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
-				Hdr:     baHeader,
+				Ctx:          ctx,
+				CmdID:        idKey,
+				Index:        index,
+				Sid:          rec.StoreID(),
+				Req:          args,
+				Version:      rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
+				Hdr:          baHeader,
+				AdmissionHdr: ba.AdmissionHeader,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
@@ -356,13 +357,14 @@ func evaluateBatch(
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   rec.StoreID(),
-				Req:   args,
-				Hdr:   baHeader,
-				Err:   err,
+				Ctx:          ctx,
+				CmdID:        idKey,
+				Index:        index,
+				Sid:          rec.StoreID(),
+				Req:          args,
+				Hdr:          baHeader,
+				AdmissionHdr: ba.AdmissionHeader,
+				Err:          err,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
