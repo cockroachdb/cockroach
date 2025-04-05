@@ -445,8 +445,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 -(0 rows)
 + oid  | typname 
 +------+---------
-+ 2276 | any
 + 2279 | trigger
++ 2276 | any
 +(2 rows)
  
  -- Check for bogus typinput routines
