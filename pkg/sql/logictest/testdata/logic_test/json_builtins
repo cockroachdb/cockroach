@@ -106,7 +106,7 @@ SELECT array_to_json(ARRAY[1, 2, 3], false)
 ----
 [1, 2, 3]
 
-query error pq: array_to_json\(\): pretty printing is not supported
+query error pq: pretty printing is not supported
 SELECT array_to_json(ARRAY[1, 2, 3], true)
 
 query error pq: unknown signature: array_to_json\(string\)
@@ -591,20 +591,20 @@ SELECT json_build_object(''::void, 1)
 {"": 1}
 
 # even number of arguments
-statement error pgcode 22023 json_build_object\(\): argument list must have even number of elements
+statement error pgcode 22023 argument list must have even number of elements
 SELECT json_build_object(1,2,3)
 
 # keys must be scalar and not null
-statement error pgcode 22004 json_build_object\(\): null value not allowed for object key
+statement error pgcode 22004 null value not allowed for object key
 SELECT json_build_object(null,2)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object((1,2),3)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object('{"a":1,"b":2}'::JSON, 3)
 
-statement error pgcode 22023 json_build_object\(\): key value must be scalar, not array, composite, or json
+statement error pgcode 22023 key value must be scalar, not array, composite, or json
 SELECT json_build_object('{1,2,3}'::int[], 3)
 
 query T

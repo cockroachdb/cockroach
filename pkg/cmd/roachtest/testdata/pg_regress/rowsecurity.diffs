@@ -47,7 +47,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- but Dave isn't allowed to anything at cid 50 or above
  -- this is to make sure that we sort the policies by name first
  -- when applying WITH CHECK, a later INSERT by Dave should fail due
-@@ -93,390 +98,182 @@
+@@ -93,390 +98,184 @@
  CREATE POLICY p1r ON document AS RESTRICTIVE TO regress_rls_dave
      USING (cid <> 44);
  \dp
@@ -114,9 +114,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 - regress_rls_schema | document  | p1r        | RESTRICTIVE | {regress_rls_dave} | ALL | (cid <> 44)                                | 
 - regress_rls_schema | document  | p2r        | RESTRICTIVE | {regress_rls_dave} | ALL | ((cid <> 44) AND (cid < 50))               | 
 -(3 rows)
-+ schemaname | tablename | policyname | permissive | roles | cmd | qual | with_check 
-+------------+-----------+------------+------------+-------+-----+------+------------
-+(0 rows)
++     schemaname     | tablename | policyname | permissive  |       roles        | cmd |                   qual                   | with_check 
++--------------------+-----------+------------+-------------+--------------------+-----+------------------------------------------+------------
++ regress_rls_schema | document  | p1r        | restrictive | {regress_rls_dave} | ALL | cid != 44:::INT8                         | 
++ regress_rls_schema | document  | p2r        | restrictive | {regress_rls_dave} | ALL | (cid != 44:::INT8) AND (cid < 50:::INT8) | 
++(2 rows)
  
  -- viewpoint from regress_rls_bob
 -SET SESSION AUTHORIZATION regress_rls_bob;
@@ -547,7 +549,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM document WHERE did = 8; -- and confirm we can't see it
   did | cid | dlevel | dauthor | dtitle 
  -----+-----+--------+---------+--------
-@@ -486,9 +283,8 @@
+@@ -486,9 +285,8 @@
  INSERT INTO document VALUES (8, 44, 1, 'regress_rls_carol', 'my third manga'); -- Should fail with RLS check violation, not duplicate key violation
  ERROR:  new row violates row-level security policy for table "document"
  UPDATE document SET did = 8, dauthor = 'regress_rls_carol' WHERE did = 5; -- Should fail with RLS check violation, not duplicate key violation
@@ -558,7 +560,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |         dtitle          
-@@ -503,8 +299,7 @@
+@@ -503,8 +301,7 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -568,7 +570,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -516,7 +311,7 @@
+@@ -516,7 +313,7 @@
  (4 rows)
  
  -- database superuser does bypass RLS policy when disabled
@@ -577,7 +579,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |         dtitle          
-@@ -531,8 +326,7 @@
+@@ -531,8 +328,7 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -587,7 +589,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -544,7 +338,8 @@
+@@ -544,7 +340,8 @@
  (4 rows)
  
  -- database non-superuser with bypass privilege can bypass RLS policy when disabled
@@ -597,7 +599,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |         dtitle          
-@@ -559,8 +354,7 @@
+@@ -559,8 +356,7 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -607,7 +609,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -572,7 +366,7 @@
+@@ -572,7 +368,7 @@
  (4 rows)
  
  -- RLS policy does not apply to table owner when RLS enabled.
@@ -616,7 +618,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |         dtitle          
-@@ -587,8 +381,7 @@
+@@ -587,8 +383,7 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -626,7 +628,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -600,7 +393,7 @@
+@@ -600,7 +395,7 @@
  (4 rows)
  
  -- RLS policy does not apply to table owner when RLS disabled.
@@ -635,7 +637,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |         dtitle          
-@@ -615,8 +408,7 @@
+@@ -615,8 +410,7 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -645,7 +647,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -630,279 +422,190 @@
+@@ -630,279 +424,190 @@
  --
  -- Table inheritance and RLS policy
  --
@@ -1056,7 +1058,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE part_document (
      did         int,
      cid         int,
-@@ -910,14 +613,44 @@
+@@ -910,14 +615,44 @@
      dauthor     name,
      dtitle      text
  ) PARTITION BY RANGE (cid);
@@ -1101,7 +1103,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  INSERT INTO part_document VALUES
      ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
      ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
-@@ -929,1067 +662,589 @@
+@@ -929,1067 +664,589 @@
      ( 8, 55, 2, 'regress_rls_carol', 'great satire'),
      ( 9, 11, 1, 'regress_rls_dave', 'awesome science fiction'),
      (10, 99, 2, 'regress_rls_dave', 'awesome technology book');
@@ -2499,7 +2501,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Exists...
  SELECT * FROM document WHERE did = 2;
   did | cid | dlevel |     dauthor     |     dtitle      
-@@ -2010,7 +1265,6 @@
+@@ -2010,7 +1267,6 @@
  INSERT INTO document VALUES (33, 22, 1, 'regress_rls_bob', 'okay science fiction'); -- preparation for next statement
  INSERT INTO document VALUES (33, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'Some novel, replaces sci-fi') -- takes UPDATE path
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle;
@@ -2507,7 +2509,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Fine (we UPDATE, since INSERT WCOs and UPDATE security barrier quals + WCOs
  -- not violated):
  INSERT INTO document VALUES (2, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'my first novel')
-@@ -2041,7 +1295,11 @@
+@@ -2041,7 +1297,11 @@
  -- passing quals:
  INSERT INTO document VALUES (78, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'some technology novel')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle, cid = 33 RETURNING *;
@@ -2520,7 +2522,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Don't fail just because INSERT doesn't satisfy WITH CHECK option that
  -- originated as a barrier/USING() qual from the UPDATE.  Note that the UPDATE
  -- path *isn't* taken, and so UPDATE-related policy does not apply:
-@@ -2058,15 +1316,21 @@
+@@ -2058,15 +1318,21 @@
  -- irrelevant, in fact.
  INSERT INTO document VALUES (79, (SELECT cid from category WHERE cname = 'technology'), 1, 'regress_rls_bob', 'technology book, can only insert')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle RETURNING *;
@@ -2545,7 +2547,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Just because WCO-style enforcement of USING quals occurs with
  -- existing/target tuple does not mean that the implementation can be allowed
  -- to fail to also enforce this qual against the final tuple appended to
-@@ -2088,8 +1352,9 @@
+@@ -2088,8 +1354,9 @@
  INSERT INTO document VALUES (2, (SELECT cid from category WHERE cname = 'technology'), 1, 'regress_rls_bob', 'my first novel')
      ON CONFLICT (did) DO UPDATE SET cid = EXCLUDED.cid, dtitle = EXCLUDED.dtitle RETURNING *;
  ERROR:  new row violates row-level security policy for table "document"
@@ -2556,7 +2558,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  --
  -- Test ALL policies with ON CONFLICT DO UPDATE (much the same as existing UPDATE
  -- tests)
-@@ -2097,7 +1362,8 @@
+@@ -2097,7 +1364,8 @@
  CREATE POLICY p3_with_all ON document FOR ALL
    USING (cid = (SELECT cid from category WHERE cname = 'novel'))
    WITH CHECK (dauthor = current_user);
@@ -2566,7 +2568,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Fails, since ALL WCO is enforced in insert path:
  INSERT INTO document VALUES (80, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_carol', 'my first novel')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle, cid = 33;
-@@ -2106,7 +1372,7 @@
+@@ -2106,7 +1374,7 @@
  -- violation, since it has the "manga" cid):
  INSERT INTO document VALUES (4, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'my first novel')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle;
@@ -2575,7 +2577,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Fails, since ALL WCO are enforced:
  INSERT INTO document VALUES (1, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'my first novel')
      ON CONFLICT (did) DO UPDATE SET dauthor = 'regress_rls_carol';
-@@ -2114,8 +1380,9 @@
+@@ -2114,8 +1382,9 @@
  --
  -- MERGE
  --
@@ -2586,7 +2588,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  ALTER TABLE document ADD COLUMN dnotes text DEFAULT '';
  -- all documents are readable
  CREATE POLICY p1 ON document FOR SELECT USING (true);
-@@ -2125,13 +1392,16 @@
+@@ -2125,13 +1394,16 @@
  CREATE POLICY p3 ON document FOR UPDATE
    USING (cid = (SELECT cid from category WHERE cname = 'novel'))
    WITH CHECK (dlevel > 0);
@@ -2603,7 +2605,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     3 |  22 |      2 | regress_rls_bob   | my science fiction               | 
     4 |  44 |      1 | regress_rls_bob   | my first manga                   | 
     5 |  44 |      2 | regress_rls_bob   | my second manga                  | 
-@@ -2140,33 +1410,42 @@
+@@ -2140,33 +1412,42 @@
     8 |  44 |      1 | regress_rls_carol | great manga                      | 
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction          | 
    10 |  33 |      2 | regress_rls_dave  | awesome technology book          | 
@@ -2652,7 +2654,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- There is a MATCH for did = 3, but UPDATE's USING qual does not allow
  -- updating an item in category 'science fiction'
  MERGE INTO document d
-@@ -2174,7 +1453,10 @@
+@@ -2174,7 +1455,10 @@
  ON did = s.sdid
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge ';
@@ -2664,7 +2666,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- The same thing with DELETE action, but fails again because no permissions
  -- to delete items in 'science fiction' category that did 3 belongs to.
  MERGE INTO document d
-@@ -2182,7 +1464,10 @@
+@@ -2182,7 +1466,10 @@
  ON did = s.sdid
  WHEN MATCHED THEN
  	DELETE;
@@ -2676,7 +2678,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Document with did 4 belongs to 'manga' category which is allowed for
  -- deletion. But this fails because the UPDATE action is matched first and
  -- UPDATE policy does not allow updation in the category.
-@@ -2193,7 +1478,10 @@
+@@ -2193,7 +1480,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -2688,7 +2690,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- UPDATE action is not matched this time because of the WHEN qual.
  -- DELETE still fails because role regress_rls_bob does not have SELECT
  -- privileges on 'manga' category row in the category table.
-@@ -2204,7 +1492,10 @@
+@@ -2204,7 +1494,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -2700,7 +2702,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- OK if DELETE is replaced with DO NOTHING
  MERGE INTO document d
  USING (SELECT 4 as sdid) s
-@@ -2213,6 +1504,10 @@
+@@ -2213,6 +1506,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DO NOTHING;
@@ -2711,7 +2713,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM document WHERE did = 4;
   did | cid | dlevel |     dauthor     |     dtitle     | dnotes 
  -----+-----+--------+-----------------+----------------+--------
-@@ -2221,8 +1516,8 @@
+@@ -2221,8 +1518,8 @@
  
  -- Switch to regress_rls_carol role and try the DELETE again. It should succeed
  -- this time
@@ -2722,7 +2724,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  MERGE INTO document d
  USING (SELECT 4 as sdid) s
  ON did = s.sdid
-@@ -2230,9 +1525,13 @@
+@@ -2230,9 +1527,13 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -2738,7 +2740,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Try INSERT action. This fails because we are trying to insert
  -- dauthor = regress_rls_dave and INSERT's WITH CHECK does not allow
  -- that
-@@ -2243,7 +1542,10 @@
+@@ -2243,7 +1544,10 @@
  	DELETE
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_dave', 'another novel');
@@ -2750,7 +2752,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- This should be fine
  MERGE INTO document d
  USING (SELECT 12 as sdid) s
-@@ -2252,6 +1554,10 @@
+@@ -2252,6 +1556,10 @@
  	DELETE
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -2761,7 +2763,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- ok
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2260,13 +1566,18 @@
+@@ -2260,13 +1568,18 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge4 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -2782,7 +2784,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- MERGE can no longer see the matching row and hence attempts the
  -- NOT MATCHED action, which results in unique key violation
  MERGE INTO document d
-@@ -2276,7 +1587,10 @@
+@@ -2276,7 +1589,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge5 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -2794,7 +2796,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- UPDATE action fails if new row is not visible
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2284,7 +1598,10 @@
+@@ -2284,7 +1600,10 @@
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge6 ',
  			   cid = (SELECT cid from category WHERE cname = 'technology');
@@ -2806,7 +2808,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- but OK if new row is visible
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2292,6 +1609,10 @@
+@@ -2292,6 +1611,10 @@
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge7 ',
  			   cid = (SELECT cid from category WHERE cname = 'novel');
@@ -2817,7 +2819,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- OK to insert a new row that is not visible
  MERGE INTO document d
  USING (SELECT 13 as sdid) s
-@@ -2300,35 +1621,38 @@
+@@ -2300,35 +1623,38 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge8 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (13, 44, 1, 'regress_rls_bob', 'new manga');
@@ -2867,7 +2869,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE z1 (a int, b text);
  CREATE TABLE z2 (a int, b text);
  GRANT SELECT ON z1,z2 TO regress_rls_group1, regress_rls_group2,
-@@ -2341,57 +1665,39 @@
+@@ -2341,57 +1667,39 @@
  CREATE POLICY p1 ON z1 TO regress_rls_group1 USING (a % 2 = 0);
  CREATE POLICY p2 ON z1 TO regress_rls_group2 USING (a % 2 = 1);
  ALTER TABLE z1 ENABLE ROW LEVEL SECURITY;
@@ -2949,7 +2951,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET ROLE regress_rls_group1;
  SELECT * FROM z1 WHERE f_leak(b);
  NOTICE:  f_leak => bbb
-@@ -2403,91 +1709,59 @@
+@@ -2403,91 +1711,59 @@
  (2 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
@@ -3085,7 +3087,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET ROLE regress_rls_group2;
  SELECT * FROM z1 WHERE f_leak(b);
  NOTICE:  f_leak => aba
-@@ -2499,422 +1773,324 @@
+@@ -2499,422 +1775,324 @@
  (2 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
@@ -3717,7 +3719,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE x1 (a int, b text, c text);
  GRANT ALL ON x1 TO PUBLIC;
  INSERT INTO x1 VALUES
-@@ -2932,7 +2108,7 @@
+@@ -2932,7 +2110,7 @@
  CREATE POLICY p3 ON x1 FOR UPDATE USING (a % 2 = 0);
  CREATE POLICY p4 ON x1 FOR DELETE USING (a < 8);
  ALTER TABLE x1 ENABLE ROW LEVEL SECURITY;
@@ -3726,7 +3728,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM x1 WHERE f_leak(b) ORDER BY a ASC;
  NOTICE:  f_leak => abc
  NOTICE:  f_leak => bcd
-@@ -2967,13 +2143,13 @@
+@@ -2967,13 +2145,13 @@
   8 | fgh_updt | regress_rls_carol
  (6 rows)
  
@@ -3743,7 +3745,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  NOTICE:  f_leak => fgh_updt
   a |    b     |         c         
  ---+----------+-------------------
-@@ -2986,50 +2162,50 @@
+@@ -2986,50 +2164,50 @@
  (6 rows)
  
  UPDATE x1 SET b = b || '_updt' WHERE f_leak(b) RETURNING *;
@@ -3804,7 +3806,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON y2 FOR ALL USING (a % 2 = 0);  --OK
  ALTER TABLE y1 ENABLE ROW LEVEL SECURITY;
  ALTER TABLE y2 ENABLE ROW LEVEL SECURITY;
-@@ -3037,189 +2213,105 @@
+@@ -3037,189 +2215,105 @@
  -- Expression structure with SBV
  --
  -- Create view as table owner.  RLS should NOT be applied.
@@ -4048,7 +4050,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE t1 (a integer);
  GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
  CREATE POLICY p1 ON t1 TO regress_rls_bob USING ((a % 2) = 0);
-@@ -3230,97 +2322,62 @@
+@@ -3230,97 +2324,62 @@
  PREPARE role_inval AS SELECT * FROM t1;
  -- Check plan
  EXPLAIN (COSTS OFF) EXECUTE role_inval;
@@ -4179,7 +4181,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  WITH cte1 AS (INSERT INTO t1 VALUES (21, 'Fail') RETURNING *) SELECT * FROM cte1; --fail
  ERROR:  new row violates row-level security policy for table "t1"
-@@ -3333,9 +2390,8 @@
+@@ -3333,9 +2392,8 @@
  --
  -- Rename Policy
  --
@@ -4190,7 +4192,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT polname, relname
      FROM pg_policy pol
      JOIN pg_class pc ON (pc.oid = pol.polrelid)
-@@ -3358,80 +2414,46 @@
+@@ -3358,80 +2416,46 @@
  --
  -- Check INSERT SELECT
  --
@@ -4295,7 +4297,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE blog (id integer, author text, post text);
  CREATE TABLE comment (blog_id integer, message text);
  GRANT ALL ON blog, comment TO regress_rls_bob;
-@@ -3450,7 +2472,7 @@
+@@ -3450,7 +2474,7 @@
      (5, 'what?'),
      (4, 'insane!'),
      (2, 'who did it?');
@@ -4304,7 +4306,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Check RLS JOIN with Non-RLS.
  SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
   id | author |   message   
-@@ -3467,10 +2489,10 @@
+@@ -3467,10 +2491,10 @@
    2 | bob    | who did it?
  (2 rows)
  
@@ -4317,7 +4319,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Check RLS JOIN RLS
  SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
   id | author |   message   
-@@ -3484,86 +2506,44 @@
+@@ -3484,86 +2508,44 @@
    2 | bob    | who did it?
  (1 row)
  
@@ -4425,7 +4427,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  SELECT * FROM t1;
   a | b 
-@@ -3571,221 +2551,194 @@
+@@ -3571,221 +2553,194 @@
  (0 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM t1;
@@ -4728,7 +4730,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE current_check (currentid int, payload text, rlsuser text);
  GRANT ALL ON current_check TO PUBLIC;
  INSERT INTO current_check VALUES
-@@ -3797,7 +2750,7 @@
+@@ -3797,7 +2752,7 @@
  CREATE POLICY p2 ON current_check FOR DELETE USING (currentid = 4 AND rlsuser = current_user);
  CREATE POLICY p3 ON current_check FOR UPDATE USING (currentid = 4) WITH CHECK (rlsuser = current_user);
  ALTER TABLE current_check ENABLE ROW LEVEL SECURITY;
@@ -4737,7 +4739,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Can SELECT even rows
  SELECT * FROM current_check;
   currentid | payload |     rlsuser     
-@@ -3814,112 +2767,74 @@
+@@ -3814,112 +2769,74 @@
  
  BEGIN;
  DECLARE current_check_cursor SCROLL CURSOR FOR SELECT * FROM current_check;
@@ -4887,7 +4889,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT attname, most_common_vals FROM pg_stats
    WHERE tablename = 'current_check'
    ORDER BY 1;
-@@ -3932,31 +2847,35 @@
+@@ -3932,31 +2849,35 @@
  --
  BEGIN;
  CREATE TABLE coll_t (c) AS VALUES ('bar'::text);
@@ -4933,7 +4935,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  GRANT SELECT ON TABLE tbl1 TO regress_rls_eve;
  CREATE POLICY P ON tbl1 TO regress_rls_eve, regress_rls_frank USING (true);
  SELECT refclassid::regclass, deptype
-@@ -3965,8 +2884,7 @@
+@@ -3965,8 +2886,7 @@
    AND refobjid = 'tbl1'::regclass;
   refclassid | deptype 
  ------------+---------
@@ -4943,7 +4945,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT refclassid::regclass, deptype
    FROM pg_shdepend
-@@ -3974,48 +2892,58 @@
+@@ -3974,48 +2894,58 @@
    AND refobjid IN ('regress_rls_eve'::regrole, 'regress_rls_frank'::regrole);
   refclassid | deptype 
  ------------+---------
@@ -5012,7 +5014,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE r1 (a int);
  CREATE TABLE r2 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4028,7 +2956,7 @@
+@@ -4028,7 +2958,7 @@
  CREATE POLICY p3 ON r2 FOR UPDATE USING (false);
  CREATE POLICY p4 ON r2 FOR DELETE USING (false);
  ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
@@ -5021,7 +5023,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM r1;
   a  
  ----
-@@ -4092,13 +3020,13 @@
+@@ -4092,13 +3022,13 @@
   20
  (2 rows)
  
@@ -5037,7 +5039,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4131,19 +3059,17 @@
+@@ -4131,19 +3061,17 @@
  SET row_security = off;
  -- these all fail, would be affected by RLS
  TABLE r1;
@@ -5062,7 +5064,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE TABLE r2 (a int REFERENCES r1);
-@@ -4157,7 +3083,7 @@
+@@ -4157,7 +3085,7 @@
  ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
  -- Errors due to rows in r2
  DELETE FROM r1;
@@ -5071,7 +5073,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DETAIL:  Key (a)=(10) is still referenced from table "r2".
  -- Reset r2 to no-RLS
  DROP POLICY p1 ON r2;
-@@ -4216,6 +3142,7 @@
+@@ -4216,6 +3144,7 @@
  ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
  -- Updates records in both
  UPDATE r1 SET a = a+5;
@@ -5079,7 +5081,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Remove FORCE from r2
  ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
  -- As owner, we now bypass RLS
-@@ -4223,8 +3150,8 @@
+@@ -4223,8 +3152,8 @@
  TABLE r2;
   a  
  ----
@@ -5090,7 +5092,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (2 rows)
  
  DROP TABLE r2;
-@@ -4233,7 +3160,7 @@
+@@ -4233,7 +3162,7 @@
  -- Test INSERT+RETURNING applies SELECT policies as
  -- WithCheckOptions (meaning an error is thrown)
  --
@@ -5099,7 +5101,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  CREATE POLICY p1 ON r1 FOR SELECT USING (false);
-@@ -4251,18 +3178,25 @@
+@@ -4251,18 +3180,25 @@
  SET row_security = off;
  -- fail, would be affected by RLS
  TABLE r1;
@@ -5129,7 +5131,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
-@@ -4273,12 +3207,13 @@
+@@ -4273,12 +3209,13 @@
  ALTER TABLE r1 FORCE ROW LEVEL SECURITY;
  -- Works fine
  UPDATE r1 SET a = 30;
@@ -5144,7 +5146,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- reset value in r1 for test with RETURNING
-@@ -4297,39 +3232,46 @@
+@@ -4297,39 +3234,46 @@
  -- UPDATE path of INSERT ... ON CONFLICT DO UPDATE should also error out
  INSERT INTO r1 VALUES (10)
      ON CONFLICT (a) DO UPDATE SET a = 30 RETURNING *;
@@ -5197,7 +5199,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return one
-@@ -4338,7 +3280,7 @@
+@@ -4338,7 +3282,7 @@
  					 AND refobjid = (SELECT oid FROM pg_authid WHERE rolname = 'regress_rls_carol');
   ?column? 
  ----------
@@ -5206,7 +5208,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return zero
-@@ -4351,15 +3293,19 @@
+@@ -4351,15 +3295,19 @@
  (1 row)
  
  -- DROP OWNED BY testing
@@ -5228,7 +5230,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role2 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should succeed
-@@ -4367,14 +3313,15 @@
+@@ -4367,14 +3315,15 @@
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role1 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should fail, already gone
@@ -5245,7 +5247,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DROP USER regress_rls_dob_role1;
  DROP USER regress_rls_dob_role2;
  -- Bug #15708: view + table with RLS should check policies as view owner
-@@ -4384,81 +3331,97 @@
+@@ -4384,81 +3333,97 @@
  INSERT INTO rls_tbl VALUES (10);
  ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
  CREATE POLICY p1 ON rls_tbl USING (EXISTS (SELECT 1 FROM ref_tbl));
@@ -5377,7 +5379,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- CVE-2023-2455: inlining an SRF may introduce an RLS dependency
  create table rls_t (c text);
  insert into rls_t values ('invisible to bob');
-@@ -4489,44 +3452,14 @@
+@@ -4489,44 +3454,14 @@
  --
  -- Clean up objects
  --

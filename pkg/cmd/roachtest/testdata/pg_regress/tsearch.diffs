@@ -1759,7 +1759,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsearch.out --lab
 - 'z' & '1' & 'fghj'
 -(1 row)
 -
-+ERROR:  plainto_tsquery(): syntax error in TSQuery: the and z 1))& fghj
++ERROR:  syntax error in TSQuery: the and z 1))& fghj
  SELECT plainto_tsquery('english', 'foo bar') && plainto_tsquery('english', 'asd');
 -       ?column?        
 ------------------------

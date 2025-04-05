@@ -271,7 +271,7 @@ SELECT substr('12345', -2, 77)
 ----
 12345
 
-statement error substr\(\): negative substring length -1 not allowed
+statement error negative substring length -1 not allowed
 SELECT substr('12345', 2, -1)
 
 query T
@@ -299,7 +299,7 @@ SELECT substring('f(oabaroob' from '+(o(.)b' for '+')
 ----
 a
 
-query error substring\(\): error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
+query error error parsing regexp: missing closing \): `\\\\\(o\(.\)b`
 SELECT substring('f(oabaroob' from '\(o(.)b' for '+')
 
 query error unknown signature: substring\(\)
@@ -342,7 +342,7 @@ SELECT substring(B'10001000' FOR 4 FROM 0), substring(B'10001000' FROM 0 FOR 4),
 ----
 100 100 1000
 
-query error substring\(\): negative bit subarray length -1 not allowed
+query error negative bit subarray length -1 not allowed
 SELECT substring('11100011'::bit(10), 4, -1)
 
 # Adding testcases for substring against byte array.
@@ -382,7 +382,7 @@ SELECT substring(b'abc' FOR 3 FROM 1), substring(b'abc' FROM 1 FOR 3), substring
 ----
 abc abc abc
 
-query error substring\(\): negative byte subarray length -1 not allowed
+query error negative byte subarray length -1 not allowed
 SELECT substring('11100011'::bytea, 4, -1)
 
 query TTTTT
@@ -2700,7 +2700,7 @@ SELECT format(E'Testing %3\x24s, %2\x24s, %s', 'one', 'two', 'three')
 ----
 Testing three, two, three
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 SELECT format(E'%2\x24s','foo');
 
 subtest pg_is_in_recovery
@@ -2747,7 +2747,7 @@ SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[
 ----
 2
 
-query error pq: width_bucket\(\): operand and thresholds must be of the same type
+query error pq: operand and thresholds must be of the same type
 SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
 
 # Regression for #40623
@@ -2766,7 +2766,7 @@ SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
 ----
 0
 
-statement error pgcode 2201G pq: width_bucket\(\): operand, lower bound, and upper bound cannot be NaN
+statement error pgcode 2201G pq: operand, lower bound, and upper bound cannot be NaN
 SELECT width_bucket('NaN', 3.0, 4.0, 888);
 
 
@@ -3020,13 +3020,13 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 000001
 111110
 
-query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
+query error bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
 query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
-query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
+query error bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
 query IT

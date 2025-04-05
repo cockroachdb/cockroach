@@ -12,7 +12,7 @@ SET ROLE readwrite
 statement error pq: user readwrite does not have SELECT privilege on relation a
 SELECT * FROM a;
 
-statement error pq: nextval\(\): user readwrite does not have UPDATE or USAGE privilege on relation a
+statement error pq: user readwrite does not have UPDATE or USAGE privilege on relation a
 SELECT nextval('a')
 
 statement ok
