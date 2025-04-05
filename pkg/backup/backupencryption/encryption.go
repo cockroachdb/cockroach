@@ -336,7 +336,9 @@ func WriteNewEncryptionInfoToBackup(
 
 // GetEncryptionFromBase retrieves the encryption options of the base backup. It
 // is expected that incremental backups use the same encryption options as the
-// base backups.
+// base backups. The encryptionParams input is expected not to have a key set
+// and to simply have the user supplied fields. The output will only have the
+// key set.
 func GetEncryptionFromBase(
 	ctx context.Context,
 	user username.SQLUsername,
@@ -366,6 +368,11 @@ func GetEncryptionFromBaseStore(
 	if encryptionParams == nil || encryptionParams.Mode == jobspb.EncryptionMode_None {
 		return nil, nil
 	}
+
+	if encryptionParams.HasKey() {
+		return nil, errors.New("encryption options already have a key")
+	}
+
 	opts, err := ReadEncryptionOptions(ctx, baseStore)
 	if err != nil {
 		return nil, err
