@@ -389,6 +389,16 @@ func (ctx *jsonpathCtx) evalArithmetic(
 			return nil, tree.ErrDivByZero
 		}
 	case jsonpath.OpMod:
+		// In other places where apd.Context.Rem() is called, we first check if
+		// the left value is NaN and the right value is 0, then return ErrDivByZero.
+		// In this case, NaN shouldn't happen because JSON numbers cannot be NaN.
+		// We assert this here, and then check if the right value is 0.
+		if leftNum.Form == apd.NaN || rightNum.Form == apd.NaN {
+			return nil, errors.AssertionFailedf("numbers in jsonpath queries cannot be NaN")
+		}
+		if rightNum.IsZero() {
+			return nil, tree.ErrDivByZero
+		}
 		_, err = tree.DecimalCtx.Rem(&res, leftNum, rightNum)
 	default:
 		panic(errors.AssertionFailedf("unhandled jsonpath arithmetic type"))

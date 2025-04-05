@@ -729,6 +729,9 @@ SELECT jsonb_path_query('{}', '3 % 2');
 ----
 1
 
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', '1 % 0');
+
 query T
 SELECT jsonb_path_query('{"a": 4, "b": 5}', '$.a + $.b');
 ----
