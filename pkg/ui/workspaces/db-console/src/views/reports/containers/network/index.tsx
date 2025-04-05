@@ -444,8 +444,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       values,
       (vals: IConnectivity[]) => flatMap(vals, v => Object.values(v.peers)),
       (vals: IPeer[]) => flatMap(vals, v => v.latency),
-      (vals: IDuration[]) =>
-        filter(vals, v => v !== undefined && v.nanos !== undefined),
+      (vals: IDuration[]) => filter(vals, v => v && v.nanos),
       (vals: IDuration[]) => map(vals, v => util.NanoToMilli(v.nanos)),
     ])(connections);
 
