@@ -448,6 +448,10 @@ type histogram struct {
 // to equal the total row count and estimated distinct count. The total row
 // count and estimated distinct count should not include NULL values, and the
 // histogram should not contain any buckets for NULL values.
+//
+// NB: it is **not** guaranteed that the returned histogram will contain the
+// specified distinct count (e.g., if distinctCountTotal of 3 or more is asked
+// from the boolean histogram).
 func (h *histogram) adjustCounts(
 	ctx context.Context,
 	compareCtx tree.CompareContext,
@@ -550,7 +554,7 @@ func (h *histogram) adjustCounts(
 					// values in the bucket.
 					inc = remDistinctCount * (maxDistRange / maxDistinctCountRange)
 					// If the bucket has DistinctRange > maxDistRange (a rare but possible
-					// occurence, see #93892) then inc will be negative. Prevent this.
+					// occurrence, see #93892) then inc will be negative. Prevent this.
 					if inc < 0 {
 						inc = 0
 					}
@@ -707,6 +711,9 @@ func getMaxVal(
 // histogram to include the remaining distinct values in remDistinctCount. It
 // also increments the counters rowCountEq, distinctCountEq, rowCountRange, and
 // distinctCountRange as needed.
+//
+// NB: it is **not** guaranteed that all remaining distinct values will be
+// covered.
 func (h *histogram) addOuterBuckets(
 	ctx context.Context,
 	compareCtx tree.CompareContext,
@@ -777,9 +784,13 @@ func (h *histogram) addOuterBuckets(
 
 		inc := avgRemPerBucket
 		if countable {
-			// Set the increment proportional to the remaining number of distinct
-			// values in the bucket.
-			inc = remDistinctCount * (maxDistRange / maxDistinctCountExtraBuckets)
+			if maxDistinctCountExtraBuckets > 0 {
+				// Set the increment proportional to the remaining number of distinct
+				// values in the bucket.
+				inc = remDistinctCount * (maxDistRange / maxDistinctCountExtraBuckets)
+			} else {
+				inc = 0
+			}
 			if inc < 0 {
 				inc = 0
 			}
