@@ -1,0 +1,17 @@
+source:
+  type: gcp
+  directory: artifacts/2024
+  bucket: cockroach-nightly
+  project: cockroach-ephemeral
+
+sink:
+  type: gcp
+  directory: converter
+  bucket: cockroach-testeng-metrics
+  project: cockroach-testeng-infra
+
+metrics:
+  - name: allocbench|replicate|restore
+    type: statsexporter
+  - name: cdc/initial-scan-only
+    type: statsexporter
