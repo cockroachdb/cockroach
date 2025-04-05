@@ -356,7 +356,9 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
 			err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedDest,
-			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User(), true)
+			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User(),
+			true /* includeSkipped */, true, /* includeCompacted */
+		)
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()

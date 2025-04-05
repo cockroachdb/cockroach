@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -531,7 +532,9 @@ func ListFullBackupsInCollection(
 // that are then expanded into the result layers returned, similar to if those
 // layers had been specified in `from` explicitly. If `includeSkipped` is true,
 // layers that do not actually contribute to the path from the base to the end
-// timestamp are included in the result, otherwise they are elided.
+// timestamp are included in the result, otherwise they are elided. If
+// `includedCompacted` is true, then backups created from compaction will be
+// included in the result, otherwise they are filtered out.
 func ResolveBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -545,6 +548,7 @@ func ResolveBackupManifests(
 	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
 	includeSkipped bool,
+	includeCompacted bool,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
@@ -654,6 +658,14 @@ func ResolveBackupManifests(
 	totalMemSize := ownedMemSize
 	ownedMemSize = 0
 
+	if !includeCompacted {
+		mainBackupManifests = util.Filter(
+			mainBackupManifests,
+			func(manifest backuppb.BackupManifest) bool {
+				return !manifest.IsCompacted
+			},
+		)
+	}
 	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
 		defaultURIs, mainBackupManifests, localityInfo, endTime, includeSkipped)
 

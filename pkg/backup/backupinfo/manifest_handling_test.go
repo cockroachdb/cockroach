@@ -379,18 +379,46 @@ func TestMakeBackupCodec(t *testing.T) {
 func TestElideSkippedLayers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Note: The tests here work under the assumption that the input lists are
+	// always sorted in ascending order by end time, and then sorted in ascending
+	// order by start time.
 	for _, tc := range []struct {
 		name     string
 		times    [][]int // len 2 slices of start and end time.
-		expected []int   // expected end times.
+		expected [][]int // expected start and end times
 	}{
-		{"single", [][]int{{0, 1}}, []int{1}},
-		{"double", [][]int{{0, 1}, {1, 2}}, []int{1, 2}},
-		{"simple chain", [][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {5, 8}}, []int{1, 2, 3, 5, 8}},
-		{"skip one", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {5, 8}}, []int{1, 3, 5, 8}},
-		{"skip all", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {1, 8}}, []int{1, 8}},
-		{"skip twice to first", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {3, 8}}, []int{1, 3, 8}},
-		{"skip twice to second", [][]int{{0, 1}, {1, 2}, {1, 3}, {3, 5}, {2, 8}}, []int{1, 2, 8}},
+		{"single", [][]int{{0, 1}}, [][]int{{0, 1}}},
+		{"double", [][]int{{0, 1}, {1, 2}}, [][]int{{0, 1}, {1, 2}}},
+		{
+			"simple chain, no skips",
+			[][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {5, 8}},
+			[][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {5, 8}},
+		},
+		{
+			"compaction of two backups",
+			[][]int{{0, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 5}, {5, 8}},
+			[][]int{{0, 1}, {1, 3}, {3, 5}, {5, 8}},
+		},
+		{
+			"compaction of entire chain",
+			[][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {0, 8}, {5, 8}},
+			[][]int{{0, 8}},
+		},
+		{
+			"two compactions of two backups",
+			[][]int{{0, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 5}, {3, 8}, {5, 8}},
+			[][]int{{0, 1}, {1, 3}, {3, 8}},
+		},
+		{
+			"compaction includes a compacted backup in the middle",
+			[][]int{{0, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 5}, {1, 8}, {5, 8}},
+			[][]int{{0, 1}, {1, 8}},
+		},
+		{
+			"two compactions with the same end time",
+			[][]int{{0, 1}, {1, 2}, {2, 3}, {3, 5}, {1, 8}, {3, 8}, {5, 8}},
+			[][]int{{0, 1}, {1, 8}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			chain := make([]backuppb.BackupManifest, len(tc.times))
@@ -408,7 +436,8 @@ func TestElideSkippedLayers(t *testing.T) {
 			require.Equal(t, len(tc.expected), len(locs))
 			require.Equal(t, len(tc.expected), len(res))
 			for i := range tc.expected {
-				require.Equal(t, tc.expected[i], int(res[i].EndTime.WallTime), "expected %q\ngot: %q")
+				actual := []int{int(res[i].StartTime.WallTime), int(res[i].EndTime.WallTime)}
+				require.Equal(t, tc.expected[i], actual)
 			}
 		})
 	}

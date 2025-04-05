@@ -301,6 +301,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/backup/backuppb",
         "//pkg/base",
         "//pkg/build",
         "//pkg/cloud",
