@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,8 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -254,7 +260,9 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 
 // TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
 // SST files associated with the replicated key ranges by writing a range
-// deletion tombstone that spans the entire range of each respectively.
+// deletion tombstone that spans the entire range of each respectively. The
+// exception is the last SST (the MVCC SST), which is always ingested via
+// excise and so does not need this rangedel.
 func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -278,11 +286,36 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
-		false /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
-	)
+	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0, false)
 	require.NoError(t, err)
+
+	// Put a rangedel into the span. This case can occur in shared SST snapshots
+	// and if we don't fragment these additional rangedels properly against the
+	// one the msstw lays down, pebble will error out (since the resulting SST
+	// would be invalid).
+	//
+	// In practice additional rangedels would likely only occur on the MVCC span,
+	// which doesn't get a covering rangedel from msstw, so this case is slightly
+	// academical. Still, we don't want to make assumptions on what data we're
+	// required to handle.
+	//
+	// NB: we have (basic) coverage for *MVCC* range deletions, which require
+	// similar considerations, through TestRaftSnapshotsWithMVCCRangeKeysEverywhere.
+	for _, span := range keySpans {
+		// NB: we avoid covering the entire span because an SST can actually contain
+		// the same rangedel twice (as long as they're added in increasing seqno
+		// order), and we want to exercise the "tricky" case where pebble would
+		// complain about lack of proper fragmentation.
+		k := storage.EngineKey{Key: span.Key}.Encode()
+		ek := storage.EngineKey{Key: span.EndKey}.Encode()
+		require.NoError(t, msstw.PutInternalRangeDelete(ctx, k, ek))
+		rk := rangekey.Key{
+			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
+		}
+		require.NoError(t, msstw.PutInternalRangeKey(ctx, k, ek, rk))
+
+	}
+
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
@@ -294,26 +327,13 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		actualSSTs = append(actualSSTs, sst)
 	}
 
-	// Construct an SST file for each of the key ranges and write a rangedel
-	// tombstone that spans from Start to End.
-	var expectedSSTs [][]byte
-	for _, s := range keySpans {
-		func() {
-			sstFile := &storage.MemObject{}
-			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
-			defer sst.Close()
-			err := sst.ClearRawRange(s.Key, s.EndKey, true, true)
-			require.NoError(t, err)
-			err = sst.Finish()
-			require.NoError(t, err)
-			expectedSSTs = append(expectedSSTs, sstFile.Data())
-		}()
-	}
+	var buf redact.StringBuilder
 
-	require.Equal(t, len(actualSSTs), len(expectedSSTs))
 	for i := range fileNames {
-		require.Equal(t, actualSSTs[i], expectedSSTs[i])
+		name := fmt.Sprintf("sst%d", i)
+		require.NoError(t, storage.ReportSSTEntries(&buf, name, actualSSTs[i]))
 	}
+	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", t.Name())))
 }
 
 func buildIterForScratch(
@@ -362,7 +382,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	mvccSpan := keySpans[len(keySpans)-1]
 
 	// Make a reference msstw with the default size.
-	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), referenceMsstw.dataSize)
 	now := timeutil.Now().UnixNano()
@@ -394,7 +414,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 
 	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
 
-	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
@@ -476,10 +496,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
-		true /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
-	)
+	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0, false)
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))

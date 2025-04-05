@@ -115,41 +115,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
 
-	// TODO(aaditya): Remove once we support flushableIngests for shared and
-	// external files in the engine.
-
-	// TODO(tbg): skipClearForMVCCSpan should equal true (since we always excise
-	// the MVCC span), but there appear to be bugs in this code as demonstrated by
-	// TestRaftSnapshotsWithMVCCRangeKeysEverywhere failing with the proposed
-	// change:
-	//
-	// * panic: failed to put range key in sst: pebble: spans must be added in order: /Local/RangeID/75/r":a"/0,0 > /Local/RangeID/75/r""/0,0
-	// ^- we added the ":a" key first, now we're trying to add the r"" key.
-	//
-	// My basic understanding of this failure mode is:
-	// - first, a range del covering the range-local replicated key span `/Range/75/{r-s}` is added in (msstw.initSST)
-	// - the fragmenter's start key is now `/Range/75/r`.
-	// - when the `/Range/75/r/{:a-:z}` rangedel, is handled, it enters through `msstw.PutRangeKey`
-	//    - since  `skipClearForMVCCSpan` is set, this does not update the fragmenter.
-	//    - the range deletion is added to the current SST.
-	// - when the first key >= `/Range/75/r` is added, `msstw.finalizeSST` flushes
-	//   the fragmenter to the current SST.
-	// - we hit the above error, since the SST already contains the rangedel
-	//   starting at `/Range/75/r:a` and we're not attempting to add a rangedel
-	//   `/Range/75/r` with smaller start key.
-	//
-	// The crucial problem is skipping the fragmenter. This seems to have to do with
-	// wanting to allow callers to use `skipClearForMVCCSpan`, but this is going to
-	// be dead code.
-	//
-	// Another note: CI passes when this is unconditionally set to `false`,
-	// indicating that we have poor coverage of the shared and external code paths.
-	skipClearForMVCCSpan := header.SharedReplicate || header.ExternalReplicate
-
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, skipClearForMVCCSpan, header.RangeKeysInOrder)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, header.RangeKeysInOrder)
 	if err != nil {
 		return noSnap, err
 	}
@@ -294,19 +263,18 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:                    snapUUID,
-				SSTStorageScratch:           kvSS.scratch,
-				FromReplica:                 header.RaftMessageRequest.FromReplica,
-				Desc:                        header.State.Desc,
-				DataSize:                    dataSize,
-				SSTSize:                     sstSize,
-				SharedSize:                  sharedSize,
-				raftAppliedIndex:            header.State.RaftAppliedIndex,
-				msgAppRespCh:                make(chan raftpb.Message, 1),
-				sharedSSTs:                  sharedSSTs,
-				externalSSTs:                externalSSTs,
-				includesRangeDelForLastSpan: !skipClearForMVCCSpan,
-				clearedSpans:                keyRanges,
+				SnapUUID:          snapUUID,
+				SSTStorageScratch: kvSS.scratch,
+				FromReplica:       header.RaftMessageRequest.FromReplica,
+				Desc:              header.State.Desc,
+				DataSize:          dataSize,
+				SSTSize:           sstSize,
+				SharedSize:        sharedSize,
+				raftAppliedIndex:  header.State.RaftAppliedIndex,
+				msgAppRespCh:      make(chan raftpb.Message, 1),
+				sharedSSTs:        sharedSSTs,
+				externalSSTs:      externalSSTs,
+				clearedSpans:      keyRanges,
 			}
 
 			timingTag.stop("totalTime")
