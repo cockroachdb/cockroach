@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "model",
     srcs = [
         "builder.go",
+        "math.go",
         "metric.go",
         "options.go",
     ],
@@ -12,5 +13,16 @@ go_library(
     deps = [
         "@org_golang_x_perf//benchfmt",
         "@org_golang_x_perf//benchmath",
+    ],
+)
+
+go_test(
+    name = "model_test",
+    srcs = ["math_test.go"],
+    embed = [":model"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_perf//benchfmt",
+        "@org_golang_x_perf//benchseries",
     ],
 )
