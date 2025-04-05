@@ -487,7 +487,10 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 
 func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) error {
 
-	cl := promhelperclient.NewPromClient()
+	cl, err := promhelperclient.NewPromClient()
+	if err != nil {
+		return err
+	}
 
 	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
 	defer stopSpinner()
@@ -502,26 +505,9 @@ func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) 
 			continue
 		}
 
-		err := cl.DeleteClusterConfig(ctx, c.Name, false, false /* insecure */, l)
+		err := cl.DeleteClusterConfig(ctx, c.Name, l)
 		if err != nil {
-
-			if !promhelperclient.IsNotFoundError(err) {
-				return errors.Wrapf(
-					err,
-					"failed to delete the cluster config with cluster as secure",
-				)
-			}
-
-			// TODO(bhaskar): Obtain secure cluster information.
-			// Cluster does not have the information on secure or not.
-			// So, we retry as insecure  if delete fails with cluster as secure.
-			if err = cl.DeleteClusterConfig(ctx, c.Name, false, true /* insecure */, l); err != nil {
-				return errors.Wrapf(
-					err,
-					"failed to delete the cluster config with cluster as insecure and secure",
-				)
-			}
-
+			return err
 		}
 		break
 
