@@ -50,51 +50,48 @@ func GetAllRevisions(
 		exportResp := resp.(*kvpb.ExportResponse)
 		var res []VersionedValues
 		for _, file := range exportResp.Files {
-			iterOpts := storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsOnly,
-				LowerBound: file.Span.Key,
-				UpperBound: file.Span.EndKey,
-			}
-			iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
-			if err != nil {
-				return err
-			}
-			//nolint:deferloop TODO(#137605)
-			defer func() {
-				if iter != nil {
-					iter.Close()
+			err := func() error {
+				iterOpts := storage.IterOptions{
+					KeyTypes:   storage.IterKeyTypePointsOnly,
+					LowerBound: file.Span.Key,
+					UpperBound: file.Span.EndKey,
 				}
-			}()
-			iter.SeekGE(storage.MVCCKey{Key: startKey})
-
-			for ; ; iter.Next() {
-				if valid, err := iter.Valid(); !valid || err != nil {
-					if err != nil {
-						return err
-					}
-					break
-				} else if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-					break
-				}
-				key := iter.UnsafeKey()
-				keyCopy := make([]byte, len(key.Key))
-				copy(keyCopy, key.Key)
-				key.Key = keyCopy
-				v, err := iter.UnsafeValue()
+				iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
 				if err != nil {
 					return err
 				}
-				value := make([]byte, len(v))
-				copy(value, v)
-				if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
-					res = append(res, VersionedValues{Key: key.Key})
-				}
-				res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: value})
-			}
+				defer iter.Close()
+				iter.SeekGE(storage.MVCCKey{Key: startKey})
 
-			// Close and nil out the iter to release the underlying resources.
-			iter.Close()
-			iter = nil
+				for ; ; iter.Next() {
+					if valid, err := iter.Valid(); !valid || err != nil {
+						if err != nil {
+							return err
+						}
+						break
+					} else if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+						break
+					}
+					key := iter.UnsafeKey()
+					keyCopy := make([]byte, len(key.Key))
+					copy(keyCopy, key.Key)
+					key.Key = keyCopy
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					value := make([]byte, len(v))
+					copy(value, v)
+					if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
+						res = append(res, VersionedValues{Key: key.Key})
+					}
+					res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: value})
+				}
+				return nil
+			}()
+			if err != nil {
+				return err
+			}
 		}
 
 		select {

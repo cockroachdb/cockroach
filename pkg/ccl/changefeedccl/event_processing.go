@@ -702,9 +702,9 @@ func (c *parallelEventConsumer) workerLoop(
 			return nil
 		case <-c.termCh:
 			c.mu.Lock()
-			//nolint:deferloop TODO(#137605)
-			defer c.mu.Unlock()
-			return c.mu.termErr
+			termErr := c.mu.termErr
+			c.mu.Unlock()
+			return termErr
 		case e := <-c.workerCh[id]:
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
 				return c.setWorkerError(err)
