@@ -101,7 +101,7 @@ process-ready 3
 ----
 Ready:
 HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:0
-Messages:
+OnSync:
 3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
 
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
@@ -146,7 +146,7 @@ stabilize 3
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 

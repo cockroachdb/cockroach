@@ -1766,14 +1766,11 @@ func testingFirst(args ...interface{}) interface{} {
 func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// raftpb.Entry and raftpb.Message are only partially populated below, which
 	// could be improved in the future.
-	appendMsg := raftpb.Message{
-		Type:     raftpb.MsgStorageAppend,
-		LogTerm:  10,
+	appendMsg := raft.StorageAppend{
+		LeadTerm: 10,
 		Snapshot: &raftpb.Snapshot{},
 		Entries: []raftpb.Entry{
-			{
-				Term: 9,
-			},
+			{Term: 9},
 		},
 	}
 	outboundMsgs := []raftpb.Message{
@@ -1822,7 +1819,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	checkSnapAndMap(event)
 	// Only LogSnapshot and ReplicasStateInfo set.
 	event = RaftEventFromMsgStorageAppendAndMsgApps(
-		MsgAppPush, 20, raftpb.Message{}, nil, logSnap, msgAppScratch, infoMap)
+		MsgAppPush, 20, raft.StorageAppend{}, nil, logSnap, msgAppScratch, infoMap)
 	checkSnapAndMap(event)
 	event.LogSnapshot = raft.LogSnapshot{}
 	event.ReplicasStateInfo = nil

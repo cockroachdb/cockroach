@@ -134,7 +134,7 @@ stabilize 3
   Ready:
   HardState Term:2 Commit:15 Lead:2 LeadEpoch:0
   Snapshot Index:15 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->2 MsgAppResp Term:2 Log:1/15 Rejected (Hint: 11) Commit:11
   3->1 MsgAppResp Term:2 Log:0/15 Commit:15
   3->2 MsgAppResp Term:2 Log:0/15 Commit:15
@@ -145,7 +145,7 @@ stabilize 3
 > 3 handling Ready
   Ready:
   HardState Term:2 Commit:15 Lead:2 LeadEpoch:1
-  Messages:
+  OnSync:
   3->2 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 

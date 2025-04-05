@@ -432,18 +432,19 @@ type MsgAppSender interface {
 func RaftEventFromMsgStorageAppendAndMsgApps(
 	mode RaftMsgAppMode,
 	replicaID roachpb.ReplicaID,
-	appendMsg raftpb.Message,
+	appendMsg raft.StorageAppend,
 	outboundMsgs []raftpb.Message,
 	logSnapshot raft.LogSnapshot,
 	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
 	replicaStateInfoMap map[roachpb.ReplicaID]ReplicaStateInfo,
 ) RaftEvent {
 	event := RaftEvent{
-		MsgAppMode: mode, LogSnapshot: logSnapshot, ReplicasStateInfo: replicaStateInfoMap}
-	if appendMsg.Type == raftpb.MsgStorageAppend {
-		event.Term = appendMsg.LogTerm
-		event.Snap = appendMsg.Snapshot
-		event.Entries = appendMsg.Entries
+		MsgAppMode:        mode,
+		Term:              appendMsg.LeadTerm,
+		Snap:              appendMsg.Snapshot,
+		Entries:           appendMsg.Entries,
+		LogSnapshot:       logSnapshot,
+		ReplicasStateInfo: replicaStateInfoMap,
 	}
 	if len(outboundMsgs) == 0 || mode == MsgAppPull {
 		// MsgAppPull mode can have MsgApps with entries under some cases: (a)

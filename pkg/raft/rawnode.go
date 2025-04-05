@@ -112,6 +112,14 @@ func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 	return rn.raft.Step(m)
 }
 
+func confChangeToMsg(c pb.ConfChangeI) (pb.Message, error) {
+	typ, data, err := pb.MarshalConfChange(c)
+	if err != nil {
+		return pb.Message{}, err
+	}
+	return pb.Message{Type: pb.MsgProp, Entries: []pb.Entry{{Type: typ, Data: data}}}, nil
+}
+
 // ApplyConfChange applies a config change to this node. This must be called
 // whenever a config change is observed in Ready.CommittedEntries, except when
 // the app decides to reject / no-op this change.
@@ -127,10 +135,10 @@ func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
 // Step advances the state machine using the given message.
 func (rn *RawNode) Step(m pb.Message) error {
 	// Ignore unexpected local messages receiving over network.
-	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
+	if IsLocalMsg(m.Type) {
 		return ErrStepLocalMsg
 	}
-	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.trk.Progress(m.From) == nil {
+	if IsResponseMsg(m.Type) && rn.raft.trk.Progress(m.From) == nil {
 		return ErrStepPeerNotFound
 	}
 	return rn.raft.Step(m)
@@ -210,12 +218,8 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LeadSlice) (pb.Message, bool) 
 // includes appending entries to the log, applying committed entries or a
 // snapshot, updating the HardState, and sending messages. See comments in the
 // Ready struct for the specification on how the updates must be handled.
-//
-// The returned Ready struct *must* be handled and subsequently passed back via
-// Advance(), unless async storage writes are enabled.
 func (rn *RawNode) Ready() Ready {
 	r := rn.raft
-
 	var rd Ready
 	rd.Messages, r.msgs = r.msgs, nil
 
@@ -225,173 +229,79 @@ func (rn *RawNode) Ready() Ready {
 		rd.SoftState = &escapingSoftSt
 		rn.prevSoftSt = &escapingSoftSt
 	}
-	hardSt, prevHardSt := r.hardState(), rn.prevHardSt
-	if !isHardStateEqual(hardSt, prevHardSt) {
-		rd.HardState = hardSt
-		rn.prevHardSt = hardSt
-	}
-
-	if r.raftLog.hasNextUnstableSnapshot() {
-		rd.Snapshot = *r.raftLog.nextUnstableSnapshot()
-	}
-	if r.raftLog.hasNextUnstableEnts() {
-		rd.Entries = r.raftLog.nextUnstableEnts()
-	}
-	// TODO(pav-kv): remove "accept" methods down the stack, since we now accept
-	// all updates unconditionally.
-	r.raftLog.acceptUnstable()
-
 	// For async storage writes, enqueue messages to local storage threads.
-	if needStorageAppendMsg(r, rd) {
-		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
+	if rn.needStorageAppend() {
+		rd.StorageAppend = rn.sendStorageAppend()
 	}
-	r.msgsAfterAppend = nil
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
 
 	return rd
 }
 
-func needStorageAppendMsg(r *raft, rd Ready) bool {
-	// Return true if log entries, hard state, or a snapshot need to be written
-	// to stable storage. Also return true if any messages are contingent on all
-	// prior MsgStorageAppend being processed.
-	return len(rd.Entries) > 0 ||
-		!IsEmptyHardState(rd.HardState) ||
-		!IsEmptySnap(rd.Snapshot) ||
-		len(r.msgsAfterAppend) > 0
+func (rn *RawNode) needStorageAppend() bool {
+	r := rn.raft
+	// Return true if log entries, HardState, or a snapshot need to be written to
+	// stable storage. Also return true if any messages are contingent on all
+	// prior storage writes being durable.
+	return r.raftLog.hasNextUnstableEnts() ||
+		r.raftLog.hasNextUnstableSnapshot() ||
+		len(r.msgsAfterAppend) > 0 ||
+		!isHardStateEqual(r.hardState(), rn.prevHardSt)
 }
 
-func needStorageAppendRespMsg(rd Ready) bool {
-	// Return true if raft needs to hear about stabilized entries or an applied
-	// snapshot.
-	return !IsEmptySnap(rd.Snapshot) || len(rd.Entries) != 0
-}
-
-// newStorageAppendMsg creates the message that should be sent to the local
-// append thread to instruct it to append log entries, write an updated hard
-// state, and apply a snapshot. The message also carries a set of responses
-// that should be delivered after the rest of the message is processed.
-func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type:    pb.MsgStorageAppend,
-		To:      LocalAppendThread,
-		From:    r.id,
-		Entries: rd.Entries,
+// sendStorageAppend creates the write request that is sent to the local
+// storage. The request also carries a set of messages that should be sent after
+// the writes in the request are durable.
+//
+// The StorageAppend is immediately "accepted" by the caller, so the next
+// StorageAppend will build on top of it.
+func (rn *RawNode) sendStorageAppend() StorageAppend {
+	r := rn.raft
+	app := StorageAppend{Entries: r.raftLog.nextUnstableEnts()}
+	if hs := r.hardState(); !isHardStateEqual(hs, rn.prevHardSt) {
+		app.HardState = hs
+		rn.prevHardSt = hs
 	}
-	if ln := len(rd.Entries); ln != 0 {
-		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		m.LogTerm = r.raftLog.accTerm()
-		m.Index = rd.Entries[ln-1].Index
+	// See StorageAppend.Mark() comment for why the accTerm() is attached.
+	if snap := r.raftLog.nextUnstableSnapshot(); snap != nil {
+		app.Snapshot = snap
+		app.LeadTerm = r.raftLog.accTerm()
 	}
-	if !IsEmptyHardState(rd.HardState) {
-		// If the Ready includes a HardState update, assign each of its fields
-		// to the corresponding fields in the Message. This allows clients to
-		// reconstruct the HardState and save it to stable storage.
-		//
-		// If the Ready does not include a HardState update, make sure to not
-		// assign a value to any of the fields so that a HardState reconstructed
-		// from them will be empty (return true from raft.IsEmptyHardState).
-		m.Term = rd.Term
-		m.Vote = rd.Vote
-		m.Commit = rd.Commit
-		m.Lead = rd.Lead
-		m.LeadEpoch = rd.LeadEpoch
+	if ln := len(app.Entries); ln > 0 {
+		app.LeadTerm = r.raftLog.accTerm()
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		snap := rd.Snapshot
-		m.Snapshot = &snap
-		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		m.LogTerm = r.raftLog.accTerm()
-	}
+	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
-	// the message is processed, along with a self-directed MsgStorageAppendResp
-	// to acknowledge the entry stability.
+	// the write is durable. The messages are stepped into RawNode right
+	// before it handles StorageAppendAck.
 	//
-	// NB: it is important for performance that MsgStorageAppendResp message be
-	// handled after self-directed MsgAppResp messages on the leader (which will
-	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
-	// handling to use a fast-path in r.raftLog.term() before the newly appended
-	// entries are removed from the unstable log.
-	m.Responses = r.msgsAfterAppend
-	// Warning: there is code outside raft package depending on the order of
-	// Responses, particularly MsgStorageAppendResp being last in this list.
-	// Change this with caution.
-	if needStorageAppendRespMsg(rd) {
-		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
-	}
-	return m
+	// NB: it is important for performance that MsgStorageAppendAck is handled
+	// after self-directed MsgAppResp messages on the leader (which will be
+	// contained in msgsAfterAppend). This ordering allows the MsgAppResp handling
+	// to use a fast-path in r.raftLog.term() before the newly appended entries
+	// are removed from the unstable log.
+	// TODO(pav-kv): this is no longer critical, after the termCache introduction.
+	app.Responses, r.msgsAfterAppend = r.msgsAfterAppend, nil
+	return app
 }
 
-// newStorageAppendRespMsg creates the message that should be returned to node
-// after the unstable log entries, hard state, and snapshot in the current Ready
-// (along with those in all prior Ready structs) have been saved to stable
-// storage.
-func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type: pb.MsgStorageAppendResp,
-		To:   r.id,
-		From: LocalAppendThread,
+// AckAppend notifies the RawNode that the storage write has been persisted.
+func (rn *RawNode) AckAppend(ack StorageAppendAck) {
+	r := rn.raft
+	for msg := range ack.Step(r.id) {
+		if err := rn.Step(msg); err != nil {
+			r.logger.Fatalf("failed to step local raft message [%s]: %v",
+				DescribeMessage(msg, emptyEntryFormatter), err)
+		}
 	}
-	if ln := len(rd.Entries); ln != 0 {
-		// If sending unstable entries to storage, attach the last index and last
-		// accepted term to the response message. This (index, term) tuple will be
-		// handed back and consulted when the stability of those log entries is
-		// signaled to the unstable. If the term matches the last accepted term by
-		// the time the response is received (unstable.stableTo), the unstable log
-		// can be truncated up to the given index.
-		//
-		// The last accepted term logic prevents an ABA problem[^1] that could lead
-		// to the unstable log and the stable log getting out of sync temporarily
-		// and leading to an inconsistent view. Consider the following example with
-		// 5 nodes, A B C D E:
-		//
-		//  1. A is the leader.
-		//  2. A proposes some log entries but only B receives these entries.
-		//  3. B gets the Ready and the entries are appended asynchronously.
-		//  4. A crashes and C becomes leader after getting a vote from D and E.
-		//  5. C proposes some log entries and B receives these entries, overwriting the
-		//     previous unstable log entries that are in the process of being appended.
-		//     The entries have a larger term than the previous entries but the same
-		//     indexes. It begins appending these new entries asynchronously.
-		//  6. C crashes and A restarts and becomes leader again after getting the vote
-		//     from D and E.
-		//  7. B receives the entries from A which are the same as the ones from step 2,
-		//     overwriting the previous unstable log entries that are in the process of
-		//     being appended from step 5. The entries have the original terms and
-		//     indexes from step 2. Recall that log entries retain their original term
-		//     numbers when a leader replicates entries from previous terms. It begins
-		//     appending these new entries asynchronously.
-		//  8. The asynchronous log appends from the first Ready complete and stableTo
-		//     is called.
-		//  9. However, the log entries from the second Ready are still in the
-		//     asynchronous append pipeline and will overwrite (in stable storage) the
-		//     entries from the first Ready at some future point. We can't truncate the
-		//     unstable log yet or a future read from Storage might see the entries from
-		//     step 5 before they have been replaced by the entries from step 7.
-		//     Instead, we must wait until we are sure that the entries are stable and
-		//     that no in-progress appends might overwrite them before removing entries
-		//     from the unstable log.
-		//
-		// If accTerm has changed by the time the MsgStorageAppendResp is returned,
-		// the response is ignored and the unstable log is not truncated. The
-		// unstable log is only truncated when the term has remained unchanged from
-		// the time that the MsgStorageAppend was sent to the time that the response
-		// is received, indicating that no new leader has overwritten the log.
-		//
-		// TODO(pav-kv): unstable entries can be partially released even if the last
-		// accepted term changed, if we track the (term, index) points at which the
-		// log was truncated.
-		//
-		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		m.LogTerm = r.raftLog.accTerm()
-		m.Index = rd.Entries[ln-1].Index
+	// The snapshot precedes the entries. We acknowledge the snapshot first, then
+	// the entries, as required by the unstable structure.
+	if ack.SnapIndex != 0 {
+		r.appliedSnap(ack.SnapIndex)
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		snap := rd.Snapshot
-		m.Snapshot = &snap
-		m.LogTerm = r.raftLog.accTerm()
+	if ack.Mark.Index > ack.SnapIndex {
+		r.raftLog.stableTo(ack.Mark)
 	}
-	return m
 }
 
 // AckApplying accepts all committed entries <= index as being applied to the
@@ -436,72 +346,13 @@ func (rn *RawNode) HasReady() bool {
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		return true
 	}
-	if hardSt := r.hardState(); !IsEmptyHardState(hardSt) && !isHardStateEqual(hardSt, rn.prevHardSt) {
-		return true
-	}
-	if r.raftLog.hasNextUnstableSnapshot() {
-		return true
-	}
-	if len(r.msgs) > 0 || len(r.msgsAfterAppend) > 0 {
-		return true
-	}
-	if r.raftLog.hasNextUnstableEnts() {
+	if rn.needStorageAppend() {
 		return true
 	}
 	if !r.raftLog.nextCommittedSpan(rn.applyUnstableEntries()).Empty() {
 		return true
 	}
-	return false
-}
-
-// SplitMessages splits the messages in Ready into two buckets:
-//
-//  1. Messages addressed to other peers. Includes both messages that can be
-//     sent immediately, and the messages subject to storage sync such as
-//     MsgVoteResp and MsgAppResp.
-//  2. Local self-addressed messages that are subject to the local storage sync.
-//     Includes MsgStorageAppendResp and MsgStorageApplyResp, as well as the
-//     leader's self-addressed MsgVoteResp and MsgAppResp.
-//
-// This is a helper for transitioning from synchronous storage API to the
-// asynchronous one. Tests are being migrated to the async API, and temporarily
-// use this helper.
-//
-// Only for testing. Will be replaced with a more explicit API.
-func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Message) {
-	for _, msg := range msgs {
-		if !IsLocalMsgTarget(msg.To) {
-			send = append(send, msg)
-			continue
-		}
-		for _, r := range msg.Responses {
-			if r.To != self {
-				send = append(send, r)
-			} else {
-				advance = append(advance, r)
-			}
-		}
-	}
-	return send, advance
-}
-
-// AdvanceHack notifies the RawNode that the application has applied all the
-// updates from the given Ready() call.
-//
-// This is a helper for transitioning from synchronous storage API to the
-// asynchronous one. Tests are being migrated to the async API, and temporarily
-// use this helper.
-//
-// Only for testing. Will be replaced with a more explicit API.
-func (rn *RawNode) AdvanceHack(rd Ready) {
-	_, advance := SplitMessages(rn.raft.id, rd.Messages)
-	rn.advance(advance)
-}
-
-func (rn *RawNode) advance(msgs []pb.Message) {
-	for _, msg := range msgs {
-		_ = rn.Step(msg)
-	}
+	return len(r.msgs) > 0
 }
 
 // Term returns the current in-memory term of this RawNode. This term may not

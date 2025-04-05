@@ -43,6 +43,8 @@ process-ready 1
 Ready:
 Entries:
 1/4 EntryConfChangeV2 l2 l3
+OnSync:
+1->1 MsgAppResp Term:1 Log:0/4 Commit:3
 
 # Propose another config change. It should be rejected, because the first config
 # change hasn't applied on the leader yet.
@@ -60,6 +62,8 @@ stabilize 1
   Entries:
   1/5 EntryNormal ""
   Committed: (3,4]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/5 Commit:4
   Applying:
   1/4 EntryConfChangeV2 l2 l3
   INFO 1 switched to configuration voters=(1)&&(1) learners=(2 3)

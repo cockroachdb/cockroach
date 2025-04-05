@@ -167,8 +167,8 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 			i, raft.DescribeEntry(e, raftEntryFormatter))
 	}
 	fmt.Fprintf(&buf, "  Committed: %v\n", ready.Committed)
-	if !raft.IsEmptySnap(ready.Snapshot) {
-		snap := ready.Snapshot
+	if ready.Snapshot != nil {
+		snap := *ready.Snapshot
 		snap.Data = nil
 		fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 	}

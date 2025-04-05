@@ -39,16 +39,9 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-const (
-	// None is a placeholder node ID used when there is no leader.
-	//
-	// TODO(arul): consider pulling these into raftpb as well.
-	None pb.PeerID = 0
-	// LocalAppendThread is a reference to a local thread that saves unstable
-	// log entries and snapshots to stable storage. The identifier is used as a
-	// target for MsgStorageAppend messages.
-	LocalAppendThread pb.PeerID = math.MaxUint64
-)
+// None is a placeholder node ID used when there is no leader.
+// TODO(arul): consider pulling these into raftpb as well.
+const None pb.PeerID = 0
 
 // Possible values for CampaignType
 const (
@@ -265,9 +258,6 @@ type Config struct {
 func (c *Config) validate() error {
 	if c.ID == None {
 		return errors.New("cannot use none as id")
-	}
-	if IsLocalMsgTarget(c.ID) {
-		return errors.New("cannot use local target as id")
 	}
 
 	if c.HeartbeatTick <= 0 {
@@ -637,6 +627,9 @@ func (r *raft) send(m pb.Message) {
 		// because the safety of such behavior has not been formally verified,
 		// we err on the side of safety and omit a `&& !m.Reject` condition
 		// above.
+		//
+		// TODO(pav-kv): MsgPreVoteResp does not require sync. Consider sending it
+		// immediately.
 		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
 	default:
 		if m.To == r.id {
@@ -766,8 +759,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	snapshot, err := r.raftLog.snapshot()
 	if err != nil {
 		panic(err) // TODO(pav-kv): handle storage errors uniformly.
-	}
-	if IsEmptySnap(snapshot) {
+	} else if snapshot == nil {
 		panic("need non-empty snapshot")
 	}
 	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
@@ -776,7 +768,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	r.becomeSnapshot(pr, sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
-	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
+	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: snapshot})
 	return true
 }
 
@@ -1006,8 +998,7 @@ func (r *raft) appliedTo(index uint64) {
 	}
 }
 
-func (r *raft) appliedSnap(snap *pb.Snapshot) {
-	index := snap.Metadata.Index
+func (r *raft) appliedSnap(index uint64) {
 	r.raftLog.stableSnapTo(index)
 	r.appliedTo(index)
 }
@@ -1714,16 +1705,6 @@ func (r *raft) Step(m pb.Message) error {
 			r.hup(campaignPreElection)
 		} else {
 			r.hup(campaignElection)
-		}
-
-	case pb.MsgStorageAppendResp:
-		// The snapshot precedes the entries. We acknowledge the snapshot first,
-		// then the entries, as required by the unstable structure.
-		if m.Snapshot != nil {
-			r.appliedSnap(m.Snapshot)
-		}
-		if m.Index != 0 {
-			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
 		}
 
 	case pb.MsgVote, pb.MsgPreVote:
