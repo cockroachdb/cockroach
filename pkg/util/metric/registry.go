@@ -20,6 +20,11 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
+const (
+	dbLabel  = "db"
+	appLabel = "app"
+)
+
 // A Registry is a list of metrics. It provides a simple way of iterating over
 // them, can marshal into JSON, and generate a prometheus format.
 //
@@ -224,6 +229,43 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 		})
 	}
 	return json.Marshal(m)
+}
+
+// ReinitialiseChildMetrics reinitialize childSet of tracked agg metrics with updated label values.
+// This is used when the cluster settings are updated and, we need to reinitialise
+// child metrics with StorageTypeCache.
+func (r *Registry) ReinitialiseChildMetrics(labelValueConfig *LabelValueConfig) {
+	r.Lock()
+	defer r.Unlock()
+
+	for _, metric := range r.tracked {
+		// Check if the metric implements the PrometheusIterable interface as we want to
+		// reinitialise the child metrics with StorageTypeCache. The Agg metrics implements
+		// the PrometheusIterable interface.
+		if m, ok := metric.(PrometheusIterable); ok {
+			var labelSet []string
+
+			if labelValueConfig.appNameLabelEnabled {
+				labelSet = append(labelSet, dbLabel)
+			}
+			if labelValueConfig.appNameLabelEnabled {
+				labelSet = append(labelSet, appLabel)
+			}
+
+			prevLabels := m.GetLabels()
+			for _, label := range prevLabels {
+				if label.GetName() != dbLabel && label.GetName() != appLabel {
+					labelSet = append(labelSet, label.GetName())
+				}
+			}
+
+			// ReinitialiseChildMetrics will reinitialise the child metrics with the
+			// labelSet based on cluster settings. Please note that, it will reinitialise child metrics with StorageTypeCache
+			// and, it will NOT reinitialise/update child metrics with StorageTypeBTree.
+			m.ReinitialiseChildMetrics(labelSet)
+		}
+	}
+
 }
 
 var (

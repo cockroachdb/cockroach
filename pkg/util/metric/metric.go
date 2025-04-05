@@ -98,6 +98,9 @@ type PrometheusIterable interface {
 	// Each takes a slice of label pairs associated with the parent metric and
 	// calls the passed function with each of the children metrics.
 	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
+
+	// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+	ReinitialiseChildMetrics(labelVals []string)
 }
 
 // WindowedHistogram represents a histogram with data over recent window of
@@ -1545,4 +1548,42 @@ func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	}
 
 	return metrics
+}
+
+// LabelValueConfig is a configuration struct for holding server.AppNameLabelEnabled
+// and server.DBNameLabelEnabled cluster settings. These setting values are stored in the
+// struct to avoid additional lookup in settings everytime when we want to update metric.
+// These settings are used to determine whether the app name and db name
+// labels should be included in the label values for child metrics.
+type LabelValueConfig struct {
+	dbNameLabelEnabled  bool
+	appNameLabelEnabled bool
+}
+
+func NewLabelValueConfig() *LabelValueConfig {
+	return &LabelValueConfig{}
+}
+
+func (lv *LabelValueConfig) SetDBNameLabelEnabled(enabled bool) {
+	lv.dbNameLabelEnabled = enabled
+}
+
+func (lv *LabelValueConfig) SetAppNameLabelEnabled(enabled bool) {
+	lv.appNameLabelEnabled = enabled
+}
+
+// GetLabelValues appends db and app label values to existing labelValues based on
+// dbNameLabelEnabled and appNameLabelEnabled.
+func (lv *LabelValueConfig) GetLabelValues(
+	dbName string, appName string, labelValues ...string,
+) []string {
+	var labels []string
+	if lv.dbNameLabelEnabled {
+		labels = append(labels, dbName)
+	}
+	if lv.appNameLabelEnabled {
+		labels = append(labels, appName)
+	}
+	labels = append(labels, labelValues...)
+	return labels
 }

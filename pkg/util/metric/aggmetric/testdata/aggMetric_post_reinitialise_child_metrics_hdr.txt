@@ -1,0 +1,34 @@
+echo
+----
+test_counter_btree 2
+test_counter_btree{tenant_id="system"} 2
+test_counter_cache 10
+test_counter_cache{db="test_db",app="test_app"} 5
+test_counter_float_btree 3
+test_counter_float_btree{tenant_id="system"} 3
+test_counter_float_cache 10
+test_counter_float_cache{db="test_db",app="test_app"} 5
+test_gauge_btree 1
+test_gauge_btree{tenant_id="system"} 1
+test_gauge_cache 10
+test_gauge_cache{db="test_db",app="test_app"} 5
+test_gauge_float_btree 1.5
+test_gauge_float_btree{tenant_id="system"} 1.5
+test_gauge_float_cache 10
+test_gauge_float_cache{db="test_db",app="test_app"} 5
+test_histogram_btree_bucket{le="+Inf"} 2
+test_histogram_btree_bucket{le="1"} 2
+test_histogram_btree_bucket{tenant_id="system",le="+Inf"} 2
+test_histogram_btree_bucket{tenant_id="system",le="1"} 2
+test_histogram_btree_count 2
+test_histogram_btree_count{tenant_id="system"} 2
+test_histogram_btree_sum 2
+test_histogram_btree_sum{tenant_id="system"} 2
+test_histogram_cache_bucket{db="test_db",app="test_app",le="+Inf"} 1
+test_histogram_cache_bucket{db="test_db",app="test_app",le="5"} 1
+test_histogram_cache_bucket{le="+Inf"} 2
+test_histogram_cache_bucket{le="5"} 2
+test_histogram_cache_count 2
+test_histogram_cache_count{db="test_db",app="test_app"} 1
+test_histogram_cache_sum 10
+test_histogram_cache_sum{db="test_db",app="test_app"} 5
