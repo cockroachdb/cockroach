@@ -171,7 +171,9 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(params.ctx, deleteVals, pm, vh, d.run.traceKV); err != nil {
+	if err := d.run.td.row(
+		params.ctx, deleteVals, pm, vh, false /* mustValidateOldPKValues */, d.run.traceKV,
+	); err != nil {
 		return err
 	}
 

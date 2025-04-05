@@ -155,6 +155,7 @@ func (tu *tombstoneUpdater) addToBatch(
 			OriginTimestamp:    afterRow.MvccTimestamp,
 			PreviousWasDeleted: true,
 		},
+		false, /* mustValidateOldPKValues */
 		false, /* traceKV */
 	)
 }

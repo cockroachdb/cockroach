@@ -402,7 +402,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		var pm row.PartialIndexUpdateHelper
 		var vh row.VectorIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, vh, nil, traceKV,
+			ctx, b, oldValues, updateValues, pm, vh, nil, false /* mustValidateOldPKValues */, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
