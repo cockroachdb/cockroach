@@ -451,6 +451,10 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	conn1.Exec(t, "SET SESSION application_name=$1", appName)
 	conn2.Exec(t, "SET SESSION application_name=$1", appName)
 
+	// TODO: think about this test.
+	conn1.Exec(t, "SET kv_transaction_buffered_writes_enabled = false")
+	conn2.Exec(t, "SET kv_transaction_buffered_writes_enabled = false")
+
 	// The first 2 recorded txns are setting the session name.
 	conflictingTxns = conflictingTxns[2:]
 
@@ -518,6 +522,7 @@ AND query = 'SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ 
 		var txRetryErr *kvpb.TransactionRetryWithProtoRefreshError
 		require.Error(t, conflictingTxns[0].err)
 		require.ErrorAs(t, conflictingTxns[0].err, &txRetryErr)
+		require.NotNil(t, txRetryErr.ConflictingTxn)
 		conflictingTxnID := txRetryErr.ConflictingTxn.ID
 
 		if enabled {
