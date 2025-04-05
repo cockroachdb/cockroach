@@ -57,6 +57,8 @@ stabilize 1 2 3
   Messages:
   1->2 MsgApp Term:1 Log:1/3 Commit:3 Entries:[1/4 EntryConfChangeV2 v4]
   1->3 MsgApp Term:1 Log:1/3 Commit:3 Entries:[1/4 EntryConfChangeV2 v4]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/3 Commit:3 Entries:[1/4 EntryConfChangeV2 v4]
 > 3 receiving messages
@@ -65,13 +67,13 @@ stabilize 1 2 3
   Ready:
   Entries:
   1/4 EntryConfChangeV2 v4
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 3 handling Ready
   Ready:
   Entries:
   1/4 EntryConfChangeV2 v4
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/4 Commit:3
@@ -99,7 +101,7 @@ stabilize 1 2 3
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
   Committed: (3,4]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   Applying:
   1/4 EntryConfChangeV2 v4
@@ -108,7 +110,7 @@ stabilize 1 2 3
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
   Committed: (3,4]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/4 Commit:4
   Applying:
   1/4 EntryConfChangeV2 v4
@@ -148,6 +150,8 @@ stabilize 1 4
   Messages:
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/5 Commit:4
 > 4 receiving messages
   1->4 MsgFortifyLeader Term:1 Log:0/0
   INFO 4 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
@@ -158,7 +162,7 @@ stabilize 1 4
 > 4 handling Ready
   Ready:
   HardState Term:1 Commit:2 Lead:1 LeadEpoch:1
-  Messages:
+  OnSync:
   4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   4->1 MsgAppResp Term:1 Log:1/3 Rejected (Hint: 2) Commit:2
 > 1 receiving messages
@@ -188,7 +192,7 @@ stabilize 1 4
   1/4 EntryConfChangeV2 v4
   1/5 EntryNormal ""
   Committed: (2,4]
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
   Applying:
   1/3 EntryNormal ""
@@ -228,6 +232,8 @@ stabilize
   1->2 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2 r2 l2]
   1->3 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2 r2 l2]
   1->4 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2 r2 l2]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
   1->2 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2 r2 l2]
@@ -241,7 +247,7 @@ stabilize
   Entries:
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2 r2 l2
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
   2->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 3 handling Ready
@@ -249,14 +255,14 @@ stabilize
   Entries:
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2 r2 l2
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/5 Commit:4
   3->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 4 handling Ready
   Ready:
   Entries:
   1/6 EntryConfChangeV2 r2 l2
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
@@ -297,11 +303,13 @@ stabilize
   1->2 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2]
   1->3 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2]
   1->4 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
   Committed: (4,6]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
   2->1 MsgAppResp Term:1 Log:0/6 Commit:6
   Applying:
@@ -312,7 +320,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
   Committed: (4,6]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/6 Commit:5
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
   Applying:
@@ -323,7 +331,7 @@ stabilize
   Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   Committed: (4,6]
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/6 Commit:5
   4->1 MsgAppResp Term:1 Log:0/6 Commit:6
   Applying:
@@ -347,19 +355,19 @@ stabilize
   Ready:
   Entries:
   1/7 EntryConfChangeV2
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 3 handling Ready
   Ready:
   Entries:
   1/7 EntryConfChangeV2
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 4 handling Ready
   Ready:
   Entries:
   1/7 EntryConfChangeV2
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
@@ -386,7 +394,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
   Committed: (6,7]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/7 Commit:7
   Applying:
   1/7 EntryConfChangeV2
@@ -395,7 +403,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
   Committed: (6,7]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/7 Commit:7
   Applying:
   1/7 EntryConfChangeV2
@@ -404,7 +412,7 @@ stabilize
   Ready:
   HardState Term:1 Commit:7 Lead:1 LeadEpoch:1
   Committed: (6,7]
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/7 Commit:7
   Applying:
   1/7 EntryConfChangeV2

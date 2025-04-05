@@ -20,6 +20,8 @@ process-ready 1
 Ready:
 State:StateCandidate
 HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+OnSync:
+1->1 MsgVoteResp Term:1 Log:0/0
 INFO 1 received MsgVoteResp from 1 at term 1
 INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 INFO 1 became leader at term 1
@@ -50,6 +52,10 @@ HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:1
 Entries:
 1/3 EntryNormal ""
 1/4 EntryConfChangeV2 v2 v3
+OnSync:
+1->1 MsgAppResp Term:1 Log:0/3 Commit:2
+1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+1->1 MsgAppResp Term:1 Log:0/4 Commit:2
 
 # Now n1 applies the conf change. We see that it starts transitioning out of that joint
 # configuration (though we will only see that proposal in the next ready handling
@@ -79,6 +85,8 @@ stabilize 1
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 v2 v3]
   1->3 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 v2 v3]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/5 Commit:4
 
 # First, play out the whole interaction between n1 and n2. We see n1's probe to
 # n2 get rejected (since n2 needs a snapshot); the snapshot is delivered at which
@@ -97,7 +105,7 @@ stabilize 1 2
 > 2 handling Ready
   Ready:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
-  Messages:
+  OnSync:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
 > 1 receiving messages
@@ -123,7 +131,7 @@ stabilize 1 2
   Ready:
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:1
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
@@ -138,7 +146,7 @@ stabilize 1 2
   Ready:
   Entries:
   1/5 EntryNormal ""
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
@@ -159,11 +167,13 @@ stabilize 1 2
   1/6 EntryConfChangeV2
   Messages:
   1->2 MsgApp Term:1 Log:1/5 Commit:5 Entries:[1/6 EntryConfChangeV2]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/6 Commit:5
 > 2 handling Ready
   Ready:
   HardState Term:1 Commit:5 Lead:1 LeadEpoch:1
   Committed: (4,5]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
   Applying:
   1/5 EntryNormal ""
@@ -175,7 +185,7 @@ stabilize 1 2
   Ready:
   Entries:
   1/6 EntryConfChangeV2
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
@@ -198,7 +208,7 @@ stabilize 1 2
   Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   Committed: (5,6]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/6 Commit:6
   Applying:
   1/6 EntryConfChangeV2
@@ -220,7 +230,7 @@ stabilize 1 3
 > 3 handling Ready
   Ready:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
-  Messages:
+  OnSync:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
@@ -248,7 +258,7 @@ stabilize 1 3
   Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   Snapshot Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
@@ -277,6 +287,8 @@ stabilize 1
   Messages:
   1->2 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2 r2 r3 l2 l3]
   1->3 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2 r2 r3 l2 l3]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/7 Commit:6
 
 # n2, n3 ack them.
 stabilize 2 3
@@ -289,13 +301,13 @@ stabilize 2 3
   Ready:
   Entries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 3 handling Ready
   Ready:
   Entries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/7 Commit:6
 
 # n1 gets some more proposals. This is part of a regression test: There used to
@@ -323,6 +335,9 @@ stabilize 1
   1->3 MsgApp Term:1 Log:1/7 Commit:6 Entries:[1/8 EntryNormal "foo"]
   1->2 MsgApp Term:1 Log:1/8 Commit:6 Entries:[1/9 EntryNormal "bar"]
   1->3 MsgApp Term:1 Log:1/8 Commit:6 Entries:[1/9 EntryNormal "bar"]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/8 Commit:6
+  1->1 MsgAppResp Term:1 Log:0/9 Commit:6
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
   3->1 MsgAppResp Term:1 Log:0/7 Commit:6
@@ -344,6 +359,8 @@ stabilize 1
   Messages:
   1->2 MsgApp Term:1 Log:1/9 Commit:7 Entries:[1/10 EntryConfChangeV2]
   1->3 MsgApp Term:1 Log:1/9 Commit:7 Entries:[1/10 EntryConfChangeV2]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/10 Commit:7
 
 # n2 and n3 also switch to the joint config, and ack the transition out of it.
 stabilize 2 3
@@ -366,7 +383,7 @@ stabilize 2 3
   1/9 EntryNormal "bar"
   1/10 EntryConfChangeV2
   Committed: (6,7]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/8 Commit:6
   2->1 MsgAppResp Term:1 Log:0/9 Commit:6
   2->1 MsgAppResp Term:1 Log:0/9 Commit:7
@@ -382,7 +399,7 @@ stabilize 2 3
   1/9 EntryNormal "bar"
   1/10 EntryConfChangeV2
   Committed: (6,7]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/8 Commit:6
   3->1 MsgAppResp Term:1 Log:0/9 Commit:6
   3->1 MsgAppResp Term:1 Log:0/9 Commit:7
@@ -433,7 +450,7 @@ stabilize
   Ready:
   HardState Term:1 Commit:10 Lead:1 LeadEpoch:1
   Committed: (7,10]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/10 Commit:8
   2->1 MsgAppResp Term:1 Log:0/10 Commit:9
   2->1 MsgAppResp Term:1 Log:0/10 Commit:10
@@ -446,7 +463,7 @@ stabilize
   Ready:
   HardState Term:1 Commit:10 Lead:1 LeadEpoch:1
   Committed: (7,10]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/10 Commit:8
   3->1 MsgAppResp Term:1 Log:0/10 Commit:9
   3->1 MsgAppResp Term:1 Log:0/10 Commit:10

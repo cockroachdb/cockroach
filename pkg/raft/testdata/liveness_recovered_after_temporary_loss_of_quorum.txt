@@ -43,6 +43,8 @@ stabilize 1
   1/12 EntryNormal "data1"
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "data1"]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/12 Commit:11
 
 # Peer 2 has a temporary blip.
 deliver-msgs drop=(2)
@@ -104,6 +106,8 @@ stabilize
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgPreVote Term:2 Log:1/11
+  OnSync:
+  2->2 MsgPreVoteResp Term:2 Log:0/0
   INFO 2 received MsgPreVoteResp from 2 at term 1
   INFO 2 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 1 receiving messages
@@ -111,7 +115,7 @@ stabilize
   INFO 1 [logterm: 1, index: 12, vote: 1] rejected MsgPreVote from 2 [logterm: 1, index: 11] at term 1
 > 1 handling Ready
   Ready:
-  Messages:
+  OnSync:
   1->2 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
 > 2 receiving messages
   1->2 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
@@ -161,6 +165,8 @@ stabilize
   State:StatePreCandidate
   Messages:
   1->2 MsgPreVote Term:2 Log:1/12
+  OnSync:
+  1->1 MsgPreVoteResp Term:2 Log:0/0
   INFO 1 received MsgPreVoteResp from 1 at term 1
   INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 2 receiving messages
@@ -168,7 +174,7 @@ stabilize
   INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 1 [logterm: 1, index: 12] at term 1
 > 2 handling Ready
   Ready:
-  Messages:
+  OnSync:
   2->1 MsgPreVoteResp Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgPreVoteResp Term:2 Log:0/0
@@ -182,6 +188,8 @@ stabilize
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgVote Term:2 Log:1/12
+  OnSync:
+  1->1 MsgVoteResp Term:2 Log:0/0
   INFO 1 received MsgVoteResp from 1 at term 2
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 receiving messages
@@ -192,7 +200,7 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   2->1 MsgVoteResp Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgVoteResp Term:2 Log:0/0
@@ -208,13 +216,16 @@ stabilize
   Messages:
   1->2 MsgFortifyLeader Term:2 Log:0/0
   1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
+  OnSync:
+  1->1 MsgAppResp Term:2 Log:0/13 Commit:11
+  1->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:2 Log:0/0
   1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
 > 2 handling Ready
   Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:1 LeadEpoch:1
-  Messages:
+  OnSync:
   2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
 > 1 receiving messages
@@ -237,7 +248,7 @@ stabilize
   Entries:
   1/12 EntryNormal "data1"
   2/13 EntryNormal ""
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
 > 1 receiving messages
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
@@ -256,7 +267,7 @@ stabilize
   Ready:
   HardState Term:2 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   Committed: (11,13]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:2 Log:0/13 Commit:13
   Applying:
   1/12 EntryNormal "data1"

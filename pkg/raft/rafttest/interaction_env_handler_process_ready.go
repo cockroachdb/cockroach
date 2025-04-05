@@ -48,20 +48,17 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	// TODO(tbg): Allow simulating crashes here.
 	n := &env.Nodes[idx]
 	rd := n.Ready()
+	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
+	// Immediately send the messages that are not contingent on storage sync.
+	env.Messages = append(env.Messages, rd.Messages...)
 
 	if !n.asyncWrites {
-		send, _ := raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
-		// When imitating a synchronous writes API, print only the outgoing
-		// messages. The self-addressed responses conditional to storage syncs are
-		// skipped, for compatibility with existing tests.
-		// TODO(pav-kv): print all messages.
-		fork := rd
-		fork.Messages, _ = raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
-		env.Output.WriteString(raft.DescribeReady(fork, defaultEntryFormatter))
-
-		// TODO(pav-kv): use the same code paths as the asynchronous writes.
-		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
+		if err := processAppend(n, rd.StorageAppend); err != nil {
 			return err
+		}
+		ack := rd.Ack()
+		for msg := range ack.Send(raftpb.PeerID(idx + 1)) {
+			env.Messages = append(env.Messages, msg)
 		}
 
 		if !rd.Committed.Empty() {
@@ -80,13 +77,13 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 			n.AckApplied(apply)
 		}
 
-		env.Messages = append(env.Messages, send...)
-		n.AdvanceHack(rd)
+		n.AckAppend(ack)
 		return nil
 	}
 
-	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
-
+	if app := rd.StorageAppend; !app.Empty() {
+		n.AppendWork = append(n.AppendWork, app)
+	}
 	if span := rd.Committed; !span.Empty() {
 		if was := n.ApplyWork; span.After > was.Last {
 			n.ApplyWork = span
@@ -95,18 +92,5 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		}
 		n.AckApplying(span.Last)
 	}
-	for _, m := range rd.Messages {
-		if raft.IsLocalMsgTarget(m.To) {
-			switch m.Type {
-			case raftpb.MsgStorageAppend:
-				n.AppendWork = append(n.AppendWork, m)
-			default:
-				panic(fmt.Sprintf("unexpected message type %s", m.Type))
-			}
-		} else {
-			env.Messages = append(env.Messages, m)
-		}
-	}
-
 	return nil
 }

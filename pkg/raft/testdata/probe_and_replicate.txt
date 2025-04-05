@@ -412,6 +412,8 @@ stabilize 1
   1->5 MsgVote Term:8 Log:6/20
   1->6 MsgVote Term:8 Log:6/20
   1->7 MsgVote Term:8 Log:6/20
+  OnSync:
+  1->1 MsgVoteResp Term:8 Log:0/0
   INFO 1 received MsgVoteResp from 1 at term 8
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 
@@ -450,18 +452,18 @@ stabilize 2 3 4 5 6 7
 > 2 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:18 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   2->1 MsgVoteResp Term:8 Log:0/0
 > 3 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:14 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   3->1 MsgVoteResp Term:8 Log:0/0
 > 4 handling Ready
   Ready:
   State:StateFollower
   HardState Term:8 Commit:18 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   4->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
 > 5 handling Ready
   Ready:
@@ -474,11 +476,12 @@ stabilize 2 3 4 5 6 7
   5->4 MsgDeFortifyLeader Term:7 Log:0/0
   5->6 MsgDeFortifyLeader Term:7 Log:0/0
   5->7 MsgDeFortifyLeader Term:7 Log:0/0
+  OnSync:
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
 > 6 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:15 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   6->1 MsgVoteResp Term:8 Log:0/0
 > 7 handling Ready
   Ready:
@@ -490,6 +493,7 @@ stabilize 2 3 4 5 6 7
   7->4 MsgDeFortifyLeader Term:3 Log:0/0
   7->5 MsgDeFortifyLeader Term:3 Log:0/0
   7->6 MsgDeFortifyLeader Term:3 Log:0/0
+  OnSync:
   7->1 MsgVoteResp Term:8 Log:0/0
 > 2 receiving messages
   5->2 MsgDeFortifyLeader Term:7 Log:0/0
@@ -561,6 +565,9 @@ stabilize 1
   1->5 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
   1->6 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
   1->7 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
+  OnSync:
+  1->1 MsgAppResp Term:8 Log:0/21 Commit:18
+  1->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
 
 ## Recover each follower, one by one.
 stabilize 1 2
@@ -571,7 +578,7 @@ stabilize 1 2
 > 2 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:18 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   2->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) Commit:18
 > 1 receiving messages
@@ -594,7 +601,7 @@ stabilize 1 2
   Entries:
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 receiving messages
   2->1 MsgAppResp Term:8 Log:0/21 Commit:18
@@ -607,7 +614,7 @@ stabilize 1 3
 > 3 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:14 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   3->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) Commit:14
 > 1 receiving messages
@@ -647,7 +654,7 @@ stabilize 1 3
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Committed: (14,18]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:8 Log:0/21 Commit:18
   Applying:
   4/15 EntryNormal "prop_4_15"
@@ -669,7 +676,7 @@ stabilize 1 4
   HardState Term:8 Commit:18 Lead:1 LeadEpoch:2
   Entries:
   8/21 EntryNormal ""
-  Messages:
+  OnSync:
   4->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   4->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 receiving messages
@@ -693,7 +700,7 @@ stabilize 1 4
   Ready:
   HardState Term:8 Commit:21 Lead:1 LeadEpoch:2
   Committed: (18,21]
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:8 Log:0/21 Commit:21
   Applying:
   6/19 EntryNormal "prop_6_19"
@@ -710,7 +717,7 @@ stabilize 1 5
 > 5 handling Ready
   Ready:
   HardState Term:8 Commit:18 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   5->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) Commit:18
 > 1 receiving messages
@@ -740,7 +747,7 @@ stabilize 1 5
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Committed: (18,21]
-  Messages:
+  OnSync:
   5->1 MsgAppResp Term:8 Log:0/21 Commit:21
   Applying:
   6/19 EntryNormal "prop_6_19"
@@ -757,7 +764,7 @@ stabilize 1 6
 > 6 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:15 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   6->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) Commit:15
 > 1 receiving messages
@@ -796,7 +803,7 @@ stabilize 1 6
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Committed: (15,21]
-  Messages:
+  OnSync:
   6->1 MsgAppResp Term:8 Log:0/21 Commit:21
   Applying:
   5/16 EntryNormal ""

@@ -122,7 +122,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:18 Lead:1 LeadEpoch:1
   Snapshot Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18

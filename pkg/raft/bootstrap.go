@@ -22,6 +22,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type Peer struct {
+	ID      pb.PeerID
+	Context []byte
+}
+
 // Bootstrap initializes the RawNode for first use by appending configuration
 // changes for the supplied peers. This method returns an error if the Storage
 // is nonempty.

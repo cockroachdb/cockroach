@@ -47,6 +47,8 @@ stabilize 3
   Messages:
   3->1 MsgPreVote Term:2 Log:1/11
   3->2 MsgPreVote Term:2 Log:1/11
+  OnSync:
+  3->3 MsgPreVoteResp Term:2 Log:0/0
   INFO 3 received MsgPreVoteResp from 3 at term 1
   INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
@@ -76,6 +78,8 @@ stabilize
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
   1->3 MsgFortifyLeader Term:1 Log:0/0
+  OnSync:
+  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:1 Log:0/0
   INFO 3 became follower at term 1
@@ -84,7 +88,7 @@ stabilize
   Ready:
   State:StateFollower
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
-  Messages:
+  OnSync:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 1 receiving messages
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
@@ -143,6 +147,8 @@ stabilize 3
   Messages:
   3->1 MsgPreVote Term:2 Log:1/11
   3->2 MsgPreVote Term:2 Log:1/11
+  OnSync:
+  3->3 MsgPreVoteResp Term:2 Log:0/0
   INFO 3 received MsgPreVoteResp from 3 at term 1
   INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
@@ -156,7 +162,7 @@ stabilize 2
   INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 3 [logterm: 1, index: 11] at term 1
 > 2 handling Ready
   Ready:
-  Messages:
+  OnSync:
   2->3 MsgPreVoteResp Term:2 Log:0/0
 
 stabilize 3
@@ -175,6 +181,8 @@ stabilize 3
   Messages:
   3->1 MsgVote Term:2 Log:1/11
   3->2 MsgVote Term:2 Log:1/11
+  OnSync:
+  3->3 MsgVoteResp Term:2 Log:0/0
   INFO 3 received MsgVoteResp from 3 at term 2
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 
@@ -203,6 +211,8 @@ stabilize 3
   Messages:
   3->1 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
   3->2 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
+  OnSync:
+  3->3 MsgAppResp Term:2 Log:0/13 Commit:12
 
 stabilize 2
 ----
@@ -212,7 +222,7 @@ stabilize 2
   Ready:
   Entries:
   2/13 EntryNormal "prop_1"
-  Messages:
+  OnSync:
   2->3 MsgAppResp Term:2 Log:0/13 Commit:12
 
 withdraw-support 2 3
@@ -266,6 +276,8 @@ HardState Term:2 Commit:12 Lead:0 LeadEpoch:0
 Messages:
 1->2 MsgPreVote Term:3 Log:2/12
 1->3 MsgPreVote Term:3 Log:2/12
+OnSync:
+1->1 MsgPreVoteResp Term:3 Log:0/0
 INFO 1 received MsgPreVoteResp from 1 at term 2
 INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
@@ -279,7 +291,7 @@ stabilize 2
   INFO 2 [logterm: 2, index: 13, vote: 3] rejected MsgPreVote from 1 [logterm: 2, index: 12] at term 2
 > 2 handling Ready
   Ready:
-  Messages:
+  OnSync:
   2->1 MsgPreVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
 
 stabilize log-level=none

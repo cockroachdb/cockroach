@@ -47,6 +47,8 @@ stabilize
   Messages:
   2->1 MsgPreVote Term:2 Log:1/11
   2->3 MsgPreVote Term:2 Log:1/11
+  OnSync:
+  2->2 MsgPreVoteResp Term:2 Log:0/0
   INFO 2 received MsgPreVoteResp from 2 at term 1
   INFO 2 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 1 receiving messages
@@ -88,6 +90,8 @@ HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
 Messages:
 3->1 MsgPreVote Term:2 Log:1/11
 3->2 MsgPreVote Term:2 Log:1/11
+OnSync:
+3->3 MsgPreVoteResp Term:2 Log:0/0
 INFO 3 received MsgPreVoteResp from 3 at term 1
 INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
@@ -99,7 +103,7 @@ INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 3 [logterm: 1, index
 process-ready 2
 ----
 Ready:
-Messages:
+OnSync:
 2->3 MsgPreVoteResp Term:2 Log:0/0
 
 stabilize
@@ -121,6 +125,8 @@ stabilize
   Messages:
   3->1 MsgVote Term:2 Log:1/11
   3->2 MsgVote Term:2 Log:1/11
+  OnSync:
+  3->3 MsgVoteResp Term:2 Log:0/0
   INFO 3 received MsgVoteResp from 3 at term 2
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
@@ -136,7 +142,7 @@ stabilize
   Ready:
   State:StateFollower
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   2->3 MsgVoteResp Term:2 Log:0/0
 > 3 receiving messages
   2->3 MsgVoteResp Term:2 Log:0/0
@@ -154,6 +160,9 @@ stabilize
   3->2 MsgFortifyLeader Term:2 Log:0/0
   3->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   3->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  OnSync:
+  3->3 MsgAppResp Term:2 Log:0/12 Commit:11
+  3->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 > 1 receiving messages
   3->1 MsgFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 3 [term: 2], new leader indicated, advancing term
@@ -170,7 +179,7 @@ stabilize
   HardState Term:2 Commit:11 Lead:3 LeadEpoch:1
   Entries:
   2/12 EntryNormal ""
-  Messages:
+  OnSync:
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 handling Ready
@@ -178,7 +187,7 @@ stabilize
   HardState Term:2 Vote:3 Commit:11 Lead:3 LeadEpoch:1
   Entries:
   2/12 EntryNormal ""
-  Messages:
+  OnSync:
   2->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   2->3 MsgAppResp Term:2 Log:0/12 Commit:11
 > 3 receiving messages
@@ -203,7 +212,7 @@ stabilize
   Ready:
   HardState Term:2 Commit:12 Lead:3 LeadEpoch:1
   Committed: (11,12]
-  Messages:
+  OnSync:
   1->3 MsgAppResp Term:2 Log:0/12 Commit:12
   Applying:
   2/12 EntryNormal ""
@@ -211,7 +220,7 @@ stabilize
   Ready:
   HardState Term:2 Vote:3 Commit:12 Lead:3 LeadEpoch:1
   Committed: (11,12]
-  Messages:
+  OnSync:
   2->3 MsgAppResp Term:2 Log:0/12 Commit:12
   Applying:
   2/12 EntryNormal ""
@@ -262,6 +271,8 @@ stabilize
   Messages:
   1->2 MsgPreVote Term:3 Log:2/12
   1->3 MsgPreVote Term:3 Log:2/12
+  OnSync:
+  1->1 MsgPreVoteResp Term:3 Log:0/0
   INFO 1 received MsgPreVoteResp from 1 at term 2
   INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 2 receiving messages
@@ -294,6 +305,8 @@ stabilize
   Messages:
   2->1 MsgPreVote Term:3 Log:2/12
   2->3 MsgPreVote Term:3 Log:2/12
+  OnSync:
+  2->2 MsgPreVoteResp Term:3 Log:0/0
   INFO 2 received MsgPreVoteResp from 2 at term 2
   INFO 2 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 1 receiving messages
@@ -304,7 +317,7 @@ stabilize
   INFO 3 [logterm: 2, index: 12, vote: 3] ignored MsgPreVote from 2 [logterm: 2, index: 12] at term 2: supporting fortified leader 3 at epoch 1
 > 1 handling Ready
   Ready:
-  Messages:
+  OnSync:
   1->2 MsgPreVoteResp Term:3 Log:0/0
 > 2 receiving messages
   1->2 MsgPreVoteResp Term:3 Log:0/0
@@ -320,6 +333,8 @@ stabilize
   Messages:
   2->1 MsgVote Term:3 Log:2/12
   2->3 MsgVote Term:3 Log:2/12
+  OnSync:
+  2->2 MsgVoteResp Term:3 Log:0/0
   INFO 2 received MsgVoteResp from 2 at term 3
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
@@ -335,7 +350,7 @@ stabilize
   Ready:
   State:StateFollower
   HardState Term:3 Vote:2 Commit:12 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   1->2 MsgVoteResp Term:3 Log:0/0
 > 2 receiving messages
   1->2 MsgVoteResp Term:3 Log:0/0
@@ -353,6 +368,9 @@ stabilize
   2->3 MsgFortifyLeader Term:3 Log:0/0
   2->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
   2->3 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
+  OnSync:
+  2->2 MsgAppResp Term:3 Log:0/13 Commit:12
+  2->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:3 Log:0/0
   2->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
@@ -368,7 +386,7 @@ stabilize
   HardState Term:3 Vote:2 Commit:12 Lead:2 LeadEpoch:1
   Entries:
   3/13 EntryNormal ""
-  Messages:
+  OnSync:
   1->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:3 Log:0/13 Commit:12
 > 3 handling Ready
@@ -377,7 +395,7 @@ stabilize
   HardState Term:3 Commit:12 Lead:2 LeadEpoch:1
   Entries:
   3/13 EntryNormal ""
-  Messages:
+  OnSync:
   3->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:3 Log:0/13 Commit:12
 > 2 receiving messages
@@ -402,7 +420,7 @@ stabilize
   Ready:
   HardState Term:3 Vote:2 Commit:13 Lead:2 LeadEpoch:1
   Committed: (12,13]
-  Messages:
+  OnSync:
   1->2 MsgAppResp Term:3 Log:0/13 Commit:13
   Applying:
   3/13 EntryNormal ""
@@ -410,7 +428,7 @@ stabilize
   Ready:
   HardState Term:3 Commit:13 Lead:2 LeadEpoch:1
   Committed: (12,13]
-  Messages:
+  OnSync:
   3->2 MsgAppResp Term:3 Log:0/13 Commit:13
   Applying:
   3/13 EntryNormal ""

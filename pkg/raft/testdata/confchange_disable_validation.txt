@@ -53,6 +53,9 @@ stabilize 1
   Entries:
   1/4 EntryNormal "foo"
   1/5 EntryConfChangeV2 l2 l3
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/4 Commit:3
+  1->1 MsgAppResp Term:1 Log:0/5 Commit:3
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
@@ -86,6 +89,8 @@ process-ready 1
 Ready:
 Entries:
 1/6 EntryConfChangeV2 l4
+OnSync:
+1->1 MsgAppResp Term:1 Log:0/6 Commit:5
 
 # If we process-ready on node 1 now, the second config change will come up for
 # application, and the node will panic with "config is already joint". The state
