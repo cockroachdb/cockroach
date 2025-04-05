@@ -35,7 +35,7 @@ type ClusterStat struct {
 
 // AggregateFn processes a map of labeled series', aggregating into a single
 // series. It must also return an appropriate label for the resulting series.
-type AggregateFn func(query string, series [][]float64) (string, []float64)
+type AggregateFn func(query string, series [][]float64) (string, []float64, string, bool)
 
 // AggQuery represents a two tier query, that (1) provides a query generating
 // multiple labeled timeseries results (AggQuery.Stat) and (2) a method to
@@ -44,11 +44,13 @@ type AggregateFn func(query string, series [][]float64) (string, []float64)
 // which proceses the result of (1). AggQuery.Interval defines the [from,to]
 // time to query.
 type AggQuery struct {
-	Stat     ClusterStat
-	Query    string
-	AggFn    AggregateFn
-	Interval Interval
-	Tag      string
+	Stat           ClusterStat
+	Query          string
+	AggFn          AggregateFn
+	Interval       Interval
+	Tag            string
+	Unit           string // Unit of measurement (e.g., "seconds", "bytes", "ops/sec")
+	IsHigherBetter bool   // Indicates if higher values are better for this metric
 }
 
 // StatExporter defines an interface to export statistics to roachperf.
@@ -82,11 +84,13 @@ type StatExporter interface {
 // over the multiple series of data to combine into one e.g. sum(qps), cv(qps),
 // max(qps). The tag describes what stat is collected from each instance.
 type StatSummary struct {
-	Time   []int64
-	Value  []float64
-	Tagged map[string][]float64
-	AggTag string
-	Tag    string
+	Time           []int64
+	Value          []float64
+	Tagged         map[string][]float64
+	AggTag         string
+	Tag            string
+	Unit           string // Unit of measurement (e.g., "seconds", "bytes", "ops/sec")
+	IsHigherBetter bool   // Indicates if higher values are better for this metric
 }
 
 // ClusterStatRun holds the summary value for a test run as well as per
@@ -149,13 +153,22 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 	// Emit histogram metrics from Stats
 	for _, stat := range r.Stats {
 		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(stat.Tag))
+
+		// Build unit and is_higher_better labels
+		additionalLabels := ""
+		if stat.Unit != "" {
+			additionalLabels += fmt.Sprintf(",unit=\"%s\"", util.SanitizeValue(stat.Unit))
+		}
+		additionalLabels += fmt.Sprintf(",is_higher_better=\"%t\"", stat.IsHigherBetter)
+
 		for i, timestamp := range stat.Time {
 			t := timeutil.Unix(0, timestamp)
 			buffer.WriteString(
-				fmt.Sprintf("%s{%s,agg_tag=\"%s\"} %f %d\n",
+				fmt.Sprintf("%s{%s,agg_tag=\"%s\"%s} %f %d\n",
 					util.SanitizeMetricName(stat.Tag),
 					*labelString,
 					util.SanitizeValue(stat.AggTag),
+					additionalLabels,
 					stat.Value[i],
 					t.UTC().Unix()))
 		}
@@ -163,11 +176,12 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 			for i, timestamp := range stat.Time {
 				t := timeutil.Unix(0, timestamp)
 				buffer.WriteString(
-					fmt.Sprintf("%s{%s,tag=\"%s\",agg_tag=\"%s\"} %f %d\n",
+					fmt.Sprintf("%s{%s,tag=\"%s\",agg_tag=\"%s\"%s} %f %d\n",
 						util.SanitizeMetricName(stat.Tag),
 						*labelString,
 						tag,
 						util.SanitizeValue(stat.AggTag),
+						additionalLabels,
 						values[i],
 						t.UTC().Unix()))
 			}
@@ -299,7 +313,10 @@ func (cs *clusterStatCollector) collectSummaries(
 func (cs *clusterStatCollector) getStatSummary(
 	ctx context.Context, l *logger.Logger, summaryQuery AggQuery,
 ) (StatSummary, error) {
-	ret := StatSummary{}
+	ret := StatSummary{
+		Unit:           summaryQuery.Unit,
+		IsHigherBetter: summaryQuery.IsHigherBetter,
+	}
 
 	taggedSeries, err := cs.CollectInterval(ctx, l, summaryQuery.Interval, summaryQuery.Stat.Query)
 	if err != nil {
@@ -356,9 +373,14 @@ func (cs *clusterStatCollector) getStatSummary(
 	// When an aggregating function is given (AggQuery.AggFn), use this.
 	// Otherwise, parse the prometheus result in a similar manner to above.
 	if summaryQuery.AggFn != nil {
-		tag, val := summaryQuery.AggFn(summaryQuery.Stat.Query, convertEqualLengthMapToMat(ret.Tagged))
+		tag, val, unit, isHigherBetter := summaryQuery.AggFn(summaryQuery.Stat.Query, convertEqualLengthMapToMat(ret.Tagged))
 		ret.Value = val
 		ret.AggTag = tag
+		// Only override Unit and IsHigherBetter from AggFn if not already set in AggQuery
+		if ret.Unit == "" && unit != "" {
+			ret.Unit = unit
+		}
+		ret.IsHigherBetter = isHigherBetter
 	} else {
 		taggedSummarySeries, err := cs.CollectInterval(ctx, l, trimmedInterval, summaryQuery.Query)
 		if err != nil {

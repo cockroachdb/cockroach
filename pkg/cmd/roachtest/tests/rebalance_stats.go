@@ -43,36 +43,103 @@ var (
 	}
 
 	actionsSummary = []clusterstats.AggQuery{
-		{Stat: rangeRebalancesStat, Query: applyAggQuery("sum", rangeRebalancesStat.Query)},
-		{Stat: leaseTransferStat, Query: applyAggQuery("sum", leaseTransferStat.Query)},
-		{Stat: rangeSplitStat, Query: applyAggQuery("sum", rangeSplitStat.Query)},
+		{
+			Stat:           rangeRebalancesStat,
+			Query:          applyAggQuery("sum", rangeRebalancesStat.Query),
+			Unit:           "operations",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           leaseTransferStat,
+			Query:          applyAggQuery("sum", leaseTransferStat.Query),
+			Unit:           "operations",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           rangeSplitStat,
+			Query:          applyAggQuery("sum", rangeSplitStat.Query),
+			Unit:           "operations",
+			IsHigherBetter: false,
+		},
 	}
 	rebalanceCostSummary = []clusterstats.AggQuery{
 		// NB: Use the cumulative rebalancing snapshot bytes rather than
 		// the instantaneous like the stat query.
 		{
-			Stat:  rebalanceSnapshotSentStat,
-			Query: applyAggQuery("sum", divQuery("range_snapshots_rebalancing_sent_bytes", 1<<20)),
+			Stat:           rebalanceSnapshotSentStat,
+			Query:          applyAggQuery("sum", divQuery("range_snapshots_rebalancing_sent_bytes", 1<<20)),
+			Unit:           "MB",
+			IsHigherBetter: false,
 		},
-		{Stat: leaseTransferStat, Query: applyAggQuery("sum", leaseTransferStat.Query)},
+		{
+			Stat:           leaseTransferStat,
+			Query:          applyAggQuery("sum", leaseTransferStat.Query),
+			Unit:           "operations",
+			IsHigherBetter: false,
+		},
 	}
 	resourceBalanceSummary = []clusterstats.AggQuery{
 		// NB: cv is an abbreviation for coefficient of variation.
-		{Stat: cpuStat, AggFn: distributionAggregate},
-		{Stat: ioWriteStat, AggFn: distributionAggregate},
+		{
+			Stat:           cpuStat,
+			AggFn:          distributionAggregate,
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           ioWriteStat,
+			AggFn:          distributionAggregate,
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
 	}
 	requestBalanceSummary = []clusterstats.AggQuery{
-		{Stat: qpsStat, AggFn: distributionAggregate},
-		{Stat: wpsStat, AggFn: distributionAggregate},
-		{Stat: rpsStat, AggFn: distributionAggregate},
+		{
+			Stat:           qpsStat,
+			AggFn:          distributionAggregate,
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           wpsStat,
+			AggFn:          distributionAggregate,
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           rpsStat,
+			AggFn:          distributionAggregate,
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
 	}
 	resourceMinMaxSummary = []clusterstats.AggQuery{
-		{Stat: cpuStat, Query: minMaxAggQuery(divQuery(cpuStat.Query, 100 /* 100% */))},
-		{Stat: ioWriteStat, Query: minMaxAggQuery(divQuery(ioWriteStat.Query, 400 /* 400mb */))},
+		{
+			Stat:           cpuStat,
+			Query:          minMaxAggQuery(divQuery(cpuStat.Query, 100 /* 100% */)),
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           ioWriteStat,
+			Query:          minMaxAggQuery(divQuery(ioWriteStat.Query, 400 /* 400mb */)),
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
 	}
 	overloadMaxSummary = []clusterstats.AggQuery{
-		{Stat: admissionAvgWaitSecs, Query: applyAggQuery("max", admissionAvgWaitSecs.Query)},
-		{Stat: admissionControlIOOverload, Query: applyAggQuery("max", admissionControlIOOverload.Query)},
+		{
+			Stat:           admissionAvgWaitSecs,
+			Query:          applyAggQuery("max", admissionAvgWaitSecs.Query),
+			Unit:           "seconds",
+			IsHigherBetter: false,
+		},
+		{
+			Stat:           admissionControlIOOverload,
+			Query:          applyAggQuery("max", admissionControlIOOverload.Query),
+			Unit:           "percent",
+			IsHigherBetter: false,
+		},
 	}
 )
 
@@ -102,8 +169,10 @@ func minMaxAggQuery(query string) string {
 	)
 }
 
-func distributionAggregate(query string, series [][]float64) (string, []float64) {
-	return fmt.Sprintf("cv(%s)", query), scale(applyToSeries(series, coefficientOfVariation), 100)
+func distributionAggregate(query string, series [][]float64) (string, []float64, string, bool) {
+	// Return coefficient of variation with unit "percent"
+	// Lower CV values are better (more stable), so isHigherBetter is false
+	return fmt.Sprintf("cv(%s)", query), scale(applyToSeries(series, coefficientOfVariation), 100), "percent", false
 }
 
 func applyToSeries(timeseries [][]float64, aggFn func(vals []float64) float64) []float64 {
