@@ -579,46 +579,107 @@ type insertFunc func(ctx context.Context, idxCtx *Context, result *SearchResult)
 // tries again with another partition, and so on. Eventually, the search will
 // succeed, and searchForInsertHelper returns a search result containing the
 // insert partition (never nil).
+//
+// There are two cases to consider, depending on whether we're inserting into a
+// root partition or a non-root partition:
+//
+//  1. Root partition: If the root partition does not allow inserts, then we
+//     need to instead insert into one of its target partitions. However, there
+//     are race conditions where those can be splitting in turn, in which case
+//     we need to retry the search.
+//  2. Non-root partition: If the top search result does not allow inserts, then
+//     we need to try a different result. We start by fetching 2 results, so
+//     that there's a backup. If both results do not allow inserts, we widen the
+//     search to 4 results, then to 8, and so on (up to 32, upon which we return
+//     an error).
+//
+// Note that it's possible for retry to switch back and forth between #1 and #2,
+// if we're racing with levels being added to or removed from the tree.
 func (vi *Index) searchForInsertHelper(
 	ctx context.Context, idxCtx *Context, fn insertFunc,
 ) (*SearchResult, error) {
-	// In most cases, the top result is the best insert partition. However, if
-	// that partition does not allow inserts, we need to fall back on a target
-	// paritition.
-	idxCtx.tempSearchSet = SearchSet{MaxResults: 1}
-	err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
-	if err != nil {
-		return nil, err
-	}
-	results := idxCtx.tempSearchSet.PopResults()
-	if len(results) != 1 {
-		return nil, errors.AssertionFailedf(
-			"SearchForInsert should return exactly one result, got %d", len(results))
-	}
-	result := &results[0]
-
-	// Loop until we find an insert partition.
-	var metadata PartitionMetadata
+	// Loop until we find an insert partition. Fetch two candidate partitions to
+	// start so that we rarely need to re-search, even in the case where the first
+	// candidate partition does not allow inserts.
+	var original, results []SearchResult
+	var seen map[PartitionKey]struct{}
+	maxResults := 2
+	allowRetry := true
 	for {
-		err = fn(ctx, idxCtx, result)
+		// If there are no more results, get more now.
+		if len(results) == 0 {
+			if !allowRetry || maxResults > 32 {
+				// This is an extreme edge case where none of the partitions we've
+				// checked allow inserts.
+				// TODO(andyk): Do we need to do something better here?
+				return nil, errors.Newf(
+					"search failed to find a partition (level=%d) that allows inserts: %v",
+					idxCtx.level, original)
+			}
+
+			// In most cases, the top result is the best insert partition. However, if
+			// that partition does not allow inserts, we need to fall back to another
+			// partition. Set MaxResults in the same way as searchHelper does.
+			idxCtx.tempSearchSet = SearchSet{MaxResults: maxResults}
+			err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
+			if err != nil {
+				return nil, err
+			}
+			original = idxCtx.tempSearchSet.PopResults()
+			if len(original) < 1 {
+				return nil, errors.AssertionFailedf("SearchForInsert should return at least one result")
+			}
+			results = original
+			allowRetry = false
+		}
+
+		// Check first result.
+		partitionKey := results[0].ChildKey.PartitionKey
+		if seen != nil {
+			// Don't re-check partitions we've already checked.
+			if _, ok := seen[partitionKey]; ok {
+				results = results[1:]
+				continue
+			}
+		}
+
+		// Allow retry since there's at least one result we haven't yet seen.
+		allowRetry = true
+
+		err := fn(ctx, idxCtx, &results[0])
 		if err == nil {
-			// Partition supports inserts.
+			// This partition supports inserts, so done.
 			break
 		}
 
 		var errConditionFailed *ConditionFailedError
 		if errors.Is(err, ErrRestartOperation) {
-			// Entire operation needs to be restarted.
-			return vi.searchForInsertHelper(ctx, idxCtx, fn)
+			// Redo search operation.
+			results = results[:0]
+			continue
 		} else if errors.As(err, &errConditionFailed) {
-			// This partition does not allow adds or removes, so fallback on a
-			// target partition.
-			metadata = errConditionFailed.Actual
-			partitionKey := results[0].ChildKey.PartitionKey
-			result, err = vi.fallbackOnTargets(ctx, idxCtx, partitionKey,
-				idxCtx.randomized, metadata.StateDetails, results)
-			if err != nil {
-				return nil, err
+			// This partition does not allow adds or removes, so fallback to
+			// another partition.
+			if partitionKey == RootKey {
+				// This is the root partition, so fallback to its target partitions.
+				metadata := errConditionFailed.Actual
+				results, err = vi.fallbackOnTargets(ctx, idxCtx,
+					partitionKey, idxCtx.randomized, metadata.StateDetails, results)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// This is a non-root partition, so check the next partition in the
+				// result list. If there are no more partitions to check, then expand
+				// the search to a wider set of partitions by increasing MaxResults.
+				results = results[1:]
+				if len(results) == 0 {
+					if seen == nil {
+						seen = make(map[PartitionKey]struct{})
+					}
+					seen[partitionKey] = struct{}{}
+					maxResults *= 2
+				}
 			}
 		} else {
 			return nil, err
@@ -642,16 +703,14 @@ func (vi *Index) searchForInsertHelper(
 			results[0].ParentPartitionKey, partitionKey, false /* singleStep */)
 	}
 
-	return result, nil
+	return &results[0], nil
 }
 
 // fallbackOnTargets is called when none of the partitions returned by a search
 // allow inserting a vector, because they are in a Draining state. Instead, the
 // search needs to continue with the target partitions of the split (or merge).
-// fallbackOnTargets returns a search result for the target that's closest to
-// the query vector.
-// NOTE: "tempResults" is reused within this method and a pointer to one of its
-// entries is returned as the best result.
+// fallbackOnTargets returns an ordered list of search results for the targets.
+// NOTE: "tempResults" is overwritten within this method by results.
 func (vi *Index) fallbackOnTargets(
 	ctx context.Context,
 	idxCtx *Context,
@@ -659,7 +718,7 @@ func (vi *Index) fallbackOnTargets(
 	vec vector.T,
 	state PartitionStateDetails,
 	tempResults []SearchResult,
-) (*SearchResult, error) {
+) ([]SearchResult, error) {
 	if state.State == DrainingForSplitState {
 		// Synthesize one search result for each split target partition to pass
 		// to getFullVectors.
@@ -677,7 +736,9 @@ func (vi *Index) fallbackOnTargets(
 		var err error
 		tempResults, err = vi.getFullVectors(ctx, idxCtx, tempResults)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err,
+				"fetching centroids for target partitions %d and %d, for splitting partition %d",
+				state.Target1, state.Target2, partitionKey)
 		}
 		if len(tempResults) != 2 {
 			return nil, errors.AssertionFailedf(
@@ -691,10 +752,13 @@ func (vi *Index) fallbackOnTargets(
 		tempResults[0].QuerySquaredDistance = dist1
 		tempResults[1].QuerySquaredDistance = dist2
 
-		if dist1 < dist2 {
-			return &tempResults[0], nil
+		if dist1 > dist2 {
+			// Swap results.
+			tempResult := tempResults[0]
+			tempResults[0] = tempResults[1]
+			tempResults[1] = tempResult
 		}
-		return &tempResults[1], nil
+		return tempResults, nil
 	}
 
 	// TODO(andyk): Add support for DrainingForMergeState.

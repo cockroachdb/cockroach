@@ -39,11 +39,11 @@ import (
 //     but instead are "forwarded" to the closest target sub-partition.
 //  7. Reload the splitting partition's vectors and copy the "left" subset to
 //     the left sub-partition.
-//  8. Update the left sub-partition's state from Updating to Ready.
-//  9. Copy the "right" subset of vectors to the right sub-partition.
-//  10. Update the right sub-partition's state from Updating to Ready. At this
+//  8. Copy the "right" subset of vectors to the right sub-partition. At this
 //     point, the splitting vectors are duplicated in the index. Any searches
 //     will filter out duplicates.
+//  9. Update the left sub-partition's state from Updating to Ready.
+//  10. Update the right sub-partition's state from Updating to Ready.
 //  11. Remove the splitting partition from its parent. The duplicates are no
 //     longer visible to searches.
 //  12. Delete the splitting partition from the index.
@@ -227,10 +227,30 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// Add vectors to nearest partition.
-		err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
-		if err != nil {
-			return err
+		// If still updating the sub-partitions, then distribute vectors among them.
+		if leftMetadata.StateDetails.State == UpdatingState {
+			err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Update sub-partition states from Updating to Ready.
+		if leftMetadata.StateDetails.State == UpdatingState {
+			expected := leftMetadata
+			leftMetadata.StateDetails = MakeReadyDetails()
+			err = fw.updateMetadata(ctx, leftPartitionKey, leftMetadata, expected)
+			if err != nil {
+				return err
+			}
+		}
+		if rightMetadata.StateDetails.State == UpdatingState {
+			expected := rightMetadata
+			rightMetadata.StateDetails = MakeReadyDetails()
+			err = fw.updateMetadata(ctx, rightPartitionKey, rightMetadata, expected)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Check whether the splitting partition is the root.
@@ -615,8 +635,7 @@ func (fw *fixupWorker) deletePartition(
 }
 
 // copyToSplitSubPartitions copies the given set of vectors to left and right
-// sub-partitions, based on which centroid they're closer to. It also updates
-// the state of each sub-partition from Updating to Ready.
+// sub-partitions, based on which centroid they're closer to.
 func (fw *fixupWorker) copyToSplitSubPartitions(
 	ctx context.Context,
 	sourcePartition *Partition,
@@ -659,57 +678,25 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	// transactional; if an error occurs, any vectors already added may not be
 	// rolled back. This is OK, since the vectors are still present in the
 	// source partition.
-	if leftMetadata.StateDetails.State == UpdatingState {
-		leftPartitionKey := sourceState.Target1
-		err = fw.copyVectorsToSubPartition(ctx,
-			leftPartitionKey, leftMetadata, leftVectors, leftChildKeys, leftValueBytes)
-		if err != nil {
-			return err
-		}
-	}
-	if rightMetadata.StateDetails.State == UpdatingState {
-		if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
-			// This should have been a merge, not a split, but we're too far into the
-			// split operation to back out now, so avoid an empty non-root partition by
-			// duplicating the last remaining vector in both partitions.
-			rightVectors = leftVectors
-			rightChildKeys = leftChildKeys
-			rightValueBytes = leftValueBytes
-		}
-
-		rightPartitionKey := sourceState.Target2
-		err = fw.copyVectorsToSubPartition(ctx,
-			rightPartitionKey, rightMetadata, rightVectors, rightChildKeys, rightValueBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// copyVectorsToSubPartition copies the given set of vectors, along with
-// associated keys and values, to a split sub-partition with the given key. The
-// vectors will only be added if the partition's metadata matches the expected
-// value. It also updates the state of the partition from Updating to Ready.
-func (fw *fixupWorker) copyVectorsToSubPartition(
-	ctx context.Context,
-	partitionKey PartitionKey,
-	metadata PartitionMetadata,
-	vectors vector.Set,
-	childKeys []ChildKey,
-	valueBytes []ValueBytes,
-) error {
-	// Add vectors to sub-partition, as long as metadata matches.
-	err := fw.addToPartition(ctx, partitionKey, vectors, childKeys, valueBytes, metadata)
+	leftPartitionKey := sourceState.Target1
+	err = fw.addToPartition(ctx,
+		leftPartitionKey, leftVectors, leftChildKeys, leftValueBytes, leftMetadata)
 	if err != nil {
 		return err
 	}
 
-	// Update partition state from Updating to Ready.
-	expected := metadata
-	metadata.StateDetails = MakeReadyDetails()
-	err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
+	if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
+		// This should have been a merge, not a split, but we're too far into the
+		// split operation to back out now, so avoid an empty non-root partition by
+		// duplicating the last remaining vector in both partitions.
+		rightVectors = leftVectors
+		rightChildKeys = leftChildKeys
+		rightValueBytes = leftValueBytes
+	}
+
+	rightPartitionKey := sourceState.Target2
+	err = fw.addToPartition(ctx,
+		rightPartitionKey, rightVectors, rightChildKeys, rightValueBytes, rightMetadata)
 	if err != nil {
 		return err
 	}
