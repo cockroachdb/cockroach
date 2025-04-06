@@ -82,3 +82,47 @@ query II
 SELECT * FROM t1
 ----
 1 1
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY);
+
+statement ok
+BEGIN;
+
+statement error pgcode 23505 duplicate key value violates unique constraint "t2_pkey"
+INSERT INTO t2 VALUES (1), (1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement error pgcode 23505 duplicate key value violates unique constraint "t2_pkey"
+INSERT INTO t2 VALUES (1);
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement ok
+DELETE FROM t2 WHERE k = 1;
+
+statement ok
+INSERT INTO t2 VALUES (1);
+
+statement ok
+COMMIT;
+
+query I
+SELECT * FROM t2
+----
+1
