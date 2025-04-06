@@ -1226,12 +1226,11 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 // getNextBootstrapAddress returns the next available bootstrap
 // address. The caller must hold the lock.
 func (g *Gossip) getNextBootstrapAddressLocked() util.UnresolvedAddr {
-	// Run through addresses round robin starting at last address index.
+	// Run through addresses round-robin starting at last address index.
 	for range g.addresses {
 		g.addressIdx++
 		g.addressIdx %= len(g.addresses)
-		//nolint:deferloop TODO(#137605)
-		defer func(idx int) { g.addressesTried[idx] = struct{}{} }(g.addressIdx)
+		g.addressesTried[g.addressIdx] = struct{}{}
 		addr := g.addresses[g.addressIdx]
 		addrStr := addr.String()
 		if _, addrActive := g.bootstrapping[addrStr]; !addrActive {
