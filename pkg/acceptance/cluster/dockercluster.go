@@ -772,11 +772,12 @@ func (l *DockerCluster) stop(ctx context.Context) {
 			fmt.Sprintf("stderr.%s.log", strings.Replace(
 				timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
 		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
-		w, err := os.Create(file)
-		maybePanic(err)
-		//nolint:deferloop TODO(#137605)
-		defer w.Close()
-		maybePanic(n.Logs(ctx, w))
+		func() {
+			w, err := os.Create(file)
+			maybePanic(err)
+			defer w.Close()
+			maybePanic(n.Logs(ctx, w))
+		}()
 		log.Infof(ctx, "node %d: stderr at %s", i, file)
 		if crashed {
 			log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)

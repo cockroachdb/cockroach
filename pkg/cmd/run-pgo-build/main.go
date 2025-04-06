@@ -170,9 +170,8 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 			if err != nil {
 				panic(err)
 			}
-			//nolint:deferloop TODO(#137605)
-			defer pprofFile.Close()
 			prof, err := profile.Parse(pprofFile)
+			_ = pprofFile.Close()
 			if err != nil {
 				panic(err)
 			}
