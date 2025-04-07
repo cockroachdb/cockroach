@@ -36,14 +36,14 @@ import (
 )
 
 type gaugeValuer interface {
-	GetName() string
+	GetName(useStaticLabels bool) string
 	Value() int64
 }
 
 func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 	t.Helper()
 	if a := g.Value(); a != e {
-		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))
+		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(false /* useStaticLabels */), id, a, e))
 	}
 }
 
@@ -368,7 +368,7 @@ func TestStoreMetrics(t *testing.T) {
 			{m.RdbTableReadersMemEstimate, 50},
 		} {
 			if a := tc.gauge.Value(); a < tc.min {
-				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
+				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(false /* useStaticLabels */), a, tc.min)
 			}
 		}
 		for _, tc := range []struct {
@@ -382,7 +382,7 @@ func TestStoreMetrics(t *testing.T) {
 			{m.RdbCompactions, 0},
 		} {
 			if a := tc.counter.Count(); a < tc.min {
-				t.Errorf("counter %s = %d < min %d", tc.counter.GetName(), a, tc.min)
+				t.Errorf("counter %s = %d < min %d", tc.counter.GetName(false /* useStaticLabels */), a, tc.min)
 			}
 		}
 	}
