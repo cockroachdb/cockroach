@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -205,7 +206,7 @@ func (p *planner) DeserializeSessionState(
 			stmt,
 			placeholderTypes,
 			prepStmt.PlaceholderTypeHints,
-			PreparedStatementOriginSessionMigration,
+			prep.StatementOriginSessionMigration,
 		)
 		if err != nil {
 			return nil, err

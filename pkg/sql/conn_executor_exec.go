@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -150,7 +151,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, parserStmt, res)
 
 	case stateOpen:
-		var preparedStmt *PreparedStatement
+		var preparedStmt *prep.Statement
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
@@ -349,7 +350,7 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
 	parserStmt statements.Statement[tree.Statement],
-	prepared *PreparedStatement,
+	prepared *prep.Statement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
@@ -905,7 +906,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -1932,7 +1933,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -4427,10 +4428,7 @@ func logTraceAboveThreshold(
 }
 
 func (ex *connExecutor) execWithProfiling(
-	ctx context.Context,
-	ast tree.Statement,
-	prepared *PreparedStatement,
-	op func(context.Context) error,
+	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
