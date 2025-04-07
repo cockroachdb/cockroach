@@ -1814,7 +1814,7 @@ func doRestorePlan(
 	}
 
 	if restoreStmt.Options.OnlineImpl() {
-		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
+		if err := checkManifestsForOnlineCompat(ctx, p.ExecCfg().Settings, mainBackupManifests); err != nil {
 			return err
 		}
 	}
