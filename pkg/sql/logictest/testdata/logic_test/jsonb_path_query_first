@@ -1,0 +1,16 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query T
+SELECT jsonb_path_query_first('[1, 2, 3]', '$[*]');
+----
+1
+
+query T
+SELECT jsonb_path_query_first('[2, 3]', '$[*]');
+----
+2
+
+query T
+SELECT jsonb_path_query_first('[]', '$[*]');
+----
+NULL

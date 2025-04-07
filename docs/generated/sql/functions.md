@@ -1306,6 +1306,21 @@ JSON object, and its fields provide named values to be substituted
 into the jsonpath expression. If the silent argument is true, the
 function suppresses the following errors: missing object field or
 array element, unexpected JSON item type, datetime and numeric errors.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
+specified JSON value, or NULL if there are no results.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
+specified JSON value, or NULL if there are no results. The vars
+argument must be a JSON object, and its fields provide named values
+to be substituted into the jsonpath expression.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
+specified JSON value, or NULL if there are no results. The vars
+argument must be a JSON object, and its fields provide named values
+to be substituted into the jsonpath expression. If the silent argument is true, the
+function suppresses the following errors: missing object field or
+array element, unexpected JSON item type, datetime and numeric errors.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
