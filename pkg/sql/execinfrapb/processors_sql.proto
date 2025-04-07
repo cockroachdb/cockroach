@@ -102,9 +102,8 @@ message TableReaderSpec {
   //     50:    bump timestamp to 40
   //     ...
   //
-  // Note: it is an error to perform a historical read at an initial timestamp
-  // older than this value.
-  //
+  // Note: if initial timestamp is older than this value when the scan begins,
+  // the timestamp will be advanced forward.
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
 
   // Indicates the row-level locking strength to be used by the scan. If set to
