@@ -177,6 +177,25 @@ func getMaxWarehousesAboveEfficiency(
 	return aggregatedMetrics, nil
 }
 
+func convertSnapshotsToOpenmetrics(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	warehouses int,
+	snapshots map[string][]exporter.SnapshotTick,
+) error {
+	statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
+
+	// Create buffer for performance metrics
+	perfBuf := bytes.NewBuffer([]byte{})
+	exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{warehouseLabel: fmt.Sprintf("%d", warehouses)})
+	writer := io.Writer(perfBuf)
+	exporter.Init(&writer)
+	defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, nodes, statsFilePrefix)
+	return exportOpenMetrics(exporter, snapshots)
+}
+
 type tpccOptions struct {
 	DB                 string // database name
 	Warehouses         int
@@ -2051,26 +2070,17 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					// overload but something that deserves failing the whole test.
 					t.Fatal(err)
 				}
-				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
-
 				// This roachtest uses the stats.json emitted from hdr histogram to compute Tpmc and show it in the run log
 				// Since directly emitting openmetrics and computing Tpmc from it is not supported, it is better to convert the
 				// stats.json emitted to openmetrics in the test itself and upload it to the cluster
 				if t.ExportOpenmetrics() {
-					// Creating a prefix
-					statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
-
-					// Create buffer for performance metrics
-					perfBuf := bytes.NewBuffer([]byte{})
-					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{warehouseLabel: fmt.Sprintf("%d", warehouses)})
-					writer := io.Writer(perfBuf)
-					exporter.Init(&writer)
-					defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, group.LoadNodes, statsFilePrefix)
-
-					if err := exportOpenMetrics(exporter, snapshots); err != nil {
-						return errors.Wrapf(err, "error converting histogram to openmetrics")
+					if err = convertSnapshotsToOpenmetrics(ctx, t, c, group.LoadNodes, warehouses, snapshots); err != nil {
+						// If we are not able to convert, then there's an error
+						t.Fatal(err)
 					}
 				}
+
+				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
 				resultChan <- result
 				return nil
 			})
