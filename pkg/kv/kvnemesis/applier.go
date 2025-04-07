@@ -155,6 +155,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			if err := txn.SetIsoLevel(o.IsoLevel); err != nil {
 				panic(err)
 			}
+			txn.SetBufferedWritesEnabled(o.BufferedWrites)
 			if savedTxn != nil && txn.TestingCloneTxn().Epoch == 0 {
 				// If the txn's current epoch is 0 and we've run at least one prior
 				// iteration, we were just aborted.
