@@ -7,7 +7,6 @@ package storage
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -345,116 +344,7 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-var _ sstable.BlockIntervalSuffixReplacer = MVCCBlockIntervalSuffixReplacer{}
-
-type MVCCBlockIntervalSuffixReplacer struct{}
-
-func (MVCCBlockIntervalSuffixReplacer) ApplySuffixReplacement(
-	interval sstable.BlockInterval, newSuffix []byte,
-) (sstable.BlockInterval, error) {
-	synthDecoded, err := mvccencoding.DecodeMVCCTimestampSuffix(newSuffix)
-	if err != nil {
-		return sstable.BlockInterval{}, errors.AssertionFailedf("could not decode synthetic suffix")
-	}
-	synthDecodedWalltime := uint64(synthDecoded.WallTime)
-	// The returned bound includes the synthetic suffix, regardless of its logical
-	// component.
-	return sstable.BlockInterval{Lower: synthDecodedWalltime, Upper: synthDecodedWalltime + 1}, nil
-}
-
-type pebbleIntervalMapper struct{}
-
-var _ sstable.IntervalMapper = pebbleIntervalMapper{}
-
-// MapPointKey is part of the sstable.IntervalMapper interface.
-func (pebbleIntervalMapper) MapPointKey(
-	key pebble.InternalKey, value []byte,
-) (sstable.BlockInterval, error) {
-	return mapSuffixToInterval(key.UserKey)
-}
-
-// MapRangeKey is part of the sstable.IntervalMapper interface.
-func (pebbleIntervalMapper) MapRangeKeys(span sstable.Span) (sstable.BlockInterval, error) {
-	var res sstable.BlockInterval
-	for _, k := range span.Keys {
-		i, err := mapSuffixToInterval(k.Suffix)
-		if err != nil {
-			return sstable.BlockInterval{}, err
-		}
-		res.UnionWith(i)
-	}
-	return res, nil
-}
-
-// mapSuffixToInterval maps the suffix of a key to a timestamp interval.
-// The buffer can be an entire key or just the suffix.
-func mapSuffixToInterval(b []byte) (sstable.BlockInterval, error) {
-	if len(b) == 0 {
-		return sstable.BlockInterval{}, nil
-	}
-	// Last byte is the version length + 1 when there is a version,
-	// else it is 0.
-	versionLen := int(b[len(b)-1])
-	if versionLen == 0 {
-		// This is not an MVCC key that we can collect.
-		return sstable.BlockInterval{}, nil
-	}
-	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
-	// which case the index is -1.
-	prefixPartEnd := len(b) - 1 - versionLen
-	// Sanity check: the index should be >= -1. Additionally, if the index is >=
-	// 0, it should point to the sentinel byte, as this is a full EngineKey.
-	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && b[prefixPartEnd] != sentinel) {
-		return sstable.BlockInterval{}, errors.Errorf("invalid key %s", roachpb.Key(b).String())
-	}
-	// We don't need the last byte (the version length).
-	versionLen--
-	// Only collect if this looks like an MVCC timestamp.
-	if versionLen == engineKeyVersionWallTimeLen ||
-		versionLen == engineKeyVersionWallAndLogicalTimeLen ||
-		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
-		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
-		// Version consists of the bytes after the sentinel and before the length.
-		ts := binary.BigEndian.Uint64(b[prefixPartEnd+1:])
-		return sstable.BlockInterval{Lower: ts, Upper: ts + 1}, nil
-	}
-	return sstable.BlockInterval{}, nil
-}
-
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
-
-var _ pebble.BlockPropertyFilterMask = (*mvccWallTimeIntervalRangeKeyMask)(nil)
-
-type mvccWallTimeIntervalRangeKeyMask struct {
-	sstable.BlockIntervalFilter
-}
-
-// SetSuffix implements the pebble.BlockPropertyFilterMask interface.
-func (m *mvccWallTimeIntervalRangeKeyMask) SetSuffix(suffix []byte) error {
-	if len(suffix) == 0 {
-		// This is currently impossible, because the only range key Cockroach
-		// writes today is the MVCC Delete Range that's always suffixed.
-		return nil
-	}
-	ts, err := mvccencoding.DecodeMVCCTimestampSuffix(suffix)
-	if err != nil {
-		return err
-	}
-	m.BlockIntervalFilter.SetInterval(uint64(ts.WallTime), math.MaxUint64)
-	return nil
-}
-
-// PebbleBlockPropertyCollectors is the list of functions to construct
-// BlockPropertyCollectors.
-var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
-	func() pebble.BlockPropertyCollector {
-		return sstable.NewBlockIntervalCollector(
-			mvccWallTimeIntervalCollector,
-			pebbleIntervalMapper{},
-			MVCCBlockIntervalSuffixReplacer{},
-		)
-	},
-}
 
 // MinimumSupportedFormatVersion is the version that provides features that the
 // Cockroach code relies on unconditionally (like range keys). New stores are by
@@ -481,7 +371,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
-		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
+		BlockPropertyCollectors:     cockroachkvs.BlockPropertyCollectors,
 		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
 	opts.Experimental.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
