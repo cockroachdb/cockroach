@@ -66,10 +66,10 @@ func TestReplicationStatements(t *testing.T) {
 				require.NoError(t, err)
 
 				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), insertStmt.String()))
+				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), insertStmt.SQL))
 				require.NoError(t, err)
 
-				return insertStmt.String()
+				return insertStmt.SQL
 			case "show-update":
 				var tableName string
 				d.ScanArgs(t, "table", &tableName)
@@ -80,10 +80,10 @@ func TestReplicationStatements(t *testing.T) {
 				require.NoError(t, err)
 
 				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), updateStmt.String()))
+				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), updateStmt.SQL))
 				require.NoError(t, err)
 
-				return updateStmt.String()
+				return updateStmt.SQL
 			case "show-delete":
 				var tableName string
 				d.ScanArgs(t, "table", &tableName)
@@ -94,10 +94,10 @@ func TestReplicationStatements(t *testing.T) {
 				require.NoError(t, err)
 
 				// Test preparing the statement to ensure it is valid SQL.
-				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), deleteStmt.String()))
+				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), deleteStmt.SQL))
 				require.NoError(t, err)
 
-				return deleteStmt.String()
+				return deleteStmt.SQL
 			default:
 				return "unknown command: " + d.Cmd
 			}
