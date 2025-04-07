@@ -2750,6 +2750,13 @@ func TestRepeatableReadLogicCCL_plpgsql_record(
 	runCCLLogicTest(t, "plpgsql_record")
 }
 
+func TestRepeatableReadLogicCCL_plpgsql_srf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_srf")
+}
+
 func TestRepeatableReadLogicCCL_plpgsql_txn(
 	t *testing.T,
 ) {

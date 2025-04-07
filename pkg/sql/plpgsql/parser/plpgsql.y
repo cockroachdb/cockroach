@@ -338,20 +338,20 @@ func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
 }
 
 %type <str> decl_varname decl_defkey
-%type <bool>	decl_const decl_notnull
+%type <bool> decl_const decl_notnull
 %type <plpgsqltree.Expr>	decl_defval decl_cursor_query
 %type <tree.ResolvableTypeReference>	decl_datatype
-%type <str>		decl_collate
+%type <str>	decl_collate
 
-%type <str>	expr_until_semi expr_until_paren stmt_until_semi return_expr
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
-%type <plpgsqltree.Expr>	opt_exitcond
+%type <plpgsqltree.Expr> return_expr opt_exitcond
 
 %type <[]plpgsqltree.Variable> for_target
 %type <*tree.NumVal> foreach_slice
 %type <plpgsqltree.ForLoopControl> for_control
 
-%type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
+%type <str> any_identifier opt_block_label opt_loop_label opt_label
 %type <str> opt_error_level option_type
 
 %type <tree.DoBlockOptions> do_stmt_opt_list
@@ -368,6 +368,7 @@ func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <plpgsqltree.Statement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
 %type <plpgsqltree.Statement>	stmt_commit stmt_rollback
 %type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
+%type <plpgsqltree.Statement> return_query
 
 %type <plpgsqltree.Statement> decl_statement
 %type <[]plpgsqltree.Statement> decl_sect opt_decl_stmts decl_stmts
@@ -1157,49 +1158,41 @@ stmt_continue: CONTINUE opt_label opt_exitcond
 
 stmt_return: RETURN return_expr ';'
   {
-    var expr plpgsqltree.Expr
-    if $2 != "" {
-      var err error
-      expr, err = plpgsqllex.(*lexer).ParseExpr($2)
-      if err != nil {
-        return setErr(plpgsqllex, err)
-      }
-    }
-    $$.val = &plpgsqltree.Return{Expr: expr}
+    $$.val = &plpgsqltree.Return{Expr: $2.expr()}
   }
-| RETURN_NEXT NEXT
+| RETURN_NEXT NEXT return_expr ';'
   {
-    return unimplemented(plpgsqllex, "return next")
+    $$.val = &plpgsqltree.ReturnNext{Expr: $3.expr()}
   }
-| RETURN_QUERY QUERY
- {
-   return unimplemented (plpgsqllex, "return query")
- }
+| RETURN_QUERY QUERY return_query ';'
+  {
+    $$.val = $3.statement()
+  }
 ;
 
 return_expr:
   {
-    sqlStr, err := plpgsqllex.(*lexer).ReadReturnExpr()
+    retExpr, err := plpgsqllex.(*lexer).ParseReturnExpr()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$ = sqlStr
+    $$.val = retExpr
   }
 ;
 
-query_options:
+return_query:
   {
-    _, terminator, err := plpgsqllex.(*lexer).ReadSqlExpr(EXECUTE, ';')
-    if err != nil {
-      return setErr(plpgsqllex, err)
-    }
-    if terminator == EXECUTE {
+    if plpgsqllex.(*lexer).peekForExecute() {
+      // Advance the lexer by one token so that the error correctly points to
+      // the EXECUTE keyword.
+      plpgsqllex.(*lexer).Advance(1)
       return unimplemented (plpgsqllex, "return dynamic sql query")
     }
-    _, _, err = plpgsqllex.(*lexer).ReadSqlExpr(';')
+    retQuery, err := plpgsqllex.(*lexer).ParseReturnQuery()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    $$.val = retQuery
   }
 ;
 
