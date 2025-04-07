@@ -14,3 +14,11 @@ var _ Path = Size{}
 func (s Size) String() string {
 	return ".size()"
 }
+
+type Type struct{}
+
+var _ Path = Type{}
+
+func (t Type) String() string {
+	return ".type()"
+}

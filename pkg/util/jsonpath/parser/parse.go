@@ -177,7 +177,7 @@ func walk(path jsonpath.Path, nestingLevel int, insideArraySubscript bool) error
 		}
 		return nil
 	case jsonpath.Root, jsonpath.Key, jsonpath.Wildcard, jsonpath.Regex,
-		jsonpath.AnyKey, jsonpath.Scalar, jsonpath.Size:
+		jsonpath.AnyKey, jsonpath.Scalar, jsonpath.Size, jsonpath.Type:
 		// These are leaf nodes that don't require any further checks.
 		return nil
 	default:

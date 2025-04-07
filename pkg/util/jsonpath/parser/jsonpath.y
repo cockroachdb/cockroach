@@ -529,7 +529,7 @@ method:
   }
 | TYPE
   {
-    return unimplemented(jsonpathlex, ".type()")
+    $$.val = jsonpath.Type{}
   }
 | KEYVALUE
   {

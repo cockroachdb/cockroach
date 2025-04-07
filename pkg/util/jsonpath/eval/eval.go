@@ -131,7 +131,7 @@ func (ctx *jsonpathCtx) eval(
 		return ctx.evalFilter(path, jsonValue, unwrap)
 	case jsonpath.Last:
 		return ctx.evalLast()
-	case jsonpath.Size:
+	case jsonpath.Size, jsonpath.Type:
 		return ctx.evalMethod(path, jsonValue)
 	default:
 		return nil, errUnimplemented

@@ -1421,3 +1421,85 @@ SELECT jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2 - 1 to $
 {"a": 13}
 {"b": 14}
 "ccc"
+
+query T
+SELECT jsonb_path_query('{}', '$.type()');
+----
+"object"
+
+query T
+SELECT jsonb_path_query('[]', '$.type()');
+----
+"array"
+
+query T
+SELECT jsonb_path_query('"hello"', '$.type()');
+----
+"string"
+
+query T
+SELECT jsonb_path_query('0', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('0.1', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('true', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('false', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', '$.type()');
+----
+"null"
+
+query T
+SELECT jsonb_path_query('null', '"123".type()');
+----
+"string"
+
+# TODO(#14425): should be "number", but the scanner doesn't scan this properly.
+statement error pgcode 42601 pq: at or near \"trailing junk after numeric literal
+SELECT jsonb_path_query('null', '(123).type()');
+
+query T
+SELECT jsonb_path_query('null', 'true.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', 'null.type()');
+----
+"null"
+
+query T rowsort
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+----
+"null"
+"number"
+"boolean"
+"string"
+"array"
+"object"
+
+query T
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+----
+"array"
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+
+query T
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+----
+3
