@@ -829,7 +829,7 @@ func TestChangefeedDiff(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedTenants(t *testing.T) {
@@ -4191,6 +4191,98 @@ func TestChangefeedEnriched(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestChangefeedsParallelEnriched tests that multiple changefeeds can run
+// in parallel with the enriched envelope. It is most useful under race.
+func TestChangefeedsParallelEnriched(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const count = 10
+	const maxIterations = 1_000_000_000
+	const maxRows = 100
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		ctx, cancel := context.WithCancel(ctx)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			db := sqlutils.MakeSQLRunner(s.Server.SQLConn(t))
+			var i int
+			for i = 0; i < maxIterations && ctx.Err() == nil; i++ {
+				db.Exec(t, `UPSERT INTO d.foo VALUES ($1, $2)`, i%maxRows, fmt.Sprintf("hello %d", i))
+			}
+		}()
+
+		opts := `envelope='enriched'`
+
+		_, isKafka := f.(*kafkaFeedFactory)
+		useAvro := isKafka && rand.Intn(2) == 0
+		if useAvro {
+			t.Logf("using avro")
+			opts += `, format='avro'`
+		}
+		var feeds []cdctest.TestFeed
+		for range count {
+			feed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH %s`, opts))
+			feeds = append(feeds, feed)
+		}
+
+		// consume from the feeds
+		for _, feed := range feeds {
+			feed := feed
+			msgCount := 0
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for ctx.Err() == nil {
+					_, err := feed.Next()
+					if err != nil {
+						if errors.Is(err, context.Canceled) {
+							t.Errorf("error reading from feed: %v", err)
+						}
+						break
+					}
+					msgCount++
+				}
+				assert.GreaterOrEqual(t, msgCount, 0)
+			}()
+		}
+
+		// let the feeds run for a few seconds
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			t.Fatalf("context cancelled: %v", ctx.Err())
+		}
+
+		cancel()
+
+		for _, feed := range feeds {
+			closeFeed(t, feed)
+		}
+
+		doneWaiting := make(chan struct{})
+		go func() {
+			defer close(doneWaiting)
+			wg.Wait()
+		}()
+		select {
+		case <-doneWaiting:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for goroutines to finish")
+		}
+	}
+	// Sinkless testfeeds have some weird shutdown behaviours, so exclude them for now.
+	cdcTest(t, testFn, feedTestRestrictSinks("kafka", "pubsub", "webhook"))
 }
 
 func TestChangefeedEnrichedAvro(t *testing.T) {
