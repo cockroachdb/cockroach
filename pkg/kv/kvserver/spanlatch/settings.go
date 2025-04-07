@@ -21,5 +21,4 @@ var LongLatchHoldThreshold = settings.RegisterDurationSetting(
 	"kv.concurrency.long_latch_hold_duration",
 	"the threshold for logging long latch holds",
 	3*time.Second,
-	settings.NonNegativeDuration,
 )

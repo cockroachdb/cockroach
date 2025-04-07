@@ -1,7 +1,7 @@
 statement ok
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
 
-statement error pq: invalid value for sql.log.slow_query.latency_threshold: cannot be set to a negative duration
+statement error pq: cannot be set to a negative duration
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1ms'
 
 statement error pq: invalid cluster setting argument type

@@ -154,7 +154,6 @@ var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
 	"admission.replication_control.range_sequencer_gc_threshold",
 	"the inactive duration for a range sequencer after it's garbage collected",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // WorkInfo provides information that is used to order work within an WorkQueue.

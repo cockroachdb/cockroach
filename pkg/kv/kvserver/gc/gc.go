@@ -84,6 +84,8 @@ var TxnCleanupThreshold = settings.RegisterDurationSetting(
 	"the threshold after which a transaction is considered abandoned and "+
 		"fit for removal, as measured by the maximum of its last heartbeat and timestamp",
 	time.Hour,
+	// TODO(arul): consider increasing the floor.
+	settings.PositiveDuration,
 )
 
 // MaxLocksPerCleanupBatch is the maximum number of locks that GC will send

@@ -295,7 +295,6 @@ var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
 		"after changing this setting)",
 	5*time.Second,
 	settings.WithName("server.shutdown.lease_transfer_iteration.timeout"),
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 

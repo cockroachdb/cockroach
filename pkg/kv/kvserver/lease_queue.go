@@ -46,7 +46,6 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 		"It does not prevent transferring leases in order to allow a "+
 		"replica to be removed from a range.",
 	1*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // MinIOOverloadLeaseShedInterval controls how frequently a store may decide to
@@ -57,7 +56,6 @@ var MinIOOverloadLeaseShedInterval = settings.RegisterDurationSetting(
 	"controls how frequently all leases can be shed from a node "+
 		"due to the node becoming IO overloaded",
 	30*time.Second,
-	settings.NonNegativeDuration,
 )
 
 type leaseQueue struct {

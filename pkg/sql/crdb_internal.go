@@ -753,6 +753,12 @@ var statsAsOfTimeClusterMode = settings.RegisterDurationSetting(
 	"sql.crdb_internal.table_row_statistics.as_of_time",
 	"historical query time used to build the crdb_internal.table_row_statistics table",
 	-10*time.Second,
+	settings.WithValidateDuration(func(v time.Duration) error {
+		if v > 0 {
+			return errors.Errorf("cannot be set to a positive duration: %s", v)
+		}
+		return nil
+	}),
 )
 
 var crdbInternalTablesTableLastStats = virtualSchemaTable{

@@ -328,7 +328,6 @@ var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
 	"determines the interval between polling done by the in-flight trace "+
 		"collector for the statement bundle, set to zero to disable",
 	0,
-	settings.NonNegativeDuration,
 )
 
 var timeoutTraceCollectionEnabled = settings.RegisterBoolSetting(

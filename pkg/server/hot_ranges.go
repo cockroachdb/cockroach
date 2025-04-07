@@ -21,5 +21,4 @@ var HotRangesRequestNodeTimeout = settings.RegisterDurationSetting(
 	"server.hot_ranges_request.node.timeout",
 	"the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout",
 	time.Minute*5,
-	settings.NonNegativeDuration,
 	settings.WithPublic)

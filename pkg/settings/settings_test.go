@@ -163,7 +163,7 @@ var i1A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.1", "desc", 
 var i2A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.2", "desc", 5)
 var fA = settings.RegisterFloatSetting(settings.SystemVisible, "f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting(settings.ApplicationLevel, "d", "desc", time.Second)
-var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.ApplicationLevel, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
+var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.ApplicationLevel, "d_with_explicit_unit", "desc", time.Second, settings.WithPublic)
 var pA = settings.RegisterProtobufSetting(settings.ApplicationLevel, "p", "desc", &dummyVersion{msg1: "foo"})
 var _ = settings.RegisterDurationSetting(settings.ApplicationLevel, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
 var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
@@ -188,7 +188,7 @@ var strVal = settings.RegisterStringSetting(settings.SystemOnly,
 		}
 		return nil
 	}))
-var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second, settings.NonNegativeDuration)
+var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second)
 var fVal = settings.RegisterFloatSetting(settings.SystemOnly, "fVal", "desc", 5.4, settings.NonNegativeFloat)
 var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly, "byteSize.Val", "desc", mb)
 var iVal = settings.RegisterIntSetting(settings.SystemOnly,
