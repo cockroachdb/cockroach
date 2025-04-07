@@ -94,8 +94,8 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 │
 ├───• 3 (10.5, 2.5) [Updating:2]
 │   │
-│   ├───• vec2 (7, 4)
-│   └───• vec5 (14, 1)
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
 │
 └───• 4 (2.5, 2.5) [Updating:2]
 
@@ -113,12 +113,12 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 │
 ├───• 3 (10.5, 2.5)
 │   │
-│   ├───• vec2 (7, 4)
-│   └───• vec5 (14, 1)
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
 │
 └───• 4 (2.5, 2.5) [Updating:2]
 
-# Add ~1/2 vectors to left sub-partition #3.
+# Add ~1/2 vectors to right sub-partition #4.
 force-split partition-key=2 parent-partition-key=1 steps=1
 ----
 • 1 (6.8, 4.2)
@@ -132,13 +132,13 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 │
 ├───• 3 (10.5, 2.5)
 │   │
-│   ├───• vec2 (7, 4)
-│   └───• vec5 (14, 1)
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
 │
 └───• 4 (2.5, 2.5) [Updating:2]
     │
-    ├───• vec1 (1, 2)
-    └───• vec3 (4, 3)
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
 
 # Update left sub-partition #4 to Ready state.
 force-split partition-key=2 parent-partition-key=1 steps=1
@@ -154,13 +154,13 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 │
 ├───• 3 (10.5, 2.5)
 │   │
-│   ├───• vec2 (7, 4)
-│   └───• vec5 (14, 1)
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
 │
 └───• 4 (2.5, 2.5)
     │
-    ├───• vec1 (1, 2)
-    └───• vec3 (4, 3)
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
 
 # Remove splitting partition #2 from parent and delete it.
 force-split partition-key=2 parent-partition-key=1 steps=1
@@ -169,13 +169,13 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 │
 ├───• 4 (2.5, 2.5)
 │   │
-│   ├───• vec1 (1, 2)
-│   └───• vec3 (4, 3)
+│   ├───• vec3 (4, 3)
+│   └───• vec1 (1, 2)
 │
 └───• 3 (10.5, 2.5)
     │
-    ├───• vec2 (7, 4)
-    └───• vec5 (14, 1)
+    ├───• vec5 (14, 1)
+    └───• vec2 (7, 4)
 
 format-tree root=2
 ----
@@ -316,13 +316,12 @@ force-split partition-key=2 parent-partition-key=1 steps=7
 │
 └───• 7 (5.5, 6.25)
     │
-    ├───• 4 (5, 6) [Splitting:5,6]
-    │   │
-    │   ├───• vec2 (3, 5)
-    │   ├───• vec3 (6, 8)
-    │   └───• vec4 (6, 5)
-    │
-    └───• 5 (6, 6.5) [Updating:4]
+    ├───• 5 (6, 6.5) [Updating:4]
+    └───• 4 (5, 6) [Splitting:5,6]
+        │
+        ├───• vec2 (3, 5)
+        ├───• vec3 (6, 8)
+        └───• vec4 (6, 5)
 
 # Now split of child #4 should be able to continue with new parent #7. Notice
 # that partition #7's centroid is not exact, since it was computed while child
@@ -339,14 +338,14 @@ force-split partition-key=4 parent-partition-key=7 steps=7
 │
 └───• 7 (5.5, 6.25)
     │
+    ├───• 5 (6, 6.5)
+    │   │
+    │   ├───• vec4 (6, 5)
+    │   └───• vec3 (6, 8)
+    │
     ├───• 4 (5, 6) [DrainingForSplit:5,6]
     │   │
     │   ├───• vec2 (3, 5)
-    │   ├───• vec3 (6, 8)
-    │   └───• vec4 (6, 5)
-    │
-    ├───• 5 (6, 6.5)
-    │   │
     │   ├───• vec3 (6, 8)
     │   └───• vec4 (6, 5)
     │
@@ -367,14 +366,14 @@ force-split partition-key=7 parent-partition-key=1 steps=10
 │
 ├───• 7 (5.5, 6.25) [DrainingForSplit:9,10]
 │   │
+│   ├───• 5 (6, 6.5)
+│   │   │
+│   │   ├───• vec4 (6, 5)
+│   │   └───• vec3 (6, 8)
+│   │
 │   ├───• 4 (5, 6) [DrainingForSplit:5,6]
 │   │   │
 │   │   ├───• vec2 (3, 5)
-│   │   ├───• vec3 (6, 8)
-│   │   └───• vec4 (6, 5)
-│   │
-│   ├───• 5 (6, 6.5)
-│   │   │
 │   │   ├───• vec3 (6, 8)
 │   │   └───• vec4 (6, 5)
 │   │
@@ -384,14 +383,14 @@ force-split partition-key=7 parent-partition-key=1 steps=10
 │
 ├───• 9 (5.5, 6.25)
 │   │
-│   ├───• 4 (5, 6) [DrainingForSplit:5,6]
+│   ├───• 5 (6, 6.5)
 │   │   │
-│   │   ├───• vec2 (3, 5)
-│   │   ├───• vec3 (6, 8)
-│   │   └───• vec4 (6, 5)
+│   │   ├───• vec4 (6, 5)
+│   │   └───• vec3 (6, 8)
 │   │
-│   └───• 5 (6, 6.5)
+│   └───• 4 (5, 6) [DrainingForSplit:5,6]
 │       │
+│       ├───• vec2 (3, 5)
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
@@ -415,14 +414,14 @@ force-split partition-key=4 parent-partition-key=7 steps=2
 │
 ├───• 7 (5.5, 6.25) [DrainingForSplit:9,10]
 │   │
+│   ├───• 5 (6, 6.5)
+│   │   │
+│   │   ├───• vec4 (6, 5)
+│   │   └───• vec3 (6, 8)
+│   │
 │   ├───• 4 (5, 6) [DrainingForSplit:5,6]
 │   │   │
 │   │   ├───• vec2 (3, 5)
-│   │   ├───• vec3 (6, 8)
-│   │   └───• vec4 (6, 5)
-│   │
-│   ├───• 5 (6, 6.5)
-│   │   │
 │   │   ├───• vec3 (6, 8)
 │   │   └───• vec4 (6, 5)
 │   │
@@ -432,14 +431,14 @@ force-split partition-key=4 parent-partition-key=7 steps=2
 │
 ├───• 9 (5.5, 6.25)
 │   │
-│   ├───• 4 (5, 6) [DrainingForSplit:5,6]
+│   ├───• 5 (6, 6.5)
 │   │   │
-│   │   ├───• vec2 (3, 5)
-│   │   ├───• vec3 (6, 8)
-│   │   └───• vec4 (6, 5)
+│   │   ├───• vec4 (6, 5)
+│   │   └───• vec3 (6, 8)
 │   │
-│   └───• 5 (6, 6.5)
+│   └───• 4 (5, 6) [DrainingForSplit:5,6]
 │       │
+│       ├───• vec2 (3, 5)
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
@@ -468,14 +467,14 @@ force-split partition-key=7 parent-partition-key=1 steps=2
 │
 └───• 9 (5.5, 6.25)
     │
-    ├───• 4 (5, 6) [DrainingForSplit:5,6]
+    ├───• 5 (6, 6.5)
     │   │
-    │   ├───• vec2 (3, 5)
-    │   ├───• vec3 (6, 8)
-    │   └───• vec4 (6, 5)
+    │   ├───• vec4 (6, 5)
+    │   └───• vec3 (6, 8)
     │
-    └───• 5 (6, 6.5)
+    └───• 4 (5, 6) [DrainingForSplit:5,6]
         │
+        ├───• vec2 (3, 5)
         ├───• vec3 (6, 8)
         └───• vec4 (6, 5)
 
@@ -500,8 +499,8 @@ force-split partition-key=4 parent-partition-key=9 steps=2
     │
     └───• 5 (6, 6.5)
         │
-        ├───• vec3 (6, 8)
-        └───• vec4 (6, 5)
+        ├───• vec4 (6, 5)
+        └───• vec3 (6, 8)
 
 # ----------------------------------------------------------------------
 # Try to split a non-leaf partition with only 1 vector.
@@ -804,20 +803,28 @@ format-tree
 │
 ├───• 12 (0.5, -7.25)
 │   │
-│   ├───• 4 (0, -8) [DrainingForSplit:8,9]
-│   │   │
-│   │   └───• vec2 (0, -8)
-│   │
-│   ├───• 6 (2, -5)
-│   │   │
-│   │   └───• vec3 (2, -5)
-│   │
 │   ├───• 8 (0, -8)
 │   │   │
 │   │   └───• vec2 (0, -8)
 │   │
-│   └───• 9 (0, -8)
+│   ├───• 9 (0, -8)
+│   ├───• 4 (0, -8) [DrainingForSplit:8,9]
+│   │   │
+│   │   └───• vec2 (0, -8)
+│   │
+│   └───• 6 (2, -5)
+│       │
+│       └───• vec3 (2, -5)
+│
 └───• 13 (3, -1.8333)
+    │
+    ├───• 5 (4, 0) [DrainingForSplit:10,11]
+    │   │
+    │   └───• vec1 (4, 0)
+    │
+    ├───• 7 (2, -3)
+    │   │
+    │   └───• vec4 (2, -3)
     │
     ├───• 2 (2, -4) [DrainingForSplit:4,5]
     │   │
@@ -827,14 +834,6 @@ format-tree
     ├───• 3 (2, -4) [DrainingForSplit:6,7]
     │   │
     │   ├───• vec3 (2, -5)
-    │   └───• vec4 (2, -3)
-    │
-    ├───• 5 (4, 0) [DrainingForSplit:10,11]
-    │   │
-    │   └───• vec1 (4, 0)
-    │
-    ├───• 7 (2, -3)
-    │   │
     │   └───• vec4 (2, -3)
     │
     ├───• 10 (4, 0)
@@ -858,11 +857,14 @@ format-tree
 │
 ├───• 17 (1, -6.5)
 │   │
-│   ├───• 6 (2, -5)
+│   ├───• 4 (0, -8) [DrainingForSplit:8,9]
 │   │   │
-│   │   └───• vec3 (2, -5)
+│   │   └───• vec2 (0, -8)
 │   │
-│   └───• 9 (0, -8)
+│   └───• 6 (2, -5)
+│       │
+│       └───• vec3 (2, -5)
+│
 ├───• 15 (4, 0)
 │   │
 │   ├───• 5 (4, 0) [DrainingForSplit:10,11]
@@ -879,29 +881,27 @@ format-tree
 │
 ├───• 14 (2, -3.6667)
 │   │
-│   ├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │   │
-│   │   ├───• vec1 (4, 0)
-│   │   └───• vec2 (0, -8)
-│   │
 │   ├───• 3 (2, -4) [DrainingForSplit:6,7]
 │   │   │
 │   │   ├───• vec3 (2, -5)
 │   │   └───• vec4 (2, -3)
 │   │
-│   └───• 7 (2, -3)
+│   ├───• 7 (2, -3)
+│   │   │
+│   │   └───• vec4 (2, -3)
+│   │
+│   └───• 2 (2, -4) [DrainingForSplit:4,5]
 │       │
-│       └───• vec4 (2, -3)
+│       ├───• vec1 (4, 0)
+│       └───• vec2 (0, -8)
 │
 └───• 16 (0, -8)
     │
-    ├───• 4 (0, -8) [DrainingForSplit:8,9]
+    ├───• 8 (0, -8)
     │   │
     │   └───• vec2 (0, -8)
     │
-    └───• 8 (0, -8)
-        │
-        └───• vec2 (0, -8)
+    └───• 9 (0, -8)
 
 # And finally once more, since all partitions should now be right-sized.
 search beam-size=16
@@ -918,31 +918,31 @@ format-tree
 │   │
 │   ├───• 17 (1, -6.5)
 │   │   │
-│   │   ├───• 6 (2, -5)
-│   │   │   │
-│   │   │   └───• vec3 (2, -5)
-│   │   │
-│   │   └───• 9 (0, -8)
+│   │   └───• 6 (2, -5)
+│   │       │
+│   │       └───• vec3 (2, -5)
+│   │
 │   └───• 16 (0, -8)
 │       │
-│       └───• 8 (0, -8)
-│           │
-│           └───• vec2 (0, -8)
-│
+│       ├───• 8 (0, -8)
+│       │   │
+│       │   └───• vec2 (0, -8)
+│       │
+│       └───• 9 (0, -8)
 └───• 19 (3, -1.8333)
     │
-    ├───• 15 (4, 0)
+    ├───• 14 (2, -3.6667)
     │   │
-    │   ├───• 11 (4, 0)
-    │   │   │
-    │   │   └───• vec5 (2, -4)
-    │   │
-    │   └───• 10 (4, 0)
+    │   └───• 7 (2, -3)
     │       │
-    │       └───• vec1 (4, 0)
+    │       └───• vec4 (2, -3)
     │
-    └───• 14 (2, -3.6667)
+    └───• 15 (4, 0)
         │
-        └───• 7 (2, -3)
+        ├───• 11 (4, 0)
+        │   │
+        │   └───• vec5 (2, -4)
+        │
+        └───• 10 (4, 0)
             │
-            └───• vec4 (2, -3)
+            └───• vec1 (4, 0)
