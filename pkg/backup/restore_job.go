@@ -2657,9 +2657,8 @@ func (r *restoreResumer) OnFailOrCancel(
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	// If this is a download-only job, there's no cleanup to do on cancel.
-	if len(details.DownloadSpans) > 0 {
-		return nil
+	if err := r.maybeCleanupFailedOnlineRestore(ctx, p, details); err != nil {
+		return err
 	}
 
 	// Emit to the event log that the job has started reverting.
