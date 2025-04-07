@@ -131,10 +131,12 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
 
-	if _, ok := ba.GetArg(kvpb.EndTxn); ok {
-		// TODO(arul): should we only flush if the transaction is being committed?
-		// If the transaction is being rolled back, we shouldn't needlessly flush
-		// writes.
+	if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
+		if !etArg.(*kvpb.EndTxnRequest).Commit {
+			// We're performing a rollback, so there is no point in flushing
+			// anything.
+			return twb.wrapped.SendLocked(ctx, ba)
+		}
 		return twb.flushWithEndTxn(ctx, ba)
 	}
 
@@ -375,6 +377,9 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// Send a locking Get request to the KV layer; we'll evaluate the
 			// condition locally based on the response.
 			baRemote.Requests = append(baRemote.Requests, getReqU)
+			// Buffer a Put under the optimistic assumption that the condition
+			// will be satisfied.
+			twb.addToBuffer(t.Key, t.Value, t.Sequence)
 
 		case *kvpb.PutRequest:
 			// If the MustAcquireExclusiveLock flag is set on the Put, then we need to
@@ -838,13 +843,14 @@ func (t transformation) toResp(
 			req.AllowIfDoesNotExist,
 		)
 		if condFailedErr != nil {
+			// TODO(yuzefovich): consider "poisoning" the txnWriteBuffer when we
+			// hit a condition failed error to avoid mistaken usages (e.g. an
+			// attempt to flush with the EndTxn request with Commit=true).
 			pErr := kvpb.NewErrorWithTxn(condFailedErr, txn)
 			pErr.SetErrorIndex(int32(t.index))
 			return kvpb.ResponseUnion{}, pErr
 		}
-		// The condition was satisfied; buffer a Put, and return a synthesized
-		// response.
-		twb.addToBuffer(req.Key, req.Value, req.Sequence)
+		// The condition was satisfied - return a synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
 
 	case *kvpb.PutRequest:
@@ -896,12 +902,6 @@ func (t transformation) toResp(
 		// separate bits.
 		panic("unimplemented")
 	}
-
-	// TODO(arul): in the future, when we'll evaluate CPuts locally, we'll have
-	// this function take in the result of the KVGet, save the CPut function
-	// locally on the transformation, and use these two things to evaluate the
-	// condition here, on the client. We'll then construct and return the
-	// appropriate response.
 
 	return ru, nil
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
@@ -417,19 +418,29 @@ func TestMaximumMemoryUsage(t *testing.T) {
 		return err
 	})
 
-	rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
-	var output strings.Builder
-	maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
-	var maxMemoryUsage float64
-	for _, row := range rows {
-		output.WriteString(row[0])
-		output.WriteString("\n")
-		s := strings.TrimSpace(row[0])
-		if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
-			var err error
-			maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
-			require.NoError(t, err)
+	// In rare cases (due to metamorphic randomization) we might drop the
+	// ComponentStats proto that powers "maximum memory usage" stat from the
+	// trace, so we add a retry loop around this.
+	testutils.SucceedsSoon(t, func() error {
+		rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
+		var output strings.Builder
+		maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
+		var maxMemoryUsage float64
+		for _, row := range rows {
+			output.WriteString(row[0])
+			output.WriteString("\n")
+			s := strings.TrimSpace(row[0])
+			if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
+				var err error
+				maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
+				if err != nil {
+					return err
+				}
+			}
 		}
-	}
-	require.Greaterf(t, maxMemoryUsage, 5.0, "expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
+		if maxMemoryUsage < 5.0 {
+			return errors.Newf("expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
+		}
+		return nil
+	})
 }
