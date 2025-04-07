@@ -11,9 +11,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+type columnSchema struct {
+	column       catalog.Column
+	isPrimaryKey bool
+}
 
 // getPhysicalColumns returns the list of columns that are part of the table's
 // primary key and value.
@@ -26,6 +33,27 @@ func getPhysicalColumns(table catalog.TableDescriptor) []catalog.Column {
 		}
 	}
 	return result
+}
+
+func getReplicatedColumns(table catalog.TableDescriptor) []columnSchema {
+	columns := getPhysicalColumns(table)
+	primaryIdx := table.GetPrimaryIndex()
+
+	// Create a map of column ID to column for fast lookup
+	isPrimaryKey := make(map[catid.ColumnID]bool)
+	for _, col := range primaryIdx.IndexDesc().KeyColumnIDs {
+		isPrimaryKey[col] = true
+	}
+
+	cols := make([]columnSchema, 0, len(columns))
+	for _, col := range columns {
+		cols = append(cols, columnSchema{
+			column:       col,
+			isPrimaryKey: isPrimaryKey[col.GetID()],
+		})
+	}
+
+	return cols
 }
 
 // newTypedPlaceholder creates a placeholder with the appropriate type for a column.
@@ -194,6 +222,183 @@ func newDeleteStatement(
 	}
 
 	return toParsedStatement(delete)
+}
+
+// newBulkSelectStatement returns a statement that can be used to query multiple rows
+// by primary key in a single operation. It uses a CTE with UNNEST to handle a variable
+// number of primary keys provided as array parameters.
+//
+// The statement will have one parameter that is the index of each input row and
+// one parameter for each primary key column, where each parameter is an array
+// of values for that column. The columns are expected in column ID order, not
+// primary key order.
+//
+// For example, given a table with primary key columns (id, secondary_id) and additional
+// columns (value1, value2), the generated statement would be equivalent to:
+//
+//	WITH key_list AS (
+//	  SELECT unnest($1::INT[]) as index, unnest($2::INT[]) as key1, unnest($3::INT[]) as key2
+//	)
+//	SELECT key_list.index,
+//	       replication_target.id, replication_target.secondary_id,
+//	       replication_target.value1, replication_target.value2
+//	FROM table_id AS replication_target
+//	INNER JOIN key_list ON replication_target.id = key_list.key1
+//	                    AND replication_target.secondary_id = key_list.key2
+func newBulkSelectStatement(
+	table catalog.TableDescriptor,
+) (statements.Statement[tree.Statement], error) {
+	cols := getReplicatedColumns(table)
+	primaryKeyColumns := make([]catalog.Column, 0, len(cols))
+	for _, col := range cols {
+		if col.isPrimaryKey {
+			primaryKeyColumns = append(primaryKeyColumns, col.column)
+		}
+	}
+
+	targetName, err := tree.NewUnresolvedObjectName(1, [3]string{"replication_target"}, tree.NoAnnotation)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, err
+	}
+	keyListName, err := tree.NewUnresolvedObjectName(1, [3]string{"key_list"}, tree.NoAnnotation)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, err
+	}
+
+	selectColumns := make(tree.SelectExprs, 0, 1+len(primaryKeyColumns))
+	selectColumns = append(selectColumns, tree.SelectExpr{
+		Expr: &tree.ColumnItem{
+			ColumnName: "index",
+			TableName:  keyListName,
+		},
+	})
+	selectColumns = append(selectColumns, tree.SelectExpr{
+		Expr: &tree.ColumnItem{
+			ColumnName: "crdb_internal_origin_timestamp",
+			TableName:  targetName,
+		},
+	})
+	selectColumns = append(selectColumns, tree.SelectExpr{
+		Expr: &tree.ColumnItem{
+			ColumnName: "crdb_internal_mvcc_timestamp",
+			TableName:  targetName,
+		},
+	})
+
+	for _, col := range cols {
+		selectColumns = append(selectColumns, tree.SelectExpr{
+			Expr: &tree.ColumnItem{
+				ColumnName: tree.Name(col.column.GetName()),
+				TableName:  targetName,
+			},
+		})
+	}
+
+	var joinCond tree.Expr
+	for i, pkCol := range primaryKeyColumns {
+		colName := tree.Name(pkCol.GetName())
+		keyColName := fmt.Sprintf("key%d", i+1)
+
+		// Create equality comparison for the join
+		eqExpr := &tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
+			Left: &tree.ColumnItem{
+				TableName:  targetName,
+				ColumnName: colName,
+			},
+			Right: &tree.ColumnItem{
+				TableName:  keyListName,
+				ColumnName: tree.Name(keyColName),
+			},
+		}
+
+		if i == 0 {
+			joinCond = eqExpr
+		} else {
+			joinCond = &tree.AndExpr{
+				Left:  joinCond,
+				Right: eqExpr,
+			}
+		}
+	}
+
+	// Create the table reference
+	tableRef := &tree.TableRef{
+		TableID: int64(table.GetID()),
+		As:      tree.AliasClause{Alias: "replication_target"},
+	}
+
+	// Create the CTE
+	unnestExpr := &tree.UnresolvedName{
+		NumParts: 1,
+		Parts:    [4]string{"unnest"},
+	}
+
+	// Create the unnest function call with named columns
+	cteSelectExprs := make(tree.SelectExprs, 0, 1+len(primaryKeyColumns))
+
+	// Add index column
+	cteSelectExprs = append(cteSelectExprs, tree.SelectExpr{
+		Expr: &tree.FuncExpr{
+			Func: tree.ResolvableFunctionReference{FunctionReference: unnestExpr},
+			Exprs: tree.Exprs{&tree.CastExpr{
+				Expr:       &tree.Placeholder{Idx: 0},
+				Type:       types.MakeArray(types.Int),
+				SyntaxMode: tree.CastShort,
+			}},
+		},
+		As: "index",
+	})
+
+	// Add key columns
+	for i, pkCol := range primaryKeyColumns {
+		cteSelectExprs = append(cteSelectExprs, tree.SelectExpr{
+			Expr: &tree.FuncExpr{
+				Func: tree.ResolvableFunctionReference{FunctionReference: unnestExpr},
+				Exprs: tree.Exprs{&tree.CastExpr{
+					Expr:       &tree.Placeholder{Idx: tree.PlaceholderIdx(i + 1)},
+					Type:       types.MakeArray(pkCol.GetType()),
+					SyntaxMode: tree.CastShort,
+				}},
+			},
+			As: tree.UnrestrictedName(fmt.Sprintf("key%d", i+1)),
+		})
+	}
+
+	// Create the main SELECT statement with the CTE
+	selectStmt := &tree.Select{
+		Select: &tree.SelectClause{
+			Exprs: selectColumns,
+			From: tree.From{
+				Tables: tree.TableExprs{
+					&tree.JoinTableExpr{
+						JoinType: tree.AstInner,
+						Left:     tableRef,
+						Right: &tree.AliasedTableExpr{
+							Expr: tree.NewUnqualifiedTableName(tree.Name("key_list")),
+						},
+						Cond: &tree.OnJoinCond{
+							Expr: joinCond,
+						},
+					},
+				},
+			},
+		},
+		With: &tree.With{
+			CTEList: []*tree.CTE{
+				{
+					Name: tree.AliasClause{Alias: "key_list"},
+					Stmt: &tree.Select{
+						Select: &tree.SelectClause{
+							Exprs: cteSelectExprs,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return toParsedStatement(selectStmt)
 }
 
 func toParsedStatement(stmt tree.Statement) (statements.Statement[tree.Statement], error) {
