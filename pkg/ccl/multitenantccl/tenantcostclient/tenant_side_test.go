@@ -636,19 +636,19 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 			typ.Inspect(func(v interface{}) {
 				switch it := v.(type) {
 				case *metric.Gauge:
-					state[typ.GetName()] = it.Value()
+					state[typ.GetName(false /* useStaticLabels */)] = it.Value()
 				case *metric.Counter:
-					state[typ.GetName()] = it.Count()
+					state[typ.GetName(false /* useStaticLabels */)] = it.Count()
 				case *metric.CounterFloat64:
-					state[typ.GetName()] = fmt.Sprintf("%.2f", it.Count())
+					state[typ.GetName(false /* useStaticLabels */)] = fmt.Sprintf("%.2f", it.Count())
 				case *aggmetric.AggCounter:
-					state[typ.GetName()] = it.Count()
+					state[typ.GetName(false /* useStaticLabels */)] = it.Count()
 					promIter, ok := v.(metric.PrometheusIterable)
 					if !ok {
 						return
 					}
 					promIter.Each(it.GetLabels(false /* useStaticLabels */), func(m *prometheusgo.Metric) {
-						childMetrics += fmt.Sprintf("%s{", typ.GetName())
+						childMetrics += fmt.Sprintf("%s{", typ.GetName(false /* useStaticLabels */))
 						for i, l := range m.Label {
 							if i > 0 {
 								childMetrics += ","

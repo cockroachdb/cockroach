@@ -244,7 +244,7 @@ func TestClientGossipMetrics(t *testing.T) {
 					s.nodeMetrics.BytesReceived,
 				} {
 					if count := counter.Count(); count <= 0 {
-						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(), count)
+						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(false /* useStaticLabels */), count)
 					}
 				}
 			}

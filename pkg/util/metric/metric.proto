@@ -52,6 +52,9 @@ enum Unit {
 message Metadata {
   // name is the name of the metric as if it was unlabeled. Set this to ensure
   // it gets recorded in TSDB.
+  // Note: this name value is used by the metric registry to uniquely identify
+  // the metric. Please ensure that it is unique across the codebase even if a
+  // labeled_name is provided.
   required string name = 1 [(gogoproto.nullable) = false];
   required string help = 2 [(gogoproto.nullable) = false];
   required string measurement = 3 [(gogoproto.nullable) = false];

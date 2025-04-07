@@ -58,10 +58,7 @@ func NewFunctionalGauge(
 }
 
 // GetName is part of the metric.Iterable interface.
-func (g *AggGauge) GetName() string { return g.g.GetName() }
-
-// GetLabeledName is part of the metric.Iterable interface.
-func (g *AggGauge) GetLabeledName() string { return g.g.GetLabeledName() }
+func (g *AggGauge) GetName(useStaticLabels bool) string { return g.g.GetName(useStaticLabels) }
 
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGauge) GetHelp() string { return g.g.GetHelp() }
@@ -263,10 +260,7 @@ func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeF
 }
 
 // GetName is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetName() string { return g.g.GetName() }
-
-// GetLabeledName is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetLabeledName() string { return g.g.GetLabeledName() }
+func (g *AggGaugeFloat64) GetName(useStaticLabels bool) string { return g.g.GetName(useStaticLabels) }
 
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) GetHelp() string { return g.g.GetHelp() }

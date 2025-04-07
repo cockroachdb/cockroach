@@ -42,7 +42,7 @@ const (
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
 	// GetName returns the fully-qualified name of the metric.
-	GetName() string
+	GetName(useStaticLabels bool) string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
 	// GetMeasurement returns the label for the metric, which describes the entity
@@ -59,9 +59,7 @@ type Iterable interface {
 
 type PrometheusCompatible interface {
 	// GetName is a method on Metadata
-	GetName() string
-	// GetLabeledName is a method on Metadata
-	GetLabeledName() string
+	GetName(useStaticLabels bool) string
 	// GetHelp is a method on Metadata
 	GetHelp() string
 	// GetType returns the prometheus type enum for this metric.
@@ -138,20 +136,14 @@ type CumulativeHistogram interface {
 	CumulativeSnapshot() HistogramSnapshot
 }
 
-// GetName returns the metric's name.
-func (m *Metadata) GetName() string {
-	return m.Name
-}
-
-// GetLabeledName returns the metric's labeled name. This name is expected to be
-// repeated with different static label sets. Those labels can be accessed via
-// `GetLabels(true)`. If the metric does not have a labeled name, the metric's
-// name is returned.
-func (m *Metadata) GetLabeledName() string {
-	if m.LabeledName == "" {
-		return m.Name
+// GetName returns the metric's name. When `useStaticLabels` is true, it returns
+// the metric's labeled name if it's non-empty. Otherwise, it returns the metric's
+// name.
+func (m *Metadata) GetName(useStaticLabels bool) string {
+	if useStaticLabels && m.LabeledName != "" {
+		return m.LabeledName
 	}
-	return m.LabeledName
+	return m.Name
 }
 
 // GetHelp returns the metric's help string.
