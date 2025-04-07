@@ -12,10 +12,12 @@ type MethodType int
 const (
 	InvalidMethod MethodType = iota
 	SizeMethod
+	TypeMethod
 )
 
 var MethodTypeStrings = map[MethodType]string{
 	SizeMethod: "size",
+	TypeMethod: "type",
 }
 
 type Method struct {
