@@ -673,16 +673,19 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 			defer memPart.lock.ReleaseShared()
 
 			partition := memPart.lock.partition
-			if partition.Metadata().StateDetails.State != cspann.ReadyState {
-				return errors.AssertionFailedf("cannot save store with non-ready partition %v", qkey)
-			}
-
+			metadata := partition.Metadata()
 			partitionProto := PartitionProto{
 				TreeId:       qkey.treeID,
 				PartitionKey: qkey.partitionKey,
-				ChildKeys:    partition.ChildKeys(),
-				ValueBytes:   partition.ValueBytes(),
-				Level:        partition.Level(),
+				Metadata: PartitionMetadataProto{
+					Level: partition.Level(),
+					State: metadata.StateDetails.State,
+					Target1: metadata.StateDetails.Target1,
+					Target2: metadata.StateDetails.Target2,
+					Source: metadata.StateDetails.Source,
+				},
+				ChildKeys:  partition.ChildKeys(),
+				ValueBytes: partition.ValueBytes(),
 			}
 
 			rabitq, ok := partition.QuantizedSet().(*quantize.RaBitQuantizedVectorSet)
@@ -757,7 +760,15 @@ func Load(data []byte) (*Store, error) {
 		}
 
 		metadata := cspann.PartitionMetadata{
-			Level: partitionProto.Level, Centroid: quantizedSet.GetCentroid()}
+			Level: partitionProto.Metadata.Level,
+			Centroid: quantizedSet.GetCentroid(),
+			StateDetails: cspann.PartitionStateDetails{
+				State: partitionProto.Metadata.State,
+				Target1: partitionProto.Metadata.Target1,
+				Target2: partitionProto.Metadata.Target2,
+				Source: partitionProto.Metadata.Source,
+			},
+		}
 		memPart.lock.partition = cspann.NewPartition(metadata, quantizer, quantizedSet,
 			partitionProto.ChildKeys, partitionProto.ValueBytes)
 
