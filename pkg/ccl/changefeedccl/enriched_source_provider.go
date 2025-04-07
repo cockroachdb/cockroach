@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -41,6 +43,13 @@ type enrichedSourceProvider struct {
 	// jsonNonFixedData is a reusable map for non-fixed fields, which are the inputs to jsonPartialObject.NewObject.
 	jsonNonFixedData map[string]json.JSON
 }
+type tableSchemaInfo struct {
+	tableName       string
+	dbName          string
+	schemaName      string
+	primaryKeys     []string
+	primaryKeysJSON json.JSON
+}
 
 func newEnrichedSourceData(
 	ctx context.Context,
@@ -49,6 +58,37 @@ func newEnrichedSourceData(
 	sink sinkType,
 	targets changefeedbase.Targets,
 ) (enrichedSourceData, error) {
+	schemaInfo := make(map[descpb.ID]tableSchemaInfo)
+	execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	err := targets.EachTarget(func(target changefeedbase.Target) error {
+		id := target.TableID
+		td, err := getTableDesc(ctx, execCfg, id)
+		if err != nil {
+			return err
+		}
+		fmt.Println("table desc par id: %s", td.GetParentID())
+
+		fmt.Println("table desc par id: ", td.GetParentSchemaID())
+
+		primaryKeys := td.GetPrimaryIndex().IndexDesc().KeyColumnNames
+
+		primaryKeysBuilder := json.NewArrayBuilder(len(primaryKeys))
+		for _, key := range primaryKeys {
+			primaryKeysBuilder.Add(json.FromString(key))
+		}
+
+		schemaInfo[id] = tableSchemaInfo{
+			tableName:       td.GetName(),
+			dbName:          "fake", // dbd.GetName(),
+			schemaName:      "fake", // sd.GetName(),
+			primaryKeys:     primaryKeys,
+			primaryKeysJSON: primaryKeysBuilder.Build(),
+		}
+		return nil
+	})
+	if err != nil {
+		return enrichedSourceData{}, err
+	}
 	var sourceNodeLocality, nodeName, nodeID string
 	tiers := cfg.Locality.Tiers
 
