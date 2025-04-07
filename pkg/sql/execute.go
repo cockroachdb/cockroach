@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/errors"
@@ -21,7 +22,7 @@ import (
 // the referenced prepared statement and correctly updated placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func (p *planner) fillInPlaceholders(
-	ctx context.Context, ps *PreparedStatement, name string, params tree.Exprs,
+	ctx context.Context, ps *prep.Statement, name string, params tree.Exprs,
 ) (*tree.PlaceholderInfo, error) {
 	if len(ps.Types) != len(params) {
 		return nil, pgerror.Newf(pgcode.Syntax,
