@@ -118,7 +118,7 @@ func (ctx *jsonpathCtx) evalExists(
 	// We can optimize this by short-circuiting in lax mode.
 	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	if len(l) == 0 {
 		return jsonpathBoolFalse, nil
@@ -233,11 +233,11 @@ func (ctx *jsonpathCtx) evalComparison(
 	// The left and right argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, true /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 
 	errored := false
