@@ -460,8 +460,25 @@ func (s *Store) TryUpdatePartitionMetadata(
 		return cspann.NewConditionFailedError(*existing)
 	}
 
+	// Check whether new level is being added or removed.
+	if partitionKey == cspann.RootKey && metadata.Level != existing.Level {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		// Treat adding new level as if it were a new root partition.
+		memPart.lock.created = s.tickLocked()
+
+		// Grow or shrink CVStats slice.
+		expectedLevels := int(metadata.Level - 1)
+		if expectedLevels > len(s.mu.stats.CVStats) {
+			s.mu.stats.CVStats =
+				slices.Grow(s.mu.stats.CVStats, expectedLevels-len(s.mu.stats.CVStats))
+		}
+		s.mu.stats.CVStats = s.mu.stats.CVStats[:expectedLevels]
+	}
+
 	// Update the partition's metadata.
-	*memPart.lock.partition.Metadata() = metadata
+	*existing = metadata
 
 	return nil
 }
