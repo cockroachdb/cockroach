@@ -181,9 +181,10 @@ type perfMetricsCollector struct {
 	// elapsed is the avg elapsed time of the run
 	elapsed int64
 	// count is the count of perf files
-	count int64
-	t     *testImpl
-	ctx   context.Context
+	count     int64
+	t         *testImpl
+	ctx       context.Context
+	perfNodes []int
 }
 
 // newTestRunner constructs a testRunner.
@@ -2024,26 +2025,27 @@ func (r *testRunner) postProcessPerfMetrics(
 	}
 
 	// Collect and aggregate metrics from all relevant nodes
-	if err := metrics.collectFromNodes(c, dstDirFn); err != nil {
+	if err := metrics.collectFromNodes(c, dstDirFn, t.L()); err != nil {
 		t.L().PrintfCtx(ctx, "failed to collect metrics: %v", err)
 		return
 	}
 
 	// Process and write aggregated metrics
-	if err := metrics.processAndWrite(c, dstDirFn); err != nil {
+	if err := metrics.processAndWrite(dstDirFn); err != nil {
 		t.L().PrintfCtx(ctx, "failed to process and write metrics: %v", err)
 	}
 }
 
 func (m *perfMetricsCollector) collectFromNodes(
-	c *clusterImpl, dstDirFn func(nodeIdx int) string,
+	c *clusterImpl, dstDirFn func(nodeIdx int) string, log *logger.Logger,
 ) error {
 	for _, node := range getPerfArtifactsNode(c) {
 		files, err := m.findMetricsFiles(dstDirFn(node))
 		if err != nil {
-			return errors.Wrapf(err, "finding metrics files")
+			log.Printf("failed to find metrics files for node %d will continue: %s", node, err)
+			continue
 		}
-
+		m.perfNodes = append(m.perfNodes, node)
 		if err := m.processFiles(files); err != nil {
 			return errors.Wrapf(err, "error while processing files")
 		}
@@ -2085,9 +2087,7 @@ func (m *perfMetricsCollector) processFiles(files []string) error {
 	return nil
 }
 
-func (m *perfMetricsCollector) processAndWrite(
-	c *clusterImpl, dstDirFn func(nodeIdx int) string,
-) error {
+func (m *perfMetricsCollector) processAndWrite(dstDirFn func(nodeIdx int) string) error {
 	if m.count == 0 {
 		return errors.New("no metrics files found")
 	}
@@ -2109,8 +2109,8 @@ func (m *perfMetricsCollector) processAndWrite(
 		return errors.Wrapf(err, "converting metrics to bytes")
 	}
 
-	// Write the file and take the first node of the cluster
-	outputPath := filepath.Join(dstDirFn(getPerfArtifactsNode(c)[0]), "aggregated_stats.om")
+	// Write the file to the first directory of any node where perf artifacts are present
+	outputPath := filepath.Join(dstDirFn(m.perfNodes[0]), "aggregated_stats.om")
 	return os.WriteFile(outputPath, finalMetricsBuffer.Bytes(), 0644)
 }
 
