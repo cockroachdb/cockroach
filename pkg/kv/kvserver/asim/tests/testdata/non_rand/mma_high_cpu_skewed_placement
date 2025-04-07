@@ -44,7 +44,7 @@ plot stat=cpu sample=1  show_last_value=true
       0 ┼──╯──────────╯ ╰──╯
                                                cpu
 
-last store values: [s5=14403 s1=14440 s2=14502 s7=14518 s4=14521 s6=14525 s3=14556]
+last store values: [s1=14440 s2=14502 s3=14556 s4=14521 s5=14403 s6=14525 s7=14518]
 ----
 ----
 
@@ -70,7 +70,7 @@ plot stat=write_bytes_per_second show_last_value=true
     0 ┼──╯────╯
                                     write_bytes_per_second
 
-last store values: [s1=1656 s5=1912 s7=2135 s2=2142 s6=2388 s3=2389 s4=2398]
+last store values: [s1=1656 s2=2142 s3=2389 s4=2398 s5=1912 s6=2388 s7=2135]
 ----
 ----
 
@@ -96,7 +96,7 @@ plot stat=replicas sample=1 show_last_value=true
   0.00 ┼──╯────╯
                                             replicas
 
-last store values: [s1=7 s5=8 s2=9 s7=9 s3=10 s4=10 s6=10]
+last store values: [s1=7 s2=9 s3=10 s4=10 s5=8 s6=10 s7=9]
 ----
 ----
 

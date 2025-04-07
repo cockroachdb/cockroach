@@ -76,7 +76,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 		})
 	}
 	sort.Slice(orderedStoreIDs, func(i, j int) bool {
-		return orderedStoreIDs[i].Value < orderedStoreIDs[j].Value
+		return orderedStoreIDs[i].StoreID < orderedStoreIDs[j].StoreID
 	})
 	fmt.Fprintf(&buf, "[")
 	for i, store := range orderedStoreIDs {
