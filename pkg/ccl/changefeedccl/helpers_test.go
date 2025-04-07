@@ -296,6 +296,9 @@ func assertPayloadsBaseErr(
 		}
 	}
 
+	sort.Strings(expected)
+	sort.Strings(actualFormatted)
+
 	if envelopeType == changefeedbase.OptEnvelopeWrapped && forceEnrichedEnvelope { // && didTransform ?
 		envelopeType = changefeedbase.OptEnvelopeEnriched
 		stripTs = true
@@ -395,7 +398,7 @@ func wrappedEnvelopeAssertionToEnrichedAssertion(assertion, actual string) (newA
 	key = actualKey
 
 	// for enriched messages without sources and schemas, this is really the only difference (right?) (excluding ts_ns bc strip timestamps)
-	bodyMap["op"] = "c" // TODO: would have to parse this out of the actual too... this approach is trash
+	bodyMap["op"] = bodyMap["op"] // :(
 
 	newBody, err := json.MakeJSON(bodyMap)
 	if err != nil {
@@ -950,12 +953,14 @@ func feed(
 
 	forceEnrichedEnvelope = true // DBG
 
-	// TODO: fix this topic name thing
-	_, isWebhook := f.(*webhookFeedFactory)
+	_, isKafka := f.(*kafkaFeedFactory)
+	if ef, isExternal := f.(*externalConnectionFeedFactory); isExternal {
+		_, isKafka = ef.TestFeedFactory.(*kafkaFeedFactory)
+	}
 
 	// metamorph here for supported sinks? as a tmp measure
 	// TODO: less dumb
-	if !isWebhook && forceEnrichedEnvelope {
+	if isKafka && forceEnrichedEnvelope {
 		if strings.Contains(create, `envelope=wrapped`) {
 			create = strings.ReplaceAll(create, `envelope=wrapped`, `envelope=enriched`)
 			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)

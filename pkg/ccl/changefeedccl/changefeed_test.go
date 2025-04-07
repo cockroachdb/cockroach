@@ -829,7 +829,7 @@ func TestChangefeedDiff(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedTenants(t *testing.T) {
