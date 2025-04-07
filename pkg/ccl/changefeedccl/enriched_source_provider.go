@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -66,9 +65,6 @@ func newEnrichedSourceData(
 		if err != nil {
 			return err
 		}
-		fmt.Println("table desc par id: %s", td.GetParentID())
-
-		fmt.Println("table desc par id: ", td.GetParentSchemaID())
 
 		primaryKeys := td.GetPrimaryIndex().IndexDesc().KeyColumnNames
 
