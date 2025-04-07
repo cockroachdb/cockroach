@@ -347,7 +347,7 @@ type (
 
 	CustomOption func(*testOptions)
 
-	predecessorFunc func(*rand.Rand, *clusterupgrade.Version, *clusterupgrade.Version) (*clusterupgrade.Version, error)
+	predecessorFunc func(*rand.Rand, *clusterupgrade.Version, *clusterupgrade.Version, *clusterupgrade.Version) (*clusterupgrade.Version, error)
 
 	// Test is the main struct callers of this package interact with.
 	Test struct {
@@ -953,7 +953,7 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 	// function to change in case the rules around what upgrades are
 	// possible in CRDB change.
 	possiblePredecessorsFor := func(v *clusterupgrade.Version) ([]*clusterupgrade.Version, error) {
-		pred, err := t.options.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion)
+		pred, err := t.options.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion, t.options.minimumBootstrapVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -974,7 +974,7 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
-		predPred, err := t.options.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion)
+		predPred, err := t.options.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion, t.options.minimumBootstrapVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -1098,7 +1098,7 @@ func (t *Test) deploymentMode() DeploymentMode {
 // always picks the latest predecessor for the given release version,
 // ignoring the minimum supported version declared by the test.
 func latestPredecessor(
-	_ *rand.Rand, v, minSupported *clusterupgrade.Version,
+	_ *rand.Rand, v, minSupported, minBootstrap *clusterupgrade.Version,
 ) (*clusterupgrade.Version, error) {
 	predecessor, err := release.LatestPredecessor(&v.Version)
 	if err != nil {
@@ -1112,47 +1112,78 @@ func latestPredecessor(
 // picks a random predecessor for the given release version. If we are
 // choosing a predecessor in the same series as the minimum supported
 // version, special care is taken to select a random predecessor that
-// is more recent that the minimum supported version.
+// is more recent that the minimum supported version. Similarly, the
+// same is done for the minimum bootstrap version. minSupported must be
+// set but minBootstrap can be nil.
 func randomPredecessor(
-	rng *rand.Rand, v, minSupported *clusterupgrade.Version,
+	rng *rand.Rand, v, minSupported, minBootstrap *clusterupgrade.Version,
 ) (*clusterupgrade.Version, error) {
 	predecessor, err := release.RandomPredecessor(rng, &v.Version)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the minimum supported version is from a different release
-	// series, we can pick any random patch release.
 	predV := clusterupgrade.MustParseVersion(predecessor)
-	if predV.Series() != minSupported.Series() {
+	// minVersion is either the minimum bootstrap version or the minimum supported version,
+	// depending on the predecessor series. When choosing a predecessor version, we want to
+	// make sure we can run test hooks if possible on that release series. So we need to
+	// pick a version that is at least the minimum supported version or the minimum bootstrap
+	// version, if they are the same series.
+	minVersion := minSupported
+	// minBootstrapSeries is the release series of the minimum bootstrap version, is empty
+	// string if one is not set.
+	var minBootstrapSeries string
+	if minBootstrap != nil {
+		minBootstrapSeries = minBootstrap.Series()
+	}
+
+	// The minimum bootstrap version (mbv) is guaranteed to be older than or the same
+	// version as the minimum supported version (msv). This gives us 4 cases to consider:
+	//
+	// 1. The predecessor series is a different series than the mbv and msv series, we can
+	// pick any random patch release.
+	// 2. The predecessor series is the same as the msv series, validate against the msv.
+	// 3. The predecessor series is the same as the mbv series, validate against the mbv.
+	// 4. The predecessor series is the same as both the mbv and msv series, validate against
+	// the msv since it's older.
+	if predV.Series() != minSupported.Series() && predV.Series() != minBootstrapSeries {
+		// If the predecessor version is from a different release series than both the minimum
+		// supported version and minimum bootstrap version, we can pick any random patch release.
+		// Case 1 above.
 		return predV, nil
+	} else if predV.Series() == minSupported.Series() {
+		// Case 2 and 4 above.
+		minVersion = minSupported
+	} else {
+		// Case 3 above.
+		minVersion = minBootstrap
 	}
 
 	// If the latest release of a series is a pre-release, we validate
 	// whether the minimum supported version is valid.
-	if predV.IsPrerelease() && !predV.AtLeast(minSupported) {
+	if predV.IsPrerelease() && !predV.AtLeast(minVersion) {
 		return nil, fmt.Errorf(
 			"latest release for %s (%s) is not sufficient for minimum supported version (%s)",
-			predV.Series(), predV, minSupported.Version,
+			predV.Series(), predV, minVersion.Version,
 		)
 	}
 
-	// If the patch version of `minSupported` is 0, it means that we
+	// If the patch version of `minVersion` is 0, it means that we
 	// can choose any patch release in the predecessor series. It is
 	// also safe to return `predV` here if the `minSupported` version is
 	// a pre-release: we already validated that `predV`is at least
 	// `minSupported` in check above.
-	if minSupported.Patch() == 0 {
+	if minVersion.Patch() == 0 {
 		return predV, nil
 	}
 
-	latestPred, err := latestPredecessor(rng, v, minSupported)
+	latestPred, err := latestPredecessor(rng, v, minVersion, minBootstrap)
 	if err != nil {
 		return nil, err
 	}
 
 	var supportedPatchReleases []*clusterupgrade.Version
-	for j := minSupported.Patch(); j <= latestPred.Patch(); j++ {
+	for j := minVersion.Patch(); j <= latestPred.Patch(); j++ {
 		supportedV := clusterupgrade.MustParseVersion(
 			fmt.Sprintf("%s.%d", predV.Major().String(), j),
 		)
@@ -1528,6 +1559,11 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		if maxUpgrades > maxUpgradesFromBootstrapVersion {
 			test.logger.Printf("WARN: overriding maxUpgrades, minimum bootstrap version (%s) allows for at most %d upgrades", minBootstrapVersion, maxUpgradesFromBootstrapVersion)
 			test.options.maxUpgrades = maxUpgradesFromBootstrapVersion
+		}
+
+		if msv.LessThan(minBootstrapVersion) {
+			test.logger.Printf("WARN: overriding minSupportedVersion, cannot be older than minimum bootstrap version (%s)", minBootstrapVersion)
+			test.options.minimumSupportedVersion = minBootstrapVersion
 		}
 	}
 }
