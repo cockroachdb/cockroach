@@ -15,6 +15,9 @@ gen_ranges ranges=100 repl_factor=5 placement_type=replica_placement
 ----
 {s1,s2,s4,s5,s6}:1
 
+gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
+----
+
 set_span_config
 [0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]
 ----
@@ -55,6 +58,31 @@ r91(9000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FU
 r96(9500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r97(9600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r98(9700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r99(9800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r100(9900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL))
 ]
 
+plot stat=cpu sample=1  show_last_value=true
+----
+----
+
+ 100533 ┤╭──────────────────────────────────────────────────────────────────────────────
+  93831 ┤│
+  87129 ┤│
+  80426 ┤│
+  73724 ┤│
+  67022 ┤│
+  60320 ┤│
+  53618 ┤│
+  46915 ┤│
+  40213 ┤│
+  33511 ┤│
+  26809 ┤│
+  20107 ┤│
+  13404 ┤│
+   6702 ┤│
+      0 ┼───────────────────────────────────────────────────────────────────────────────
+                                               cpu
+
+last store values: [s3=0 s7=0 s8=0 s9=0 s2=500 s4=500 s5=500 s6=500 s1=100533]
+----
+----
 
 plot stat=leases sample=1 show_last_value=true
 ----
