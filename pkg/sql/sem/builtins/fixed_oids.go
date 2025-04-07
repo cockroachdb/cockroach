@@ -2659,6 +2659,9 @@ var builtinOidsArray = []string{
 	2696: `jsonb_path_query_first(target: jsonb, path: jsonpath) -> jsonb`,
 	2697: `jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb) -> jsonb`,
 	2698: `jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> jsonb`,
+	2699: `jsonb_path_match(target: jsonb, path: jsonpath) -> bool`,
+	2700: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb) -> bool`,
+	2701: `jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
