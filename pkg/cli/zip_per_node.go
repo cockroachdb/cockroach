@@ -411,6 +411,7 @@ func (zc *debugZipContext) getLogFiles(
 		// transfers somehow.
 
 		nodePrinter.info("%d log files found", len(logs.Files))
+		var warnings []string
 		for _, file := range logs.Files {
 			ctime := extractTimeFromFileName(file.Name)
 			mtime := timeutil.Unix(0, file.ModTimeNanos)
@@ -485,11 +486,12 @@ func (zc *debugZipContext) getLogFiles(
 			if warnRedactLeak {
 				// Defer the warning, so that it does not get "drowned" as
 				// part of the main zip output.
-				//nolint:deferloop TODO(#137605)
-				defer func(fileName string) {
-					fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact=true)\n", fileName)
-				}(file.Name)
+				warnings = append(warnings,
+					fmt.Sprintf("server-side redaction failed for %s, completed client-side (--redact=true)", file.Name))
 			}
+		}
+		for _, w := range warnings {
+			fmt.Fprintf(stderr, "WARNING: %s\n", w)
 		}
 	}
 	return nil
