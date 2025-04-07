@@ -110,7 +110,7 @@ func (km *BalancedKmeans) ComputeCentroids(
 		maxIterations = 16
 	}
 
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		// Assign vectors to one of the partitions.
 		leftOffsets, rightOffsets = km.AssignPartitions(
 			vectors, leftCentroid, rightCentroid, tempOffsets)
@@ -153,7 +153,7 @@ func (km *BalancedKmeans) AssignPartitions(
 
 	// Calculate difference between squared distance of each vector to the left
 	// and right centroids.
-	for i := 0; i < count; i++ {
+	for i := range count {
 		tempDistances[i] = num32.L2SquaredDistance(vectors.At(i), leftCentroid) -
 			num32.L2SquaredDistance(vectors.At(i), rightCentroid)
 		offsets[i] = uint64(i)
@@ -225,7 +225,7 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 
 	// Calculate distance of each vector in the set from the left centroid.
 	var distanceSum float32
-	for i := 0; i < count; i++ {
+	for i := range count {
 		tempDistances[i] = num32.L2SquaredDistance(vectors.At(i), leftCentroid)
 		distanceSum += tempDistances[i]
 	}
@@ -242,7 +242,7 @@ func (km *BalancedKmeans) selectInitialRightCentroid(
 		rnd = rand.Float32()
 	}
 	rightOffset := 0
-	for i := 0; i < len(tempDistances); i++ {
+	for i := range len(tempDistances) {
 		cum += tempDistances[i]
 		if rnd < cum {
 			rightOffset = i
@@ -289,7 +289,7 @@ func (km *BalancedKmeans) calculateMeanOfVariances(vectors vector.Set) float32 {
 	num32.Zero(tempCompensation)
 
 	// Compute the first term and part of second term.
-	for i := 0; i < vectors.Count; i++ {
+	for i := range vectors.Count {
 		// First: x[i]
 		vector := vectors.At(i)
 		// First: x[i] - mean(x)
