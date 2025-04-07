@@ -139,7 +139,7 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	log.VEventf(ctx, 2, "splitting partition %d with %d vectors (parent=%d, state=%s)",
-		partitionKey, parentPartitionKey, partition.Count(), metadata.StateDetails.String())
+		partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
 
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
@@ -454,13 +454,13 @@ func (fw *fixupWorker) createSplitSubPartition(
 	partitionKey PartitionKey,
 	centroid vector.T,
 ) (targetMetadata PartitionMetadata, err error) {
-	const format = "creating split sub-partition %d, with parent %d"
+	const format = "creating split sub-partition %d (source=%d, parent=%d)"
 
 	defer func() {
-		err = errors.Wrapf(err, format, partitionKey, parentPartitionKey)
+		err = errors.Wrapf(err, format, partitionKey, sourcePartitionKey, parentPartitionKey)
 	}()
 
-	log.VEventf(ctx, 2, format, partitionKey, parentPartitionKey)
+	log.VEventf(ctx, 2, format, partitionKey, sourcePartitionKey, parentPartitionKey)
 
 	// Create an empty partition in the Updating state.
 	targetMetadata = PartitionMetadata{
@@ -548,15 +548,15 @@ func (fw *fixupWorker) addToParentPartition(
 func (fw *fixupWorker) deletePartition(
 	ctx context.Context, parentPartitionKey, partitionKey PartitionKey,
 ) (err error) {
-	const format = "deleting partition %d (parent=%d, state=%d)"
+	const format = "deleting partition %d (parent=%d, state=%s)"
 	var parentMetadata PartitionMetadata
 
 	defer func() {
 		err = errors.Wrapf(err, format,
-			partitionKey, parentPartitionKey, parentMetadata.StateDetails.State)
+			partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
 	}()
 
-	// Load parent partition to verify that it's in a state that allows inserts.
+	// Load parent partition to verify that it's in a state that allows removes.
 	var parentPartition *Partition
 	parentPartition, err = fw.getPartition(ctx, parentPartitionKey)
 	if err != nil {
@@ -566,7 +566,8 @@ func (fw *fixupWorker) deletePartition(
 		parentMetadata = *parentPartition.Metadata()
 	}
 
-	log.VEventf(ctx, 2, format, partitionKey, parentPartitionKey, parentMetadata.StateDetails.State)
+	log.VEventf(ctx, 2, format,
+		partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
 
 	if !parentMetadata.StateDetails.State.AllowAddOrRemove() {
 		// Child could not be removed from the parent because it doesn't exist or
@@ -640,21 +641,16 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	leftOffsets, rightOffsets = kmeans.AssignPartitions(
 		vectors, leftMetadata.Centroid, rightMetadata.Centroid, tempOffsets)
 
-	// Sort vectors into contiguous left and right groupings.
-	sortVectors(&fw.workspace, vectors, leftOffsets, rightOffsets)
+	// Assign vectors and associated keys and values into contiguous left and right groupings.
+	childKeys := slices.Clone(sourcePartition.ChildKeys())
+	valueBytes := slices.Clone(sourcePartition.ValueBytes())
+	splitPartitionData(&fw.workspace, vectors, childKeys, valueBytes, leftOffsets, rightOffsets)
 	leftVectors := vectors
 	rightVectors := leftVectors.SplitAt(len(leftOffsets))
-
-	childKeys := make([]ChildKey, vectors.Count)
-	valueBytes := make([]ValueBytes, vectors.Count)
-	leftChildKeys := copyByOffsets(
-		sourcePartition.ChildKeys(), childKeys[:len(leftOffsets)], leftOffsets)
-	rightChildKeys := copyByOffsets(
-		sourcePartition.ChildKeys(), childKeys[len(leftOffsets):], rightOffsets)
-	leftValueBytes := copyByOffsets(
-		sourcePartition.ValueBytes(), valueBytes[:len(leftOffsets)], leftOffsets)
-	rightValueBytes := copyByOffsets(
-		sourcePartition.ValueBytes(), valueBytes[len(leftOffsets):], rightOffsets)
+	leftChildKeys := childKeys[:len(leftOffsets)]
+	rightChildKeys := childKeys[len(leftOffsets):]
+	leftValueBytes := valueBytes[:len(leftOffsets)]
+	rightValueBytes := valueBytes[len(leftOffsets):]
 
 	log.VEventf(ctx, 2, format,
 		len(leftOffsets), sourceState.Target1, len(rightOffsets), sourceState.Target2)
@@ -740,63 +736,63 @@ func suppressRaceErrors(err error) (PartitionMetadata, error) {
 	return PartitionMetadata{}, err
 }
 
-// sortVectors sorts the input vectors in-place, according to the provided left
-// and right offsets, which reference vectors by position. Vectors at left
-// offsets are sorted at the beginning of the slice, followed by vectors at
-// right offsets. The internal ordering among left and right vectors is not
-// defined.
+// splitPartitionData groups the provided partition data according to the left
+// and right offsets. All data referenced by left offsets will be moved to the
+// left of each set or slice. All data referenced by right offsets will be moved
+// to the right. The internal ordering of elements on each side is not defined.
 //
-// NOTE: The left and right offsets are modified in-place with the updated
-// positions of the vectors.
-func sortVectors(w *workspace.T, vectors vector.Set, leftOffsets, rightOffsets []uint64) {
+// TODO(andyk): Passing in left and right offsets makes this overly complex. It
+// would be better to pass an assignments slice of the same length as the
+// partition data, where 0=left and 1=right.
+func splitPartitionData(
+	w *workspace.T,
+	vectors vector.Set,
+	childKeys []ChildKey,
+	valueBytes []ValueBytes,
+	leftOffsets, rightOffsets []uint64,
+) {
 	tempVector := w.AllocFloats(vectors.Dims)
 	defer w.FreeFloats(tempVector)
 
-	// Sort left and right offsets.
-	slices.Sort(leftOffsets)
-	slices.Sort(rightOffsets)
-
-	// Any left offsets that point beyond the end of the left list indicate that
-	// a vector needs to be moved from the right half of vectors to the left half.
-	// The reverse is true for right offsets. Because the left and right offsets
-	// are in sorted order, out-of-bounds offsets must be at the end of the left
-	// list and the beginning of the right list. Therefore, the algorithm just
-	// needs to iterate over those out-of-bounds offsets and swap the positions
-	// of the referenced vectors.
-	li := len(leftOffsets) - 1
-	ri := 0
-
-	var rightToLeft, leftToRight vector.T
-	for li >= 0 {
-		left := int(leftOffsets[li])
-		if left < len(leftOffsets) {
-			break
+	left := 0
+	right := 0
+	for {
+		// Find a misplaced "right" element from the left side.
+		var leftOffset int
+		for {
+			if left >= len(leftOffsets) {
+				return
+			}
+			leftOffset = int(leftOffsets[left])
+			left++
+			if leftOffset >= len(leftOffsets) {
+				break
+			}
 		}
 
-		right := int(rightOffsets[ri])
-		if right >= len(leftOffsets) {
-			panic(errors.AssertionFailedf(
-				"expected equal number of left and right offsets that need to be swapped"))
+		// There must be a misplaced "left" element from the right side.
+		var rightOffset int
+		for {
+			rightOffset = int(rightOffsets[right])
+			right++
+			if rightOffset < len(leftOffsets) {
+				break
+			}
 		}
 
-		// Swap vectors.
-		rightToLeft = vectors.At(left)
-		leftToRight = vectors.At(right)
+		// Swap the two elements.
+		rightToLeft := vectors.At(leftOffset)
+		leftToRight := vectors.At(rightOffset)
 		copy(tempVector, rightToLeft)
 		copy(rightToLeft, leftToRight)
 		copy(leftToRight, tempVector)
 
-		leftOffsets[li] = uint64(left)
-		rightOffsets[ri] = uint64(right)
+		tempChildKey := childKeys[leftOffset]
+		childKeys[leftOffset] = childKeys[rightOffset]
+		childKeys[rightOffset] = tempChildKey
 
-		li--
-		ri++
+		tempValueBytes := valueBytes[leftOffset]
+		valueBytes[leftOffset] = valueBytes[rightOffset]
+		valueBytes[rightOffset] = tempValueBytes
 	}
-}
-
-func copyByOffsets[T any](source, target []T, offsets []uint64) []T {
-	for i := range offsets {
-		target[i] = source[offsets[i]]
-	}
-	return target
 }

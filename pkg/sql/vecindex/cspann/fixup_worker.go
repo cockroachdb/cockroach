@@ -278,7 +278,7 @@ func (fw *fixupWorker) oldSplitPartition(
 	tempLeftOffsets, tempRightOffsets := kmeans.ComputeCentroids(
 		vectors, tempLeftCentroid, tempRightCentroid, false /* pinLeftCentroid */, tempOffsets)
 
-	leftSplit, rightSplit := splitPartitionData(
+	leftSplit, rightSplit := oldSplitPartitionData(
 		&fw.workspace, fw.index.quantizer, partition, vectors,
 		tempLeftOffsets, tempRightOffsets)
 
@@ -424,7 +424,7 @@ func (fw *fixupWorker) oldSplitPartition(
 // NOTE: The vectors set will be updated in-place, via a partial sort that moves
 // vectors in the left partition to the left side of the set. However, the split
 // partition is not modified.
-func splitPartitionData(
+func oldSplitPartitionData(
 	w *workspace.T,
 	quantizer quantize.Quantizer,
 	splitPartition *Partition,
