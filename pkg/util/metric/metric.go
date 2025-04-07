@@ -60,12 +60,14 @@ type Iterable interface {
 type PrometheusCompatible interface {
 	// GetName is a method on Metadata
 	GetName() string
+	// GetLabeledName is a method on Metadata
+	GetLabeledName() string
 	// GetHelp is a method on Metadata
 	GetHelp() string
 	// GetType returns the prometheus type enum for this metric.
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
-	GetLabels() []*prometheusgo.LabelPair
+	GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair
 }
 
 // PrometheusExportable is the standard interface for an individual metric
@@ -141,6 +143,17 @@ func (m *Metadata) GetName() string {
 	return m.Name
 }
 
+// GetLabeledName returns the metric's labeled name. This name is expected to be
+// repeated with different static label sets. Those labels can be accessed via
+// `GetLabels(true)`. If the metric does not have a labeled name, the metric's
+// name is returned.
+func (m *Metadata) GetLabeledName() string {
+	if m.LabeledName == "" {
+		return m.Name
+	}
+	return m.LabeledName
+}
+
 // GetHelp returns the metric's help string.
 func (m *Metadata) GetHelp() string {
 	return m.Help
@@ -159,12 +172,23 @@ func (m *Metadata) GetUnit() Unit {
 // GetLabels returns the metric's labels. For rationale behind the conversion
 // from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
 // in pkg/util/metric/metric.proto.
-func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	lps := make([]*prometheusgo.LabelPair, len(m.Labels))
+func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
 	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
 	var x []byte
+
+	var lps []*prometheusgo.LabelPair
+	numStaticLabels := 0
+	if useStaticLabels {
+		numStaticLabels = len(m.StaticLabels)
+		lps = make([]*prometheusgo.LabelPair, len(m.Labels)+numStaticLabels)
+		for i, v := range m.StaticLabels {
+			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+		}
+	} else {
+		lps = make([]*prometheusgo.LabelPair, len(m.Labels))
+	}
 	for i, v := range m.Labels {
-		lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
 	}
 	return lps
 }
