@@ -1387,6 +1387,18 @@ message HotRangesRequest {
     (gogoproto.customname) = "Nodes",
     (gogoproto.nullable) = true
   ];
+  // per_node_limit indicates the maximum number of hot ranges
+  // to return for each node. If left empty, the default is 128.
+  int32 per_node_limit = 6 [
+    (gogoproto.customname) = "PerNodeLimit",
+    (gogoproto.nullable) = true
+  ];
+  // stats_only indicates whether to return only the stats
+  // for the hot ranges, without pulling descriptor information.
+  bool stats_only = 7 [
+    (gogoproto.customname) = "StatsOnly",
+    (gogoproto.nullable) = true
+  ];
 }
 
 // HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
