@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -688,54 +689,10 @@ func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File
 	return fs.FS.Create(name, category)
 }
 
-func TestPebbleMVCCIntervalMapper(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	m := pebbleIntervalMapper{}
-	aKey := roachpb.Key("a")
-	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-
-	for _, tc := range []struct {
-		userKey  []byte
-		expected sstable.BlockInterval
-	}{
-		{
-			userKey: func() []byte {
-				ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
-				return ek.Encode()
-			}(),
-			// Lock keys are not MVCC keys.
-			expected: sstable.BlockInterval{},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 2, Upper: 3},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 22, Upper: 23},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25}}),
-			expected: sstable.BlockInterval{Lower: 25, Upper: 26},
-		},
-	} {
-		i, err := m.MapPointKey(sstable.InternalKey{UserKey: tc.userKey}, nil)
-		require.NoError(t, err)
-		require.Equal(t, tc.expected, i)
-	}
-	// An invalid key (malformed sentinel) results in an error.
-	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
-	sentinelPos := len(key) - 1 - int(key[len(key)-1])
-	key[sentinelPos] = '\xff'
-	_, err := m.MapPointKey(sstable.InternalKey{UserKey: key}, nil)
-	require.Error(t, err)
-}
-
 func TestPebbleMVCCBlockIntervalSuffixReplacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	r := MVCCBlockIntervalSuffixReplacer{}
+	r := cockroachkvs.MVCCBlockIntervalSuffixReplacer{}
 	suffix := mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
 	before := sstable.BlockInterval{Lower: 10, Upper: 15}
 	after, err := r.ApplySuffixReplacement(before, suffix)
