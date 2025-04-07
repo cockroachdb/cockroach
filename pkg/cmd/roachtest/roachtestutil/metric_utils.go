@@ -433,7 +433,7 @@ func processMetricLine(line string, metric *HistogramSummaryMetricPoint) ([]*Lab
 		return nil, errors.New("error parsing metric line")
 	}
 
-	labels, err := getLabels(matches[2])
+	labels, err := GetLabels(matches[2])
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func processMetricLine(line string, metric *HistogramSummaryMetricPoint) ([]*Lab
 	return labels, nil
 }
 
-func getLabels(labels string) ([]*Label, error) {
+func GetLabels(labels string) ([]*Label, error) {
 	labelSlice := strings.Split(labels, ",")
 	var finalLabels []*Label
 
