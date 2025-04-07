@@ -1170,6 +1170,13 @@ func TestTenantLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestTenantLogic_jsonb_path_match(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_match")
+}
+
 func TestTenantLogic_jsonb_path_query(
 	t *testing.T,
 ) {
