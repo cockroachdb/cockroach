@@ -112,7 +112,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.o
 -ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
 -DETAIL:  view fdv1 depends on constraint articles_pkey on table articles
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "articles" (1613): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  DROP VIEW fdv1;
@@ -125,14 +125,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.o
 -ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
 -DETAIL:  view fdv2 depends on constraint articles_pkey on table articles
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "articles" (1613): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
 -ERROR:  cannot drop constraint articles_in_category_pkey on table articles_in_category because other objects depend on it
 -DETAIL:  view fdv2 depends on constraint articles_in_category_pkey on table articles_in_category
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "articles_in_category" (1614): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles_in_category": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  DROP VIEW fdv2;
@@ -145,7 +145,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.o
 -ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
 -DETAIL:  view fdv3 depends on constraint articles_pkey on table articles
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "articles" (1613): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  DROP VIEW fdv3;
@@ -155,7 +155,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.o
 -ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
 -DETAIL:  view fdv4 depends on constraint articles_pkey on table articles
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "articles" (1613): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  DROP VIEW fdv4;
@@ -165,7 +165,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.o
  (0 rows)
  
  ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
-+ERROR:  relation "articles" (1613): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "articles": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  EXECUTE foo;  -- fail
