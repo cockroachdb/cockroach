@@ -163,9 +163,6 @@ statement error unimplemented
 SELECT '$ ? (@ like_regex ".*" flag "i")'::JSONPATH;
 
 statement error unimplemented
-SELECT '$.type()'::JSONPATH;
-
-statement error unimplemented
 SELECT '$.keyvalue()'::JSONPATH;
 
 statement error unimplemented

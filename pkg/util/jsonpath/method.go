@@ -11,10 +11,12 @@ type MethodType int
 
 const (
 	SizeMethod MethodType = iota
+	TypeMethod
 )
 
 var MethodTypeStrings = map[MethodType]string{
 	SizeMethod: "size",
+	TypeMethod: "type",
 }
 
 type Method struct {
