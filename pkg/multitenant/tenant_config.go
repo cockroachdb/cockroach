@@ -35,4 +35,5 @@ var WaitForClusterStartTimeout = settings.RegisterDurationSetting(
 	"server.controller.mux_virtual_cluster_wait.timeout",
 	"amount of time to wait for a default virtual cluster to become available when serving SQL connections (0 to disable)",
 	10*time.Second,
+	settings.NonNegativeDuration,
 )

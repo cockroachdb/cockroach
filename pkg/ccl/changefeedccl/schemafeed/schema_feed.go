@@ -723,6 +723,7 @@ var highPriorityAfter = settings.RegisterDurationSetting(
 	"changefeed.schema_feed.read_with_priority_after",
 	"retry with high priority if we were not able to read descriptors for too long; 0 disables",
 	time.Minute,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // sendExportRequestWithPriorityOverride uses KV API Export() to dump all kv pairs

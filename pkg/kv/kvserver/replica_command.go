@@ -3236,6 +3236,7 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 		"snapshots with a duration longer than this threshold will have their "+
 		"trace logged (set to 0 to disable);",
 	0,
+	settings.NonNegativeDuration,
 )
 
 var externalFileSnapshotting = settings.RegisterBoolSetting(

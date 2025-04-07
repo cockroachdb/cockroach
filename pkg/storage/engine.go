@@ -1733,6 +1733,7 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
 	time.Second*5,
+	settings.NonNegativeDuration,
 )
 
 var preIngestDelayEnabled = settings.RegisterBoolSetting(

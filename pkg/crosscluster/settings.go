@@ -18,6 +18,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
+	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.producer.stream_liveness_track_frequency"),
 )
 

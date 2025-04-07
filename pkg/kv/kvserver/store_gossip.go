@@ -45,6 +45,7 @@ var MaxStoreGossipFrequency = settings.RegisterDurationSetting(
 	"kv.store_gossip.max_frequency",
 	"the maximum frequency at which a store will gossip its store descriptor",
 	defaultMaxStoreGossipFrequency,
+	settings.NonNegativeDuration,
 )
 
 const (

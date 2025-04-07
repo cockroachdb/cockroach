@@ -31,6 +31,7 @@ var KeepAliveProbeFrequency = settings.RegisterDurationSetting(
 	"server.sql_tcp_keep_alive.interval",
 	"time between keep alive probes and idle time before probes are sent out",
 	time.Second*10,
+	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 

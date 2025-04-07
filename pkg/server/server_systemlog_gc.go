@@ -46,6 +46,7 @@ var (
 		"server.rangelog.ttl",
 		"if nonzero, entries in system.rangelog older than this duration are periodically purged",
 		30*24*time.Hour, // 30 days
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
@@ -55,6 +56,7 @@ var (
 		"server.eventlog.ttl",
 		"if nonzero, entries in system.eventlog older than this duration are periodically purged",
 		90*24*time.Hour, // 90 days
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	webSessionPurgeTTL = settings.RegisterDurationSetting(
@@ -62,6 +64,7 @@ var (
 		"server.web_session.purge.ttl",
 		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
 		time.Hour,
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 )
 

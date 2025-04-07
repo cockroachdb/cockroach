@@ -53,6 +53,7 @@ var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
 	settings.WithPublic,
+	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.consumer.minimum_flush_interval"),
 )
 
@@ -97,6 +98,7 @@ var quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	"physical_replication.consumer.timestamp_granularity",
 	"the granularity at which replicated times are quantized to make tracking more efficient",
 	5*time.Second,
+	settings.NonNegativeDuration,
 )
 
 var ingestSplitEvent = settings.RegisterBoolSetting(

@@ -276,6 +276,7 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 		"because it applies to all statements within a transaction as well as "+
 		"client communication (e.g. retries)",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -291,6 +292,7 @@ var TraceStmtThreshold = settings.RegisterDurationSetting(
 		"this setting applies to individual statements within a transaction and "+
 		"is therefore finer-grained than sql.trace.txn.enable_threshold",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for

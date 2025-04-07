@@ -22,5 +22,6 @@ var StalledOpTimeoutSetting = settings.RegisterDurationSetting(
 	"sql.vecindex.stalled_op.timeout",
 	"amount of time before other vector index workers will assist with a stalled background fixup",
 	cspann.DefaultStalledOpTimeout,
+	settings.NonNegativeDuration,
 	settings.WithPublic,
 )

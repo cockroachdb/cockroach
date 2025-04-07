@@ -19,6 +19,7 @@ var TxnIDResolutionInterval = settings.RegisterDurationSetting(
 	"the interval at which transaction fingerprint ID resolution is "+
 		"performed (set to 0 to disable)",
 	time.Second*30,
+	settings.NonNegativeDuration,
 )
 
 // StoreCapacity is the cluster setting that controls the
@@ -39,6 +40,7 @@ var DurationThreshold = settings.RegisterDurationSetting(
 	"minimum contention duration to cause the contention events to be collected "+
 		"into crdb_internal.transaction_contention_events",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // EnableSerializationConflictEvents is the cluster setting to enable recording

@@ -446,6 +446,7 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
+	settings.PositiveDuration,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
@@ -460,6 +461,7 @@ var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
 	"jobs.scheduler.schedule_execution.timeout",
 	"sets a timeout on for schedule execution; 0 disables timeout",
 	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // Returns the amount of time to wait before starting initial scan.

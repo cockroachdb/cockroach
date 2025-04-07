@@ -54,6 +54,7 @@ var idleWaitDuration = settings.RegisterDurationSetting(
 	"sql.gc_job.idle_wait_duration",
 	"after this duration of waiting for an update, the gc job will mark itself idle",
 	time.Second,
+	settings.NonNegativeDuration,
 )
 
 type schemaChangeGCResumer struct {

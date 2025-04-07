@@ -40,6 +40,7 @@ var cidrRefreshInterval = settings.RegisterDurationSetting(
 	"server.cidr_refresh_interval",
 	"interval at which to refresh the CIDR mapping, 0 means don't refresh",
 	0,
+	settings.NonNegativeDuration,
 )
 
 // Lookup looks up the CIDR record for either an IP address or a URL. The source

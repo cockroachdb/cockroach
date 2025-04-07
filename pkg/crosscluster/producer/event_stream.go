@@ -73,6 +73,7 @@ var quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	"physical_replication.producer.timestamp_granularity",
 	"the granularity at which replicated times are quantized to make tracking more efficient",
 	5*time.Second,
+	settings.NonNegativeDuration,
 )
 
 var emitMetadata = settings.RegisterBoolSetting(

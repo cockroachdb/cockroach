@@ -32,6 +32,7 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 	"sql.insights.latency_threshold",
 	"amount of time after which an executing statement is considered slow. Use 0 to disable.",
 	100*time.Millisecond,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // AnomalyDetectionEnabled turns on a per-fingerprint heuristic-based

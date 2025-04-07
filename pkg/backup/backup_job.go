@@ -82,7 +82,9 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"bulkio.backup.checkpoint_interval",
 	"the minimum time between writing progress checkpoints during a backup",
-	time.Minute)
+	time.Minute,
+	settings.NonNegativeDuration,
+)
 
 var forceReadBackupManifest = metamorphic.ConstantWithTestBool("backup-read-manifest", false)
 

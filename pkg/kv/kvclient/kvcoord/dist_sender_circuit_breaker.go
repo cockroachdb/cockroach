@@ -79,6 +79,7 @@ var (
 		"kv.dist_sender.circuit_breaker.probe.threshold",
 		"duration of errors or stalls after which a replica will be probed",
 		3*time.Second,
+		settings.NonNegativeDuration,
 		settings.WithPublic,
 	)
 
@@ -87,6 +88,7 @@ var (
 		"kv.dist_sender.circuit_breaker.probe.interval",
 		"interval between replica probes",
 		3*time.Second,
+		settings.NonNegativeDuration,
 		settings.WithPublic,
 	)
 
@@ -95,6 +97,7 @@ var (
 		"kv.dist_sender.circuit_breaker.probe.timeout",
 		"timeout for replica probes",
 		3*time.Second,
+		settings.NonNegativeDuration,
 		settings.WithPublic,
 	)
 
@@ -103,6 +106,7 @@ var (
 		"kv.dist_sender.circuit_breaker.cancellation.enabled",
 		"when enabled, in-flight requests will be cancelled when the circuit breaker trips",
 		true,
+		settings.NonNegativeDuration,
 		settings.WithPublic,
 	)
 
