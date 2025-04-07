@@ -12,6 +12,7 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1116,11 +1117,11 @@ func (rr requestRecord) toResp(
 		// The condition was satisfied; buffer the write and return a
 		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.PutRequest:
 		ru.MustSetInner(&kvpb.PutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
@@ -1155,7 +1156,7 @@ func (rr requestRecord) toResp(
 		ru.MustSetInner(&kvpb.DeleteResponse{
 			FoundKey: foundKey,
 		})
-		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence)
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq)
 
 	case *kvpb.GetRequest:
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
@@ -1217,7 +1218,9 @@ func (rr requestRecords) Empty() bool {
 }
 
 // addToBuffer adds a write to the given key to the buffer.
-func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
+func (twb *txnWriteBuffer) addToBuffer(
+	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 
@@ -1225,7 +1228,7 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 	if it.Valid() {
 		// We've already seen a write for this key.
 		bw := it.Cur()
-		val := bufferedValue{val: val, seq: seq}
+		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
 		bw.vals = append(bw.vals, val)
 		twb.bufferSize += val.size()
 	} else {
@@ -1233,7 +1236,7 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq}},
+			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
 		}
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
@@ -1376,8 +1379,11 @@ const bufferedValueStructOverhead = int64(unsafe.Sizeof(bufferedValue{}))
 
 // bufferedValue is a value written to a key at a given sequence number.
 type bufferedValue struct {
-	val roachpb.Value
-	seq enginepb.TxnSeq
+	// NB: Keep this at the start of the struct so that it is zero (size) cost in
+	// production.
+	kvNemesisSeq kvnemesisutil.Container
+	val          roachpb.Value
+	seq          enginepb.TxnSeq
 }
 
 // valPtr returns a pointer to the buffered value.
@@ -1428,6 +1434,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		putAlloc.put.Key = bw.key
 		putAlloc.put.Value = val.val
 		putAlloc.put.Sequence = val.seq
+		putAlloc.put.KVNemesisSeq = val.kvNemesisSeq
 		putAlloc.union.Put = &putAlloc.put
 		ru.Value = &putAlloc.union
 	} else {
@@ -1437,6 +1444,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		})
 		delAlloc.del.Key = bw.key
 		delAlloc.del.Sequence = val.seq
+		delAlloc.del.KVNemesisSeq = val.kvNemesisSeq
 		delAlloc.union.Delete = &delAlloc.del
 		ru.Value = &delAlloc.union
 	}
