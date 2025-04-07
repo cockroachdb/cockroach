@@ -290,7 +290,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
@@ -334,6 +334,7 @@ func Test_randomPredecessor(t *testing.T) {
 		name                string
 		v                   string
 		minSupported        string
+		minBootstrap        string
 		expectedPredecessor string
 		expectedError       string
 	}{
@@ -341,6 +342,13 @@ func Test_randomPredecessor(t *testing.T) {
 			name:                "minSupported is from a different release series as predecessor",
 			v:                   "v23.2.0",
 			minSupported:        "v24.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported and minBootstrap are from a different release series as predecessor",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.2.0",
 			expectedPredecessor: "v23.1.15",
 		},
 		{
@@ -356,6 +364,20 @@ func Test_randomPredecessor(t *testing.T) {
 			expectedPredecessor: "v23.1.23",
 		},
 		{
+			name:                "minSupported is same release series as predecessor, but patch is 0 and minBootstrap is older release series",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.0",
+			minBootstrap:        "v22.1.1",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported is same release series as predecessor and patch is not 0 and minBootstrap is older release series",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.8",
+			minBootstrap:        "v22.1.1",
+			expectedPredecessor: "v23.1.23",
+		},
+		{
 			name:                "latest predecessor is pre-release, but minimum supported is also the same version",
 			v:                   "v24.3.0-alpha.00000000",
 			minSupported:        "v24.2.0-beta.1",
@@ -367,6 +389,27 @@ func Test_randomPredecessor(t *testing.T) {
 			minSupported:  "v24.2.0",
 			expectedError: "latest release for 24.2 (v24.2.0-beta.1) is not sufficient for minimum supported version (v24.2.0)",
 		},
+		{
+			name:                "minBootstrap is same release series as predecessor, but patch is 0",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minBootstrap is same release series as predecessor and patch is not 0",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.1.8",
+			expectedPredecessor: "v23.1.23",
+		},
+		{
+			name:                "minBootstrap and minSupported are same release series as predecessor and patch is not 0",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.15",
+			minBootstrap:        "v23.1.0",
+			expectedPredecessor: "v23.1.19",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -374,10 +417,15 @@ func Test_randomPredecessor(t *testing.T) {
 			var pred *clusterupgrade.Version
 			var err error
 			_ = release.WithReleaseData(testReleaseData, func() error {
+				var minBootstrap *clusterupgrade.Version
+				if tc.minBootstrap != "" {
+					minBootstrap = clusterupgrade.MustParseVersion(tc.minBootstrap)
+				}
 				pred, err = randomPredecessor(
 					newRand(),
 					clusterupgrade.MustParseVersion(tc.v),
 					clusterupgrade.MustParseVersion(tc.minSupported),
+					minBootstrap,
 				)
 
 				return err

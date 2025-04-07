@@ -511,7 +511,7 @@ func boolP(b bool) *bool {
 // deterministic even as changes continue to happen in the
 // cockroach_releases.yaml file.
 func testPredecessorFunc(
-	rng *rand.Rand, v, _ *clusterupgrade.Version,
+	rng *rand.Rand, v, _, _ *clusterupgrade.Version,
 ) (*clusterupgrade.Version, error) {
 	pred, ok := testPredecessorMapping[v.Series()]
 	if !ok {
@@ -585,7 +585,7 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 		mvt._isLocal = isLocal
 	}
 	if predecessors != nil {
-		mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+		mvt.options.predecessorFunc = func(_ *rand.Rand, v, _, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 			if v.IsCurrent() {
 				return predecessors[len(predecessors)-1], nil
 			}
