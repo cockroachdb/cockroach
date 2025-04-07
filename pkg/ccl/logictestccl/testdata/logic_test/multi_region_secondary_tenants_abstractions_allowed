@@ -1,0 +1,85 @@
+# LogicTest: multiregion-9node-3region-3azs-tenant
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=true
+
+statement ok
+CREATE DATABASE db PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE db ADD REGION "ca-central-1"
+
+statement ok
+SET override_multi_region_zone_config = true
+
+statement ok
+ALTER DATABASE db CONFIGURE ZONE USING constraints = '{+region=us-east-1: 4}', voter_constraints = '{+region=us-east-1: 3}'
+
+subtest constrained_replicas
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.max_replicas_per_region = 10
+
+user host-cluster-root
+
+# Ensure that the override from the system tenant takes precedence over anything
+# set from within the application tenant.
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.max_replicas_per_region = 4
+
+user root
+
+# Our setting should not affect non-constraint related zone config updates.
+statement ok
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 1
+
+statement error pgcode 23514 constraint for "us-east-1" exceeds the configured maximum of 4 replicas
+ALTER DATABASE db CONFIGURE ZONE USING constraints = '{+region=us-east-1: 5}'
+
+statement ok
+ALTER DATABASE db CONFIGURE ZONE USING constraints = '{+region=us-east-1: 1, +region=ca-central-1: 1}', voter_constraints = '{+region=us-east-1: 3}'
+
+statement error pgcode 23514 voter constraint for "us-east-1" exceeds the configured maximum of 4 replicas
+ALTER DATABASE db CONFIGURE ZONE USING voter_constraints = '{+region=us-east-1: 5}'
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.max_replicas_per_region = 3
+
+user root
+
+statement ok
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 1
+
+statement ok
+ALTER DATABASE db CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3, +region=ca-central-1: 1}', voter_constraints = '{+region=us-east-1: 2}'
+
+# Ensure that prohibited constraints don't trigger a validation error.
+statement ok
+ALTER DATABASE test CONFIGURE ZONE USING num_replicas = 4, constraints = '{-region=us-east-1: 4}'
+
+subtest end
+
+subtest privileged_range
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.default_range_modifiable_by_non_root.enabled = false
+
+user root
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET ROLE admin
+
+statement error pgcode 42501 only root users are allowed to modify the default range
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+subtest end

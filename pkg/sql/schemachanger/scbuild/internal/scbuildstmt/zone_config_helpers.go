@@ -381,7 +381,7 @@ func evaluateZoneOptions(
 					pgerror.Newf(pgcode.InvalidParameterValue, "unsupported NULL value for %q",
 						tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name] // Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
+			opt := zone.SupportedZoneConfigOptions[*name]
 			if opt.CheckAllowed != nil {
 				if err := opt.CheckAllowed(b, b.ClusterSettings(), datum); err != nil {
 					return nil, nil, nil, err
@@ -601,6 +601,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper

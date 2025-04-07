@@ -290,11 +290,11 @@ type RangeStateListener interface {
 	// may want to flush to disk as replicated. Since lease transfers declare
 	// latches that conflict with all requests, the caller knows that nothing is
 	// going to modify the lock table as its evaluating.
-	OnRangeLeaseTransferEval() []*roachpb.LockAcquisition
+	OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64)
 
 	// OnRangeSubsumeEval informs the concurrency manager that the range is
 	// evaluating a merge.
-	OnRangeSubsumeEval() []*roachpb.LockAcquisition
+	OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64)
 
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's

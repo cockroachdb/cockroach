@@ -173,6 +173,19 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	// an admin. Otherwise we require CREATE privileges on the database or table
 	// in question.
 	if zs.NamedZone != "" {
+		// Only block privileges for non-root users if this is the default range
+		// for a secondary tenant with
+		// sql.zone_configs.default_range_modifiable_by_non_root.enabled set to
+		// false; other ranges just need the REPAIRCLUSTER privilege.
+		if zonepb.NamedZone(zs.NamedZone.String()) == zonepb.DefaultZoneName && !p.execCfg.Codec.ForSystemTenant() &&
+			!zonepb.DefaultRangeModifiableByNonRoot.Get(&p.execCfg.Settings.SV) {
+			if !p.EvalContext().SessionData().User().IsRootUser() {
+				return pgerror.New(
+					pgcode.InsufficientPrivilege,
+					"only root users are allowed to modify the default range",
+				)
+			}
+		}
 		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 	}
 	if zs.Database != "" {
@@ -941,6 +954,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
