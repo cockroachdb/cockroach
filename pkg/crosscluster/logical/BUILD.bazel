@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "create_logical_replication_stmt.go",
         "dead_letter_queue.go",
+        "event_decoder.go",
         "logical_replication_dist.go",
         "logical_replication_job.go",
         "logical_replication_writer_processor.go",
@@ -18,6 +19,7 @@ go_library(
         "replication_statements.go",
         "sql_row_reader.go",
         "sql_row_writer.go",
+        "table_batch_handler.go",
         "tombstone_updater.go",
         "udf_row_processor.go",
     ],
@@ -125,6 +127,7 @@ go_test(
         "replication_statements_test.go",
         "sql_row_reader_test.go",
         "sql_row_writer_test.go",
+        "table_batch_handler_test.go",
         "udf_row_processor_test.go",
     ],
     data = glob(["testdata/**"]) + [
