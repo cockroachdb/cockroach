@@ -12,6 +12,7 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -151,7 +152,17 @@ type txnWriteBuffer struct {
 	// that have been aborted by a conflicting transaction. As read-your-own-write
 	// semantics are upheld by the client, not the server, for transactions that
 	// use buffered writes, we can skip the AbortSpan check on the server.
+	//
+	// We currently track this via two state variables: `enabled` and `flushed`.
+	// Writes are only buffered if enabled && !flushed.
+	//
+	// `enabled` tracks whether buffering has been enabled/disabled externally via
+	// txn.SetBufferedWritesEnabled or because we are operating on a leaf
+	// transaction.
 	enabled bool
+	//
+	// `flushed` tracks whether the buffer has been previously flushed.
+	flushed bool
 
 	buffer        btree
 	bufferIDAlloc uint64
@@ -169,7 +180,7 @@ type txnWriteBuffer struct {
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
-	if !twb.enabled {
+	if !twb.shouldBuffer() {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
 
@@ -183,6 +194,7 @@ func (twb *txnWriteBuffer) SendLocked(
 	}
 
 	if _, ok := ba.GetArg(kvpb.DeleteRange); ok {
+		log.VEventf(ctx, 2, "DeleteRangeRequest forcing flush of write buffer")
 		// DeleteRange requests can delete an arbitrary number of keys over a
 		// given keyspan. We won't know the exact scope of the delete until
 		// we've scanned the keyspan, which must happen on the server. We've got
@@ -212,8 +224,13 @@ func (twb *txnWriteBuffer) SendLocked(
 	// Check if buffering writes from the supplied batch will run us over
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
-	if twb.estimateSize(ba)+twb.bufferSize > bufferedWritesMaxBufferSize.Get(&twb.st.SV) {
+	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	bufSize := twb.estimateSize(ba) + twb.bufferSize
+	if bufSize > maxSize {
 		// TODO(arul): add some metrics for this case.
+		log.VEventf(ctx, 2, "flushing buffer because buffer size (%d bytes) exceeeds max size (%d bytes)",
+			bufSize,
+			maxSize)
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
@@ -306,12 +323,17 @@ func (twb *txnWriteBuffer) adjustError(
 				if ts[0].stripped {
 					numStripped++
 				} else {
-					// TODO(arul): If the error index points to a request that we've
-					// transformed, returning this back to the client is weird -- the
-					// client doesn't know we're making transformations. We should
-					// probably just log a warning and clear out the error index for such
-					// cases.
-					log.Fatal(ctx, "unhandled")
+					// This is a transformed request (for example a LockingGet that was
+					// sent instead of a Del). In this case, the error might be a bit
+					// confusing to the client since the request that had an error isn't
+					// exactly the request the user sent.
+					//
+					// For now, we handle this by logging and removing the error index.
+					if baIdx == pErr.Index.Index {
+						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+						pErr.Index = nil
+						return pErr
+					}
 				}
 				ts = ts[1:]
 				continue
@@ -418,7 +440,13 @@ func (twb *txnWriteBuffer) importLeafFinalState(context.Context, *roachpb.LeafTx
 }
 
 // epochBumpedLocked implements the txnInterceptor interface.
-func (twb *txnWriteBuffer) epochBumpedLocked() {}
+func (twb *txnWriteBuffer) epochBumpedLocked() {
+	// TODO(ssd): Consider whether we definitely want to restart buffering on
+	// retry.
+	twb.flushed = false
+	twb.buffer.Reset()
+	twb.bufferSize = 0
+}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) createSavepointLocked(context.Context, *savepoint) {}
@@ -529,7 +557,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 			baRemote.Requests = append(baRemote.Requests, getReqU)
 			// Buffer a Put under the optimistic assumption that the condition
 			// will be satisfied.
-			twb.addToBuffer(t.Key, t.Value, t.Sequence)
+			twb.addToBuffer(t.Key, t.Value, t.Sequence, t.KVNemesisSeq)
 
 		case *kvpb.PutRequest:
 			// If the MustAcquireExclusiveLock flag is set on the Put, then we need to
@@ -558,7 +586,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				origRequest: req,
 				resp:        ru,
 			})
-			twb.addToBuffer(t.Key, t.Value, t.Sequence)
+			twb.addToBuffer(t.Key, t.Value, t.Sequence, t.KVNemesisSeq)
 
 		case *kvpb.DeleteRequest:
 			// To correctly populate FoundKey in the response, we need to look in our
@@ -608,7 +636,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				origRequest: req,
 				resp:        ru,
 			})
-			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
+			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence, t.KVNemesisSeq)
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
@@ -1000,7 +1028,9 @@ func (t transformation) toResp(
 			pErr.SetErrorIndex(int32(t.index))
 			return kvpb.ResponseUnion{}, pErr
 		}
+
 		// The condition was satisfied - return a synthesized response.
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
 
 	case *kvpb.PutRequest:
@@ -1064,7 +1094,9 @@ func (t transformations) Empty() bool {
 }
 
 // addToBuffer adds a write to the given key to the buffer.
-func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
+func (twb *txnWriteBuffer) addToBuffer(
+	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 
@@ -1074,13 +1106,15 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 		bw := it.Cur()
 		val := bufferedValue{val: val, seq: seq}
 		bw.vals = append(bw.vals, val)
+		bw.kvNemesisSeq = kvNemSeq
 		twb.bufferSize += val.size()
 	} else {
 		twb.bufferIDAlloc++
 		bw := &bufferedWrite{
-			id:   twb.bufferIDAlloc,
-			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq}},
+			kvNemesisSeq: kvNemSeq,
+			id:           twb.bufferIDAlloc,
+			key:          key,
+			vals:         []bufferedValue{{val: val, seq: seq}},
 		}
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
@@ -1113,8 +1147,12 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
+	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
 	// Once we've flushed the buffer, we disable write buffering going forward.
-	twb.enabled = false
+	//
+	// TODO(ssd): Consider whether we want to unconditionally set flushed to true
+	// above the buffer length check above.
+	twb.flushed = true
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1168,6 +1206,12 @@ func (twb *txnWriteBuffer) hasBufferedWrites() bool {
 	return twb.buffer.Len() > 0
 }
 
+// shouldBuffer returns true if SendLocked() should attempt to buffer parts of
+// the batch.
+func (twb *txnWriteBuffer) shouldBuffer() bool {
+	return twb.enabled && !twb.flushed
+}
+
 // testingBufferedWritesAsSlice returns all buffered writes, in key order, as a
 // slice.
 func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
@@ -1193,8 +1237,11 @@ const bufferedWriteStructOverhead = int64(unsafe.Sizeof(bufferedWrite{}))
 // track intermediate values in the buffer to support read-your-own-writes and
 // savepoint rollbacks.
 type bufferedWrite struct {
-	id  uint64
-	key roachpb.Key
+	// NB: Keep this at the start of the struct so that it is zero (size) cost in
+	// production.
+	kvNemesisSeq kvnemesisutil.Container
+	id           uint64
+	key          roachpb.Key
 	// TODO(arul): explore the possibility of using a b-tree which doesn't use an
 	// endKey as a comparator. We could then remove this unnecessary field here,
 	// and also in the keyLocks struct.
@@ -1268,6 +1315,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		putAlloc.put.Key = bw.key
 		putAlloc.put.Value = val.val
 		putAlloc.put.Sequence = val.seq
+		putAlloc.put.KVNemesisSeq = bw.kvNemesisSeq
 		putAlloc.union.Put = &putAlloc.put
 		ru.Value = &putAlloc.union
 	} else {
@@ -1277,6 +1325,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		})
 		delAlloc.del.Key = bw.key
 		delAlloc.del.Sequence = val.seq
+		delAlloc.del.KVNemesisSeq = bw.kvNemesisSeq
 		delAlloc.union.Delete = &delAlloc.del
 		ru.Value = &delAlloc.union
 	}
