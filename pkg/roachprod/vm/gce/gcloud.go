@@ -354,6 +354,12 @@ type ProviderOpts struct {
 	// Use an instance template and a managed instance group to create VMs. This
 	// enables cluster resizing, load balancing, and health monitoring.
 	Managed bool
+	// Enable turbo mode for the instance. Only supported on C4 VM families.
+	// See: https://cloud.google.com/sdk/docs/release-notes#compute_engine_23
+	TurboMode string
+	// The number of visible threads per physical core.
+	// See: https://cloud.google.com/compute/docs/instances/configuring-simultaneous-multithreading.
+	ThreadsPerCore int
 	// This specifies a subset of the Zones above that will run on spot instances.
 	// VMs running in Zones not in this list will be provisioned on-demand. This
 	// is only used by managed instance groups.
@@ -1133,6 +1139,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"use a managed instance group (enables resizing, load balancing, and health monitoring)")
 	flags.BoolVar(&o.EnableCron, ProviderName+"-enable-cron",
 		false, "Enables the cron service (it is disabled by default)")
+	flags.StringVar(&o.TurboMode, ProviderName+"-turbo-mode", "",
+		"enable turbo mode for the instance (only supported on C4 VM families, valid value: 'ALL_CORE_MAX')")
+	flags.IntVar(&o.ThreadsPerCore, ProviderName+"-threads-per-core", 0,
+		"the number of visible threads per physical core (valid values: 1 or 2), default is 0 (auto)")
 }
 
 // ConfigureProviderFlags implements Provider
@@ -1402,6 +1412,12 @@ func (p *Provider) computeInstanceArgs(
 	if providerOpts.ServiceAccount != "" {
 		args = append(args, "--service-account", providerOpts.ServiceAccount)
 	}
+	if providerOpts.TurboMode != "" {
+		args = append(args, "--turbo-mode", providerOpts.TurboMode)
+	}
+	if providerOpts.ThreadsPerCore > 0 {
+		args = append(args, "--threads-per-core", fmt.Sprintf("%d", providerOpts.ThreadsPerCore))
+	}
 
 	if providerOpts.preemptible {
 		// Make sure the lifetime is no longer than 24h
@@ -1639,6 +1655,11 @@ func (p *Provider) Create(
 	}
 	if providerOpts.Managed {
 		if err := checkSDKVersion("450.0.0" /* minVersion */, "required by managed instance groups"); err != nil {
+			return nil, err
+		}
+	}
+	if providerOpts.TurboMode != "" {
+		if err := checkSDKVersion("492.0.0" /* minVersion */, "required for turbo-mode setting"); err != nil {
 			return nil, err
 		}
 	}
