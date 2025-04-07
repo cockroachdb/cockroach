@@ -71,6 +71,19 @@ func JsonpathQueryArray(
 	return tree.DJSON{JSON: b.Build()}, nil
 }
 
+func JsonpathQueryFirst(
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+) (tree.Datum, error) {
+	j, err := jsonpathQuery(target, path, vars, silent)
+	if err != nil {
+		return nil, err
+	}
+	if len(j) == 0 {
+		return tree.DNull, nil
+	}
+	return &tree.DJSON{JSON: j[0]}, nil
+}
+
 func jsonpathQuery(
 	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) ([]json.JSON, error) {
