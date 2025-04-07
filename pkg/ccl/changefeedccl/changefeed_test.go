@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -3978,9 +3979,9 @@ func TestChangefeedEnriched(t *testing.T) {
 	// Create an enriched source provider with no data. The contents of source
 	// will be tested in another test, we just want to make sure the structure &
 	// schema is right here.
-	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, getTestingEnrichedSourceData())
 	require.NoError(t, err)
-	source, err := esp.GetJSON(cdcevent.Row{}, eventContext{})
+	source, err := esp.GetJSON(cdcevent.TestingMakeEventRowFromEncDatums([]rowenc.EncDatum{}, nil, 0, false), eventContext{})
 	require.NoError(t, err)
 
 	var sourceMap map[string]any
@@ -4513,6 +4514,171 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 						feedTestUseLocality(testLocality))
 				}
 			})
+		})
+	}
+}
+
+func TestChangefeedEnrichedSourceSchemaInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name                          string
+		format                        string
+		expectedRow                   string
+		expectedRowsAfterSchemaChange []string
+	}{
+		{
+			name:        "json",
+			format:      "json",
+			expectedRow: `foo: {"a": 1, "b": "key1"}->{"after": {"a": 1, "b": "key1", "c": 100}, "op": "c"}`,
+			expectedRowsAfterSchemaChange: []string{
+				`foo: {"a": 1, "b": "key1"}->{"after": {"a": 1, "b": "key1", "c": 100, "d": "new_col"}, "op": "u"}`,
+				`foo: {"a": 2, "b": "key2"}->{"after": {"a": 2, "b": "key2", "c": 200, "d": "new_value"}, "op": "c"}`,
+			},
+		},
+		{
+			name:        "avro",
+			format:      "avro",
+			expectedRow: `foo: {"a":{"long":1},"b":{"string":"key1"}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "key1"}, "c": {"long": 100}}}, "op": {"string": "c"}}`,
+			expectedRowsAfterSchemaChange: []string{
+				`foo: {"a":{"long":1},"b":{"string":"key1"}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "key1"}, "c": {"long": 100}, "d": {"string": "new_col"}}}, "op": {"string": "u"}}`,
+				`foo: {"a":{"long":2},"b":{"string":"key2"}}->{"after": {"foo": {"a": {"long": 2}, "b": {"string": "key2"}, "c": {"long": 200}, "d": {"string": "new_value"}}}, "op": {"string": "c"}}`,
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT, b STRING, c INT, PRIMARY KEY (a, b))`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'key1', 100)`)
+
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+				foo := feed(t, f, stmt)
+				defer closeFeed(t, foo)
+
+				sourceAssertion := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "tableInfo.tableName"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.schemaName"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.dbName"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"tableInfo.primaryKeys"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "fake", actualSource["table_name"])
+						require.Equal(t, "fake", actualSource["schema_name"])
+						require.Equal(t, "fake", actualSource["database_name"])
+						require.Equal(t, []any{}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+
+				sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN d STRING DEFAULT 'new_col'`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'key2', 200, 'new_value')`)
+
+				sourceAssertionAfterSchemaChange := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "tableInfo.tableName"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.schemaName"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.dbName"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"tableInfo.primaryKeys"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "fake", actualSource["table_name"])
+						require.Equal(t, "fake", actualSource["schema_name"])
+						require.Equal(t, "fake", actualSource["database_name"])
+						require.Equal(t, []any{}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, testCase.expectedRowsAfterSchemaChange, sourceAssertionAfterSchemaChange)
+			}
+
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
+		})
+	}
+}
+
+func TestChangefeedEnrichedSourceSchemaInfoOnPrimaryKeyChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name             string
+		format           string
+		expectedRow      string
+		expectedRowAfter string
+	}{
+		{
+			name:             "json",
+			format:           "json",
+			expectedRow:      `foo: {"a": 1}->{"after": {"a": 1, "b": "initial"}, "op": "c"}`,
+			expectedRowAfter: `foo: {"b": "new_key"}->{"after": {"a": 2, "b": "new_key"}, "op": "c"}`,
+		},
+		{
+			name:             "avro",
+			format:           "avro",
+			expectedRow:      `foo: {"a":{"long":1}}->{"after": {"foo": {"a": {"long": 1}, "b": {"string": "initial"}}}, "op": {"string": "c"}}`,
+			expectedRowAfter: `foo: {"b":{"string":"new_key"}}->{"after": {"foo": {"a": {"long": 2}, "b": {"string": "new_key"}}}, "op": {"string": "c"}}`,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'initial')`)
+
+				stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+				foo := feed(t, f, stmt)
+				defer closeFeed(t, foo)
+
+				sourceAssertion := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "tableInfo.tableName"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.schemaName"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.dbName"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"tableInfo.primaryKeys"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "fake", actualSource["table_name"])
+						require.Equal(t, "fake", actualSource["schema_name"])
+						require.Equal(t, "fake", actualSource["database_name"])
+						require.Equal(t, []any{}, actualSource["primary_keys"])
+					}
+				}
+				if testCase.format == "json" {
+					assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+				} else {
+					assertPayloadsEnriched(t, foo, []string{testCase.expectedRow}, sourceAssertion)
+				}
+
+				sqlDB.Exec(t, `ALTER TABLE foo ALTER COLUMN b SET NOT NULL`)
+				sqlDB.Exec(t, `ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS (b)`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'new_key')`)
+
+				sourceAssertionAfterPKChange := func(actualSource map[string]any) {
+					if testCase.format == "avro" {
+						actualSourceValue := actualSource["source"].(map[string]any)
+						require.Equal(t, map[string]any{"string": "tableInfo.tableName"}, actualSourceValue["table_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.schemaName"}, actualSourceValue["schema_name"])
+						require.Equal(t, map[string]any{"string": "tableInfo.dbName"}, actualSourceValue["database_name"])
+						require.Equal(t, map[string]any{"array": []any{"tableInfo.primaryKeys"}}, actualSourceValue["primary_keys"])
+					} else {
+						require.Equal(t, "fake", actualSource["table_name"])
+						require.Equal(t, "fake", actualSource["schema_name"])
+						require.Equal(t, "fake", actualSource["database_name"])
+						require.Equal(t, []any{}, actualSource["primary_keys"])
+					}
+				}
+				assertPayloadsEnriched(t, foo, []string{testCase.expectedRowAfter}, sourceAssertionAfterPKChange)
+			}
+
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
 		})
 	}
 }
