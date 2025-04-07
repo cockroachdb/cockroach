@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -512,6 +511,7 @@ func TestDataDriven(t *testing.T) {
 				var stat string
 				var height, width, sample = 15, 80, 1
 				var showLastValue bool
+				var showInitialValue bool
 				var buf strings.Builder
 
 				scanArg(t, d, "stat", &stat)
@@ -519,6 +519,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
 				scanIfExists(t, d, "show_last_value", &showLastValue)
+				scanIfExists(t, d, "show_initial_value", &showInitialValue)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
@@ -534,35 +535,15 @@ func TestDataDriven(t *testing.T) {
 				))
 				buf.WriteString("\n")
 
-				if showLastValue {
-					type storeIDWithStat struct {
-						StoreID int64
-						Value   float64
-					}
-					lastTick := history.Recorded[len(history.Recorded)-1]
-					orderedStoreIDs := make([]storeIDWithStat, 0, len(lastTick))
-					for i, sm := range lastTick {
-						orderedStoreIDs = append(orderedStoreIDs, storeIDWithStat{
-							StoreID: sm.StoreID,
-							Value:   statTS[i][len(statTS[i])-1],
-						})
-					}
-					sort.Slice(orderedStoreIDs, func(i, j int) bool {
-						return orderedStoreIDs[i].Value < orderedStoreIDs[j].Value
-					})
-					fmt.Fprintf(&buf, "\nlast store values: [")
-					for i, store := range orderedStoreIDs {
-						if i > 0 {
-							fmt.Fprintf(&buf, " ")
-						}
-						if stat == "disk_fraction_used" {
-							fmt.Fprintf(&buf, "s%v=%.2f", store.StoreID, store.Value)
-						} else {
-							fmt.Fprintf(&buf, "s%v=%.0f", store.StoreID, store.Value)
-						}
-					}
-					fmt.Fprintf(&buf, "]")
+				if showInitialValue {
+					buf.WriteString("\ninitial store values: ")
+					buf.WriteString(history.ShowRecordedValueAt(0, stat))
 				}
+				if showLastValue {
+					buf.WriteString("\nlast store values: ")
+					buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
+				}
+
 				return buf.String()
 			case "print":
 				var buf strings.Builder

@@ -58,7 +58,7 @@ r91(9000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FU
 r96(9500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r97(9600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r98(9700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r99(9800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r100(9900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL))
 ]
 
-plot stat=cpu sample=1  show_last_value=true
+plot stat=cpu sample=1  show_last_value=true show_initial_value=true
 ----
 ----
 
@@ -80,11 +80,12 @@ plot stat=cpu sample=1  show_last_value=true
       0 ┼───────────────────────────────────────────────────────────────────────────────
                                                cpu
 
+initial store values: [s1=0 s2=0 s3=0 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0]
 last store values: [s7=0 s8=0 s9=0 s4=500 s5=500 s6=500 s2=27470 s3=36231 s1=37332]
 ----
 ----
 
-plot stat=leases sample=1 show_last_value=true
+plot stat=leases sample=1 show_last_value=true  show_initial_value=true
 ----
 ----
 
@@ -106,12 +107,13 @@ plot stat=leases sample=1 show_last_value=true
    0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                               leases
 
+initial store values: [s2=0 s3=0 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0 s1=100]
 last store values: [s4=0 s5=0 s6=0 s7=0 s8=0 s9=0 s2=27 s3=36 s1=37]
 ----
 ----
 
 
-plot stat=replicas show_last_value=true
+plot stat=replicas show_last_value=true  show_initial_value=true
 ----
 ----
 
@@ -133,6 +135,7 @@ plot stat=replicas show_last_value=true
    0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                              replicas
 
+initial store values: [s3=0 s7=0 s8=0 s9=0 s1=100 s2=100 s4=100 s5=100 s6=100]
 last store values: [s7=0 s8=0 s9=0 s3=36 s1=70 s2=94 s4=100 s5=100 s6=100]
 ----
 ----
