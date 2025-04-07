@@ -1,0 +1,20 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query B
+SELECT jsonb_path_match('{}', '1 + 1 == 2');
+----
+true
+
+statement error pgcode 22038 pq: jsonb_path_match\(\): single boolean result is expected
+SELECT jsonb_path_match('{}', '$');
+
+statement error pgcode 22038 pq: jsonb_path_match\(\): single boolean result is expected
+SELECT jsonb_path_match('{}', 'strict $');
+
+statement error pgcode 22038 pq: jsonb_path_match\(\): single boolean result is expected
+SELECT jsonb_path_match('{}', '$', '{}', false);
+
+query T
+SELECT jsonb_path_match('{}', '$', '{}', true);
+----
+NULL

@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -15,8 +17,9 @@ import (
 )
 
 var (
-	errUnimplemented = unimplemented.NewWithIssue(22513, "unimplemented")
-	errInternal      = errors.New("internal error")
+	errUnimplemented         = unimplemented.NewWithIssue(22513, "unimplemented")
+	errInternal              = errors.New("internal error")
+	errSingleBooleanRequired = pgerror.Newf(pgcode.SingletonSQLJSONItemRequired, "single boolean result is expected")
 )
 
 type jsonpathCtx struct {
@@ -81,6 +84,28 @@ func JsonpathQueryFirst(
 		return tree.DNull, nil
 	}
 	return &tree.DJSON{JSON: j[0]}, nil
+}
+
+func JsonpathMatch(
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+) (tree.Datum, error) {
+	j, err := jsonpathQuery(target, path, vars, silent)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(j) == 1 {
+		if b, ok := j[0].AsBool(); ok {
+			return tree.MakeDBool(tree.DBool(b)), nil
+		}
+		if j[0].Type() == json.NullJSONType {
+			return tree.DNull, nil
+		}
+	}
+	if !silent {
+		return nil, errSingleBooleanRequired
+	}
+	return tree.DNull, nil
 }
 
 func jsonpathQuery(
