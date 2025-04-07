@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"slices"
 	"sync"
@@ -818,5 +819,103 @@ func TestHotRangesByNode(t *testing.T) {
 		req := &serverpb.HotRangesRequest{PageSize: 100, Nodes: []string{"local", "2"}}
 		_, err := app.HotRangesV2(ctx, req)
 		require.Error(t, err, "cannot call 'local' mixed with other nodes")
+	})
+}
+
+func TestHotRangesStatsOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	for _, test := range []struct {
+		statsOnly      bool
+		hasDescriptors bool
+	}{
+		{true, false},
+		{false, true},
+	} {
+		t.Run(fmt.Sprintf("statsOnly=%t hasDescriptors %t", test.statsOnly, test.hasDescriptors), func(t *testing.T) {
+			testutils.SucceedsSoon(t, func() error {
+				ss := s.StatusServer().(*systemStatusServer)
+				resp, err := ss.HotRangesV2(ctx, &serverpb.HotRangesRequest{NodeID: "local", StatsOnly: test.statsOnly})
+				if err != nil {
+					return err
+				}
+
+				if len(resp.Ranges) == 0 {
+					return errors.New("waiting for hot ranges to be collected")
+				}
+
+				hasDescriptors := false
+				for _, r := range resp.Ranges {
+					allDescriptors := append(r.Databases, append(r.Tables, r.Indexes...)...)
+					if len(allDescriptors) > 0 {
+						hasDescriptors = true
+					}
+				}
+
+				require.Equal(t, test.hasDescriptors, hasDescriptors)
+				return nil
+			})
+		})
+	}
+}
+
+func TestHotRangesNodeLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
+					DisableReplicaRebalancing: true,
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	testutils.SucceedsSoon(t, func() error {
+		ss := s.StatusServer().(*systemStatusServer)
+		resp, err := ss.HotRangesV2(ctx, &serverpb.HotRangesRequest{NodeID: "local", PerNodeLimit: 5})
+		if err != nil {
+			return err
+		}
+
+		if len(resp.Ranges) == 0 {
+			return errors.New("waiting for hot ranges to be collected")
+		}
+
+		require.Equal(t, 5, len(resp.Ranges))
+		return nil
 	})
 }
