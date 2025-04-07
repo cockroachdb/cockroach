@@ -838,9 +838,8 @@ func (b *Builder) buildTriggerFunction(
 		panic(err)
 	}
 	plBuilder := newPLpgSQLBuilder(
-		b, resolvedDef.Name, stmt.AST.Label, nil /* colRefs */, params, tableTyp,
-		false /* isProc */, false, /* isDoBlock */
-		true /* isTriggerFn */, true /* buildSQL */, nil, /* outScope */
+		b, basePLOptions().WithIsTriggerFn(), resolvedDef.Name, stmt.AST.Label, nil, /* colRefs */
+		params, tableTyp, nil /* outScope */, 0, /* resultBufferID */
 	)
 	stmtScope := plBuilder.buildRootBlock(stmt.AST, triggerFuncScope, params)
 	udfDef.Body = []memo.RelExpr{stmtScope.expr}
