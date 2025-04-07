@@ -4182,8 +4182,59 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 	"jsonb_path_exists_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_match":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_match_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_match": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.)`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.) The vars argument must be a JSON object, and its fields provide
+			named values to be substituted into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathMatch,
+			Info: `Returns the SQL boolean result of a JSON path predicate check
+			for the specified JSON value. (This is useful only with predicate check
+			expressions, not SQL-standard JSON path expressions, since it will
+			either fail or return NULL if the path result is not a single boolean
+			value.) The vars argument must be a JSON object, and its fields provide
+			named values to be substituted into the jsonpath expression. If the
+			silent argument is true, the function suppresses the following errors:
+			missing object field or array element, unexpected JSON item type,
+			datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
+	"jsonb_path_match_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
 	"jsonb_path_query_array": makeBuiltin(jsonpathProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -12329,4 +12380,12 @@ func makeJsonpathQueryFirst(
 		return nil, err
 	}
 	return jsonpath.JsonpathQueryFirst(target, path, vars, silent)
+}
+
+func makeJsonpathMatch(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpath.JsonpathMatch(target, path, vars, silent)
 }
