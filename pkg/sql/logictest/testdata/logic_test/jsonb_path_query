@@ -1380,3 +1380,44 @@ query T
 SELECT jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
 ----
 true
+
+query T
+SELECT jsonb_path_query('[1, 2]', '$.size()');
+----
+2
+
+query T
+SELECT jsonb_path_query('[]', '$.size()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '$.size()');
+----
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('{}', 'strict $.size()');
+
+query T rowsort
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+----
+1
+1
+1
+1
+0
+1
+3
+1
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+
+query T rowsort
+SELECT jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2 - 1 to $.size() - 2]');
+----
+{"a": 13}
+{"b": 14}
+"ccc"

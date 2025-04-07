@@ -571,6 +571,16 @@ parse
 ----
 (1 == 1)."abc" -- normalized!
 
+parse
+$.a.size()
+----
+$."a".size() -- normalized!
+
+parse
+($.a).size()
+----
+$."a".size() -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
