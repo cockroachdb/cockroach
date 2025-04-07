@@ -74,9 +74,10 @@ func KMSEncryptDecrypt(t *testing.T, kmsURI string, env KMSEnv) {
 func CheckNoKMSAccess(t *testing.T, kmsURI string, env KMSEnv) {
 	ctx := context.Background()
 	kms, err := KMSFromURI(ctx, kmsURI, env)
-	require.NoError(t, err)
-
-	_, err = kms.Encrypt(ctx, []byte("test bytes"))
+	if err == nil {
+		// AWS will fail on initialization, but GCP and Azure will fail on Encrypt.
+		_, err = kms.Encrypt(ctx, []byte("test bytes"))
+	}
 	if err == nil {
 		t.Fatalf("expected error when encrypting with kms %s", kmsURI)
 	}
