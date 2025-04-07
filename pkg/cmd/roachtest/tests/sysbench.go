@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -436,6 +437,11 @@ func exportSysbenchResults(
 	}
 	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
 	openmetricsMap := make(map[string][]openmetricsValues)
+
+	// Counters for aggregated metrics
+	var totalQpsSum, readQpsSum, writeQpsSum, otherQpsSum float64
+	var sampleCount int64
+
 	tick := func(fields []string, qpsByType []string) error {
 		snapshotTick := sysbenchMetrics{
 			Time:         start.Unix(),
@@ -449,6 +455,18 @@ func exportSysbenchResults(
 			Errors:       fields[12],
 			Reconnects:   fields[14],
 		}
+
+		// Add to aggregation counters
+		qpsVal, _ := strconv.ParseFloat(fields[5], 64)
+		readQpsVal, _ := strconv.ParseFloat(qpsByType[0], 64)
+		writeQpsVal, _ := strconv.ParseFloat(qpsByType[1], 64)
+		otherQpsVal, _ := strconv.ParseFloat(qpsByType[2], 64)
+
+		totalQpsSum += qpsVal
+		readQpsSum += readQpsVal
+		writeQpsSum += writeQpsVal
+		otherQpsSum += otherQpsVal
+		sampleCount++
 
 		if t.ExportOpenmetrics() {
 			addCurrentSnapshotToOpenmetrics(snapshotTick, openmetricsMap)
@@ -508,7 +526,71 @@ func exportSysbenchResults(
 	if t.ExportOpenmetrics() {
 		metricBytes = getOpenmetricsBytes(openmetricsMap, labelString)
 	}
-	return os.WriteFile(fmt.Sprintf("%s/%s", perfDir, roachtestutil.GetBenchmarkMetricsFileName(t)), metricBytes, 0666)
+
+	// Write the standard metrics file
+	if err := os.WriteFile(fmt.Sprintf("%s/%s", perfDir, roachtestutil.GetBenchmarkMetricsFileName(t)), metricBytes, 0666); err != nil {
+		return err
+	}
+
+	// If using OpenMetrics, also calculate and write aggregated metrics
+	if t.ExportOpenmetrics() && sampleCount > 0 {
+		floatSampleCount := float64(sampleCount)
+		avgTotalQps := totalQpsSum / floatSampleCount
+		avgReadQps := readQpsSum / floatSampleCount
+		avgWriteQps := writeQpsSum / floatSampleCount
+		avgOtherQps := otherQpsSum / floatSampleCount
+
+		// Create aggregated metrics exactly matching roachperf's expected format
+		aggregatedMetrics := roachtestutil.AggregatedPerfMetrics{
+			{
+				Name:           "total_qps",
+				Value:          roachtestutil.MetricPoint(avgTotalQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "read_qps",
+				Value:          roachtestutil.MetricPoint(avgReadQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "write_qps",
+				Value:          roachtestutil.MetricPoint(avgWriteQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+			{
+				Name:           "other_qps",
+				Value:          roachtestutil.MetricPoint(avgOtherQps),
+				Unit:           "ops/s",
+				IsHigherBetter: true,
+			},
+		}
+
+		aggregatedBuf := &bytes.Buffer{}
+
+		// Convert aggregated metrics to OpenMetrics format
+		if err := roachtestutil.GetAggregatedMetricBytes(
+			aggregatedMetrics,
+			[]*roachtestutil.Label{{Name: "test", Value: t.Name()}},
+			timeutil.Now(),
+			aggregatedBuf,
+		); err != nil {
+			return errors.Wrap(err, "failed to format aggregated metrics")
+		}
+
+		// Write aggregated metrics
+		aggregatedFileName := "aggregated_" + roachtestutil.GetBenchmarkMetricsFileName(t)
+		aggregatedPath := filepath.Join(perfDir, aggregatedFileName)
+		if err := os.WriteFile(aggregatedPath, aggregatedBuf.Bytes(), 0644); err != nil {
+			return errors.Wrap(err, "failed to write aggregated metrics")
+		}
+
+		t.L().Printf("Wrote aggregated metrics to %s", aggregatedPath)
+	}
+
+	return nil
 }
 
 // Add sysbenchMetrics to the openmetricsMap
