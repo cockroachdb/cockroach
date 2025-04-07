@@ -337,6 +337,10 @@ type TestingKnobs struct {
 	// will be assigned to the gateway before we start assigning partitions to
 	// other nodes.
 	MinimumNumberOfGatewayPartitions int
+
+	// TableReaderStartScanCb, when non-nil, will be called whenever the
+	// TableReader processor starts its scan.
+	TableReaderStartScanCb func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -30,6 +30,7 @@ type rowFetcher interface {
 		_ *kv.DB,
 		initialTimestamp hlc.Timestamp,
 		maxTimestampAge time.Duration,
+		minTimestampAge time.Duration,
 		spans roachpb.Spans,
 		batchBytesLimit rowinfra.BytesLimit,
 		rowLimitHint rowinfra.RowLimit,

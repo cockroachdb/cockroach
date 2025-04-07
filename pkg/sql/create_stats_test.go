@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,11 +38,19 @@ func TestStatsWithLowTTL(t *testing.T) {
 	// The test depends on reasonable timings, so don't run under race.
 	skip.UnderRace(t)
 
+	var blockTableReader atomic.Bool
+	blockCh := make(chan struct{})
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				// Set the batch size small to avoid having to use a large number of rows.
 				TableReaderBatchBytesLimit: 100,
+				TableReaderStartScanCb: func() {
+					if blockTableReader.Load() {
+						<-blockCh
+					}
+				},
 			},
 		},
 	})
@@ -130,6 +139,15 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 
 	// Set up timestamp advance to keep timestamps no older than 1s.
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.max_timestamp_age = '1s'`)
+
+	// Block start of the inconsistent scan for 2s so that the initial timestamp
+	// becomes way too old.
+	blockTableReader.Store(true)
+	go func() {
+		defer blockTableReader.Store(false)
+		time.Sleep(2 * time.Second)
+		close(blockCh)
+	}()
 
 	_, err := db.Exec(`CREATE STATISTICS foo FROM t AS OF SYSTEM TIME '-0.1s'`)
 	if err != nil {
