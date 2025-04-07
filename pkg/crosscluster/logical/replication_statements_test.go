@@ -98,6 +98,20 @@ func TestReplicationStatements(t *testing.T) {
 				require.NoError(t, err)
 
 				return deleteStmt.SQL
+			case "show-select":
+				var tableName string
+				d.ScanArgs(t, "table", &tableName)
+
+				desc := getTableDesc(tableName)
+
+				stmt, err := newBulkSelectStatement(desc)
+				require.NoError(t, err)
+
+				// Test preparing the statement to ensure it is valid SQL.
+				_, err = sqlDB.Exec(fmt.Sprintf("PREPARE stmt_%d AS %s", rand.Int(), stmt.SQL))
+				require.NoError(t, err)
+
+				return stmt.SQL
 			default:
 				return "unknown command: " + d.Cmd
 			}
