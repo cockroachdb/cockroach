@@ -1125,7 +1125,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 //   - system.join_tokens: avoid downloading secret join keys.
 //   - system.comments: avoid downloading noise from SQL schema.
 //   - system.ui: avoid downloading noise from UI customizations.
-//   - system.zones: the contents of crdb_internal.zones is easier to use.
 //   - system.statement_bundle_chunks: avoid downloading a large table that's
 //     hard to interpret currently.
 //   - system.statement_statistics: historical data, usually too much to
@@ -1603,5 +1602,12 @@ limit 5000;`,
 			"active",
 			"info",
 		},
+	},
+	"system.zones": {
+		customQueryRedacted: `SELECT "id" FROM system.zones;`,
+		customQueryUnredacted: `SELECT 
+			"id", 
+			crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config)
+			FROM system.zones;`,
 	},
 }
