@@ -53,6 +53,7 @@ go_test(
         "childkey_dedup_test.go",
         "cspannpb_test.go",
         "fixup_processor_test.go",
+        "fixup_split_test.go",
         "fixup_worker_test.go",
         "index_stats_test.go",
         "index_test.go",
