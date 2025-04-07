@@ -12,6 +12,9 @@ gen_ranges ranges=21 placement_type=skewed
 setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
 ----
 
+# node_cpu_rate_capacity
+# utilization: set request_cpu_per_access high to avoid utilization rebalancing
+
 gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
 ----
 
