@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -622,6 +623,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	db *kv.DB,
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
+	minTimestampAge time.Duration,
 	spans roachpb.Spans,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
@@ -636,15 +638,38 @@ func (rf *Fetcher) StartInconsistentScan(
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-
-	txnTimestamp := initialTimestamp
-	txnStartTime := timeutil.Now()
-	if txnStartTime.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
-		return errors.Errorf(
-			"AS OF SYSTEM TIME: cannot specify timestamp older than %s for this operation",
-			maxTimestampAge,
+	if maxTimestampAge < 2*minTimestampAge {
+		return errors.Newf(
+			"sql.stats.max_timestamp_age (%s) should not be less than 2 x sql.inconsistent_scan.min_timestamp_age (%s)",
+			humanizeutil.Duration(maxTimestampAge), humanizeutil.Duration(minTimestampAge),
 		)
 	}
+
+	txnStartTime := timeutil.Now()
+	if txnStartTime.Sub(initialTimestamp.GoTime()) >= maxTimestampAge {
+		// The initial timestamp is too far into the past already (which can
+		// happen when the cluster is overloaded, or there was a delay in the
+		// stats job being picked up for execution, or some other reason). In
+		// such case we'll advance the timestamp so that its age is about 1/10
+		// of the maximum age.
+		targetTimestampAge := maxTimestampAge.Nanoseconds() / 10
+		if minTimestampAge != 0 && targetTimestampAge < minTimestampAge.Nanoseconds() {
+			targetTimestampAge = minTimestampAge.Nanoseconds()
+		}
+		advanceBy := txnStartTime.Sub(initialTimestamp.GoTime()).Nanoseconds() - targetTimestampAge
+		if log.V(1) {
+			log.Infof(ctx, "initial timestamp %v too far into the past, advancing it by %v", initialTimestamp, advanceBy)
+		}
+		initialTimestamp = initialTimestamp.Add(advanceBy, 0 /* logical */)
+	} else if minTimestampAge != 0 && txnStartTime.Sub(initialTimestamp.GoTime()) < minTimestampAge {
+		rewindBy := minTimestampAge.Nanoseconds() - txnStartTime.Sub(initialTimestamp.GoTime()).Nanoseconds()
+		if log.V(1) {
+			log.Infof(ctx, "initial timestamp %v too close to the present, rewinding it by %v", initialTimestamp, rewindBy)
+		}
+		initialTimestamp = initialTimestamp.Add(-rewindBy, 0 /* logical */)
+	}
+
+	txnTimestamp := initialTimestamp
 	txn := kv.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */, qualityOfService)
 	if err := txn.SetFixedTimestamp(ctx, txnTimestamp); err != nil {
 		return err
@@ -691,7 +716,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, nil, batchBytesLimit,
+		ctx, spans, nil /* spanIDs */, batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint), false, /* spansCanOverlap */
 	); err != nil {
 		return err

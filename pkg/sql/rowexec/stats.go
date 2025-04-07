@@ -111,6 +111,7 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	db *kv.DB,
 	initialTimestamp hlc.Timestamp,
 	maxTimestampAge time.Duration,
+	minTimestampAge time.Duration,
 	spans roachpb.Spans,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
@@ -119,7 +120,7 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	start := timeutil.Now()
 	c.cpuStopWatch.Start()
 	err := c.Fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
+		ctx, db, initialTimestamp, maxTimestampAge, minTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	c.cpuStopWatch.Stop()

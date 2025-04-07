@@ -205,6 +205,9 @@ func (tr *tableReader) Start(ctx context.Context) {
 }
 
 func (tr *tableReader) startScan(ctx context.Context) error {
+	if cb := tr.FlowCtx.Cfg.TestingKnobs.TableReaderStartScanCb; cb != nil {
+		cb()
+	}
 	limitBatches := !tr.parallelize
 	var bytesLimit rowinfra.BytesLimit
 	if !limitBatches {
@@ -220,9 +223,10 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
+		minTimestampAge := execinfra.InconsistentScanMinTimestampAge.Get(&tr.FlowCtx.Cfg.Settings.SV)
 		err = tr.fetcher.StartInconsistentScan(
-			ctx, tr.FlowCtx.Cfg.DB.KV(), initialTS, tr.maxTimestampAge, tr.Spans,
-			bytesLimit, tr.limitHint, tr.FlowCtx.EvalCtx.QualityOfService(),
+			ctx, tr.FlowCtx.Cfg.DB.KV(), initialTS, tr.maxTimestampAge, minTimestampAge,
+			tr.Spans, bytesLimit, tr.limitHint, tr.FlowCtx.EvalCtx.QualityOfService(),
 		)
 	}
 	tr.scanStarted = true

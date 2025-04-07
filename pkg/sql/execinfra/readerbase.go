@@ -258,3 +258,15 @@ func GetIndexJoinBatchSize(sd *sessiondata.SessionData) int64 {
 	}
 	return sd.JoinReaderIndexJoinStrategyBatchSize
 }
+
+// InconsistentScanMinTimestampAge is the minimum age of a scan timestamp during
+// the inconsistent scans. (Currently, they are used only by table stats
+// collection, used when creating statistics AS OF SYSTEM TIME.) Whenever a new
+// txn is created, its read timestamp will be at least this old.
+var InconsistentScanMinTimestampAge = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.inconsistent_scan.min_timestamp_age",
+	"minimum age of timestamp during inconsistent scans on txn creation (set to 0 to disable the minimum enforcement)",
+	0,
+	settings.NonNegativeDuration,
+)
