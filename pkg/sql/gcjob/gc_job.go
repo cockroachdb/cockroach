@@ -426,7 +426,6 @@ var EmptySpanPollInterval = settings.RegisterDurationSetting(
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 func waitForEmptyPrefix(

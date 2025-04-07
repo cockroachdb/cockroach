@@ -88,7 +88,6 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	"bulkio.stream_ingestion.failover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("physical_replication.consumer.failover_signal_poll_interval"),
 )
 
