@@ -570,10 +570,14 @@ func exportSysbenchResults(
 
 		aggregatedBuf := &bytes.Buffer{}
 
+		labels, err := roachtestutil.GetLabels(labelString)
+		if err != nil {
+			return errors.Wrap(err, "failed to get labels")
+		}
 		// Convert aggregated metrics to OpenMetrics format
 		if err := roachtestutil.GetAggregatedMetricBytes(
 			aggregatedMetrics,
-			[]*roachtestutil.Label{{Name: "test", Value: t.Name()}},
+			labels,
 			timeutil.Now(),
 			aggregatedBuf,
 		); err != nil {
