@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
@@ -44,7 +46,9 @@ func newTypedPlaceholder(idx int, col catalog.Column) (*tree.CastExpr, error) {
 //
 // The statement will have `n` parameters, where `n` is the number of columns
 // in the table. Parameters are ordered by column ID.
-func newInsertStatement(table catalog.TableDescriptor) (tree.Statement, error) {
+func newInsertStatement(
+	table catalog.TableDescriptor,
+) (statements.Statement[tree.Statement], error) {
 	columns := getPhysicalColumns(table)
 
 	columnNames := make(tree.NameList, len(columns))
@@ -57,7 +61,7 @@ func newInsertStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 		var err error
 		parameters[i], err = newTypedPlaceholder(i+1, col)
 		if err != nil {
-			return nil, err
+			return statements.Statement[tree.Statement]{}, err
 		}
 	}
 
@@ -81,7 +85,7 @@ func newInsertStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return insert, nil
+	return toParsedStatement(insert)
 }
 
 // newMatchesLastRow creates a WHERE clause for matching all columns of a row.
@@ -118,13 +122,15 @@ func newMatchesLastRow(columns []catalog.Column, startParamIdx int) (tree.Expr, 
 // and the last `n` parameters are the new values of the row.
 //
 // Parameters are ordered by column ID.
-func newUpdateStatement(table catalog.TableDescriptor) (tree.Statement, error) {
+func newUpdateStatement(
+	table catalog.TableDescriptor,
+) (statements.Statement[tree.Statement], error) {
 	columns := getPhysicalColumns(table)
 
 	// Create WHERE clause for matching the previous row values
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return nil, err
+		return statements.Statement[tree.Statement]{}, err
 	}
 
 	exprs := make(tree.UpdateExprs, len(columns))
@@ -137,7 +143,7 @@ func newUpdateStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 		// are for the where clause.
 		placeholder, err := newTypedPlaceholder(len(columns)+i+1, col)
 		if err != nil {
-			return nil, err
+			return statements.Statement[tree.Statement]{}, err
 		}
 
 		exprs[i] = &tree.UpdateExpr{
@@ -157,7 +163,7 @@ func newUpdateStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return update, nil
+	return toParsedStatement(update)
 }
 
 // newDeleteStatement returns a statement that can be used to delete a row from
@@ -166,13 +172,15 @@ func newUpdateStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 // identify the row to delete.
 //
 // Parameters are ordered by column ID.
-func newDeleteStatement(table catalog.TableDescriptor) (tree.Statement, error) {
+func newDeleteStatement(
+	table catalog.TableDescriptor,
+) (statements.Statement[tree.Statement], error) {
 	columns := getPhysicalColumns(table)
 
 	// Create WHERE clause for matching the row to delete
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return nil, err
+		return statements.Statement[tree.Statement]{}, err
 	}
 
 	// Create the final delete statement
@@ -185,5 +193,11 @@ func newDeleteStatement(table catalog.TableDescriptor) (tree.Statement, error) {
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return delete, nil
+	return toParsedStatement(delete)
+}
+
+func toParsedStatement(stmt tree.Statement) (statements.Statement[tree.Statement], error) {
+	// TODO(jeffswenson): do I have to round trip through the string or can I
+	// safely construct the statement directly?
+	return parser.ParseOne(stmt.String())
 }
