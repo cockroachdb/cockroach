@@ -33,6 +33,7 @@ message ClosureTxnOperation {
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
+  bool buffered_writes = 8;
 }
 
 message GetOperation {

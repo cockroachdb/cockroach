@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -183,12 +184,17 @@ func (twb *txnWriteBuffer) adjustError(
 				if ts[0].stripped {
 					numStripped++
 				} else {
-					// TODO(arul): If the error index points to a request that we've
-					// transformed, returning this back to the client is weird -- the
-					// client doesn't know we're making transformations. We should
-					// probably just log a warning and clear out the error index for such
-					// cases.
-					log.Fatal(ctx, "unhandled")
+					// This is a transformed request (for example a LockingGet that was
+					// sent instead of a Del). In this case, the error might be a bit
+					// confusing to the client since the request that had an error isn't
+					// exactly the request the user sent.
+					//
+					// For now, we handle this by logging and removing the error index.
+					if baIdx == pErr.Index.Index {
+						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+						pErr.Index = nil
+						return pErr
+					}
 				}
 				ts = ts[1:]
 				continue
@@ -403,7 +409,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				origRequest: req,
 				resp:        ru,
 			})
-			twb.addToBuffer(t.Key, t.Value, t.Sequence)
+			twb.addToBuffer(t.Key, t.Value, t.Sequence, t.KVNemesisSeq)
 
 		case *kvpb.DeleteRequest:
 			// To correctly populate FoundKey in the response, we need to look in our
@@ -453,7 +459,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				origRequest: req,
 				resp:        ru,
 			})
-			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence)
+			twb.addToBuffer(t.Key, roachpb.Value{}, t.Sequence, t.KVNemesisSeq)
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
@@ -844,7 +850,7 @@ func (t transformation) toResp(
 		}
 		// The condition was satisfied; buffer a Put, and return a synthesized
 		// response.
-		twb.addToBuffer(req.Key, req.Value, req.Sequence)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
 
 	case *kvpb.PutRequest:
@@ -914,7 +920,9 @@ func (t transformations) Empty() bool {
 }
 
 // addToBuffer adds a write to the given key to the buffer.
-func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
+func (twb *txnWriteBuffer) addToBuffer(
+	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 
@@ -926,9 +934,10 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 	} else {
 		twb.bufferIDAlloc++
 		twb.buffer.Set(&bufferedWrite{
-			id:   twb.bufferIDAlloc,
-			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq}},
+			kvNemesisSeq: kvNemSeq,
+			id:           twb.bufferIDAlloc,
+			key:          key,
+			vals:         []bufferedValue{{val: val, seq: seq}},
 		})
 	}
 }
@@ -1011,8 +1020,11 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 // track intermediate values in the buffer to support read-your-own-writes and
 // savepoint rollbacks.
 type bufferedWrite struct {
-	id  uint64
-	key roachpb.Key
+	// NB: Keep this ta the start of the struct so that it is zero (size) cost in
+	// production.
+	kvNemesisSeq kvnemesisutil.Container
+	id           uint64
+	key          roachpb.Key
 	// TODO(arul): explore the possibility of using a b-tree which doesn't use an
 	// endKey as a comparator. We could then remove this unnecessary field here,
 	// and also in the keyLocks struct.
@@ -1072,6 +1084,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		putAlloc.put.Key = bw.key
 		putAlloc.put.Value = val.val
 		putAlloc.put.Sequence = val.seq
+		putAlloc.put.KVNemesisSeq = bw.kvNemesisSeq
 		putAlloc.union.Put = &putAlloc.put
 		ru.Value = &putAlloc.union
 	} else {
@@ -1081,6 +1094,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 		})
 		delAlloc.del.Key = bw.key
 		delAlloc.del.Sequence = val.seq
+		delAlloc.del.KVNemesisSeq = bw.kvNemesisSeq
 		delAlloc.union.Delete = &delAlloc.del
 		ru.Value = &delAlloc.union
 	}
