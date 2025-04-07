@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,13 +53,13 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - AnonymizedStr
 //   - BaseMemo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(
-	ctx context.Context, origin PreparedStatementOrigin,
+	ctx context.Context, origin prep.StatementOrigin,
 ) (planFlags, error) {
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
 	opc.reset(ctx)
-	if origin == PreparedStatementOriginSessionMigration {
+	if origin == prep.StatementOriginSessionMigration {
 		opc.flags.Set(planFlagSessionMigration)
 	}
 
@@ -610,14 +611,14 @@ func (opc *optPlanningCtx) incPlanTypeTelemetry(cachedMemo *memo.Memo) {
 // buildNonIdealGenericPlan returns true if we should attempt to build a
 // non-ideal generic query plan.
 func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
-	prep := opc.p.stmt.Prepared
+	ps := opc.p.stmt.Prepared
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
 		// We need to build CustomPlanThreshold custom plans before considering
 		// a generic plan.
-		return prep.Costs.NumCustom() >= CustomPlanThreshold
+		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold
 	default:
 		return false
 	}
@@ -628,17 +629,17 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 // plan is chosen if CustomPlanThreshold custom plans have already been built
 // and the generic plan is optimal or it has not yet been built.
 func (opc *optPlanningCtx) chooseGenericPlan() bool {
-	prep := opc.p.stmt.Prepared
+	ps := opc.p.stmt.Prepared
 	// Always use an ideal generic plan.
-	if prep.IdealGenericPlan {
+	if ps.IdealGenericPlan {
 		return true
 	}
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
-		return prep.Costs.NumCustom() >= CustomPlanThreshold &&
-			(!prep.Costs.HasGeneric() || prep.Costs.IsGenericOptimal())
+		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold &&
+			(!ps.Costs.HasGeneric() || ps.Costs.IsGenericOptimal())
 	default:
 		return false
 	}

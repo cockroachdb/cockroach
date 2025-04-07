@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -1245,12 +1246,12 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.underOuterTxn = underOuterTxn
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmts:    make(map[string]*prep.Statement),
 		prepStmtsLRU: make(map[string]struct{ prev, next string }),
 		portals:      make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
-		prepStmts:    make(map[string]*PreparedStatement),
+		prepStmts:    make(map[string]*prep.Statement),
 		prepStmtsLRU: make(map[string]struct{ prev, next string }),
 		portals:      make(map[string]PreparedPortal),
 	}
@@ -1929,7 +1930,7 @@ func (ch *ctxHolder) unhijack() {
 type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
-	prepStmts map[string]*PreparedStatement
+	prepStmts map[string]*prep.Statement
 	// prepStmtsLRU is a circular doubly-linked list containing the prepared
 	// statement names ordered by most recent access (needed to determine
 	// evictions when prepared_statements_cache_size is set). There is a special
@@ -1940,7 +1941,7 @@ type prepStmtNamespace struct {
 	// prepStmtsLRUAlloc is the total amount of memory allocated for prepared
 	// statements in prepStmtsLRU. This will sometimes be less than
 	// ex.sessionPreparedMon.AllocBytes() because refcounting causes us to hold
-	// onto more PreparedStatements than are currently in the LRU list.
+	// onto more prep.Statements than are currently in the LRU list.
 	prepStmtsLRUAlloc int64
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
@@ -2134,11 +2135,11 @@ func (ns *prepStmtNamespace) resetTo(
 	// Reset prepStmts.
 	if !maps.Equal(ns.prepStmts, to.prepStmts) {
 		for name, ps := range ns.prepStmts {
-			ps.decRef(ctx)
+			ps.DecRef(ctx)
 			delete(ns.prepStmts, name)
 		}
 		for name, ps := range to.prepStmts {
-			ps.incRef(ctx)
+			ps.IncRef(ctx)
 			ns.prepStmts[name] = ps
 		}
 	}
@@ -4829,10 +4830,10 @@ type connExPrepStmtsAccessor struct {
 var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 
 // List is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
+func (ps connExPrepStmtsAccessor) List() map[string]*prep.Statement {
 	// Return a copy of the data, to prevent modification of the map.
 	stmts := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
-	ret := make(map[string]*PreparedStatement, len(stmts))
+	ret := make(map[string]*prep.Statement, len(stmts))
 	for key, stmt := range stmts {
 		ret[key] = stmt
 	}
@@ -4840,7 +4841,7 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 }
 
 // Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string, touchLRU bool) (*PreparedStatement, bool) {
+func (ps connExPrepStmtsAccessor) Get(name string, touchLRU bool) (*prep.Statement, bool) {
 	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if ok && touchLRU {
 		ps.ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
