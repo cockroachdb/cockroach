@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -867,4 +869,145 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 			require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 		})
 	}
+}
+
+// TestRangeFeedWithExcise tests that a RangeFeed can be created just before
+// excising a range and that the RangeFeed, and the RangeFeed will stop when
+// an excise command is issued.
+//
+// Test setup can be visualized in the following diagram:
+/*
+             a                d                g                z
+             |                |                |                |
+             v                v                v                v
+Keyspace:    |----------------|----------------|----------------|
+             Range 1          Range 2          Range 3
+             |                |                |                |
+RangeFeeds:  |---- RF1 -------|---- RF2 -------|---- RF3 -------|
+             |                |                |                |
+                              |<-- External SSTable -->|
+                              |                        |
+                              |<--- Excised Range ---->|
+                              |                        |
+                              d                        k
+*/
+func TestRangeFeedWithExcise(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	const externURI = "nodelocal://1/external-files"
+
+	ctx := context.Background()
+	etc := externalSSTTestCluster{}
+
+	// Create a test cluster with the following ranges: [a, d), [d, g), [g, z).
+	etc.testSetup(t)
+	defer etc.tc.Stopper().Stop(ctx)
+
+	externalStorage, err := etc.createExternalStorage(ctx, externURI)
+	require.NoError(t, err)
+
+	deletedStartKey := roachpb.Key("d")
+	deletedEndKey := roachpb.Key("k")
+	firstStartChar := deletedStartKey[0]
+	firstEndChar := deletedEndKey[0]
+
+	require.NoError(t, etc.createExternalSSTableFile(t, ctx, externalStorage,
+		"file1.sst", firstStartChar, firstEndChar))
+	require.NoError(t, etc.linkExternalSSTableToFile(ctx, deletedStartKey,
+		deletedEndKey, externURI, "file1.sst"))
+
+	// Create one range feed per range.
+	rfStream1, rfErr1 := etc.createRangeFeed(t, roachpb.Key("a"), roachpb.Key("d"))
+	defer rfStream1.Cancel()
+
+	rfStream2, rfErr2 := etc.createRangeFeed(t, roachpb.Key("d"), roachpb.Key("g"))
+	defer rfStream2.Cancel()
+
+	rfStream3, rfErr3 := etc.createRangeFeed(t, roachpb.Key("g"), roachpb.Key("z"))
+	defer rfStream3.Cancel()
+
+	waitForCheckpoint := func(rfErr chan error, stream *testStream) {
+		require.Eventually(t, func() bool {
+			select {
+			case err = <-rfErr:
+				require.Fail(t, "unexpected RangeFeed error", "%v", err)
+			default:
+			}
+
+			events := stream.Events()
+			for _, event := range events {
+				require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
+			}
+			return len(events) > 0
+		}, 5*time.Second, 100*time.Millisecond)
+	}
+
+	// Wait for the RangeFeeds to receive the initial checkpoint. This is to avoid
+	// the RangeFeed racing with the deleted span, which would cause the
+	// RangeFeed to fail to start.
+	waitForCheckpoint(rfErr1, rfStream1)
+	waitForCheckpoint(rfErr2, rfStream2)
+	waitForCheckpoint(rfErr3, rfStream3)
+
+	// Perform some data operations, and delete the external SSTable file.
+	pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
+	require.NoError(t, err)
+
+	require.NoError(t, externalStorage.Delete(ctx, "file1.sst"))
+
+	require.NoError(t, pendingTxn1.Commit(ctx))
+	require.NoError(t, pendingTxn2.Commit(ctx))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("a")))
+	// Requests to the deleted key span should fail.
+	etc.requireNotFoundError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+	etc.requireNotFoundError(t, etc.putHelper(ctx, roachpb.Key("h-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("y")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("k"), roachpb.Key("l")))
+
+	assertNoRangeFeedErr := func(rfErr chan error) {
+		select {
+		case err = <-rfErr:
+			require.Fail(t, "unexpected RangeFeed error", "%v", err)
+		default:
+		}
+	}
+
+	// Before running Excise, the RangeFeeds should still be running.
+	assertNoRangeFeedErr(rfErr1)
+	assertNoRangeFeedErr(rfErr2)
+	assertNoRangeFeedErr(rfErr3)
+
+	waitForExciseError := func(rfErr chan error) {
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case err = <-rfErr:
+			default:
+				return errors.Errorf("no error was found on the range feed")
+			}
+
+			require.Regexp(t, "Replica applied ExciseRequest", err)
+			return nil
+		})
+	}
+
+	// After we excise, we expect that range [a,d) will not see any errors (since
+	// it doesn't overlap with the deleted span), but the other ranges should see
+	// an excise error.
+	require.NoError(t, etc.exciseHelper(ctx, deletedStartKey, deletedEndKey))
+	waitForExciseError(rfErr2)
+	waitForExciseError(rfErr3)
+	require.Equal(t, 0, len(rfErr1))
+
+	// Requests should work normally after excising.
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("a")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("h-15000")))
+	require.NoError(t, etc.putHelper(ctx, roachpb.Key("y")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
+	require.NoError(t, etc.deleteRangeHelper(ctx, roachpb.Key("k"), roachpb.Key("l")))
+
+	// Make sure that the store is consistent after the excise.
+	require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 }
