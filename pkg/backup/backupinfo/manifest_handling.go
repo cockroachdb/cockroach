@@ -887,11 +887,19 @@ func ValidateEndTimeAndTruncate(
 	endTime hlc.Timestamp,
 	includeSkipped bool,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+
 	if endTime.IsEmpty() {
 		if includeSkipped {
 			return defaultURIs, mainBackupManifests, localityInfo, nil
 		}
-		return ElideSkippedLayers(defaultURIs, mainBackupManifests, localityInfo)
+		uris, manifests, locality, err := ElideSkippedLayers(defaultURIs, mainBackupManifests, localityInfo)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := validateContinuity(manifests, endTime); err != nil {
+			return nil, nil, nil, err
+		}
+		return uris, manifests, locality, nil
 	}
 	for i, b := range mainBackupManifests {
 		// Find the backup that covers the requested time.
@@ -930,7 +938,16 @@ func ValidateEndTimeAndTruncate(
 		if includeSkipped {
 			return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
 		}
-		return ElideSkippedLayers(defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1])
+		uris, manifests, locality, err := ElideSkippedLayers(
+			defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1],
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := validateContinuity(manifests, endTime); err != nil {
+			return nil, nil, nil, err
+		}
+		return uris, manifests, locality, nil
 
 	}
 
@@ -939,10 +956,42 @@ func ValidateEndTimeAndTruncate(
 	)
 }
 
-// ElideSkippedLayers removes backups that are skipped in the backup chain.
+// ValidateContinuity checks that the backups are continuous and cover the
+// requested end time.
+func validateContinuity(manifests []backuppb.BackupManifest, endTime hlc.Timestamp) error {
+	if len(manifests) == 0 {
+		return errors.AssertionFailedf("an empty chain of backups cannot cover an end time")
+	}
+	for i := range len(manifests) - 1 {
+		if !manifests[i].EndTime.Equal(manifests[i+1].StartTime) {
+			return errors.AssertionFailedf(
+				"backups are not continuous: %dth backup ends at %+v, %dth backup starts at %+v",
+				i, manifests[i].EndTime,
+				i+1, manifests[i+1].StartTime,
+			)
+		}
+	}
+	if !endTime.IsEmpty() {
+		lastManifest := manifests[len(manifests)-1]
+		if !lastManifest.StartTime.Less(endTime) || !endTime.LessEq(lastManifest.EndTime) {
+			return errors.AssertionFailedf(
+				"requested time %s is not covered by the last backup",
+				endTime,
+			)
+		}
+	}
+	return nil
+}
+
+// ElideSkippedLayers removes backups that are skipped in the backup chain and
+// ensures only backups that will be used in the restore are returned.
+//
+// Note: This assumes that the provided backups are sorted in increasing order
+// by end time, and then sorted in increasing order by start time to break ties.
 func ElideSkippedLayers(
 	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	uris, backups, loc = elideDuplicateEndTimes(uris, backups, loc)
 	i := len(backups) - 1
 	for i > 0 {
 		// Find j such that backups[j] is parent of backups[i].
@@ -959,8 +1008,35 @@ func ElideSkippedLayers(
 		// Move up to check the chain from j now.
 		i = j
 	}
-
 	return uris, backups, loc, nil
+}
+
+// elideDuplicateEndTimes ensures that backups in a list of backups are
+// functionally unique by removing any duplicates that have the same end time,
+// choosing backups with earlier start times and eliding the rest.
+//
+// Note: This assumes that the provided backups are sorted in increasing order
+// by end time, and then sorted in increasing order by start time to break ties.
+// This is the case for backups being returned by storage clients due to us
+// encoding backup paths in a way that ensures this order.
+func elideDuplicateEndTimes(
+	uris []string, backups []backuppb.BackupManifest, loc []jobspb.RestoreDetails_BackupLocalityInfo,
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo) {
+	for i := range len(backups) - 1 {
+		j := i + 1
+		// Find j such that backups[j] no longer shares the same end time as
+		// backups[i].
+		for j < len(backups) && backups[i].EndTime.Equal(backups[j].EndTime) {
+			j++
+		}
+		// If there exists backups between i and j, remove them.
+		if j > i+1 {
+			uris = slices.Delete(uris, i+1, j)
+			backups = slices.Delete(backups, i+1, j)
+			loc = slices.Delete(loc, i+1, j)
+		}
+	}
+	return uris, backups, loc
 }
 
 // GetBackupIndexAtTime returns the index of the latest backup in

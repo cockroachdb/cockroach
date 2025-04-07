@@ -50,14 +50,6 @@ force-split partition-key=1 root=2 steps=1
 ├───• vec5 (14, 1)
 └───• vec2 (7, 4)
 
-# Update left sub-partition #2 to Ready state.
-force-split partition-key=1 root=2 steps=1
-----
-• 2 (10.5, 2.5)
-│
-├───• vec5 (14, 1)
-└───• vec2 (7, 4)
-
 # Add ~1/2 vectors to right sub-partition #3.
 force-split partition-key=1 root=3 steps=1
 ----
@@ -65,6 +57,14 @@ force-split partition-key=1 root=3 steps=1
 │
 ├───• vec3 (4, 3)
 └───• vec1 (1, 2)
+
+# Update left sub-partition #2 to Ready state.
+force-split partition-key=1 root=2 steps=1
+----
+• 2 (10.5, 2.5)
+│
+├───• vec5 (14, 1)
+└───• vec2 (7, 4)
 
 # Update right sub-partition #3 to Ready state.
 force-split partition-key=1 root=3 steps=1
@@ -140,9 +140,9 @@ load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
 Loaded 2 vectors.
 
 # Step to point where partition #2 is copied to target sub-partition #3.
-force-split partition-key=1 root=3 steps=6
+force-split partition-key=1 root=3 steps=5
 ----
-• 3 (2.5, 2.5)
+• 3 (2.5, 2.5) [Updating:1]
 │
 └───• 2 (2.5, 2.5)
     │
@@ -152,9 +152,9 @@ force-split partition-key=1 root=3 steps=6
 # Next steps should duplicate the last remaining vector in partition #1 and also
 # add it to partition #4. This will prevent partition #4 from being empty, which
 # would be a violation of the constraint that the K-means tree must be balanced.
-force-split partition-key=1 root=4 steps=2
+force-split partition-key=1 root=4 steps=1
 ----
-• 4 (2.5, 2.5)
+• 4 (2.5, 2.5) [Updating:1]
 │
 └───• 2 (2.5, 2.5)
     │
@@ -162,7 +162,7 @@ force-split partition-key=1 root=4 steps=2
     └───• vec2 (4, 3)
 
 # Finish the split, with partition #2 a child of both sub-partitions.
-force-split partition-key=1 steps=5
+force-split partition-key=1
 ----
 • 1 (6.8, 4.2)
 │
