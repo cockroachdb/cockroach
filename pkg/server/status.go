@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2843,7 +2844,7 @@ func (t *statusServer) HotRangesV2(
 	}
 
 	ti, _ := t.sqlServer.tenantConnect.TenantInfo()
-	if ti.TenantID.IsSet() {
+	if ti.TenantID.IsSet() && !req.StatsOnly {
 		err = t.addDescriptorsToHotRanges(ctx, resp)
 		if err != nil {
 			return nil, err
@@ -2893,13 +2894,13 @@ func (s *systemStatusServer) HotRangesV2(
 			return nil, err
 		}
 		if local {
-			resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
+			resp, err := s.localHotRanges(tenantID, requestedNodeID, int(req.PerNodeLimit))
 			if err != nil {
 				return nil, err
 			}
 
-			// If operating as the system tenant, add descriptor data to the reposnse.
-			if !tenantID.IsSet() {
+			// If explicitly set as the system tenant, or unset, add descriptor data to the reposnse.
+			if !tenantID.IsSet() && !req.StatsOnly {
 				err = s.addDescriptorsToHotRanges(ctx, resp)
 				if err != nil {
 					return nil, err
@@ -2912,7 +2913,12 @@ func (s *systemStatusServer) HotRangesV2(
 		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
+	remoteRequest := serverpb.HotRangesRequest{
+		NodeID:       "local",
+		TenantID:     req.TenantID,
+		PerNodeLimit: req.PerNodeLimit,
+		StatsOnly:    req.StatsOnly,
+	}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {
@@ -2959,7 +2965,7 @@ func (s *systemStatusServer) HotRangesV2(
 // Returns a HotRangesResponseV2 containing detailed information about each hot range,
 // or an error if the operation fails.
 func (s *systemStatusServer) localHotRanges(
-	ctx context.Context, tenantID roachpb.TenantID, requestedNodeID roachpb.NodeID,
+	tenantID roachpb.TenantID, requestedNodeID roachpb.NodeID, localLimit int,
 ) (*serverpb.HotRangesResponseV2, error) {
 	// Initialize response object
 	var resp serverpb.HotRangesResponseV2
@@ -3015,6 +3021,18 @@ func (s *systemStatusServer) localHotRanges(
 
 	if err != nil {
 		return nil, err
+	}
+
+	// sort the slices by cpu
+	slices.SortFunc(resp.Ranges, func(a, b *serverpb.HotRangesResponseV2_HotRange) int {
+		if a.CPUTimePerSecond < b.CPUTimePerSecond {
+			return -1
+		}
+		return 1
+	})
+	// truncate the response if localLimit is set
+	if localLimit != 0 && localLimit < len(resp.Ranges) {
+		resp.Ranges = resp.Ranges[:localLimit]
 	}
 
 	return &resp, nil
