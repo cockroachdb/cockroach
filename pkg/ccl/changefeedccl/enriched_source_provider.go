@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -19,9 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/linkedin/goavro/v2"
 )
@@ -32,7 +35,7 @@ type enrichedSourceProviderOpts struct {
 type enrichedSourceData struct {
 	jobID, sink,
 	dbVersion, clusterName, sourceNodeLocality, nodeName, nodeID, clusterID string
-	// TODO(#139692): Add schema info support.
+	tableSchemaInfo map[descpb.ID]tableSchemaInfo
 	// TODO(#139691): Add job info support.
 	// TODO(#139690): Add node/cluster info support.
 }
@@ -66,9 +69,14 @@ func newEnrichedSourceData(
 		if err != nil {
 			return err
 		}
-		fmt.Println("table desc par id: %s", td.GetParentID())
-
-		fmt.Println("table desc par id: ", td.GetParentSchemaID())
+		dbd, err := getDBDesc(ctx, execCfg, td.GetParentID())
+		if err != nil {
+			return err
+		}
+		sd, err := getSchemaDesc(ctx, execCfg, td.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
 
 		primaryKeys := td.GetPrimaryIndex().IndexDesc().KeyColumnNames
 
@@ -79,8 +87,8 @@ func newEnrichedSourceData(
 
 		schemaInfo[id] = tableSchemaInfo{
 			tableName:       td.GetName(),
-			dbName:          "fake", // dbd.GetName(),
-			schemaName:      "fake", // sd.GetName(),
+			dbName:          dbd.GetName(),
+			schemaName:      sd.GetName(),
 			primaryKeys:     primaryKeys,
 			primaryKeysJSON: primaryKeysBuilder.Build(),
 		}
@@ -126,6 +134,7 @@ func newEnrichedSourceData(
 		sourceNodeLocality: sourceNodeLocality,
 		nodeName:           nodeName,
 		nodeID:             nodeID,
+		tableSchemaInfo:    schemaInfo,
 	}, nil
 }
 
@@ -463,4 +472,40 @@ func init() {
 		Fields:   kcjFields,
 		Optional: true,
 	}
+}
+
+func getDBDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, dbID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	var desc catalog.DatabaseDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
+		if err != nil {
+			return err
+		}
+		desc = dbDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func getSchemaDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, schemaID descpb.ID,
+) (catalog.SchemaDescriptor, error) {
+	var desc catalog.SchemaDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		schemaDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, schemaID)
+		if err != nil {
+			return err
+		}
+		desc = schemaDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
 }
