@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -53,7 +55,8 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot,
 		jsonpath.OpCompEqual, jsonpath.OpCompNotEqual, jsonpath.OpCompLess,
 		jsonpath.OpCompLessEqual, jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual,
-		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown:
+		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown,
+		jsonpath.OpStartsWith:
 		b, err := ctx.evalBoolean(op, jsonValue)
 		if err != nil {
 			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
@@ -82,16 +85,36 @@ func (ctx *jsonpathCtx) evalBoolean(
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		return ctx.evalComparison(op, jsonValue)
+		return ctx.evalPredicate(op, jsonValue, evalComparisonFunc, true /* evalRight */, true /* unwrapRight */)
 	case jsonpath.OpLikeRegex:
-		return ctx.evalRegex(op, jsonValue)
+		return ctx.evalPredicate(op, jsonValue, evalRegexFunc, false /* evalRight */, false /* unwrapRight */)
 	case jsonpath.OpExists:
 		return ctx.evalExists(op, jsonValue)
 	case jsonpath.OpIsUnknown:
 		return ctx.evalIsUnknown(op, jsonValue)
+	case jsonpath.OpStartsWith:
+		return ctx.evalPredicate(op, jsonValue, evalStartsWithFunc, true /* evalRight */, false /* unwrapRight */)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func evalStartsWithFunc(_ jsonpath.Operation, l, r json.JSON) (jsonpathBool, error) {
+	if l.Type() != json.StringJSONType || r.Type() != json.StringJSONType {
+		return jsonpathBoolUnknown, nil
+	}
+	left, err := l.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	right, err := r.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if strings.HasPrefix(*left, *right) {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
 }
 
 func (ctx *jsonpathCtx) evalIsUnknown(
@@ -126,17 +149,13 @@ func (ctx *jsonpathCtx) evalExists(
 	return jsonpathBoolTrue, nil
 }
 
-func (ctx *jsonpathCtx) evalRegex(
-	op jsonpath.Operation, jsonValue json.JSON,
-) (jsonpathBool, error) {
-	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+func evalRegexFunc(op jsonpath.Operation, l, _ json.JSON) (jsonpathBool, error) {
+	regexOp, ok := op.Right.(jsonpath.Regex)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("op.Right is not a regex")
 	}
-	if len(l) != 1 {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a single string")
-	}
-	if l[0].Type() != json.StringJSONType {
+
+	if l.Type() != json.StringJSONType {
 		return jsonpathBoolUnknown, nil
 	}
 	// AsText() provides the correct string representation for regex pattern
@@ -150,16 +169,16 @@ func (ctx *jsonpathCtx) evalRegex(
 	// - For a JSON string with a newline ("\n"): AsText() returns an actual
 	//   newline character ("\n"), while String() returns "\"\\n\"" (an escaped
 	//   backslash and 'n' enclosed in quotes)
-	text, err := l[0].AsText()
+	text, err := l.AsText()
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
 
-	regexOp := op.Right.(jsonpath.Regex)
 	r, err := parser.ReCache.GetRegexp(regexOp)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
+
 	res := r.MatchString(*text)
 	if !res {
 		return jsonpathBoolFalse, nil
@@ -223,28 +242,40 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 }
 
-// evalComparison evaluates a comparison operation predicate. Predicates have
-// existence semantics. True is returned if any pair of items from the left and
-// right paths satisfy the condition. In strict mode, even if a pair has been
-// found, all pairs need to be checked for errors.
-func (ctx *jsonpathCtx) evalComparison(
-	op jsonpath.Operation, jsonValue json.JSON,
+// evalPredicate evaluates a predicate operation. Predicates have existence
+// semantics. True is returned if any pair of items from the left and right
+// paths satisfy the condition. In strict mode, even if a pair has been found,
+// all pairs need to be checked for errors.
+func (ctx *jsonpathCtx) evalPredicate(
+	op jsonpath.Operation,
+	jsonValue json.JSON,
+	exec func(op jsonpath.Operation, l, r json.JSON) (jsonpathBool, error),
+	evalRight, unwrapRight bool,
 ) (jsonpathBool, error) {
-	// The left and right argument results are always auto-unwrapped.
+	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
-	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, true /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+	var right []json.JSON
+	if evalRight {
+		// The right argument results are conditionally evaluated and unwrapped.
+		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
+		if err != nil {
+			return jsonpathBoolUnknown, err
+		}
+	} else {
+		// If we don't want to evaluate the right argument, we need to call
+		// the exec function once for each item in the left argument. Currently,
+		// this only includes OpLikeRegex.
+		right = append(right, nil)
 	}
 
 	errored := false
 	found := false
 	for _, l := range left {
 		for _, r := range right {
-			res, err := execComparison(l, r, op.Type)
+			res, err := exec(op, l, r)
 			if err != nil {
 				return jsonpathBoolUnknown, err
 			}
@@ -271,7 +302,8 @@ func (ctx *jsonpathCtx) evalComparison(
 	return jsonpathBoolFalse, nil
 }
 
-func execComparison(l, r json.JSON, op jsonpath.OperationType) (jsonpathBool, error) {
+func evalComparisonFunc(operation jsonpath.Operation, l, r json.JSON) (jsonpathBool, error) {
+	op := operation.Type
 	if l.Type() != r.Type() && !(isBool(l) && isBool(r)) {
 		// Inequality comparison of nulls to non-nulls is true. Everything else
 		// is false.
