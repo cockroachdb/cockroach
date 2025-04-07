@@ -50,10 +50,17 @@ enum Unit {
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
 message Metadata {
+  // name is the name of the metric as if it was unlabeled. Set this to ensure
+  // it gets recorded in TSDB.
   required string name = 1 [(gogoproto.nullable) = false];
   required string help = 2 [(gogoproto.nullable) = false];
   required string measurement = 3 [(gogoproto.nullable) = false];
   required Unit unit = 4 [(gogoproto.nullable) = false];
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   repeated LabelPair labels = 6;
+
+  // if a labeled_name is provided, it will be output in the /metrics endpoint
+  // with the corresponding static labels.
+  required string labeled_name = 8 [(gogoproto.nullable) = false];
+  repeated LabelPair static_labels = 7;
 }

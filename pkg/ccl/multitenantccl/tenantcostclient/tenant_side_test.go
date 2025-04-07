@@ -647,7 +647,7 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 					if !ok {
 						return
 					}
-					promIter.Each(it.GetLabels(), func(m *prometheusgo.Metric) {
+					promIter.Each(it.GetLabels(false /* useStaticLabels */), func(m *prometheusgo.Metric) {
 						childMetrics += fmt.Sprintf("%s{", typ.GetName())
 						for i, l := range m.Label {
 							if i > 0 {
