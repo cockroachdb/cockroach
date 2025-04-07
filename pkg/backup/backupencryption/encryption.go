@@ -176,14 +176,10 @@ func ValidateKMSURIsAgainstFullBackup(
 			return nil, err
 		}
 
-		//nolint:deferloop TODO(#137605)
-		defer func() {
-			_ = kms.Close()
-		}()
-
 		// Depending on the KMS specific implementation, this may or may not contact
 		// the remote KMS.
 		id := kms.MasterKeyID()
+		_ = kms.Close()
 
 		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(PlaintextMasterKeyID(id))
 		if err != nil {
@@ -457,10 +453,8 @@ func ReadEncryptionOptions(
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
-		//nolint:deferloop TODO(#137605)
-		defer r.Close(ctx)
-
 		encInfoBytes, err := ioctx.ReadAll(ctx, r)
+		_ = r.Close(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}

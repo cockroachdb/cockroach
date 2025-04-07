@@ -172,6 +172,11 @@ func CompareConns(
 	defer cancel()
 	connRows := make(map[string]pgx.Rows)
 	connExecs := make(map[string]string)
+	defer func() {
+		for _, r := range connRows {
+			r.Close()
+		}
+	}()
 	for name, conn := range conns {
 		connExecs[name] = exec
 		if cwm, withMutators := conn.(*connWithMutators); withMutators {
@@ -181,8 +186,6 @@ func CompareConns(
 		if err != nil {
 			return true, nil //nolint:returnerrcheck
 		}
-		//nolint:deferloop TODO(#137605)
-		defer rows.Close()
 		connRows[name] = rows
 	}
 

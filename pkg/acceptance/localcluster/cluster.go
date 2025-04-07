@@ -725,13 +725,6 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 			n.pgURL = pgURL.String()
 		}()
 
-		var uiURL *url.URL
-
-		//nolint:deferloop TODO(#137605)
-		defer func() {
-			log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
-		}()
-
 		// We're basically running, but (at least) the decommissioning test sometimes starts
 		// up servers that can already be draining when they get here. For that reason, leave
 		// the admin port undefined if we don't manage to get it.
@@ -744,21 +737,17 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 			n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
 		}()
 
-		{
-			var uiStr string
-			if err := n.db.QueryRow(
-				`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
-			).Scan(&uiStr); err != nil {
-				log.Infof(ctx, "%v", err)
-				return nil
-			}
-
-			_, uiURL, err = portFromURL(uiStr)
-			if err != nil {
-				log.Infof(ctx, "%v", err)
-				// TODO(tschottdorf): see above.
-			}
+		var uiStr string
+		var uiURL *url.URL
+		if err := n.db.QueryRow(
+			`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
+		).Scan(&uiStr); err != nil {
+			log.Infof(ctx, "%v", err)
+		} else if _, uiURL, err = portFromURL(uiStr); err != nil {
+			log.Infof(ctx, "%v", err)
+			// TODO(tschottdorf): see above.
 		}
+		log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
 		return nil
 	}
 	return errors.Errorf("node %+v was unable to join cluster within %s", n.Cfg, dur)

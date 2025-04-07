@@ -518,8 +518,6 @@ func ensureDataset(ctx context.Context, datasetName string) dataset {
 		if err != nil {
 			panic(err)
 		}
-		//nolint:deferloop TODO(#137605)
-		defer zippedFile.Close()
 
 		// Create the output file
 		path := fmt.Sprintf("%s/%s", tempDir, file.Name)
@@ -527,11 +525,15 @@ func ensureDataset(ctx context.Context, datasetName string) dataset {
 		if err != nil {
 			panic(err)
 		}
-		//nolint:deferloop TODO(#137605)
-		defer outputFile.Close()
 
 		// Copy the contents of the zipped file to the output file
-		if _, err = io.Copy(outputFile, zippedFile); err != nil {
+		if _, err := io.Copy(outputFile, zippedFile); err != nil {
+			panic(err)
+		}
+		if err := outputFile.Close(); err != nil {
+			panic(err)
+		}
+		if err := zippedFile.Close(); err != nil {
 			panic(err)
 		}
 	}
