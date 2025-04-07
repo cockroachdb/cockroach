@@ -842,6 +842,10 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
+	if log.V(2) {
+		log.Infof(ca.Ctx(), "resolved span from kv feed: %#v", resolved)
+	}
+
 	if resolved.Timestamp.IsEmpty() {
 		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
 		// When rangefeed starts running, it emits @0.0 resolved timestamp.
@@ -937,6 +941,9 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		Stats: jobspb.ResolvedSpans_Stats{
 			RecentKvCount: ca.recentKVCount,
 		},
+	}
+	if log.V(2) {
+		log.Infof(ca.Ctx(), "progress update to be sent to change frontier: %#v", progressUpdate)
 	}
 	updateBytes, err := protoutil.Marshal(&progressUpdate)
 	if err != nil {
