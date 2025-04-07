@@ -4228,7 +4228,50 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	"jsonb_path_query_first": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results. The vars
+			argument must be a JSON object, and its fields provide named values
+			to be substituted into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn:         makeJsonpathQueryFirst,
+			Info: `Returns the first JSON item returned by the JSON path for the
+			specified JSON value, or NULL if there are no results. The vars
+			argument must be a JSON object, and its fields provide named values
+			to be substituted into the jsonpath expression. If the silent argument is true, the
+			function suppresses the following errors: missing object field or
+			array element, unexpected JSON item type, datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
@@ -12276,4 +12319,14 @@ func makeJsonpathQueryArray(
 		return nil, err
 	}
 	return &j, nil
+}
+
+func makeJsonpathQueryFirst(
+	_ context.Context, _ *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
+	target, path, vars, silent, err := jsonpathArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	return jsonpath.JsonpathQueryFirst(target, path, vars, silent)
 }

@@ -1182,6 +1182,13 @@ func TestRepeatableReadLogic_jsonb_path_query_array(
 	runLogicTest(t, "jsonb_path_query_array")
 }
 
+func TestRepeatableReadLogic_jsonb_path_query_first(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_first")
+}
+
 func TestRepeatableReadLogic_jsonpath(
 	t *testing.T,
 ) {
