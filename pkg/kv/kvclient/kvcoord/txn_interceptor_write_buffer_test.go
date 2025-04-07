@@ -1109,11 +1109,11 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 			require.IsType(t, &kvpb.ConditionFailedError{}, pErr.GoError())
 		}
 
-		// Lastly, commit the transaction. A put should only be flushed if the condition
-		// evaluated successfully.
+		// Lastly, commit or rollback the transaction. A put should only be
+		// flushed if the condition evaluated successfully.
 		ba = &kvpb.BatchRequest{}
 		ba.Header = kvpb.Header{Txn: &txn}
-		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+		ba.Add(&kvpb.EndTxnRequest{Commit: condEvalSuccessful})
 
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			if condEvalSuccessful {

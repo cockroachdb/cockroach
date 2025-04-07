@@ -2011,6 +2011,7 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				if expErr {
 					require.Error(t, err)
 					require.IsType(t, &kvpb.ConditionFailedError{}, err)
+					return err
 				} else {
 					require.NoError(t, err)
 				}
@@ -2022,11 +2023,10 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				}
 			})
 
-			if commit {
+			if commit && !expErr {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				testutils.IsError(err, "abort")
 			}
 
 			// Verify the values are visible only if the transaction commited
