@@ -1157,3 +1157,34 @@ query T
 SELECT jsonb_path_query('["ab", 1]', 'strict $ starts with $var', '{"var": "abc"}');
 ----
 null
+
+query T
+SELECT jsonb_path_query('{}', 'exists(2 + "3")');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '2 / 0 > 0');
+----
+null
+
+query T rowsort
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+----
+{"x": 2}
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+----
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+----
+[{"x": 2}, {"y": 3}]
+
+query T
+SELECT jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+----
+0
