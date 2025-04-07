@@ -7,6 +7,7 @@ go_library(
         "eval.go",
         "filter.go",
         "key.go",
+        "method.go",
         "operation.go",
         "scalar.go",
     ],
