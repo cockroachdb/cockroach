@@ -341,6 +341,7 @@ type ProviderOpts struct {
 	// multiple projects or a single one.
 	MachineType      string
 	MinCPUPlatform   string
+	BootDiskType     string
 	Zones            []string
 	Image            string
 	SSDCount         int
@@ -1096,6 +1097,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
+		"Type of the boot disk volume")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
@@ -1390,7 +1393,7 @@ func (p *Provider) computeInstanceArgs(
 		"--scopes", "cloud-platform",
 		"--image", image,
 		"--image-project", imageProject,
-		"--boot-disk-type", "pd-ssd",
+		"--boot-disk-type", providerOpts.BootDiskType,
 	}
 
 	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
