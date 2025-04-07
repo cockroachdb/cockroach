@@ -35,6 +35,8 @@ if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
   stats_file_name="stats.om"
 fi
 
+COMMIT_SHA=$(git rev-parse --short HEAD)
+
 # Set up a function we'll invoke at the end.
 function upload_stats {
   if tc_release_branch; then
