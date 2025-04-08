@@ -6,7 +6,6 @@
 package changefeedccl
 
 import (
-	"context"
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -43,8 +42,8 @@ func newFrontierResolvedSpanFrontier(
 // ForwardResolvedSpan forwards the progress of a resolved span and also does
 // some boundary validation.
 func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) (bool, error) {
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
 	switch boundaryType := r.BoundaryType; boundaryType {
 	case jobspb.ResolvedSpan_NONE:
 	case jobspb.ResolvedSpan_BACKFILL:
@@ -63,7 +62,7 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 		if ok {
 			break
 		}
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlier(r); err != nil {
 			return false, err
 		}
 		f.backfills = append(f.backfills, boundaryTS)
@@ -73,7 +72,7 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 		// EXIT and RESTART are final boundaries that cause the changefeed
 		// processors to all move to draining and so should not be followed
 		// by any other boundaries.
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlier(r); err != nil {
 			return false, err
 		}
 		f.boundaryTime = r.Timestamp
