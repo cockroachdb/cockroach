@@ -155,7 +155,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 
 type frontier interface {
 	Frontier() hlc.Timestamp
-	ForwardResolvedSpan(context.Context, jobspb.ResolvedSpan) (bool, error)
+	ForwardResolvedSpan(jobspb.ResolvedSpan) (bool, error)
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
@@ -171,7 +171,7 @@ func testBackfillSpan(
 ) {
 	backfillSpan := makeResolvedSpan(start, end, ts, jobspb.ResolvedSpan_NONE)
 	require.True(t, f.InBackfill(backfillSpan))
-	_, err := f.ForwardResolvedSpan(ctx, backfillSpan)
+	_, err := f.ForwardResolvedSpan(backfillSpan)
 	require.NoError(t, err)
 	require.Equal(t, frontierAfterSpan, f.Frontier())
 }
@@ -186,7 +186,7 @@ func testBoundarySpan(
 	frontierAfterSpan hlc.Timestamp,
 ) {
 	boundarySpan := makeResolvedSpan(start, end, boundaryTS, boundaryType)
-	_, err := f.ForwardResolvedSpan(ctx, boundarySpan)
+	_, err := f.ForwardResolvedSpan(boundarySpan)
 	require.NoError(t, err)
 
 	if finalBoundarySpan := frontierAfterSpan.Equal(boundaryTS); finalBoundarySpan {
@@ -220,7 +220,7 @@ func testIllegalBoundarySpan(
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) {
 	boundarySpan := makeResolvedSpan(start, end, boundaryTS, boundaryType)
-	_, err := f.ForwardResolvedSpan(ctx, boundarySpan)
+	_, err := f.ForwardResolvedSpan(boundarySpan)
 	require.True(t, errors.HasAssertionFailure(err))
 }
 
@@ -243,4 +243,54 @@ func makeSpan(start, end string) roachpb.Span {
 		Key:    roachpb.Key(start),
 		EndKey: roachpb.Key(end),
 	}
+}
+
+func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a fresh frontier with no progress.
+	f, err := resolvedspan.NewAggregatorFrontier(
+		hlc.Timestamp{},
+		hlc.Timestamp{},
+		makeSpan("a", "f"),
+	)
+	require.NoError(t, err)
+	require.Zero(t, f.Frontier())
+
+	t.Run("advance frontier with no boundary", func(t *testing.T) {
+		// Forwarding part of the span space to 10 should not advance the frontier.
+		forwarded, err := f.ForwardResolvedSpan(
+			makeResolvedSpan("a", "b", makeTS(10), jobspb.ResolvedSpan_NONE))
+		require.NoError(t, err)
+		require.False(t, forwarded)
+		require.Zero(t, f.Frontier())
+
+		// Forwarding the rest of the span space to 10 should advance the frontier.
+		forwarded, err = f.ForwardResolvedSpan(
+			makeResolvedSpan("b", "f", makeTS(10), jobspb.ResolvedSpan_NONE))
+		require.NoError(t, err)
+		require.True(t, forwarded)
+		require.Equal(t, makeTS(10), f.Frontier())
+	})
+
+	t.Run("advance frontier with same timestamp and new boundary", func(t *testing.T) {
+		// Forwarding part of the span space to 10 again with a non-NONE boundary
+		// should be considered forwarding the frontier because we're learning
+		// about a new boundary.
+		forwarded, err := f.ForwardResolvedSpan(
+			makeResolvedSpan("c", "f", makeTS(10), jobspb.ResolvedSpan_RESTART))
+		require.NoError(t, err)
+		require.True(t, forwarded)
+		require.Equal(t, makeTS(10), f.Frontier())
+
+		// Forwarding the rest of the span space to 10 again with a non-NONE boundary
+		// should not be considered forwarding the frontier because we already
+		// know about the new boundary.
+		forwarded, err = f.ForwardResolvedSpan(
+			makeResolvedSpan("a", "c", makeTS(10), jobspb.ResolvedSpan_RESTART))
+		require.NoError(t, err)
+		require.False(t, forwarded)
+		require.Equal(t, makeTS(10), f.Frontier())
+	})
 }
