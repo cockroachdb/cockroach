@@ -842,6 +842,17 @@ func NewColOperator(
 			var resultTypes []*types.T
 			if flowCtx.EvalCtx.SessionData().DirectColumnarScansEnabled {
 				canUseDirectScan := func() bool {
+					// txnWriteBuffer currently doesn't support
+					// COL_BATCH_RESPONSE scan format, so if buffered writes are
+					// enabled, we won't use the direct scans.
+					//
+					// We could've relaxed this condition further to not use
+					// direct scans if at least some writes are actually
+					// buffered, but given this feature is in experimental
+					// state, we don't bother doing so for now.
+					if flowCtx.Txn.BufferedWritesEnabled() {
+						return false
+					}
 					// We currently don't use the direct scans if TraceKV is
 					// enabled (due to not being able to tell the KV server
 					// about it). One idea would be to include this boolean into
