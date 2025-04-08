@@ -116,6 +116,10 @@ type TestingKnobs struct {
 	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
 	// to pass to the constructor of the kv feed to change aggregator buffer.
 	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
+
+	// IncNumPeriodicTelemetryLogger is used to keep track of the number of periodicTelemetryLogger created.
+	// More than 1 call to this indicates that there was a transient KV error.
+	IncNumPeriodicTelemetryLogger func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

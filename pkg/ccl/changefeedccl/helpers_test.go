@@ -1424,7 +1424,12 @@ func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.Chan
 // This function also asserts the LoggingInterval and Closing fields of
 // each message.
 func verifyLogsWithEmittedBytesAndMessages(
-	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
+	t *testing.T,
+	jobID jobspb.JobID,
+	startTime int64,
+	interval int64,
+	closing bool,
+	numMessagesCanSkip int32,
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
@@ -1433,6 +1438,7 @@ func verifyLogsWithEmittedBytesAndMessages(
 		}
 		var emittedBytes int64 = 0
 		var emittedMessages int64 = 0
+		var skippedMessages int32 = 0
 		for _, msg := range emittedBytesLogs {
 			t.Logf("read message %v", msg)
 			if msg.JobId != int64(jobID) {
@@ -1442,7 +1448,12 @@ func verifyLogsWithEmittedBytesAndMessages(
 			emittedBytes += msg.EmittedBytes
 			emittedMessages += msg.EmittedMessages
 			require.Equal(t, interval, msg.LoggingInterval)
-			require.Equal(t, closing, msg.Closing)
+			if closing != msg.Closing {
+				if skippedMessages >= numMessagesCanSkip {
+					require.Equal(t, closing, msg.Closing)
+				}
+				skippedMessages += 1
+			}
 		}
 		if emittedBytes == 0 || emittedMessages == 0 {
 			return errors.Newf(

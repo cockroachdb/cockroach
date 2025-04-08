@@ -7544,7 +7544,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			beforeCreate := timeutil.Now()
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
-			verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+			verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false, 0)
 		}
 	}
 
@@ -7597,6 +7597,11 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 				},
 			}
 		}
+		var numPeriodicTelemetryLogger atomic.Int32
+		s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs).IncNumPeriodicTelemetryLogger =
+			func() {
+				numPeriodicTelemetryLogger.Add(1)
+			}
 
 		// Insert a row and wait for logs to be created.
 		beforeFirstLog := timeutil.Now()
@@ -7606,7 +7611,9 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 			jobID = foo.JobID()
 		}
 		testutils.SucceedsSoon(t, waitForIncEmittedCounters)
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeFirstLog.UnixNano(), interval.Nanoseconds(), false /* closing */)
+		verifyLogsWithEmittedBytesAndMessages(
+			t, jobID, beforeFirstLog.UnixNano(), interval.Nanoseconds(), false /* closing */, 0,
+		)
 
 		// Insert more rows. No logs should be created for these since we recently
 		// published them above and the interval is 24h.
@@ -7623,7 +7630,13 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 
 		// Close the changefeed and ensure logs were created after closing.
 		require.NoError(t, foo.Close())
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
+		telemetryLoggersCreated := numPeriodicTelemetryLogger.Load()
+		if telemetryLoggersCreated > 1 {
+			t.Log("transient error")
+		}
+		verifyLogsWithEmittedBytesAndMessages(
+			t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */, telemetryLoggersCreated-1,
+		)
 	}
 
 	cdcTest(t, testFn)
@@ -7649,13 +7662,13 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 		beforeInsert := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1)`)
-		verifyLogsWithEmittedBytesAndMessages(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
-		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false, 0)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false, 0)
 		require.NoError(t, foo.Close())
 
 		beforeInsert = timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (2)`)
-		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false, 0)
 		require.NoError(t, foo2.Close())
 	}
 
