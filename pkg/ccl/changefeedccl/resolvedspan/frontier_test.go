@@ -244,3 +244,47 @@ func makeSpan(start, end string) roachpb.Span {
 		EndKey: roachpb.Key(end),
 	}
 }
+
+func TestResolvedSpanFrontier_ForwardResolvedSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a fresh frontier with no progress.
+	f, err := resolvedspan.NewResolvedSpanFrontier(
+		hlc.Timestamp{},
+		hlc.Timestamp{},
+		makeSpan("a", "f"),
+	)
+	require.NoError(t, err)
+	require.Zero(t, f.Frontier())
+
+	// Forwarding part of the span space to 10 should not advance the frontier.
+	forwarded, err := f.ForwardResolvedSpan(
+		makeResolvedSpan("a", "b", makeTS(10), jobspb.ResolvedSpan_NONE))
+	require.NoError(t, err)
+	require.False(t, forwarded)
+	require.Zero(t, f.Frontier())
+
+	// Forwarding the rest of the span space to 10 should advance the frontier.
+	forwarded, err = f.ForwardResolvedSpan(
+		makeResolvedSpan("b", "f", makeTS(10), jobspb.ResolvedSpan_NONE))
+	require.NoError(t, err)
+	require.True(t, forwarded)
+	require.Equal(t, makeTS(10), f.Frontier())
+
+	// Forwarding part of the span space to 10 with a non-NONE boundary
+	// should not be considered forwarding the frontier.
+	forwarded, err = f.ForwardResolvedSpan(
+		makeResolvedSpan("c", "f", makeTS(10), jobspb.ResolvedSpan_RESTART))
+	require.NoError(t, err)
+	require.False(t, forwarded)
+	require.Equal(t, makeTS(10), f.Frontier())
+
+	// Forwarding the rest of the span space to 10 with a non-NONE boundary
+	// should be considered forwarding the frontier.
+	forwarded, err = f.ForwardResolvedSpan(
+		makeResolvedSpan("a", "c", makeTS(10), jobspb.ResolvedSpan_RESTART))
+	require.NoError(t, err)
+	require.True(t, forwarded)
+	require.Equal(t, makeTS(10), f.Frontier())
+}
