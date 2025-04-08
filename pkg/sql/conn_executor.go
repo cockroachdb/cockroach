@@ -1255,7 +1255,7 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.extraTxnState.underOuterTxn = underOuterTxn
-	ex.extraTxnState.prepStmtsNamespace.prepStmts.Init()
+	ex.extraTxnState.prepStmtsNamespace.prepStmts.Init(ctx)
 	ex.extraTxnState.prepStmtsNamespace.portals = make(map[string]PreparedPortal)
 	ex.extraTxnState.prepStmtsNamespace.portalsSnapshot = make(map[string]PreparedPortal)
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
@@ -2030,14 +2030,7 @@ func (ns *prepStmtNamespace) String() string {
 func (ns *prepStmtNamespace) clear(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
-	// Commit the prepared statements cache to ensure that any statements that
-	// have been removed but not committed are not leaked.
-	// TODO(mgartner): Make a Clear method of prep.Cache to make this automatic.
-	ns.prepStmts.Commit(ctx, 0)
-	ns.prepStmts.ForEach(func(name string, stmt *prep.Statement) {
-		stmt.DecRef(ctx)
-	})
-	ns.prepStmts.Init()
+	ns.prepStmts.Init(ctx)
 	ns.closeAllPortals(ctx, prepStmtsNamespaceMemAcc)
 }
 
