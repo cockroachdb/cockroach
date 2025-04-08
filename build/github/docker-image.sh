@@ -27,7 +27,7 @@ esac
 
 build_arch=${1:-amd64}
 
-bazel build //pkg/cmd/cockroach //c-deps:libgeos --config $CROSSCONFIG --jobs 100 $(./build/github/engflow-args.sh)
+bazel build //pkg/cmd/cockroach //c-deps:libgeos --config $CROSSCONFIG --jobs 50 $(./build/github/engflow-args.sh)
 cp _bazel/bin/pkg/cmd/cockroach/cockroach_/cockroach build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos.so build/deploy
 cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos_c.so build/deploy
@@ -59,4 +59,4 @@ bazel test \
   --config=crosslinux \
   --test_timeout=3000 \
   --remote_download_minimal \
-  --jobs 100 $(./build/github/engflow-args.sh) --build_event_binary_file=bes.bin
+  --jobs 50 $(./build/github/engflow-args.sh) --build_event_binary_file=bes.bin

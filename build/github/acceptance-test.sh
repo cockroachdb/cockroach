@@ -14,13 +14,13 @@ set -x
 
 bazel build --config crosslinux //pkg/cmd/cockroach-short \
     --bes_keywords integration-test-artifact-build \
-    --jobs 100 $(./build/github/engflow-args.sh)
+    --jobs 50 $(./build/github/engflow-args.sh)
 
 COCKROACH=$(bazel info bazel-bin --config=crosslinux)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short
 
 bazel test //pkg/acceptance:acceptance_test \
   --config crosslinux \
-  --jobs 100 $(./build/github/engflow-args.sh) \
+  --jobs 50 $(./build/github/engflow-args.sh) \
   --remote_download_minimal \
   --test_arg=-b=$COCKROACH \
   --test_env=COCKROACH_DEV_LICENSE \
