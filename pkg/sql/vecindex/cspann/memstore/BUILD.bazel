@@ -60,7 +60,6 @@ go_test(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/commontest",
         "//pkg/sql/vecindex/cspann/quantize",
-        "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/vector",

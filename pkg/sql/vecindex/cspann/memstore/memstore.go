@@ -468,7 +468,8 @@ func (s *Store) TryUpdatePartitionMetadata(
 		// Treat adding new level as if it were a new root partition.
 		memPart.lock.created = s.tickLocked()
 
-		// Grow or shrink CVStats slice.
+		// Grow or shrink CVStats slice. Stats are for non-leaf levels, so subtract
+		// one to get the new slice length.
 		expectedLevels := int(metadata.Level - 1)
 		if expectedLevels > len(s.mu.stats.CVStats) {
 			s.mu.stats.CVStats =
@@ -678,11 +679,11 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 				TreeId:       qkey.treeID,
 				PartitionKey: qkey.partitionKey,
 				Metadata: PartitionMetadataProto{
-					Level: partition.Level(),
-					State: metadata.StateDetails.State,
+					Level:   partition.Level(),
+					State:   metadata.StateDetails.State,
 					Target1: metadata.StateDetails.Target1,
 					Target2: metadata.StateDetails.Target2,
-					Source: metadata.StateDetails.Source,
+					Source:  metadata.StateDetails.Source,
 				},
 				ChildKeys:  partition.ChildKeys(),
 				ValueBytes: partition.ValueBytes(),
@@ -760,13 +761,13 @@ func Load(data []byte) (*Store, error) {
 		}
 
 		metadata := cspann.PartitionMetadata{
-			Level: partitionProto.Metadata.Level,
+			Level:    partitionProto.Metadata.Level,
 			Centroid: quantizedSet.GetCentroid(),
 			StateDetails: cspann.PartitionStateDetails{
-				State: partitionProto.Metadata.State,
+				State:   partitionProto.Metadata.State,
 				Target1: partitionProto.Metadata.Target1,
 				Target2: partitionProto.Metadata.Target2,
-				Source: partitionProto.Metadata.Source,
+				Source:  partitionProto.Metadata.Source,
 			},
 		}
 		memPart.lock.partition = cspann.NewPartition(metadata, quantizer, quantizedSet,
