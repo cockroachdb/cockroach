@@ -831,7 +831,7 @@ func (rr registryRecorder) recordChild(
 				return
 			}
 			*dest = append(*dest, tspb.TimeSeriesData{
-				Name:   fmt.Sprintf(rr.format, prom.GetName()),
+				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */)),
 				Source: rr.source,
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{

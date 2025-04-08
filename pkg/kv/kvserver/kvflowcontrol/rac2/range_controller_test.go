@@ -1522,20 +1522,20 @@ func TestRangeController(t *testing.T) {
 						admissionpb.RegularWorkClass,
 						admissionpb.ElasticWorkClass,
 					} {
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(), evalMetrics.Waiting[wc].Value())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(), evalMetrics.Admitted[wc].Count())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(), evalMetrics.Errored[wc].Count())
-						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(), evalMetrics.Bypassed[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(false /* useStaticLabels */), evalMetrics.Waiting[wc].Value())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(false /* useStaticLabels */), evalMetrics.Admitted[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(false /* useStaticLabels */), evalMetrics.Errored[wc].Count())
+						fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(false /* useStaticLabels */), evalMetrics.Bypassed[wc].Count())
 						// We only print the number of recorded durations, instead of any
 						// percentiles or cumulative wait times as these are
 						// non-deterministic in the test.
 						fmt.Fprintf(&buf, "%-50v: %v\n",
-							fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName()),
+							fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName(false /* useStaticLabels */)),
 							testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
 					}
 				case "range_controller":
 					rcMetrics := state.rcMetrics
-					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(), rcMetrics.Count.Value())
+					fmt.Fprintf(&buf, "%v: %v\n", rcMetrics.Count.GetName(false /* useStaticLabels */), rcMetrics.Count.Value())
 				case "send_queue":
 					sendQueueMetrics := state.rcMetrics.SendQueue
 					sendQueueTokenMetrics := state.ssTokenCounter.tokenMetrics.CounterMetrics[SendToken].SendQueue[0]
@@ -1556,17 +1556,17 @@ func TestRangeController(t *testing.T) {
 					}
 					sendQueueMetrics.SizeBytes.Update(sizeBytes)
 					sendQueueMetrics.SizeCount.Update(sizeCount)
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeCount.GetName(), sendQueueMetrics.SizeCount.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeBytes.GetName(), sendQueueMetrics.SizeBytes.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.ForceFlushedScheduledCount.GetName(), sendQueueMetrics.ForceFlushedScheduledCount.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.DeductedForSchedulerBytes.GetName(), sendQueueMetrics.DeductedForSchedulerBytes.Value())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.PreventionCount.GetName(), sendQueueMetrics.PreventionCount.Count())
-					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.ForceFlushDeducted.GetName(), sendQueueTokenMetrics.ForceFlushDeducted.Count())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeCount.GetName(false /* useStaticLabels */), sendQueueMetrics.SizeCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.SizeBytes.GetName(false /* useStaticLabels */), sendQueueMetrics.SizeBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.ForceFlushedScheduledCount.GetName(false /* useStaticLabels */), sendQueueMetrics.ForceFlushedScheduledCount.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.DeductedForSchedulerBytes.GetName(false /* useStaticLabels */), sendQueueMetrics.DeductedForSchedulerBytes.Value())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueMetrics.PreventionCount.GetName(false /* useStaticLabels */), sendQueueMetrics.PreventionCount.Count())
+					fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.ForceFlushDeducted.GetName(false /* useStaticLabels */), sendQueueTokenMetrics.ForceFlushDeducted.Count())
 					for _, wc := range []admissionpb.WorkClass{
 						admissionpb.RegularWorkClass,
 						admissionpb.ElasticWorkClass,
 					} {
-						fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.PreventionDeducted[wc].GetName(), sendQueueTokenMetrics.PreventionDeducted[wc].Count())
+						fmt.Fprintf(&buf, "%-66v: %v\n", sendQueueTokenMetrics.PreventionDeducted[wc].GetName(false /* useStaticLabels */), sendQueueTokenMetrics.PreventionDeducted[wc].Count())
 					}
 
 				default:
