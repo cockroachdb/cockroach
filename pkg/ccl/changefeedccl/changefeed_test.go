@@ -4431,6 +4431,10 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 										"node_name":            map[string]any{"string": nodeName},
 										"changefeed_sink":      map[string]any{"string": sink},
 										"source_node_locality": map[string]any{"string": sourceNodeLocality},
+										"database_name":        map[string]any{"string": "tableInfo.dbName"},
+										"schema_name":          map[string]any{"string": "tableInfo.schemaName"},
+										"table_name":           map[string]any{"string": "tableInfo.tableName"},
+										"primary_keys":         map[string]any{"array": []any{"tableInfo.primaryKeys"}},
 									},
 								}
 								if withMVCCTS {
@@ -4467,6 +4471,10 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 									"node_name":            nodeName,
 									"changefeed_sink":      sink,
 									"source_node_locality": sourceNodeLocality,
+									"database_name":        "fake",
+									"schema_name":          "fake",
+									"table_name":           "fake",
+									"primary_keys":         []any{},
 								}
 								if withMVCCTS {
 									assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
