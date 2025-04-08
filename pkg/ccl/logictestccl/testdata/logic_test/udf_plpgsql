@@ -2649,3 +2649,26 @@ $$ LANGUAGE PLpgSQL;
 
 statement ok
 DROP FUNCTION f1;
+
+subtest regression_144020
+
+statement ok
+CREATE FUNCTION f144020() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 3 LOOP
+      RAISE NOTICE 'foo';
+      i := i + 1;
+    END LOOP;
+    RETURN i;
+  END
+$$;
+
+statement ok
+PREPARE foo AS SELECT $1::INT, f144020();
+
+statement ok
+EXECUTE foo (100);
+
+subtest end
