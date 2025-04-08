@@ -9128,6 +9128,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Unavailable:     false,
 				Underreplicated: false,
 				BehindCount:     10,
+				RaftLogSize:     5 * cfg.RaftLogTruncationThreshold,
 				RaftLogTooLarge: true,
 			}},
 	}
