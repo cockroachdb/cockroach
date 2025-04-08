@@ -268,7 +268,7 @@ func (a *allocatorState) rebalanceStores(
 					panic("raft cpu higher than total cpu")
 					addedLoad[CPURate] = 0
 				}
-				if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means) {
+				if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true) {
 					continue
 				}
 				addTarget := roachpb.ReplicationTarget{
@@ -416,7 +416,7 @@ func (a *allocatorState) rebalanceStores(
 			if !isLeaseholder {
 				addedLoad[CPURate] = rstate.load.RaftCPU
 			}
-			if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means) {
+			if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false) {
 				continue
 			}
 			addTarget := roachpb.ReplicationTarget{
