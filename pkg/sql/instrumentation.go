@@ -1060,6 +1060,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
 				nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
+				nodeStats.ExecTime.MaybeAdd(stats.Exec.ExecTime)
 				nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
 				nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
 				if noMutations && !makeDeterministic {
