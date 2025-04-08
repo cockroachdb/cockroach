@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -329,6 +331,24 @@ func forecastColumnStatistics(
 		}
 		forecast.HistogramData = &histData
 		forecast.setHistogramBuckets(hist)
+
+		// Verify that the first two buckets (the initial NULL bucket and the first
+		// non-NULL bucket) both have NumRange=0 and DistinctRange=0. (We must check
+		// this after calling setHistogramBuckets to account for rounding.)
+		for _, bucket := range forecast.Histogram {
+			if bucket.NumRange != 0 || bucket.DistinctRange != 0 {
+				err := errorutil.UnexpectedWithIssueErrorf(
+					93892, "forecasted histogram for table %v had first bucket with non-zero NumRange or "+
+						"DistinctRange", tableID,
+				)
+				log.Warningf(ctx, "%v", err)
+				return nil, err
+			}
+			if bucket.UpperBound != tree.DNull {
+				// Stop checking after the first non-NULL bucket.
+				break
+			}
+		}
 	}
 
 	return forecast, nil
