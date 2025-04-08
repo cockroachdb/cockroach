@@ -1083,6 +1083,12 @@ type Replica struct {
 		// GC threshold for the range.
 		pendingGCThreshold hlc.Timestamp
 	}
+
+	// cachedClosedTimestampPolicy is the cached closed timestamp policy of the
+	// range. It is updated asynchronously by listening on span configuration
+	// changes, leaseholder changes, and periodically at the interval of
+	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
+	cachedClosedTimestampPolicy atomic.Int32
 }
 
 // String returns the string representation of the replica using an
@@ -1174,6 +1180,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.conf = conf
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
+	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -1314,23 +1321,43 @@ func toClientClosedTsPolicy(
 }
 
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
-// range, which is updated asynchronously by listening in on span configuration
-// changes.
+// range, which is updated asynchronously by listening on span configuration
+// changes, leaseholder changes, and periodically at the interval of
+// kv.closed_timestamp.policy_refresh_interval.
 //
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
-		if !r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
-			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
-		}
+	// TODO(wenyi): try to remove the need for this key comparison under RLock.
+	// See more in #143648.
+	if r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+		return ctpb.LAG_BY_CLUSTER_SETTING
+	}
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+}
+
+// RefreshPolicy updates the replica's cached closed timestamp policy based on
+// its span configuration. Note that the given map can be nil.
+//
+// TODO(wenyihu6): update this function to consult the supplied map and
+// clarify what happens when the map is nil
+func (r *Replica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration) {
+	policy := func() ctpb.RangeClosedTimestampPolicy {
+		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
 		// closing timestamps in the future, it would break liveness updates,
 		// which perform a 1PC transaction with a commit trigger and can not
 		// tolerate being pushed into the future.
+		if desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+			return ctpb.LAG_BY_CLUSTER_SETTING
+		}
+		if !conf.GlobalReads {
+			return ctpb.LAG_BY_CLUSTER_SETTING
+		}
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
 	}
-	return ctpb.LAG_BY_CLUSTER_SETTING
+	r.cachedClosedTimestampPolicy.Store(int32(policy()))
 }
 
 // NodeID returns the ID of the node this replica belongs to.

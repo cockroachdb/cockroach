@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -915,6 +916,7 @@ type Store struct {
 	sstSnapshotStorage  SSTSnapshotStorage
 	protectedtsReader   spanconfig.ProtectedTSReader
 	ctSender            *sidetransport.Sender
+	policyRefresher     *policyrefresher.PolicyRefresher
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
 	// raftTransportForFlowControl exposes the set of (remote) stores the raft
@@ -1187,6 +1189,10 @@ type StoreConfig struct {
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
+
+	// PolicyRefresher periodically refreshes the closed timestamp policies for
+	// leaseholder replicas. One per node.
+	PolicyRefresher *policyrefresher.PolicyRefresher
 
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
@@ -1490,6 +1496,7 @@ func NewStore(
 		nodeDesc:                          nodeDesc,
 		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender:                          cfg.ClosedTimestampSender,
+		policyRefresher:                   cfg.PolicyRefresher,
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
@@ -4140,14 +4147,16 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 	return errors.Newf("unable to subscribe to span configs")
 }
 
-// registerLeaseholder registers the provided replica as a leaseholder in the
-// node's closed timestamp side transport.
-func (s *Store) registerLeaseholder(
+// registerLeaseholderAndRefreshPolicy registers the provided replica as a
+// leaseholder in the node's closed timestamp side transport and refreshes its
+// closed timestamp policy as a post-action to the lease acquisition.
+func (s *Store) registerLeaseholderAndRefreshPolicy(
 	ctx context.Context, r *Replica, leaseSeq roachpb.LeaseSequence,
 ) {
 	if s.ctSender != nil {
 		s.ctSender.RegisterLeaseholder(ctx, r, leaseSeq)
 	}
+	s.policyRefresher.EnqueueReplicaForRefresh(r)
 }
 
 // unregisterLeaseholder unregisters the provided replica from node's closed
