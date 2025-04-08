@@ -328,7 +328,7 @@ var UsageMetricsReportingInterval = settings.RegisterDurationSetting(
 	"changefeed.usage.reporting_interval",
 	"the interval at which the changefeed calculates and updates its usage metric",
 	5*time.Minute,
-	settings.PositiveDuration, settings.DurationInRange(2*time.Minute, 50*time.Minute),
+	settings.DurationInRange(2*time.Minute, 50*time.Minute),
 )
 
 // UsageMetricsReportingTimeoutPercent is the percent of
