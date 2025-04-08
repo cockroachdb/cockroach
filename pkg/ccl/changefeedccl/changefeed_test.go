@@ -7596,6 +7596,11 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 				},
 			}
 		}
+		var numPeriodicTelemetryLogger atomic.Int32
+		s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs).IncNumPeriodicTelemetryLogger =
+			func() {
+				numPeriodicTelemetryLogger.Add(1)
+			}
 
 		// Insert a row and wait for logs to be created.
 		beforeFirstLog := timeutil.Now()
@@ -7622,7 +7627,13 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 
 		// Close the changefeed and ensure logs were created after closing.
 		require.NoError(t, foo.Close())
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
+		if numPeriodicTelemetryLogger.Load() > 1 {
+			t.Log("transient error")
+			// Only check for the closing event since we expect to see non-closing events from the error
+			verifyClosingContinousTelemetryEvent(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds())
+		} else {
+			verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
+		}
 	}
 
 	cdcTest(t, testFn)
