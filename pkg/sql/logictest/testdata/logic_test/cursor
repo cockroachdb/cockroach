@@ -872,3 +872,51 @@ statement ok
 RESET autocommit_before_ddl
 
 subtest end
+
+# Regression test for #142114 - close the holdable cursor container if there is
+# an error while executing the query.
+subtest regression_142114
+
+statement error pgcode 22012 pq: sql-cursor: division by zero
+DECLARE foo CURSOR WITH HOLD FOR SELECT 1 // 0;
+
+statement ok
+DECLARE curs CURSOR WITH HOLD FOR SELECT 100;
+
+statement ok
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 1;
+
+statement ok
+DECLARE bar CURSOR WITH HOLD FOR SELECT 2;
+
+statement ok
+DECLARE baz CURSOR WITH HOLD FOR SELECT 1 // 0;
+
+statement ok
+DECLARE bar2 CURSOR WITH HOLD FOR SELECT 3;
+
+statement ok
+INSERT INTO a VALUES (-1, -2);
+
+statement error pgcode 22012 pq: sql-cursor: division by zero
+COMMIT;
+
+# All cursors created in the aborted transaction should be closed.
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+curs
+
+# The insert should not have been committed.
+query III
+SELECT * FROM a ORDER BY a LIMIT 1;
+----
+1  2  NULL
+
+statement ok
+CLOSE curs;
+
+subtest end
