@@ -1667,8 +1667,8 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		}
 		if maxUpgradesFromBootstrapVersion < minUpgrades {
 			fail(errors.Newf(
-				"invalid test options: minimum bootstrap version (%s) does not allow for min %d upgrades",
-				minBootstrapVersion, minUpgrades,
+				"invalid test options: minimum bootstrap version (%s) does not allow for min %d upgrades to %s, max is %d",
+				minBootstrapVersion, minUpgrades, currentVersion, maxUpgradesFromBootstrapVersion,
 			))
 		}
 		// Override the max upgrades if the minimum bootstrap version does not allow for that
