@@ -32,6 +32,8 @@ type deleteNode struct {
 	run deleteRun
 }
 
+var _ mutationPlanNode = &deleteNode{}
+
 // deleteRun contains the run-time state of deleteNode during local execution.
 type deleteRun struct {
 	td         tableDeleter
@@ -40,6 +42,10 @@ type deleteRun struct {
 	// done informs a new call to BatchedNext() that the previous call
 	// to BatchedNext() has completed the work already.
 	done bool
+
+	// resultRowBuffer is used to prepare a result row for accumulation
+	// into the row container above, when rowsNeeded is set.
+	resultRowBuffer tree.Datums
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
@@ -57,17 +63,26 @@ type deleteRun struct {
 	numPassthrough int
 }
 
-var _ mutationPlanNode = &deleteNode{}
+func (r *deleteRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
+	if !r.rowsNeeded {
+		return
+	}
+	r.td.rows = rowcontainer.NewRowContainer(
+		params.p.Mon().MakeBoundAccount(),
+		colinfo.ColTypeInfoFromResCols(columns),
+	)
+	r.resultRowBuffer = make([]tree.Datum, len(columns))
+	for i := range r.resultRowBuffer {
+		r.resultRowBuffer[i] = tree.DNull
+	}
+}
 
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	if d.run.rowsNeeded {
-		d.run.td.rows = rowcontainer.NewRowContainer(
-			params.p.Mon().MakeBoundAccount(),
-			colinfo.ColTypeInfoFromResCols(d.columns))
-	}
+	d.run.initRowContainer(params, d.columns)
+
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }
 
@@ -107,7 +122,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 
 		// Process the deletion of the current input row,
 		// potentially accumulating the result row for later.
-		if err := d.processSourceRow(params, d.input.Values()); err != nil {
+		if err := d.run.processSourceRow(params, d.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -145,9 +160,9 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
-func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
+func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) error {
 	// Remove extra columns for partial index predicate values and AFTER triggers.
-	deleteVals := sourceVals[:len(d.run.td.rd.FetchCols)+d.run.numPassthrough]
+	deleteVals := sourceVals[:len(r.td.rd.FetchCols)+r.numPassthrough]
 	sourceVals = sourceVals[len(deleteVals):]
 
 	// Create a set of partial index IDs to not delete from. Indexes should not
@@ -155,8 +170,8 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// satisfy the predicate and therefore do not exist in the partial index.
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
-	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
-		err := pm.Init(nil /* partialIndexPutVals */, sourceVals[:n], d.run.td.tableDesc())
+	if n := len(r.td.tableDesc().PartialIndexes()); n > 0 {
+		err := pm.Init(nil /* partialIndexPutVals */, sourceVals[:n], r.td.tableDesc())
 		if err != nil {
 			return err
 		}
@@ -166,53 +181,52 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Keep track of the vector index partitions to update. This information is
 	// passed to tableInserter.row below.
 	var vh row.VectorIndexUpdateHelper
-	if n := len(d.run.td.tableDesc().VectorIndexes()); n > 0 {
-		vh.InitForDel(sourceVals[:n], d.run.td.tableDesc())
+	if n := len(r.td.tableDesc().VectorIndexes()); n > 0 {
+		vh.InitForDel(sourceVals[:n], r.td.tableDesc())
 	}
 
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(
-		params.ctx, deleteVals, pm, vh, false /* mustValidateOldPKValues */, d.run.traceKV,
+	if err := r.td.row(
+		params.ctx, deleteVals, pm, vh, false /* mustValidateOldPKValues */, r.traceKV,
 	); err != nil {
 		return err
 	}
 
 	// If result rows need to be accumulated, do it.
-	if d.run.td.rows != nil {
+	if r.td.rows != nil {
 		// The new values can include all columns, so the values may contain
 		// additional columns for every newly dropped column not visible. We do not
 		// want them to be available for RETURNING.
 		//
-		// d.run.rows.NumCols() is guaranteed to only contain the requested
+		// r.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
-		resultValues := make(tree.Datums, d.run.td.rows.NumCols())
 		largestRetIdx := -1
-		for i := range d.run.rowIdxToRetIdx {
-			retIdx := d.run.rowIdxToRetIdx[i]
+		for i := range r.rowIdxToRetIdx {
+			retIdx := r.rowIdxToRetIdx[i]
 			if retIdx >= 0 {
 				if retIdx >= largestRetIdx {
 					largestRetIdx = retIdx
 				}
-				resultValues[retIdx] = deleteVals[i]
+				r.resultRowBuffer[retIdx] = deleteVals[i]
 			}
 		}
 
 		// At this point we've extracted all the RETURNING values that are part
 		// of the target table. We must now extract the columns in the RETURNING
 		// clause that refer to other tables (from the USING clause of the delete).
-		if d.run.numPassthrough > 0 {
-			passthroughBegin := len(d.run.td.rd.FetchCols)
-			passthroughEnd := passthroughBegin + d.run.numPassthrough
+		if r.numPassthrough > 0 {
+			passthroughBegin := len(r.td.rd.FetchCols)
+			passthroughEnd := passthroughBegin + r.numPassthrough
 			passthroughValues := deleteVals[passthroughBegin:passthroughEnd]
 
-			for i := 0; i < d.run.numPassthrough; i++ {
+			for i := 0; i < r.numPassthrough; i++ {
 				largestRetIdx++
-				resultValues[largestRetIdx] = passthroughValues[i]
+				r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
 			}
 
 		}
 
-		if _, err := d.run.td.rows.AddRow(params.ctx, resultValues); err != nil {
+		if _, err := r.td.rows.AddRow(params.ctx, r.resultRowBuffer); err != nil {
 			return err
 		}
 	}
