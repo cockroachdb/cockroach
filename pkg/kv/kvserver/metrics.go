@@ -1799,6 +1799,19 @@ difficult to meaningfully interpret this metric.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaRaftLogTotalSize = metric.Metadata{
+		Name:        "raftlog.size.total",
+		Help:        "Approximate size of all Raft logs on the store.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftLogMaxSize = metric.Metadata{
+		Name:        "raftlog.size.max",
+		Help:        "Approximate size of the largest Raft log on the store.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
 	metaRaftFollowerPaused = metric.Metadata{
 		Name: "admission.raft.paused_replicas",
 		Help: `Number of followers (i.e. Replicas) to which replication is currently paused to help them recover from I/O overload.
@@ -2874,6 +2887,8 @@ type StoreMetrics struct {
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
+	RaftLogTotalSize           *metric.Gauge
+	RaftLogMaxSize             *metric.Gauge
 
 	RaftPausedFollowerCount       *metric.Gauge
 	RaftPausedFollowerDroppedMsgs *metric.Counter
@@ -3643,6 +3658,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
+		RaftLogTotalSize:           metric.NewGauge(metaRaftLogTotalSize),
+		RaftLogMaxSize:             metric.NewGauge(metaRaftLogMaxSize),
 
 		RaftPausedFollowerCount:       metric.NewGauge(metaRaftFollowerPaused),
 		RaftPausedFollowerDroppedMsgs: metric.NewCounter(metaRaftPausedFollowerDroppedMsgs),
