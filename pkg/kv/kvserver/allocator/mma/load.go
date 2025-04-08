@@ -203,9 +203,9 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v)",
+	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.1f(%t))",
 		sls.sls, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
-		sls.nls, sls.highDiskSpaceUtilization, sls.fd)
+		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPending, sls.maxFractionPending < epsilon)
 }
 
 // The allocator often needs mean load information for a set of stores. This
