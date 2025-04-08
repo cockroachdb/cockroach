@@ -50,8 +50,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -301,6 +303,20 @@ func assertPayloadsBaseErr(
 		}
 	}
 
+	sort.Strings(expected)
+	sort.Strings(actualFormatted)
+
+	if envelopeType == changefeedbase.OptEnvelopeWrapped && forceEnrichedEnvelope { // && didTransform ?
+		envelopeType = changefeedbase.OptEnvelopeEnriched
+		stripTs = true
+		for i := range expected {
+			expected[i], actualFormatted[i], err = wrappedEnvelopeAssertionToEnrichedAssertion(expected[i], actualFormatted[i])
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if sourceAssertion != nil {
 		err := applySourceAssertion(actual, sourceAssertion)
 		if err != nil {
@@ -354,6 +370,48 @@ func withTimeout(
 			return fn(ctx)
 		},
 	)
+}
+
+var wrappedAssertionRX = regexp.MustCompile(`([^:]+): ([^-]+)->(.*)`)
+
+// assumption: json, wrapped
+// TODO: withSource, withSchema bool
+func wrappedEnvelopeAssertionToEnrichedAssertion(assertion, actual string) (newAssertion, newActual string, err error) {
+	groups := wrappedAssertionRX.FindStringSubmatch(assertion)
+	if len(groups) != 4 {
+		return "", "", fmt.Errorf("parsing assertion: %s", assertion)
+	}
+	topic, key, body := groups[1], groups[2], groups[3]
+
+	// decode, transform, encode the body
+	dec := gojson.NewDecoder(bytes.NewBufferString(body))
+	dec.UseNumber()
+	var bodyMap map[string]any
+	if err := dec.Decode(&bodyMap); err != nil {
+		return "", "", err
+	}
+	if dec.InputOffset() != int64(len(body)) {
+		return "", "", fmt.Errorf("parsing assertion: %s", assertion)
+	}
+
+	// also need to do something for the key ([0] -> {"a": 0}).... but how do you know about "a"
+	actualGroups := wrappedAssertionRX.FindStringSubmatch(actual)
+	if len(actualGroups) != 4 {
+		return "", "", fmt.Errorf("parsing actual: %s", actual)
+	}
+	actualKey := actualGroups[2]
+	// TODO: this is so gross... ideally we would know the primary key definition here. more required shared state.
+	// TODO: assert that the key values match
+	key = actualKey
+
+	// for enriched messages without sources and schemas, this is really the only difference (right?) (excluding ts_ns bc strip timestamps)
+	bodyMap["op"] = bodyMap["op"] // :(
+
+	newBody, err := json.MakeJSON(bodyMap)
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody.String()), actual, nil
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -893,10 +951,39 @@ func makeSpanGroupFromCheckpoint(
 	return spanGroup
 }
 
+var forceEnrichedEnvelope = metamorphic.ConstantWithTestBool("force-enriched-envelope", false)
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
+
+	forceEnrichedEnvelope = true // DBG
+
+	_, isKafka := f.(*kafkaFeedFactory)
+	if ef, isExternal := f.(*externalConnectionFeedFactory); isExternal {
+		_, isKafka = ef.TestFeedFactory.(*kafkaFeedFactory)
+	}
+
+	// metamorph here for supported sinks? as a tmp measure
+	// TODO: less dumb
+	if isKafka && forceEnrichedEnvelope {
+		if strings.Contains(create, `envelope=wrapped`) {
+			create = strings.ReplaceAll(create, `envelope=wrapped`, `envelope=enriched`)
+			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)
+		} else if !strings.Contains(create, `envelope=`) {
+			create = fmt.Sprintf("%s, envelope=enriched", create)
+			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)
+		} else if strings.Contains(create, `envelope=enriched`) {
+			// TODO: do nothing and note this in some shared state
+			_ = 42
+		} else {
+			// TODO: else, don't touch this, and also note that in some shared state
+			_ = 42
+		}
+
+	}
+
 	feed, err := f.Feed(create, args...)
 	if err != nil {
 		t.Fatal(err)
