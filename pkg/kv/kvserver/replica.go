@@ -1087,7 +1087,8 @@ type Replica struct {
 	// cachedClosedTimestampPolicy is the cached closed timestamp policy of the
 	// range. It is updated asynchronously by listening on span configuration
 	// changes, leaseholder changes, and periodically at the interval of
-	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
+	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher. Exported
+	// for testing-only reasons.
 	cachedClosedTimestampPolicy atomic.Int32
 }
 
@@ -2735,6 +2736,18 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 // GetMutexForTesting returns the replica's mutex, for use in tests.
 func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
+}
+
+// SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
+// to be the given policy. It is a test-only helper method.
+func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
+	r.cachedClosedTimestampPolicy.Store(int32(policy))
+}
+
+// GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
+// It is a test-only helper method.
+func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
