@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -35,6 +36,8 @@ type TpccFixture struct {
 	WorkloadWarehouses     int
 	MinutesPerIncremental  int
 	IncrementalChainLength int
+	CompactionThreshold    int
+	CompactionWindow       int
 	RestoredSizeEstimate   string
 }
 
@@ -45,6 +48,8 @@ var TinyFixture = TpccFixture{
 	ImportWarehouses:       10,
 	WorkloadWarehouses:     10,
 	IncrementalChainLength: 4,
+	CompactionThreshold:    3,
+	CompactionWindow:       2,
 	RestoredSizeEstimate:   "700MiB",
 }
 
@@ -55,6 +60,8 @@ var SmallFixture = TpccFixture{
 	ImportWarehouses:       5000,
 	WorkloadWarehouses:     1000,
 	IncrementalChainLength: 48,
+	CompactionThreshold:    7,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "350GiB",
 }
 
@@ -65,6 +72,8 @@ var MediumFixture = TpccFixture{
 	ImportWarehouses:       30000,
 	WorkloadWarehouses:     5000,
 	IncrementalChainLength: 400,
+	CompactionThreshold:    10,
+	CompactionWindow:       5,
 	RestoredSizeEstimate:   "2TiB",
 }
 
@@ -77,6 +86,8 @@ var LargeFixture = TpccFixture{
 	ImportWarehouses:       300000,
 	WorkloadWarehouses:     7500,
 	IncrementalChainLength: 400,
+	CompactionThreshold:    10,
+	CompactionWindow:       5,
 	RestoredSizeEstimate:   "20TiB",
 }
 
@@ -205,9 +216,23 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
-
-	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	if bd.sp.fixture.CompactionThreshold > 0 {
+		bd.t.L().Printf(
+			"enabling compaction with threshold %d and window size %d",
+			bd.sp.fixture.CompactionThreshold, bd.sp.fixture.CompactionWindow,
+		)
+		_, err := conn.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING backup.compaction.threshold = %d", bd.sp.fixture.CompactionThreshold,
+		))
+		require.NoError(bd.t, err)
+		_, err = conn.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING backup.compaction.window_size = %d", bd.sp.fixture.CompactionWindow,
+		))
+		require.NoError(bd.t, err)
+	}
+	createScheduleStatement := CreateScheduleStatement(bd.registry.URI(bd.fixture.DataPath))
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
 }
@@ -215,7 +240,9 @@ func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 // monitorBackups pauses the schedule once the target number of backups in the
 // chain have been taken.
 func (bd *backupDriver) monitorBackups(ctx context.Context) {
-	sql := sqlutils.MakeSQLRunner(bd.c.Conn(ctx, bd.t.L(), 1))
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
 	fixtureURI := bd.registry.URI(bd.fixture.DataPath)
 	for {
 		time.Sleep(1 * time.Minute)
@@ -230,12 +257,55 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) {
 		backupCountQuery := fmt.Sprintf(`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String())
 		sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
 		bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
+
+		compSuccess, compRunning, compFailed := bd.compactionJobStates(sql)
+		if bd.sp.fixture.CompactionThreshold > 0 {
+			bd.t.L().Printf(
+				"%d compaction jobs succeeded, %d running, %d failed", compSuccess, compRunning, compFailed,
+			)
+		}
+
 		if backupCount >= bd.sp.fixture.IncrementalChainLength {
 			pauseSchedulesQuery := fmt.Sprintf(`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel)
 			sql.Exec(bd.t, pauseSchedulesQuery)
 			break
 		}
 	}
+}
+
+// compactionJobStates returns the state of the compaction jobs, returning
+// the number of successful and failed jobs, respectively.
+func (bd *backupDriver) compactionJobStates(sql *sqlutils.SQLRunner) (int, int, int) {
+	if bd.sp.fixture.CompactionThreshold == 0 {
+		return 0, 0, 0
+	}
+	compactionQuery := `SELECT status FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND 
+	description ILIKE 'COMPACT BACKUPS%'`
+	rows := sql.Query(bd.t, compactionQuery)
+	defer rows.Close()
+	var statuses []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			bd.t.L().Printf("error scanning compaction job: %s", err)
+			continue
+		}
+		statuses = append(statuses, status)
+	}
+	var successes, running, failures int
+	if len(statuses) > 0 {
+		for _, status := range statuses {
+			switch status {
+			case string(jobs.StateSucceeded):
+				successes++
+			case string(jobs.StateRunning):
+				running++
+			default:
+				failures++
+			}
+		}
+	}
+	return successes, running, failures
 }
 
 func fixtureDirectory() string {
