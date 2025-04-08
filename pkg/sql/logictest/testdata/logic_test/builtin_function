@@ -2962,10 +2962,10 @@ SELECT get_bit('000000'::varbit, 5) UNION SELECT get_bit('1111111'::varbit, 5)
 1
 0
 
-query error get_bit\(\): GetBitAtIndex: bit index 10 out of valid range \(0..4\)
+query error get_bit\(\): bit index 10 out of valid range \(0..4\)
 SELECT get_bit(B'10110', 10)
 
-query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
+query error get_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
 query II
@@ -3020,13 +3020,13 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 000001
 111110
 
-query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
+query error set_bit\(\): bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
 query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
-query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
+query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
 
 query IT
