@@ -10038,7 +10038,11 @@ func TestCDCQuerySelectSingleRow(t *testing.T) {
 		}
 		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		cfKnobs.HandleDistChangefeedError = func(err error) error {
-			errCh <- err
+			// Only capture the first error -- that's enough for the test.
+			select {
+			case errCh <- err:
+			default:
+			}
 			return err
 		}
 	}
