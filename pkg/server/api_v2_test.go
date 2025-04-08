@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -156,7 +157,7 @@ func TestHealthV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 }
 
-func TestQuorumGuardrailV2(t *testing.T) {
+func TestRestartSafetyV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -169,18 +170,36 @@ func TestQuorumGuardrailV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"drain/check/").String(), nil)
+	urlStr := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "health/restart_safety/").String()
+	req, err := http.NewRequest("GET", urlStr, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
-	// Check if the response was a 200.
-	require.Equal(t, 200, resp.StatusCode)
+	require.Equal(t, 503, resp.StatusCode)
 	// Check if an unmarshal into the DrainCheckResponse struct works.
 	var response serverpb.DrainCheckResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	require.NoError(t, resp.Body.Close())
+
+	stores, ok := ts1.GetStores().(*kvserver.Stores)
+	require.True(t, ok)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		s.SetDraining(true, nil, false)
+		return nil
+	})
+
+	req, err = http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(t, 200, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+
 }
 
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it
