@@ -1825,10 +1825,10 @@ def go_deps():
         name = "com_github_cockroachdb_datadriven",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/datadriven",
-        sha256 = "f4cb70fec2b2904a56bfbda6a6c8bf9ea1d568a5994ecdb825f770671119b63b",
-        strip_prefix = "github.com/cockroachdb/datadriven@v1.0.3-0.20240530155848-7682d40af056",
+        sha256 = "251593cd9c040fe84a99a3919de7ce6f85030d522159a37d625dc2dea7a4d17f",
+        strip_prefix = "github.com/cockroachdb/datadriven@v1.0.3-0.20250407164829-2945557346d5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/datadriven/com_github_cockroachdb_datadriven-v1.0.3-0.20240530155848-7682d40af056.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/datadriven/com_github_cockroachdb_datadriven-v1.0.3-0.20250407164829-2945557346d5.zip",
         ],
     )
     go_repository(
@@ -1895,10 +1895,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "9cbb98cf6e1db8e0594f37667f7338810e794468e734c5a9aa1b675cc521cc76",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250328210930-0f1c564b0912",
+        sha256 = "35742402ba6ca70d76fb64293d58fe4837d01620aa68a339cb157c540f909597",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250408215241-4d38942f0ce0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250328210930-0f1c564b0912.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250408215241-4d38942f0ce0.zip",
         ],
     )
     go_repository(
@@ -2455,10 +2455,10 @@ def go_deps():
         name = "com_github_datadog_zstd",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/zstd",
-        sha256 = "e4924158bd1abf765a016d2c728fc367b32d20b86a268ef25743ba404c55e097",
-        strip_prefix = "github.com/DataDog/zstd@v1.5.6-0.20230824185856-869dae002e5e",
+        sha256 = "2329cea1cc05226917495381c6036e4c5c1fff4e7a0b7fc2c30fa5cfd83d0b3f",
+        strip_prefix = "github.com/DataDog/zstd@v1.5.7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/zstd/com_github_datadog_zstd-v1.5.6-0.20230824185856-869dae002e5e.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/zstd/com_github_datadog_zstd-v1.5.7.zip",
         ],
     )
     go_repository(
@@ -5789,10 +5789,10 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "648bbc7813dec448eec1a5a467750696bc7e41e1ac0a00b76a967c589826afb6",
-        strip_prefix = "github.com/klauspost/compress@v1.17.8",
+        sha256 = "88dea800cc6a11ccb9dd2f0dd487f30e8701870abdfc11245e41dcfc9f3d428e",
+        strip_prefix = "github.com/klauspost/compress@v1.17.11",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.17.8.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.17.11.zip",
         ],
     )
     go_repository(
@@ -6643,6 +6643,16 @@ def go_deps():
         strip_prefix = "github.com/minio/minio-go/v7@v7.0.21",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minio-go/v7/com_github_minio_minio_go_v7-v7.0.21.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_minio_minlz",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/minio/minlz",
+        sha256 = "fe8a654f4e82f2ddbf69429293aa0a7cb541ab87c8e8e4b7ebaec18bdaf7fe43",
+        strip_prefix = "github.com/minio/minlz@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.0.zip",
         ],
     )
     go_repository(

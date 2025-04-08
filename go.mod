@@ -131,12 +131,12 @@ require (
 	github.com/cockroachdb/cockroach-go/v2 v2.3.7
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
 	github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c
-	github.com/cockroachdb/datadriven v1.0.3-0.20240530155848-7682d40af056
+	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250328210930-0f1c564b0912
+	github.com/cockroachdb/pebble v0.0.0-20250408215241-4d38942f0ce0
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -187,7 +187,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
-	github.com/klauspost/compress v1.17.8
+	github.com/klauspost/compress v1.17.11
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -397,6 +397,7 @@ require (
 	github.com/minio/highwayhash v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
+	github.com/minio/minlz v1.0.0 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -460,7 +461,7 @@ require (
 )
 
 require (
-	github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e // indirect
+	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/andybalholm/cascadia v1.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
