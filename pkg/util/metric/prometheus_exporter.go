@@ -56,12 +56,7 @@ func MakePrometheusExporterForSelectedMetrics(selection map[string]struct{}) Pro
 func (pm *PrometheusExporter) findOrCreateFamily(
 	prom PrometheusCompatible, options *scrapeOptions,
 ) *prometheusgo.MetricFamily {
-	var familyName string
-	if options.useStaticLabels {
-		familyName = exportedName(prom.GetLabeledName())
-	} else {
-		familyName = exportedName(prom.GetName())
-	}
+	familyName := exportedName(prom.GetName(options.useStaticLabels))
 	if family, ok := pm.families[familyName]; ok {
 		return family
 	}
