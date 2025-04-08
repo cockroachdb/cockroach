@@ -791,3 +791,13 @@ message InsufficientSpaceError {
    // RequiredFraction is the required remaining capacity fraction.
    optional double required = 5 [(gogoproto.nullable) = false];
 }
+
+
+// PebbleCorruptionError indicates that pebble thinks that there is a data                                                                                                                                                                                  
+// corruption.                                                                                                                                                                                                                                                
+message PebbleCorruptionError {
+  optional string path = 1 [(gogoproto.nullable) = false];
+  optional bool is_remote = 2 [(gogoproto.nullable) = false];
+  optional string extra_msg = 3 [(gogoproto.nullable) = false];
+}
+   
