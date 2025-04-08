@@ -27,9 +27,9 @@ import (
 // hashAggregatorSizeOfBucketsItem
 const mapEntryOverhead = 64
 
-// alterAddFKStatements represents the column name for alter_statements in
+// alterAddFKStatements represents the column name for fk_statements in
 // crdb_internal.create_statements.
-const alterAddFKStatements = "alter_statements"
+const alterAddFKStatements = "fk_statements"
 
 // alterValidateFKStatements represents the column name for validate_statements in
 // crdb_internal.create_statements.
