@@ -57,7 +57,7 @@ const (
 
 type ApiV2System interface {
 	health(w http.ResponseWriter, r *http.Request)
-	drainCheck(w http.ResponseWriter, r *http.Request)
+	restartSafetyCheck(w http.ResponseWriter, r *http.Request)
 	listNodes(w http.ResponseWriter, r *http.Request)
 	listNodeRanges(w http.ResponseWriter, r *http.Request)
 }
@@ -183,8 +183,8 @@ func registerRoutes(
 		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
+		{"health/restart_safety/", systemRoutes.restartSafetyCheck, false, authserver.RegularRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
-		{"drain/check/", systemRoutes.drainCheck, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
 		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
 		{"databases/", a.listDatabases, true, authserver.RegularRole, false},
@@ -398,7 +398,7 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
 }
 
-func (a *apiV2Server) drainCheck(w http.ResponseWriter, r *http.Request) {
+func (a *apiV2Server) restartSafetyCheck(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
@@ -407,11 +407,11 @@ func (a *apiV2Server) drainCheck(w http.ResponseWriter, r *http.Request) {
 // Endpoint to expose node criticality information. A 200 response indicates that terminating the node in
 // question won't cause any ranges to become unavailable, at the time the response was prepared. Users may
 // use this check as a precondition for advancing a rolling restart process.
-func (a *apiV2SystemServer) drainCheck(w http.ResponseWriter, r *http.Request) {
+func (a *apiV2SystemServer) restartSafetyCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nodeInQuestion := a.systemStatus.node.Descriptor.NodeID
 
-	res, err := checkDrainSafe(ctx, nodeInQuestion, a.systemStatus)
+	res, err := checkRestartSafe(ctx, nodeInQuestion, a.systemStatus)
 	if err != nil {
 		http.Error(w, "Error checking store status", http.StatusInternalServerError)
 		return
@@ -424,7 +424,7 @@ func (a *apiV2SystemServer) drainCheck(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, res)
 }
 
-func checkDrainSafe(
+func checkRestartSafe(
 	ctx context.Context, nodeInQuestion roachpb.NodeID, systemStatus *systemStatusServer,
 ) (*serverpb.DrainCheckResponse, error) {
 	res := &serverpb.DrainCheckResponse{
@@ -446,17 +446,16 @@ func checkDrainSafe(
 			metrics := replica.Metrics(ctx, now, isLiveMap, nodeCount)
 			id := replica.ID()
 
-			raftStatus := replica.RaftStatus()
-			noRaftLeader := !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent
-
 			statusString := ""
 			switch {
 			case metrics.Unavailable:
 				statusString = "Unavailable"
 			case metrics.Underreplicated:
 				statusString = "Underreplicated"
-			case noRaftLeader:
-				statusString = "NoRaftLeader"
+			case metrics.Leader:
+				statusString = "IsRaftLeader"
+			case !store.IsDraining():
+				statusString = "StoreNotDraining"
 			default:
 				return true
 			}
