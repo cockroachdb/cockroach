@@ -73,6 +73,7 @@
 /pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
+#!/pkg/sql/BUILD.bazel       @cockroachdb/sql-queries-noreview
 
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
 /pkg/sql/importer/export*    @cockroachdb/cdc-prs
@@ -258,8 +259,9 @@
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 
 /pkg/crosscluster/       @cockroachdb/disaster-recovery
-/pkg/backup/          @cockroachdb/disaster-recovery
-/pkg//backup/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
+/pkg/backup/                 @cockroachdb/disaster-recovery
+/pkg//backup/*_job.go        @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
+/pkg/sql/exec_util_backup.go @cockroachdb/disaster-recovery
 /pkg/revert/          @cockroachdb/disaster-recovery
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
