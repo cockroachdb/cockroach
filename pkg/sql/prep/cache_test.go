@@ -35,7 +35,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		var c Cache
-		c.Init()
+		c.Init(ctx)
 		assertEmpty(t, &c)
 		if c.Dirty() {
 			t.Errorf("expected c to not be dirty")
@@ -54,7 +54,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("add-remove", func(t *testing.T) {
 		var c Cache
-		c.Init()
+		c.Init(ctx)
 		c.Add("s1", stmt(), 1)
 		c.Remove("s1")
 		if c.Len() != 0 {
@@ -67,10 +67,10 @@ func TestCache(t *testing.T) {
 
 	t.Run("init", func(t *testing.T) {
 		var c Cache
-		c.Init()
+		c.Init(ctx)
 		c.Add("s1", stmt(), 1)
 		_ = c.Commit(ctx, 0)
-		c.Init()
+		c.Init(ctx)
 		if c.Len() != 0 {
 			t.Errorf("expected cache to be empty after reinitializing")
 		}
@@ -81,7 +81,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("evict-none", func(t *testing.T) {
 		var c Cache
-		c.Init()
+		c.Init(ctx)
 		c.Add("s1", stmt(), 1)
 		c.Add("s2", stmt(), 1)
 		evicted := c.Commit(ctx, 2)
@@ -104,7 +104,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("evict", func(t *testing.T) {
 		var c Cache
-		c.Init()
+		c.Init(ctx)
 		c.Add("s1", stmt(), 2)
 		c.Add("s2", stmt(), 2)
 		c.Add("s3", stmt(), 2)
@@ -115,7 +115,7 @@ func TestCache(t *testing.T) {
 			t.Errorf("expected s2 to be evicted, got: %v", evicted)
 		}
 		// Clear the cache.
-		c.Init()
+		c.Init(ctx)
 		c.Add("s5", stmt(), 2)
 		c.Add("s6", stmt(), 2)
 		c.Add("s7", stmt(), 2)
@@ -134,21 +134,21 @@ func TestCache(t *testing.T) {
 				rng, _ := randutil.NewTestRand()
 				var c Cache
 				var o oracle
-				c.Init()
+				c.Init(ctx)
 				o.Init()
 				for j := 0; j < numOps; j++ {
 					switch n := rng.Intn(10); n {
 					case 0:
 						maxSize := rng.Int63n(maxSizeUpperbound)
 						cEvicted := c.Commit(ctx, maxSize)
-						oEvicted := o.Commit(ctx, maxSize)
+						oEvicted := o.Commit(maxSize)
 						if !slices.Equal(cEvicted, oEvicted) {
 							t.Errorf("expected evicted statements %v, got %v",
 								oEvicted, cEvicted)
 						}
 					case 1:
 						c.Rewind(ctx)
-						o.Rewind(ctx)
+						o.Rewind()
 					default:
 						name := fmt.Sprintf("stmt_%d", rng.Intn(numNames))
 						switch n := rng.Intn(10); n {
@@ -313,7 +313,7 @@ func (o *oracle) Size() int64 {
 	return o.size
 }
 
-func (o *oracle) Commit(ctx context.Context, maxSize int64) (evicted []string) {
+func (o *oracle) Commit(maxSize int64) (evicted []string) {
 	// Evict committed entries, if necessary.
 	entries := o.orderedEntries()
 	for i := 0; i < len(entries)-1 && maxSize > 0 && o.size > maxSize; i++ {
@@ -340,7 +340,7 @@ func (o *oracle) orderedEntries() []oEntry {
 	return res
 }
 
-func (o *oracle) Rewind(ctx context.Context) {
+func (o *oracle) Rewind() {
 	maps.Clear(o.m)
 	maps.Copy(o.m, o.snapshot.m)
 	o.size = o.snapshot.size
