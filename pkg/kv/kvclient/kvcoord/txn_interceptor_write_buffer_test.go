@@ -1614,3 +1614,101 @@ func TestTxnWriteBufferDeleteRange(t *testing.T) {
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
+
+// TestTxnWriteBufferRollbackToSavepoint tests the savepoint rollback logic.
+func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	valA, valA2, valB := "valA", "valA2", "valB"
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, valA, txn.Sequence)
+	txn.Sequence++
+	delC := delArgs(keyC, txn.Sequence)
+	ba.Add(putA)
+	ba.Add(delC)
+
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// All the requests should be buffered and not make it past the
+	// txnWriteBuffer. The response returned should be indistinguishable.
+	require.Equal(t, numCalled, mockSender.NumCalled())
+	require.Len(t, br.Responses, 2)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[1].GetInner())
+	// Verify the
+	expBufferedWrites := []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
+		makeBufferedWrite(keyC, makeBufferedValue("", 11)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Create a savepoint. This is inclusive of the buffered Delete on keyC.
+	savepoint := &savepoint{seqNum: txn.Sequence}
+	twb.createSavepointLocked(ctx, savepoint)
+
+	// Add some new writes. A second write to keyA and a new one to keyB.
+	ba = &kvpb.BatchRequest{}
+	txn.Sequence++
+	putA2 := putArgs(keyA, valA2, txn.Sequence)
+	ba.Add(putA2)
+	txn.Sequence++
+	putB := putArgs(keyB, valB, txn.Sequence)
+	ba.Add(putB)
+
+	// All these writes should be buffered as well, with no KV requests sent yet.
+	numCalled = mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	require.Equal(t, numCalled, mockSender.NumCalled())
+	require.Len(t, br.Responses, 2)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[1].GetInner())
+	// Verify the state of the write buffer.
+	expBufferedWrites = []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("valA", 10), makeBufferedValue("valA2", 12)),
+		makeBufferedWrite(keyB, makeBufferedValue("valB", 13)),
+		makeBufferedWrite(keyC, makeBufferedValue("", 11)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Now, Rollback to the savepoint. This should leave just one write in the
+	// buffer, that on keyA at seqnum 10.
+	twb.rollbackToSavepointLocked(ctx, *savepoint)
+	expBufferedWrites = []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Commit the transaction.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}

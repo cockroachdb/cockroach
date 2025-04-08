@@ -517,6 +517,7 @@ func makeDefaultFeatureFlags() cdcFeatureFlags {
 type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
+	envelope        string
 	opts            map[string]string
 	assumeRole      string
 	tolerateErrors  bool
@@ -547,15 +548,15 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 
 	targetsStr := strings.Join(args.targets, ", ")
 
+	if args.envelope == "" {
+		args.envelope = "wrapped"
+	}
+
 	feedOptions := make(map[string]string)
 	feedOptions["min_checkpoint_frequency"] = "'10s'"
+	feedOptions["envelope"] = args.envelope
 	if args.sinkType == cloudStorageSink || args.sinkType == webhookSink {
-		// Webhook and cloudstorage don't have a concept of keys and therefore
-		// require envelope=wrapped
-		feedOptions["envelope"] = "wrapped"
-
 		feedOptions["resolved"] = "'10s'"
-
 	} else {
 		feedOptions["resolved"] = ""
 	}
@@ -2310,6 +2311,40 @@ func registerCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          1 * time.Hour,
 		Run:              runCDCMultipleSchemaChanges,
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/tpcc-100/10min/sink=kafka/envelope=enriched",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				envelope: "enriched",
+				targets:  allTpccTargets,
+				kafkaArgs: kafkaFeedArgs{
+					validateOrder: true,
+				},
+				opts: map[string]string{
+					"initial_scan":        "'no'",
+					"updated":             "",
+					"enriched_properties": "source",
+				},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
+		},
 	})
 }
 
