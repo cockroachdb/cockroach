@@ -10,7 +10,7 @@ set -euxo pipefail
 
 pushd cockroach
 bazel build //pkg/cmd/cockroach-short \
-      --config crosslinux --jobs 100 \
+      --config crosslinux --jobs 50 \
       --bes_keywords integration-test-artifact-build \
       $(./build/github/engflow-args.sh)
 cp _bazel/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short ../examples-orms/cockroach

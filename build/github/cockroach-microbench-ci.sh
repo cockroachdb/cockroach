@@ -30,7 +30,7 @@ if $SKIP_COMPARISON && ! $PUSH_STEP; then
 fi
 
 # Build binary with Bazel
-bazel build --config crosslinux $(./build/github/engflow-args.sh) --jobs 100 //pkg/cmd/roachprod-microbench
+bazel build --config crosslinux $(./build/github/engflow-args.sh) --jobs 50 //pkg/cmd/roachprod-microbench
 
 roachprod_microbench_dir="_bazel/bin/pkg/cmd/roachprod-microbench/roachprod-microbench_"
 
@@ -41,7 +41,7 @@ mkdir -p "$output_dir"
 bazel test //pkg/sql/tests:tests_test \
   --test_timeout=1800 \
   --strategy=TestRunner=sandboxed \
-  --jobs 100 \
+  --jobs 50 \
   --config=crosslinux \
   --remote_download_minimal \
   $(./build/github/engflow-args.sh) \

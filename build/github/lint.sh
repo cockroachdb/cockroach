@@ -12,11 +12,11 @@ WORKSPACE=$(bazel info workspace)
 
 # GCAssert and unused need generated files in the workspace to work properly.
 bazel run //pkg/gen:code \
-    --config crosslinux --jobs 100 \
+    --config crosslinux --jobs 50 \
     --remote_download_minimal $(./build/github/engflow-args.sh)
 bazel run //pkg/cmd/generate-cgo:generate-cgo \
     --run_under="cd $WORKSPACE && " \
-    --config crosslinux --jobs 100 \
+    --config crosslinux --jobs 50 \
     --remote_download_minimal $(./build/github/engflow-args.sh)
 
 bazel test \
@@ -30,5 +30,5 @@ bazel test \
   --test_env=COCKROACH_WORKSPACE=$WORKSPACE \
   --test_timeout=1800 \
   --build_event_binary_file=bes.bin \
-  --jobs 100 \
+  --jobs 50 \
   --remote_download_minimal $(./build/github/engflow-args.sh)

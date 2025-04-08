@@ -29,7 +29,7 @@ set -x
 
 bazel build --config=$CROSSCONFIG $(./build/github/engflow-args.sh) \
       --bes_keywords integration-test-artifact-build \
-      --jobs 100 \
+      --jobs 50 \
       //pkg/cmd/cockroach-short \
       //pkg/cmd/roachtest \
       //pkg/cmd/roachprod \

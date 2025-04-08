@@ -41,7 +41,7 @@ fi
 
 bazel build \
     --config "$CONFIG" $EXTRA_ARGS \
-    --jobs 100 \
+    --jobs 50 \
     --build_event_binary_file=bes.bin \
     --bes_keywords ci-build \
     $(./build/github/engflow-args.sh) \
