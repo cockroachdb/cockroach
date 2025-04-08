@@ -18,8 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/linkedin/goavro/v2"
 )
@@ -30,7 +35,7 @@ type enrichedSourceProviderOpts struct {
 type enrichedSourceData struct {
 	jobID, sink,
 	dbVersion, clusterName, sourceNodeLocality, nodeName, nodeID, clusterID string
-	// TODO(#139692): Add schema info support.
+	tableSchemaInfo map[descpb.ID]tableSchemaInfo
 	// TODO(#139691): Add job info support.
 	// TODO(#139690): Add node/cluster info support.
 }
@@ -41,13 +46,57 @@ type enrichedSourceProvider struct {
 	// jsonNonFixedData is a reusable map for non-fixed fields, which are the inputs to jsonPartialObject.NewObject.
 	jsonNonFixedData map[string]json.JSON
 }
+type tableSchemaInfo struct {
+	tableName       string
+	dbName          string
+	schemaName      string
+	primaryKeys     []string
+	primaryKeysJSON json.JSON
+}
 
 func newEnrichedSourceData(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	spec execinfrapb.ChangeAggregatorSpec,
 	sink sinkType,
+	targets changefeedbase.Targets,
 ) (enrichedSourceData, error) {
+	schemaInfo := make(map[descpb.ID]tableSchemaInfo)
+	execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	err := targets.EachTarget(func(target changefeedbase.Target) error {
+		id := target.TableID
+		td, err := getTableDesc(ctx, execCfg, id)
+		if err != nil {
+			return err
+		}
+		dbd, err := getDBDesc(ctx, execCfg, td.GetParentID())
+		if err != nil {
+			return err
+		}
+		sd, err := getSchemaDesc(ctx, execCfg, td.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+
+		primaryKeys := td.GetPrimaryIndex().IndexDesc().KeyColumnNames
+
+		primaryKeysBuilder := json.NewArrayBuilder(len(primaryKeys))
+		for _, key := range primaryKeys {
+			primaryKeysBuilder.Add(json.FromString(key))
+		}
+
+		schemaInfo[id] = tableSchemaInfo{
+			tableName:       td.GetName(),
+			dbName:          dbd.GetName(),
+			schemaName:      sd.GetName(),
+			primaryKeys:     primaryKeys,
+			primaryKeysJSON: primaryKeysBuilder.Build(),
+		}
+		return nil
+	})
+	if err != nil {
+		return enrichedSourceData{}, err
+	}
 	var sourceNodeLocality, nodeName, nodeID string
 	tiers := cfg.Locality.Tiers
 
@@ -85,6 +134,7 @@ func newEnrichedSourceData(
 		sourceNodeLocality: sourceNodeLocality,
 		nodeName:           nodeName,
 		nodeID:             nodeID,
+		tableSchemaInfo:    schemaInfo,
 	}, nil
 }
 
@@ -108,6 +158,11 @@ func newEnrichedSourceProvider(
 		nonFixedJSONFields = append(nonFixedJSONFields, fieldName)
 		nonFixedDataIdx[fieldName] = len(nonFixedJSONFields) - 1
 	}
+
+	addNonFixedJSONfield(fieldNameDatabaseName)
+	addNonFixedJSONfield(fieldNameSchemaName)
+	addNonFixedJSONfield(fieldNameTableName)
+	addNonFixedJSONfield(fieldNamePrimaryKeys)
 
 	if opts.MVCCTimestamps {
 		addNonFixedJSONfield(fieldNameMVCCTimestamp)
@@ -142,6 +197,12 @@ func (p *enrichedSourceProvider) GetJSON(
 	updated cdcevent.Row, evCtx eventContext,
 ) (json.JSON, error) {
 	clear(p.jsonNonFixedData)
+
+	p.jsonNonFixedData[fieldNameDatabaseName] = json.FromString("fake")
+	p.jsonNonFixedData[fieldNameSchemaName] = json.FromString("fake")
+	p.jsonNonFixedData[fieldNameTableName] = json.FromString("fake")
+	p.jsonNonFixedData[fieldNamePrimaryKeys] = json.NewArrayBuilder(0).Build()
+
 	if p.opts.mvccTimestamp {
 		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(evCtx.mvcc.AsOfSystemTime())
 	}
@@ -168,6 +229,11 @@ func (p *enrichedSourceProvider) GetAvro(
 			dest[fieldNameNodeName] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName)
 			dest[fieldNameNodeID] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID)
 		}
+
+		dest[fieldNameDatabaseName] = goavro.Union(avro.SchemaTypeString, "tableInfo.dbName")
+		dest[fieldNameSchemaName] = goavro.Union(avro.SchemaTypeString, "tableInfo.schemaName")
+		dest[fieldNameTableName] = goavro.Union(avro.SchemaTypeString, "tableInfo.tableName")
+		dest[fieldNamePrimaryKeys] = goavro.Union(avro.SchemaTypeArray, []string{"tableInfo.primaryKeys"})
 
 		if p.opts.mvccTimestamp {
 			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, evCtx.mvcc.AsOfSystemTime())
@@ -196,6 +262,10 @@ const (
 	fieldNameMVCCTimestamp      = "mvcc_timestamp"
 	fieldNameUpdatedTSNS        = "ts_ns"
 	fieldNameUpdatedTSHLC       = "ts_hlc"
+	fieldNameDatabaseName       = "database_name"
+	fieldNameSchemaName         = "schema_name"
+	fieldNameTableName          = "table_name"
+	fieldNamePrimaryKeys        = "primary_keys"
 )
 
 type fieldInfo struct {
@@ -329,6 +399,54 @@ var allFieldInfo = map[string]fieldInfo{
 			Optional: true,
 		},
 	},
+	fieldNameDatabaseName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameDatabaseName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameDatabaseName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNameSchemaName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameSchemaName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameSchemaName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNameTableName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameTableName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameTableName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNamePrimaryKeys: {
+		avroSchemaField: avro.SchemaField{
+			Name: fieldNamePrimaryKeys,
+			SchemaType: []avro.SchemaType{
+				avro.SchemaTypeNull,
+				avro.ArrayType{SchemaType: avro.SchemaTypeArray, Items: avro.SchemaTypeString},
+			},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNamePrimaryKeys,
+			TypeName: kcjsonschema.SchemaTypeArray,
+			Optional: false,
+			Items:    &kcjsonschema.Schema{TypeName: kcjsonschema.SchemaTypeString},
+		},
+	},
 }
 
 // filled in by init() using allFieldInfo
@@ -354,4 +472,40 @@ func init() {
 		Fields:   kcjFields,
 		Optional: true,
 	}
+}
+
+func getDBDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, dbID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	var desc catalog.DatabaseDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
+		if err != nil {
+			return err
+		}
+		desc = dbDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func getSchemaDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, schemaID descpb.ID,
+) (catalog.SchemaDescriptor, error) {
+	var desc catalog.SchemaDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		schemaDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, schemaID)
+		if err != nil {
+			return err
+		}
+		desc = schemaDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
 }
