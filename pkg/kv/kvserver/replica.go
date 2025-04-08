@@ -2838,3 +2838,9 @@ func (r *Replica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 		r.flowControlV2.SendStreamStats(stats)
 	}
 }
+
+// TestingGetCachedClosedTimestampPolicy returns the closed timestamp policy
+// held by r. This is a testing-only helper.
+func (r *Replica) TestingGetCachedClosedTimestampPolicy() ctpb.RangeClosedTimestampPolicy {
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+}

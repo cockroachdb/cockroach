@@ -29,7 +29,9 @@ func newNoopPolicyRefresher(stopper *stop.Stopper, settings *cluster.Settings) *
 		func() []Replica { return nil },
 		func() map[roachpb.NodeID]time.Duration {
 			return nil
-		})
+		},
+		nil,
+	)
 }
 
 type mockSpanConfig struct {
@@ -134,7 +136,7 @@ func TestPolicyRefreshOnRefreshIntervalUpdate(t *testing.T) {
 	getLeaseholders := func() []Replica { return []Replica{r} }
 	getLatencies := func() map[roachpb.NodeID]time.Duration { return nil }
 
-	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
+	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies, nil)
 	require.NotNil(t, pr)
 
 	// Start the refresher.
@@ -222,7 +224,7 @@ func TestPolicyRefresherOnLatencyIntervalUpdate(t *testing.T) {
 	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(
 		ctx, &st.SV, 1*time.Hour)
 
-	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
+	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies, nil)
 	require.NotNil(t, pr)
 	pr.Run(ctx)
 

@@ -58,4 +58,5 @@ type TestingKnobs struct {
 	TableMetadata                  ModuleTestingKnobs
 	LicenseTestingKnobs            ModuleTestingKnobs
 	VecIndexTestingKnobs           ModuleTestingKnobs
+	PolicyRefresherTestingKnobs    ModuleTestingKnobs
 }
