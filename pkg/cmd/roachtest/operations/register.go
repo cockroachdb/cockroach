@@ -19,6 +19,7 @@ func RegisterOperations(r registry.Registry) {
 	registerNetworkPartition(r)
 	registerDiskStall(r)
 	registerNodeKill(r)
+	registerCreateRole(r)
 	registerClusterSettings(r)
 	registerBackupRestore(r)
 	registerManualCompaction(r)
