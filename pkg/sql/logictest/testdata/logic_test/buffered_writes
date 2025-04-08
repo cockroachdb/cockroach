@@ -78,7 +78,7 @@ INSERT INTO t1 VALUES (1,1)
 statement ok
 COMMIT
 
-query II
+query II rowsort
 SELECT * FROM t1
 ----
 1 1
@@ -122,7 +122,7 @@ INSERT INTO t2 VALUES (1);
 statement ok
 COMMIT;
 
-query I
+query I rowsort
 SELECT * FROM t2
 ----
 1
@@ -151,7 +151,76 @@ DELETE FROM t3 WHERE k < 10 AND k > 0
 statement ok
 COMMIT
 
-query I
+query I rowsort
 SELECT count(*) from t3
 ----
 0
+
+# Test savepoints, and in particular savepoint rollbacks, with buffered writes. 
+# We test both intermediate selects after rollbacks and the final state
+# the transaction has been committed.
+statement ok
+BEGIN; 
+INSERT INTO t3 VALUES(1), (2), (3);
+SAVEPOINT s1; 
+INSERT INTO t3 VALUES(4), (5), (6)
+
+query I rowsort
+SELECT * FROM t3
+----
+1
+2
+3
+4
+5
+6
+
+statement ok
+SAVEPOINT s2; 
+INSERT INTO t3 VALUES(7), (8), (9)
+
+query I rowsort
+SELECT * FROM t3
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+statement ok
+ROLLBACK TO SAVEPOINT s2; 
+
+query I rowsort
+SELECT * FROM t3
+----
+1
+2
+3
+4
+5
+6
+
+statement ok
+ROLLBACK TO SAVEPOINT s1;
+
+query I rowsort
+SELECT * FROM t3
+----
+1
+2
+3
+
+statement ok
+COMMIT
+
+query I rowsort
+SELECT * FROM t3
+----
+1
+2
+3

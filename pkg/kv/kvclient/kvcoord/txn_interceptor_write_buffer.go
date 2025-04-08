@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"slices"
+	"sort"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -423,7 +424,36 @@ func (twb *txnWriteBuffer) epochBumpedLocked() {}
 func (twb *txnWriteBuffer) createSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {}
+func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+	toDelete := make([]*bufferedWrite, 0)
+	it := twb.buffer.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		bufferedVals := it.Cur().vals
+		// NB: the savepoint is being rolled back to s.seqNum (inclusive). So,
+		// idx is the index of the first value that is considered rolled back.
+		idx := sort.Search(len(bufferedVals), func(i int) bool {
+			return bufferedVals[i].seq >= s.seqNum
+		})
+		if idx == len(bufferedVals) {
+			// No writes are being rolled back.
+			continue
+		}
+		// Update size bookkeeping for the values we're rolling back.
+		for i := idx; i < len(bufferedVals); i++ {
+			twb.bufferSize -= bufferedVals[i].size()
+		}
+		// Rollback writes by truncating the buffered values.
+		it.Cur().vals = bufferedVals[:idx]
+		if len(it.Cur().vals) == 0 {
+			// All writes have been rolled back; we should remove this key from
+			// the buffer entirely.
+			toDelete = append(toDelete, it.Cur())
+		}
+	}
+	for _, bw := range toDelete {
+		twb.removeFromBuffer(bw)
+	}
+}
 
 // closeLocked implements the txnInterceptor interface.
 func (twb *txnWriteBuffer) closeLocked() {}
@@ -1057,6 +1087,12 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 	}
 }
 
+// removeFromBuffer removes all buffered writes on a given key from the buffer.
+func (twb *txnWriteBuffer) removeFromBuffer(bw *bufferedWrite) {
+	twb.buffer.Delete(bw)
+	twb.bufferSize -= bw.size()
+}
+
 // flushBufferAndSendBatch flushes all buffered writes when sending the supplied
 // batch request to the KV layer. This is done by pre-pending the buffered
 // writes to the requests in the batch.
@@ -1092,11 +1128,11 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
 
-	// Next, remove the buffered writes from the buffer and collect them into requests.
+	// Next, remove the buffered writes from the buffer and collect them into
+	// requests.
 	for _, bw := range toFlushBufferedWrites {
 		reqs = append(reqs, bw.toRequest())
-		twb.buffer.Delete(&bw)
-		twb.bufferSize -= bw.size()
+		twb.removeFromBuffer(&bw)
 	}
 
 	// Layers below us expect that writes inside a batch are in sequence number
