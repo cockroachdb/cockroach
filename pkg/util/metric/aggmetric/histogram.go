@@ -63,6 +63,19 @@ var _ metric.CumulativeHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
+	return initHistogram(opts, StorageTypeBTree, childLabels)
+}
+
+// NewHistogramWithCacheStorage constructs a new AggHistogram with Cache as child storage.
+func NewHistogramWithCacheStorage(
+	opts metric.HistogramOptions, childLabels ...string,
+) *AggHistogram {
+	return initHistogram(opts, StorageTypeCache, childLabels)
+}
+
+func initHistogram(
+	opts metric.HistogramOptions, storageType StorageType, childLabels []string,
+) *AggHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
@@ -87,7 +100,8 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 				childHist.h.Tick()
 			})
 		})
-	a.initWithBTreeStorageType(childLabels)
+
+	a.initChildSet(childLabels, storageType)
 	return a
 }
 
@@ -149,31 +163,47 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 		labelValuesSlice: labelValuesSlice(labelVals),
 		h:                a.create(),
 	}
-	a.add(child)
+	a.add(withLock, child)
+	return child
+}
+
+// GetOrAddChild adds a Histogram to this AggHistogram if not exists. Otherwise,
+// method returns existing Histogram child.
+func (a *AggHistogram) getOrAddChild(labelVals ...string) *Histogram {
+	// If the child already exists, return it.
+	if child, ok := a.get(labelVals...); ok {
+		return child.(*Histogram)
+	}
+
+	child := &Histogram{
+		parent:           a,
+		labelValuesSlice: labelValuesSlice(labelVals),
+		h:                a.create(),
+	}
+
+	a.add(withoutLock, child)
 	return child
 }
 
 // RecordValue adds the given value to the histogram for the given label values. If a
 // histogram with the given label values doesn't exist yet, it creates a new
-// histogram and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this histogram.
-// Recording a value in excess of the configured maximum value for that histogram
-// results in recording the maximum value instead.
+// histogram and increments it. It will recprd only the parent histogram in
+// case of below conditions:
+// 1. when label count is zero to avoid child creation and redundant
+// export values.
+// 2. when label count is mismatched due to run time configuration change
+// for server.AppNameLabelEnabled and server.DBNameLabelEnabled cluster
+// settings.
 func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
-	if len(a.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(a.labels), a.labels))
-	}
-
-	// If the child already exists, update it.
-	if child, ok := a.get(labelVals...); ok {
-		child.(*Histogram).RecordValue(v)
+	if len(a.mu.labels) != len(labelVals) || len(labelVals) == 0 {
+		a.h.RecordValue(v)
 		return
 	}
 
-	// Otherwise, create a new child and update it.
-	child := a.AddChild(labelVals...)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	child := a.getOrAddChild(labelVals...)
 	child.RecordValue(v)
 }
 
@@ -182,6 +212,13 @@ func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
 func (g *AggHistogram) RemoveChild(labelVals ...string) {
 	key := &Histogram{labelValuesSlice: labelValuesSlice(labelVals)}
 	g.remove(key)
+}
+
+// ReinitialiseChildMetrics reinitialize child metrics with updated label values.
+// This is used when the children storage type is StorageTypeCache. If the storage type
+// is StorageTypeBTree, this method is no-op.
+func (a *AggHistogram) ReinitialiseChildMetrics(labelVals []string) {
+	a.reinitialise(labelVals...)
 }
 
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the

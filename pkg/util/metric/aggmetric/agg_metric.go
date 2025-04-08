@@ -27,6 +27,16 @@ type Builder struct {
 	labels []string
 }
 
+// StorageType is an enum which represents children storage in childSet.
+type StorageType int
+
+const (
+	withLock                     = true
+	withoutLock                  = false
+	StorageTypeBTree StorageType = iota
+	StorageTypeCache
+)
+
 // MakeBuilder makes a new Builder.
 func MakeBuilder(labels ...string) Builder {
 	return Builder{labels: labels}
@@ -64,26 +74,30 @@ func (b Builder) Histogram(opts metric.HistogramOptions) *AggHistogram {
 }
 
 type childSet struct {
-	labels []string
-	mu     struct {
+	mu struct {
 		syncutil.Mutex
 		children ChildrenStorage
+		labels   []string
 	}
 }
 
+// initChildSet initializes the childSet with the given labels and uses BTree as the
+// storage type for children. This is the default storage type for aggmetric.
 func (cs *childSet) initWithBTreeStorageType(labels []string) {
-	cs.labels = labels
+	cs.mu.labels = labels
 	cs.mu.children = &BtreeWrapper{
 		tree: btree.New(8),
 	}
 }
 
+// initWithCacheStorageType initializes the childSet with the given labels and uses cache as the
+// storage type for children. This is used for dynamic label values.
 func (cs *childSet) initWithCacheStorageType(labels []string) {
 	// cacheSize is the default number of children that can be stored in the cache.
 	// If the cache exceeds this size, the oldest children are evicted. This is
 	// specific to cache storage for children
 	const cacheSize = 5000
-	cs.labels = labels
+	cs.mu.labels = labels
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		//TODO (aa-joshi) : make cacheSize configurable in the future
@@ -96,6 +110,17 @@ func (cs *childSet) initWithCacheStorageType(labels []string) {
 	}
 }
 
+func (cs *childSet) initChildSet(labels []string, storageType StorageType) {
+	switch storageType {
+	case StorageTypeBTree:
+		cs.initWithBTreeStorageType(labels)
+	case StorageTypeCache:
+		cs.initWithCacheStorageType(labels)
+	default:
+		panic(errors.AssertionFailedf("unknown storage type %d", storageType))
+	}
+}
+
 func (cs *childSet) Each(
 	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
 ) {
@@ -105,12 +130,12 @@ func (cs *childSet) Each(
 		cm := cs.mu.children.GetChildMetric(e)
 		pm := cm.ToPrometheusMetric()
 
-		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.mu.labels))
 		childLabels = append(childLabels, labels...)
 		lvs := cm.labelValues()
-		for i := range cs.labels {
+		for i := range cs.mu.labels {
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
-				Name:  &cs.labels[i],
+				Name:  &cs.mu.labels[i],
 				Value: &lvs[i],
 			})
 		}
@@ -128,15 +153,20 @@ func (cs *childSet) apply(applyFn func(item MetricItem)) {
 	})
 }
 
-func (cs *childSet) add(metric ChildMetric) {
+// add method inserts ChildMetric. We have introduced withLock option for optional locking during ChildMetric insertion.
+func (cs *childSet) add(withLock bool, metric ChildMetric) {
 	lvs := metric.labelValues()
-	if len(lvs) != len(cs.labels) {
+	if len(lvs) != len(cs.mu.labels) {
 		panic(errors.AssertionFailedf(
 			"cannot add child with %d label values %v to a metric with %d labels %v",
-			len(lvs), lvs, len(cs.labels), cs.labels))
+			len(lvs), lvs, len(cs.mu.labels), cs.mu.labels))
 	}
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
+
+	if withLock {
+		cs.mu.Lock()
+		defer cs.mu.Unlock()
+	}
+
 	cs.mu.children.Add(metric)
 }
 
@@ -147,19 +177,22 @@ func (cs *childSet) remove(metric ChildMetric) {
 }
 
 func (cs *childSet) get(labelVals ...string) (ChildMetric, bool) {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
 	return cs.mu.children.Get(labelVals...)
 }
 
-// clear method removes all children from the childSet. It does not reset parent metric values.
-// Method should cautiously be used when childSet is reinitialised/updated. Today, it is
-// only used when cluster settings are updated to support app and db label values. For normal
-// operations, please use add, remove and get method to update the childSet.
-func (cs *childSet) clear() {
+// reinitialise method removes all children from the childSet and updates labels in childSet.
+// Method should cautiously be used when childSet is reinitialised/updated. Today, it is only
+// used when cluster settings are updated to support app and db label values. It updates only when
+// the children storage type is StorageTypeCache. If the storage type is StorageTypeBTree, this
+// method is no-op. For normal operations, please use add, remove and get method to update the childSet.
+func (cs *childSet) reinitialise(labelVals ...string) {
+	if cs.mu.children.GetStorageType() == StorageTypeBTree {
+		return
+	}
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.mu.children.Clear()
+	cs.mu.labels = labelVals
 }
 
 type MetricItem interface {
@@ -204,6 +237,7 @@ type ChildrenStorage interface {
 	Do(f func(e interface{}))
 	GetChildMetric(e interface{}) ChildMetric
 	Clear()
+	GetStorageType() StorageType
 }
 
 var _ ChildrenStorage = &UnorderedCacheWrapper{}
@@ -252,8 +286,16 @@ func (ucw *UnorderedCacheWrapper) Clear() {
 	ucw.cache.Clear()
 }
 
+func (ucw *UnorderedCacheWrapper) GetStorageType() StorageType {
+	return StorageTypeCache
+}
+
 type BtreeWrapper struct {
 	tree *btree.BTree
+}
+
+func (b BtreeWrapper) GetStorageType() StorageType {
+	return StorageTypeBTree
 }
 
 func (b BtreeWrapper) Get(labelVals ...string) (ChildMetric, bool) {

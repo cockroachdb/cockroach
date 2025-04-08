@@ -1,0 +1,26 @@
+echo
+----
+test_counter_btree 1
+test_counter_btree{tenant_id="system"} 1
+test_counter_cache 5
+test_counter_float_btree 1.5
+test_counter_float_btree{tenant_id="system"} 1.5
+test_counter_float_cache 5
+test_gauge_btree 1
+test_gauge_btree{tenant_id="system"} 1
+test_gauge_cache 5
+test_gauge_float_btree 1.5
+test_gauge_float_btree{tenant_id="system"} 1.5
+test_gauge_float_cache 5
+test_histogram_btree_bucket{le="+Inf"} 1
+test_histogram_btree_bucket{le="1"} 1
+test_histogram_btree_bucket{tenant_id="system",le="+Inf"} 1
+test_histogram_btree_bucket{tenant_id="system",le="1"} 1
+test_histogram_btree_count 1
+test_histogram_btree_count{tenant_id="system"} 1
+test_histogram_btree_sum 1
+test_histogram_btree_sum{tenant_id="system"} 1
+test_histogram_cache_bucket{le="+Inf"} 1
+test_histogram_cache_bucket{le="5"} 1
+test_histogram_cache_count 1
+test_histogram_cache_sum 5
