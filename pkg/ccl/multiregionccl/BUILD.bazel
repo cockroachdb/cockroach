@@ -63,6 +63,7 @@ go_test(
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
