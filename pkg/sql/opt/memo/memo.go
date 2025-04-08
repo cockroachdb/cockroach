@@ -628,6 +628,8 @@ func (m *Memo) NextRoutineResultBufferID() RoutineResultBufferID {
 // constructed in this memo.
 func (m *Memo) Detach() {
 	m.interner = interner{}
+	m.replacer = nil
+
 	// It is important to not hold on to the EvalCtx in the logicalPropsBuilder
 	// (#57059).
 	m.logPropsBuilder = logicalPropsBuilder{}
