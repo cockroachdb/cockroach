@@ -141,7 +141,7 @@ func (ctx *jsonpathCtx) evalExists(
 	// We can optimize this by short-circuiting in lax mode.
 	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	if len(l) == 0 {
 		return jsonpathBoolFalse, nil
@@ -255,14 +255,14 @@ func (ctx *jsonpathCtx) evalPredicate(
 	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if err != nil {
-		return jsonpathBoolUnknown, err
+		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	var right []json.JSON
 	if evalRight {
 		// The right argument results are conditionally evaluated and unwrapped.
 		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
 		if err != nil {
-			return jsonpathBoolUnknown, err
+			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 		}
 	} else {
 		// If we don't want to evaluate the right argument, we need to call
