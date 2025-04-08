@@ -95,7 +95,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 
 		// Process the insertion for the current input row, potentially
 		// accumulating the result row for later.
-		if err := n.processSourceRow(params, n.input.Values()); err != nil {
+		if err := n.run.processSourceRow(params, n.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -133,15 +133,15 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
-func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
+func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
 	// Check for NOT NULL constraint violations.
-	if u.run.tw.canaryOrdinal != -1 && rowVals[u.run.tw.canaryOrdinal] != tree.DNull {
+	if r.tw.canaryOrdinal != -1 && rowVals[r.tw.canaryOrdinal] != tree.DNull {
 		// When there is a canary column and its value is not NULL, then an
 		// existing row is being updated, so check only the update columns for
 		// NOT NULL constraint violations.
-		offset := len(u.run.insertCols) + len(u.run.tw.fetchCols)
-		vals := rowVals[offset : offset+len(u.run.tw.updateCols)]
-		if err := enforceNotNullConstraints(vals, u.run.tw.updateCols); err != nil {
+		offset := len(r.insertCols) + len(r.tw.fetchCols)
+		vals := rowVals[offset : offset+len(r.tw.updateCols)]
+		if err := enforceNotNullConstraints(vals, r.tw.updateCols); err != nil {
 			return err
 		}
 	} else {
@@ -150,14 +150,14 @@ func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		// without performing a read) or it is NULL, indicating that a new row
 		// is being inserted. In this case, check the insert columns for a NOT
 		// NULL constraint violation.
-		vals := rowVals[:len(u.run.insertCols)]
-		if err := enforceNotNullConstraints(vals, u.run.insertCols); err != nil {
+		vals := rowVals[:len(r.insertCols)]
+		if err := enforceNotNullConstraints(vals, r.insertCols); err != nil {
 			return err
 		}
 	}
 
-	lastUpsertCol := len(u.run.insertCols) + len(u.run.tw.fetchCols) + len(u.run.tw.updateCols)
-	if u.run.tw.canaryOrdinal != -1 {
+	lastUpsertCol := len(r.insertCols) + len(r.tw.fetchCols) + len(r.tw.updateCols)
+	if r.tw.canaryOrdinal != -1 {
 		lastUpsertCol++
 	}
 	upsertVals := rowVals[:lastUpsertCol]
@@ -165,21 +165,21 @@ func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
-	if !u.run.checkOrds.Empty() {
+	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
-			u.run.tw.tableDesc(), u.run.checkOrds, rowVals[:u.run.checkOrds.Len()],
+			r.tw.tableDesc(), r.checkOrds, rowVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
 		}
-		rowVals = rowVals[u.run.checkOrds.Len():]
+		rowVals = rowVals[r.checkOrds.Len():]
 	}
 
 	// Create a set of partial index IDs to not add or remove entries from. Order is puts
 	// then deletes.
 	var pm row.PartialIndexUpdateHelper
-	if n := len(u.run.tw.tableDesc().PartialIndexes()); n > 0 {
-		err := pm.Init(rowVals[:n], rowVals[n:n*2], u.run.tw.tableDesc())
+	if n := len(r.tw.tableDesc().PartialIndexes()); n > 0 {
+		err := pm.Init(rowVals[:n], rowVals[n:n*2], r.tw.tableDesc())
 		if err != nil {
 			return err
 		}
@@ -190,9 +190,9 @@ func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 	// quantized vectors for puts. This information is passed to tableInserter.row
 	// below.
 	var vh row.VectorIndexUpdateHelper
-	if n := len(u.run.tw.tableDesc().VectorIndexes()); n > 0 {
-		vh.InitForPut(rowVals[:n], rowVals[n:n*2], u.run.tw.tableDesc())
-		vh.InitForDel(rowVals[n*2:n*3], u.run.tw.tableDesc())
+	if n := len(r.tw.tableDesc().VectorIndexes()); n > 0 {
+		vh.InitForPut(rowVals[:n], rowVals[n:n*2], r.tw.tableDesc())
+		vh.InitForDel(rowVals[n*2:n*3], r.tw.tableDesc())
 	}
 
 	if buildutil.CrdbTestBuild {
@@ -204,7 +204,7 @@ func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return u.run.tw.row(params.ctx, upsertVals, pm, vh, u.run.traceKV)
+	return r.tw.row(params.ctx, upsertVals, pm, vh, r.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.
