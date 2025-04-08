@@ -30,8 +30,8 @@ type periodicTelemetryLogger struct {
 	sinkTelemetryData sinkTelemetryData
 	changefeedDetails eventpb.CommonChangefeedEventDetails
 	settings          *cluster.Settings
-
-	lastEmitTime atomic.Int64
+	lastEmitTime      atomic.Int64
+	knobs             TestingKnobs
 }
 
 type telemetryLogger interface {
@@ -55,12 +55,14 @@ func makePeriodicTelemetryLogger(
 	description string,
 	jobID jobspb.JobID,
 	s *cluster.Settings,
+	knobs TestingKnobs,
 ) (*periodicTelemetryLogger, error) {
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
 		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
+		knobs:             knobs,
 	}, nil
 }
 
@@ -90,7 +92,13 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 	// case multiple goroutines call this function at the same time.
 	// This prevents a burst of telemetry events from being needlessly
 	// logging the same data.
-	lastEmit := ptl.lastEmitTime.Load()
+	lastEmit := func() int64 {
+		lastEmitTime := ptl.lastEmitTime.Load()
+		if ptl.knobs.OverrideContinuousTelemetryLastEmit != nil {
+			return ptl.knobs.OverrideContinuousTelemetryLastEmit(lastEmitTime)
+		}
+		return lastEmitTime
+	}()
 	if currentTime < lastEmit+loggingInterval {
 		return
 	}
@@ -133,7 +141,7 @@ func wrapMetricsRecorderWithTelemetry(
 	knobs TestingKnobs,
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
-	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s, knobs)
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}

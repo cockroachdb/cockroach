@@ -7209,6 +7209,19 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		seen.Store(false)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+
+		s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs).OverrideContinuousTelemetryLastEmit =
+			func(lastEmitTime int64) int64 {
+				// If lastEmitTime == 0, we know that a new instance of the logger
+				// is created because we passed verifyLogsWithEmittedBytesAndMessages.
+				// We override this value to prevent the new logger from emitting an event when
+				// they call maybeFlushLogs().
+				if lastEmitTime == 0 {
+					return afterFirstLog.UnixMicro()
+				} else {
+					return lastEmitTime
+				}
+			}
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"id": 1}}`,
 			`foo: [2]->{"after": {"id": 2}}`,
