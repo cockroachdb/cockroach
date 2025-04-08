@@ -96,20 +96,6 @@ func TestMemStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, refs[0].Vector)
 	})
-
-	t.Run("abort transaction", func(t *testing.T) {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.AbortTransaction(ctx, t, store, txn)
-
-		// Perform some read-only operations.
-		_, err := txn.GetPartition(ctx, treeKey, cspann.RootKey)
-		require.NoError(t, err)
-
-		err = txn.GetFullVectors(ctx, treeKey, []cspann.VectorWithKey{
-			{Key: cspann.ChildKey{KeyBytes: testPKs[0]}},
-		})
-		require.NoError(t, err)
-	})
 }
 
 func TestInMemoryStoreConcurrency(t *testing.T) {
@@ -122,44 +108,38 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	valueBytes1 := cspann.ValueBytes{1, 2}
 	valueBytes2 := cspann.ValueBytes{3, 4}
 
-	// Insert root partition into new store.
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
 	var wait sync.WaitGroup
 	wait.Add(1)
-	func() {
-		txn := commontest.BeginTransaction(ctx, t, store)
-		defer commontest.CommitTransaction(ctx, t, store, txn)
-
+	require.NoError(t, store.RunTransaction(ctx, func(txn cspann.Txn) error {
 		// Ensure the root partition has been created.
-		err := txn.AddToPartition(
-			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{10, 10}, childKey1, valueBytes1)
+		err := txn.AddToPartition(ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
+			vector.T{10, 10}, childKey1, valueBytes1)
 		require.NoError(t, err)
 
 		// Acquire partition lock.
-		_, err = txn.GetPartition(ctx, treeKey, cspann.RootKey)
+		_, err = txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
 		require.NoError(t, err)
 
-		// Search root partition on background goroutine.
+		// Search root partition on background goroutine. The transaction should
+		// not begin until the outer transaction is complete.
 		go func() {
-			// Begin transaction should block until the outer transaction is
-			// complete.
-			txn2 := commontest.BeginTransaction(ctx, t, store)
-			defer commontest.CommitTransaction(ctx, t, store, txn2)
-
-			searchSet := cspann.SearchSet{MaxResults: 1}
-			toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
-			_, err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
-			require.NoError(t, err)
-			result1 := cspann.SearchResult{
-				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
-				ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
-			require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
-			require.Equal(t, 2, toSearch[0].Count)
-
-			wait.Done()
+			defer wait.Done()
+			require.NoError(t, store.RunTransaction(ctx, func(txn2 cspann.Txn) error {
+				searchSet := cspann.SearchSet{MaxResults: 1}
+				toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
+				_, err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
+				require.NoError(t, err)
+				result1 := cspann.SearchResult{
+					QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
+					ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
+				require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
+				require.Equal(t, 2, toSearch[0].Count)
+				return nil
+			}))
 		}()
 
 		// Add vector to root partition after yielding to the background goroutine.
@@ -168,9 +148,14 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		err = txn.AddToPartition(
 			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{3, 4}, childKey2, valueBytes2)
 		require.NoError(t, err)
-	}()
+
+		return nil
+	}))
 
 	wait.Wait()
+	if t.Failed() {
+		t.FailNow()
+	}
 }
 
 func TestInMemoryStoreUpdateStats(t *testing.T) {

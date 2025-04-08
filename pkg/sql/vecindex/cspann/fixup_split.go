@@ -261,6 +261,11 @@ func (fw *fixupWorker) splitPartition(
 			if err != nil {
 				return err
 			}
+
+			if fw.fp.onSuccessfulSplit != nil {
+				// Notify listener that a partition has been successfully split.
+				fw.fp.onSuccessfulSplit()
+			}
 		} else {
 			// This is the root partition, so remove all of its vectors rather than
 			// delete the root partition itself. Note that the vectors have already
@@ -304,6 +309,11 @@ func (fw *fixupWorker) splitPartition(
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
+		}
+
+		if fw.fp.onSuccessfulSplit != nil {
+			// Notify listener that a partition has been successfully split.
+			fw.fp.onSuccessfulSplit()
 		}
 	}
 
