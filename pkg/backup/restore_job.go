@@ -1769,7 +1769,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
 			return err
 		}
-		return r.doDownloadFiles(ctx, p, details.DownloadSpans)
+		return r.doDownloadFiles(ctx, p)
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
@@ -1814,6 +1814,21 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r, latestBackupManifest)
 	if err != nil {
 		return err
+	}
+
+	if details.OnlineImpl() && len(details.DownloadSpans) == 0 {
+		// Persist the download spans before the link phase begins as OnFailOrCancel
+		// could use them if called.
+		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
+		if err != nil {
+			return err
+		}
+		// Ensure we have the latest copy of the job details.
+		details = r.job.Details().(jobspb.RestoreDetails)
+		details.DownloadSpans = downloadSpans
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+			return errors.Wrap(err, "updating job details with download spans")
+		}
 	}
 
 	// Refresh the job details since they may have been updated when creating the
@@ -1983,11 +1998,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return errors.Wrap(err, "inserting table statistics")
 	}
 	if details.ExperimentalCopy {
-		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
-		if err != nil {
-			return err
-		}
-		if err := r.doDownloadFiles(ctx, p, downloadSpans); err != nil {
+		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
+		// and is instead passed an execCfg and the download spans and anything else
+		// it needs. If that occured, we would not need to update details above.
+		if err := r.doDownloadFiles(ctx, p); err != nil {
 			return err
 		}
 	}
@@ -2073,7 +2087,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	r.restoreStats = resTotal
-	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
 
