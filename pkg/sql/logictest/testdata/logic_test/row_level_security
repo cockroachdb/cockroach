@@ -2969,4 +2969,175 @@ DROP ROLE test_role1;
 statement ok
 DROP ROLE test_role2;
 
+# Ensure that if a role has the BYPASSRLS option or privilege set, that it's
+# exempt from policies.
+subtest bypassrls
+
+statement ok
+CREATE TABLE bypassrls (id INT PRIMARY KEY, val TEXT);
+
+statement ok
+CREATE USER bypassrls_user;
+
+statement ok
+GRANT ALL ON bypassrls TO bypassrls_user;
+
+statement ok
+ALTER TABLE bypassrls ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY pol1 ON bypassrls TO bypassrls_user USING (val like 'visible: %');
+
+statement ok
+CREATE FUNCTION insert_policy_violation_as_session_user(id INT) RETURNS TABLE(id INT, description TEXT)
+LANGUAGE SQL AS
+$$
+ INSERT INTO bypassrls VALUES (id, 'hidden: value') RETURNING id, val
+$$;
+
+# This function is like the above, except it will always be run as admin since
+# it uses SECURITY DEFINER.
+statement ok
+CREATE FUNCTION insert_policy_violation_as_admin(id INT) RETURNS TABLE(id INT, description TEXT)
+LANGUAGE SQL AS
+$$
+ INSERT INTO bypassrls VALUES (id, 'hidden: value') RETURNING id, val
+$$ SECURITY DEFINER;
+
+statement ok
+INSERT INTO bypassrls VALUES (0, 'visible: 0'), (1, 'hidden: 1'), (2, 'visible: 2');
+
+query IT
+SELECT * FROM insert_policy_violation_as_admin(10);
+----
+10 hidden: value
+
+query IT
+SELECT * FROM insert_policy_violation_as_session_user(11);
+----
+11 hidden: value
+
+query IT
+SELECT * FROM bypassrls ORDER BY id;
+----
+0 visible: 0
+1 hidden: 1
+2 visible: 2
+10 hidden: value
+11 hidden: value
+
+statement ok
+SET ROLE bypassrls_user;
+
+query IT
+SELECT * FROM bypassrls ORDER BY id;
+----
+0 visible: 0
+2 visible: 2
+
+query IT
+SELECT * FROM insert_policy_violation_as_admin(20);
+----
+20 hidden: value
+
+statement error pq: new row violates row-level security policy for table "bypassrls"
+SELECT * FROM insert_policy_violation_as_session_user(21);
+
+statement ok
+SET ROLE root;
+
+statement error pq: conflicting role options
+ALTER ROLE bypassrls_user BYPASSRLS NOBYPASSRLS;
+
+statement ok
+ALTER ROLE bypassrls_user BYPASSRLS;
+
+statement ok
+SET ROLE bypassrls_user;
+
+query IT
+SELECT * FROM bypassrls ORDER BY id;
+----
+0 visible: 0
+1 hidden: 1
+2 visible: 2
+10 hidden: value
+11 hidden: value
+20 hidden: value
+
+query IT
+SELECT * FROM insert_policy_violation_as_admin(30);
+----
+30 hidden: value
+
+query IT
+SELECT * FROM insert_policy_violation_as_session_user(31);
+----
+31 hidden: value
+
+statement ok
+SET ROLE root
+
+statement ok
+ALTER ROLE bypassrls_user NOBYPASSRLS;
+
+statement ok
+GRANT SYSTEM BYPASSRLS TO bypassrls_user;
+
+query TTB colnames
+SELECT * FROM [SHOW SYSTEM GRANTS] WHERE privilege_type = 'BYPASSRLS';
+----
+grantee         privilege_type  is_grantable
+bypassrls_user  BYPASSRLS             false
+
+statement ok
+SET ROLE bypassrls_user;
+
+query IT
+SELECT * FROM bypassrls ORDER BY id;
+----
+0   visible: 0
+1   hidden: 1
+2   visible: 2
+10  hidden: value
+11  hidden: value
+20  hidden: value
+30  hidden: value
+31  hidden: value
+
+query IT
+SELECT * FROM insert_policy_violation_as_session_user(40);
+----
+40 hidden: value
+
+statement ok
+SET ROLE root;
+
+statement ok
+REVOKE SYSTEM BYPASSRLS FROM bypassrls_user;
+
+statement ok
+SET ROLE bypassrls_user;
+
+query IT
+SELECT * FROM bypassrls ORDER BY id;
+----
+0 visible: 0
+2 visible: 2
+
+statement error pq: new row violates row-level security policy for table "bypassrls"
+SELECT * FROM insert_policy_violation_as_session_user(50);
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP FUNCTION insert_policy_violation_as_admin, insert_policy_violation_as_session_user
+
+statement ok
+DROP TABLE bypassrls;
+
+statement ok
+DROP USER bypassrls_user;
+
 subtest end

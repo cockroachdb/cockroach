@@ -1187,10 +1187,13 @@ func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 // SetRLSEnabled will update the metadata to indicate we came across a table
 // that had row-level security enabled.
 func (md *Metadata) SetRLSEnabled(
-	user username.SQLUsername, isAdmin bool, tableID TableID, isTableOwnerAndNotForced bool,
+	user username.SQLUsername,
+	isAdmin bool,
+	tableID TableID,
+	isTableOwnerAndNotForced, bypassRLS bool,
 ) {
 	md.rlsMeta.MaybeInit(user, isAdmin)
-	md.rlsMeta.AddTableUse(tableID, isTableOwnerAndNotForced)
+	md.rlsMeta.AddTableUse(tableID, isTableOwnerAndNotForced, bypassRLS)
 }
 
 // ClearRLSEnabled will clear out the initialized state for the rls meta. This
@@ -1231,8 +1234,26 @@ func (md *Metadata) checkRLSDependencies(
 		return false, nil
 	}
 
-	// We do not check for specific policy changes. Any time a policy is modified
-	// on a table, a new version of the table descriptor is created. The metadata
-	// dependency check already accounts for changes in the table descriptor version.
+	// Check if the current user has a role option/privilege that changed
+	// affecting the exemption of policies.
+	for i := range md.tables {
+		table := &md.tables[i]
+		policiesApplied, ok := md.rlsMeta.PoliciesApplied[table.MetaID]
+		if !ok {
+			continue
+		}
+		bypassRLS, err := optCatalog.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, md.rlsMeta.User)
+		if err != nil {
+			return false, err
+		}
+		if bypassRLS != policiesApplied.BypassRLS {
+			return false, nil
+		}
+	}
+
+	// We do not check for specific policy changes or exemption due to FORCE RLS.
+	// Any time a policy or table attribute such as forced is modified on a table,
+	// a new version of the table descriptor is created. The metadata dependency
+	// check already accounts for changes in the table descriptor version.
 	return true, nil
 }
