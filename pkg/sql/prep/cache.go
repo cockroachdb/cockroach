@@ -60,13 +60,19 @@ type event struct {
 
 // Init initializes an empty cache. If the cache contains any statements, they
 // are cleared.
-func (c *Cache) Init() {
-	// Clear the tape.
+func (c *Cache) Init(ctx context.Context) {
+	// Clear the tape and decrement added statement reference counts.
 	for i := range c.tape {
+		if c.tape[i].op == remove {
+			// Remove deletes the statement from the map without decrementing
+			// its reference count, so it must be decremented here.
+			c.tape[i].e.stmt.DecRef(ctx)
+		}
 		c.tape[i] = event{}
 	}
-	// Clear the map.
-	for name := range c.m {
+	// Clear the map and decrement the statement reference counts.
+	for name, e := range c.m {
+		e.stmt.DecRef(ctx)
 		delete(c.m, name)
 	}
 	// Reuse the tape and the map.
@@ -74,7 +80,7 @@ func (c *Cache) Init() {
 		m:    c.m,
 		tape: c.tape[:0],
 	}
-	// Initialize the map and "uses" list if necessary.
+	// Initialize the map and "uses" list.
 	if c.m == nil {
 		c.m = make(map[string]*entry)
 	}
