@@ -849,7 +849,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 		return nil
 	}
 
-	advanced, err := ca.frontier.ForwardResolvedSpan(ca.Ctx(), resolved)
+	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
@@ -1614,7 +1614,7 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 }
 
 func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
-	frontierChanged, err := cf.frontier.ForwardResolvedSpan(cf.Ctx(), resolved)
+	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
@@ -2034,22 +2034,38 @@ func makeSchemaChangeFrontier(
 
 // ForwardResolvedSpan advances the timestamp for a resolved span, taking care
 // of updating schema change boundary information.
+// The frontier is considered forwarded if either the frontier
+// timestamp advances or the current frontier timestamp becomes
+// a boundary timestamp (for some non-NONE boundary type)
+// and all the spans are at the boundary timestamp already.
 func (f *schemaChangeFrontier) ForwardResolvedSpan(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) (bool, error) {
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
+	forwarded, err = f.Forward(r.Span, r.Timestamp)
+	if err != nil {
+		return false, err
+	}
+	f.latestTs.Forward(r.Timestamp)
 	if r.BoundaryType != jobspb.ResolvedSpan_NONE {
 		// Boundary resolved events should be ingested from the schema feed
 		// serially, where the changefeed won't even observe a new schema change
 		// boundary until it has progressed past the current boundary.
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlier(r); err != nil {
 			return false, err
 		}
-		f.boundaryTime = r.Timestamp
-		f.boundaryType = r.BoundaryType
+		if r.Timestamp.After(f.boundaryTime) {
+			// Forward the boundary.
+			f.boundaryTime = r.Timestamp
+			f.boundaryType = r.BoundaryType
+			if !forwarded {
+				// The frontier is considered forwarded if the boundary type
+				// changes to non-NONE and all the spans are at the boundary
+				// timestamp already.
+				forwarded = f.schemaChangeBoundaryReached()
+			}
+		}
 	}
-
-	f.latestTs.Forward(r.Timestamp)
-	return f.Forward(r.Span, r.Timestamp)
+	return forwarded, nil
 }
 
 func (f *schemaChangeFrontier) ForwardLatestKV(ts time.Time) {
@@ -2128,20 +2144,16 @@ func (f *schemaChangeFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 
 // assertBoundaryNotEarlier is a helper method provided to assert that a
 // resolved span does not have an earlier boundary than the existing one.
-func (f *schemaChangeFrontier) assertBoundaryNotEarlier(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) error {
+func (f *schemaChangeFrontier) assertBoundaryNotEarlier(r jobspb.ResolvedSpan) error {
 	boundaryType := r.BoundaryType
 	if boundaryType == jobspb.ResolvedSpan_NONE {
 		return errors.AssertionFailedf("assertBoundaryNotEarlier should not be called for NONE boundary")
 	}
 	boundaryTS := r.Timestamp
 	if f.boundaryTime.After(boundaryTS) {
-		err := errors.AssertionFailedf("received resolved span for %s "+
+		return errors.AssertionFailedf("received resolved span for %s "+
 			"with %v boundary (%v), which is earlier than previously received %v boundary (%v)",
 			r.Span, r.BoundaryType, r.Timestamp, f.boundaryType, f.boundaryTime)
-		log.Errorf(ctx, "error while forwarding boundary resolved span: %v", err)
-		return err
 	}
 	return nil
 }
