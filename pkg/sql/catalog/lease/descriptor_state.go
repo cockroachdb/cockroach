@@ -203,10 +203,15 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 	for _, desc := range append([]*descriptorVersionState(nil), t.mu.active.data...) {
 		if desc.refcount.Load() == 0 {
 			t.mu.active.remove(desc)
-			if l := desc.mu.lease; l != nil {
-				desc.mu.lease = nil
-				leases = append(leases, l)
-			}
+			func() {
+				desc.mu.Lock()
+				defer desc.mu.Unlock()
+				if l := desc.mu.lease; l != nil {
+					desc.mu.lease = nil
+					leases = append(leases, l)
+
+				}
+			}()
 		}
 	}
 	return leases
