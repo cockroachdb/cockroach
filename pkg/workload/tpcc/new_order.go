@@ -187,9 +187,17 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 			allLocal = 0
 			// To avoid picking the local warehouse again, randomly choose among n-1
 			// warehouses and swap in the nth if necessary.
-			item.olSupplyWID = n.config.wPart.randActive(rng)
-			for item.olSupplyWID == wID {
+			if len(n.config.multiRegionCfg.regions) > 0 {
+				// For multi-region configurations, use the multi-region partitioner
+				item.olSupplyWID = n.config.wMRPart.randActive(rng)
+				for item.olSupplyWID == wID {
+					item.olSupplyWID = n.config.wMRPart.randActive(rng)
+				}
+			} else {
 				item.olSupplyWID = n.config.wPart.randActive(rng)
+				for item.olSupplyWID == wID {
+					item.olSupplyWID = n.config.wPart.randActive(rng)
+				}
 			}
 			n.config.auditor.Lock()
 			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++

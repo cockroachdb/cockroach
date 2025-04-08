@@ -484,9 +484,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if err != nil {
 					return errors.Wrap(err, "error creating multi-region partitioner")
 				}
+				w.auditor = newAuditor(w.activeWarehouses, w.wMRPart, w.affinityPartitions)
+			} else {
+				w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			}
 
-			w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			return initializeMix(w)
 		},
 		PreCreate: func(db *gosql.DB) error {
