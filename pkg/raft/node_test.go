@@ -589,12 +589,9 @@ func TestAppendPagination(t *testing.T) {
 }
 
 func TestCommitPagination(t *testing.T) {
+	const maxCommittedSize = 2048
 	s := newTestMemoryStorage(withPeers(1))
-	cfg := newTestConfig(1, 10, 1, s)
-	cfg.MaxCommittedSizePerReady = 2048
-	rn, err := NewRawNode(cfg)
-	require.NoError(t, err)
-
+	rn := newTestRawNode(1, 10, 1, s)
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
@@ -628,8 +625,7 @@ func TestCommitPagination(t *testing.T) {
 	rd = rn.Ready()
 	// TODO(pav-kv): we no longer need this test after the flow control policy is
 	// moved up the stack.
-	committed, err := rn.LogSnapshot().Slice(
-		rd.Committed, uint64(rn.raft.raftLog.maxApplyingEntsSize))
+	committed, err := rn.LogSnapshot().Slice(rd.Committed, maxCommittedSize)
 	require.NoError(t, err)
 	require.Len(t, committed, 2)
 	require.NoError(t, s.Append(rd.Entries))
@@ -637,8 +633,7 @@ func TestCommitPagination(t *testing.T) {
 	rn.AckApplied(committed)
 
 	rd = rn.Ready()
-	committed, err = rn.LogSnapshot().Slice(
-		rd.Committed, uint64(rn.raft.raftLog.maxApplyingEntsSize))
+	committed, err = rn.LogSnapshot().Slice(rd.Committed, maxCommittedSize)
 	require.NoError(t, err)
 	require.Len(t, committed, 1)
 	require.NoError(t, s.Append(rd.Entries))
@@ -648,11 +643,8 @@ func TestCommitPagination(t *testing.T) {
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
-	cfg := newTestConfig(1, 10, 1, s)
-	cfg.MaxCommittedSizePerReady = 2048
+	rn := newTestRawNode(1, 10, 1, s)
 
-	rn, err := NewRawNode(cfg)
-	require.NoError(t, err)
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
