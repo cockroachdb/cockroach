@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
 )
 
@@ -561,6 +562,15 @@ func evaluateCommand(
 		}
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
 			args.Method(), trunc(args.String()), h.Txn, resp, err)
+	}
+
+	// If there is a pebble data corruption error, we want to serialize it by
+	// returning the KV error PebbleCorruptionError. This way, the error can be
+	// extracted by KV clients.
+	if err != nil {
+		if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
+			err = kvpb.NewPebbleCorruptionError(rec.StoreID(), info)
+		}
 	}
 	return pd, err
 }
