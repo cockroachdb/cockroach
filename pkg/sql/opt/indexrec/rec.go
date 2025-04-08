@@ -271,6 +271,10 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 		sb.WriteByte(';')
 		return Rec{sb.String(), TypeCreateIndex}, nil
 	case TypeReplaceIndex:
+		setCmd := tree.SetVar{
+			Name:   "autocommit_before_ddl",
+			Values: tree.Exprs{tree.NewStrVal("true")},
+		}
 		dropCmd := tree.DropIndex{
 			IndexList: []*tree.TableIndexName{{
 				Table: tableName,
@@ -285,6 +289,9 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 			Unique: existingIndex.IsUnique(),
 			Type:   ir.index.Type(),
 		}
+		sb.WriteString(setCmd.String())
+		sb.WriteByte(';')
+		sb.WriteByte(' ')
 		sb.WriteString(createCmd.String())
 		sb.WriteByte(';')
 		sb.WriteByte(' ')
