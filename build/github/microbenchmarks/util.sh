@@ -8,7 +8,7 @@
 set -euxo pipefail
 
 bazel build --config=crosslinux $(./build/github/engflow-args.sh) \
-  --jobs 100 \
+  --jobs 50 \
   --bes_keywords integration-test-artifact-build \
   //pkg/cmd/microbench-ci
 
