@@ -470,6 +470,13 @@ func (oc *optCatalog) HasRoleOption(
 	return oc.planner.HasRoleOption(ctx, roleOption)
 }
 
+// UserHasGlobalPrivilegeOrRoleOption is part of the cat.Catalog interface.
+func (oc *optCatalog) UserHasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
+) (bool, error) {
+	return oc.planner.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege, user)
+}
+
 // FullyQualifiedName is part of the cat.Catalog interface.
 func (oc *optCatalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
