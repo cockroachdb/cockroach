@@ -81,7 +81,7 @@ plot stat=cpu sample=1  show_last_value=true show_initial_value=true
                                                cpu
 
 initial store values: [s1=0 s2=0 s3=0 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0]
-last store values: [s1=37190 s2=27532 s3=36177 s4=498 s5=498 s6=498 s7=0 s8=0 s9=0]
+last store values: [s1=37234 s2=27494 s3=36148 s4=499 s5=499 s6=499 s7=0 s8=0 s9=0]
 ----
 ----
 

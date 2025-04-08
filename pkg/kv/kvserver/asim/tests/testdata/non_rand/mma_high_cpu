@@ -48,7 +48,7 @@ plot stat=cpu sample=1  show_last_value=true
       0 ┼╯
                                                cpu
 
-last store values: [s1=119344 s2=121079 s3=120605 s4=117007 s5=102101 s6=81831 s7=71732 s8=112323 s9=97018 s10=86610]
+last store values: [s1=119344 s2=121079 s3=120605 s4=116977 s5=102119 s6=81795 s7=71776 s8=112323 s9=97018 s10=86610]
 ----
 ----
 
