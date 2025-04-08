@@ -224,8 +224,13 @@ func newResolvedSpanFrontier(
 }
 
 // ForwardResolvedSpan forwards the progress of a resolved span.
-func (f *resolvedSpanFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool, error) {
-	forwarded, err := f.Forward(r.Span, r.Timestamp)
+// The frontier is considered forwarded if either the frontier
+// timestamp advances or the boundary is advanced and the frontier
+// is already at that timestamp.
+func (f *resolvedSpanFrontier) ForwardResolvedSpan(
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
+	forwarded, err = f.Forward(r.Span, r.Timestamp)
 	if err != nil {
 		return false, err
 	}
@@ -235,7 +240,12 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool,
 			ts:  r.Timestamp,
 			typ: r.BoundaryType,
 		}
-		f.boundary.Forward(newBoundary)
+		boundaryForwarded := f.boundary.Forward(newBoundary)
+		if boundaryForwarded && !forwarded {
+			// The frontier is considered forwarded if the boundary
+			// was advanced and we are already at the boundary.
+			forwarded, _, _ = f.AtBoundary()
+		}
 	}
 	return forwarded, nil
 }
@@ -375,9 +385,9 @@ func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_B
 	return false, 0
 }
 
-// After returns whether a timestamp is later than the boundary timestamp.
+// After returns whether the boundary is after a given timestamp.
 func (b *resolvedSpanBoundary) After(ts hlc.Timestamp) bool {
-	return ts.Less(b.ts)
+	return b.ts.After(ts)
 }
 
 // Forward forwards the boundary to the new boundary if it is later.
