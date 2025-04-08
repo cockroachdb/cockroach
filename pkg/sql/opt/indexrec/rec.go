@@ -271,10 +271,6 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 		sb.WriteByte(';')
 		return Rec{sb.String(), TypeCreateIndex}, nil
 	case TypeReplaceIndex:
-		setCmd := tree.SetVar{
-			Name:   "autocommit_before_ddl",
-			Values: tree.Exprs{tree.NewStrVal("true")},
-		}
 		dropCmd := tree.DropIndex{
 			IndexList: []*tree.TableIndexName{{
 				Table: tableName,
@@ -289,14 +285,21 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 			Unique: existingIndex.IsUnique(),
 			Type:   ir.index.Type(),
 		}
-		sb.WriteString(setCmd.String())
-		sb.WriteByte(';')
-		sb.WriteByte(' ')
+		alterCmd := tree.AlterIndexVisible{
+			Index: tree.TableIndexName{
+				Table: tableName,
+				Index: tree.UnrestrictedName(existingIndex.Name()),
+			},
+			Invisibility: tree.IndexInvisibility{
+				Value: 1.0,
+			},
+		}
 		sb.WriteString(createCmd.String())
-		sb.WriteByte(';')
-		sb.WriteByte(' ')
+		sb.WriteString(";\n-- After creating the new index, manually run:\n--   ")
+		sb.WriteString(alterCmd.String())
+		sb.WriteString(";\n-- and then, after verifying workload performance, manually run:\n--   ")
 		sb.WriteString(dropCmd.String())
-		sb.WriteByte(';')
+		sb.WriteString(";\n")
 		return Rec{sb.String(), TypeReplaceIndex}, nil
 	case TypeAlterIndex:
 		alterCmd := tree.AlterIndexVisible{
