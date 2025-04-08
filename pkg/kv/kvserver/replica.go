@@ -1084,11 +1084,12 @@ type Replica struct {
 		pendingGCThreshold hlc.Timestamp
 	}
 
-	// cachedClosedTimestampPolicy is the cached closed timestamp policy of the
+	// CachedClosedTimestampPolicy is the cached closed timestamp policy of the
 	// range. It is updated asynchronously by listening on span configuration
 	// changes, leaseholder changes, and periodically at the interval of
-	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
-	cachedClosedTimestampPolicy atomic.Int32
+	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher. Exported
+	// for testing-only reasons.
+	CachedClosedTimestampPolicy atomic.Int32
 }
 
 // String returns the string representation of the replica using an
@@ -1333,7 +1334,7 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 	if r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	return ctpb.RangeClosedTimestampPolicy(r.CachedClosedTimestampPolicy.Load())
 }
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
@@ -1357,7 +1358,7 @@ func (r *Replica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration) {
 		}
 		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
 	}
-	r.cachedClosedTimestampPolicy.Store(int32(policy()))
+	r.CachedClosedTimestampPolicy.Store(int32(policy()))
 }
 
 // NodeID returns the ID of the node this replica belongs to.

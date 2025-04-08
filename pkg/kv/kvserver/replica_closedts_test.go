@@ -1095,7 +1095,7 @@ func TestClosedTimestampPolicyRefreshIntervalOnLeaseTransfers(t *testing.T) {
 	})
 
 	// Force repl2 policy to be LAG_BY_CLUSTER_SETTING.
-	repl2.TestingSetCachedClosedTimestampPolicy(ctpb.LAG_BY_CLUSTER_SETTING)
+	r.CachedClosedTimestampPolicy.Store(int32(ctpb.LAG_BY_CLUSTER_SETTING))
 	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl2.GetRangeInfo(ctx).ClosedTimestampPolicy)
 
 	// Ensure that transferring the lease to repl2 does trigger a lease refresh.
