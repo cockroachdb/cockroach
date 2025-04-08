@@ -355,6 +355,7 @@ func UserAuthCertHook(
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
 					systemIdentity,
+					peerCert.SerialNumber.String(),
 					peerCert.NotAfter.Unix(),
 				)
 			}
