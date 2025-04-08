@@ -445,54 +445,67 @@ const (
 )
 
 func (c *cursorMap) closeAll(p *planner, reason cursorCloseReason) error {
-	for n, curs := range c.cursors {
-		switch reason {
-		case cursorCloseForTxnCommit:
-			if curs.withHold {
-				// Cursors declared using WITH HOLD are not closed at transaction
-				// commit, and become the responsibility of the session.
-				curs.committed = true
-				if !curs.persisted {
-					// Execute the cursor's query to completion and persist the result so
-					// that it can survive the transaction's commit.
-					if err := persistCursor(p, curs); err != nil {
-						return err
-					}
+	if reason == cursorCloseForTxnCommit {
+		for _, curs := range c.cursors {
+			if curs.withHold && !curs.persisted {
+				// Execute the cursor's query to completion and persist the result so
+				// that it can survive the transaction's commit. The cursor will become
+				// the responsibility of the session.
+				if err := persistCursor(p, curs); err != nil {
+					return errors.CombineErrors(err, c.closeAll(p, cursorCloseForTxnRollback))
 				}
-				continue
-			}
-		case cursorCloseForTxnRollback:
-			if curs.committed {
-				// Transaction rollback should only remove cursors that were created in
-				// the current transaction.
-				continue
-			}
-		case cursorCloseForTxnPrepare:
-			if curs.withHold && !curs.committed {
-				// Disallow preparing a transaction that has created a cursor WITH HOLD.
-				// It's fine for previous transactions to have created holdable cursors.
-				// NOTE: Postgres also disallows this.
-				//
-				// Make sure to close all cursors before returning the error.
-				err := c.closeAll(p, cursorCloseForTxnRollback)
-				return errors.CombineErrors(
-					pgerror.New(pgcode.FeatureNotSupported,
-						"cannot PREPARE a transaction that has created a cursor WITH HOLD"),
-					err,
-				)
 			}
 		}
-		if err := curs.Close(); err != nil {
-			return err
-		}
-		delete(c.cursors, n)
 	}
+	// Close the cursor iterators/containers. Make sure to continue closing even
+	// if one of them fails.
+	var retErr error
+	for _, curs := range c.cursors {
+		if reason != cursorCloseForExplicitClose && curs.committed {
+			// A holdable cursor from a previously committed transaction should remain
+			// open, except for a session close.
+			continue
+		}
+		if reason == cursorCloseForTxnCommit && curs.withHold {
+			// A holdable cursor remains open after transaction commit.
+			continue
+		}
+		if reason == cursorCloseForTxnPrepare && curs.withHold && !curs.committed {
+			// Disallow preparing a transaction that has created a cursor WITH HOLD.
+			// It's fine for previous transactions to have created holdable cursors.
+			// NOTE: Postgres also disallows this.
+			//
+			// Make sure to close all cursors before returning the error.
+			err := c.closeAll(p, cursorCloseForTxnRollback)
+			return errors.CombineErrors(
+				pgerror.New(pgcode.FeatureNotSupported,
+					"cannot PREPARE a transaction that has created a cursor WITH HOLD"),
+				err,
+			)
+		}
+		retErr = errors.CombineErrors(retErr, curs.Close())
+	}
+	if reason == cursorCloseForTxnCommit && retErr != nil {
+		return errors.CombineErrors(retErr, c.closeAll(p, cursorCloseForTxnRollback))
+	}
+	// Remove closed cursors from the map. Mark holdable cursors as committed
+	// for a transaction commit.
 	if reason == cursorCloseForExplicitClose {
 		// All cursors are closed for explicit close, so we can lose the reference
 		// to the map.
 		c.cursors = nil
+	} else {
+		for n, curs := range c.cursors {
+			if reason == cursorCloseForTxnCommit && curs.withHold {
+				curs.committed = true
+			}
+			if curs.committed {
+				continue
+			}
+			delete(c.cursors, n)
+		}
 	}
-	return nil
+	return retErr
 }
 
 func (c *cursorMap) closeCursor(s tree.Name) error {
@@ -583,7 +596,7 @@ func (p *planner) checkNoConflictingCursors(stmt tree.Statement) error {
 
 // persistCursor runs the given cursor to completion and stores the result in a
 // row container that can outlive the cursor's transaction.
-func persistCursor(p *planner, cursor *sqlCursor) error {
+func persistCursor(p *planner, cursor *sqlCursor) (retErr error) {
 	// Use context.Background() because the cursor can outlive the context in
 	// which it was created.
 	helper := persistedCursorHelper{
@@ -602,6 +615,12 @@ func persistCursor(p *planner, cursor *sqlCursor) error {
 		p.ExtendedEvalContextCopy(),
 		"persisted_cursor", /* opName */
 	)
+	defer func() {
+		if retErr != nil {
+			// Close the container if we encountered an error.
+			helper.container.Close(helper.ctx)
+		}
+	}()
 	for {
 		ok, err := cursor.Next(helper.ctx)
 		if err != nil {
@@ -619,6 +638,7 @@ func persistCursor(p *planner, cursor *sqlCursor) error {
 		return err
 	}
 	cursor.Rows = &helper
+	cursor.persisted = true
 	return nil
 }
 
