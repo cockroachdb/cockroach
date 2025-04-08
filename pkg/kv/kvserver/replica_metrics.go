@@ -47,6 +47,7 @@ type ReplicaMetrics struct {
 	Underreplicated          bool
 	Overreplicated           bool
 	Decommissioning          bool
+	RaftLogSize              int64
 	RaftLogTooLarge          bool
 	BehindCount              int64
 	PausedFollowerCount      int64
@@ -190,6 +191,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		Underreplicated:           underreplicated,
 		Overreplicated:            overreplicated,
 		Decommissioning:           decommissioning,
+		RaftLogSize:               d.raftLogSize,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		BehindCount:              leaderBehindCount,
