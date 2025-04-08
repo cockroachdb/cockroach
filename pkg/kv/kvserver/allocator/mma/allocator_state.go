@@ -283,10 +283,10 @@ func (a *allocatorState) rebalanceStores(
 				}
 				log.Infof(ctx,
 					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with "+
-						"resulting loads %v %v (means: %v)",
+						"resulting loads %v %v (means: %v) (frac_pending: %.2f %.2f)",
 					ss.NodeID, store.StoreID, rangeID,
 					removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
-					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load)
+					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load, ss.maxFractionPending, targetSS.maxFractionPending)
 				if leaseTransferCount >= maxLeaseTransferCount {
 					return changes
 				}
@@ -295,7 +295,14 @@ func (a *allocatorState) rebalanceStores(
 					break
 				}
 			}
-			if doneShedding {
+			if doneShedding || leaseTransferCount > 0 {
+				// If managed to transfer a lease, wait for it to be done, before
+				// shedding replicas from this store (which is more costly). Otherwise
+				// we may needlessly start moving replicas. Note that the store
+				// rebalancer will call the rebalance method again after the lease
+				// transfer is done and we may still be considering those transfers as
+				// pending from a load perspective, so we *may* not be able to do more
+				// lease transfers -- so be it.
 				continue
 			}
 		}
