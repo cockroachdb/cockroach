@@ -222,7 +222,7 @@ func Test_assertValidTest(t *testing.T) {
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
-		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades`,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades to v23.1.2, max is 3`,
 		fatalErr.Error(),
 	)
 
