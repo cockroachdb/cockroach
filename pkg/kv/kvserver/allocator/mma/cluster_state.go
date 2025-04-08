@@ -1513,8 +1513,20 @@ func (cs *clusterState) canShedAndAddLoad(
 	// stricter and expect targetSS to be better than loadNoChange -- this will
 	// delay making a potentially non-ideal choice of targetSS until it has no
 	// pending changes.
+	var targetSummary loadSummary
+	if false {
+		targetSummary = targetSLS.dimSummary[CPURate]
+		if targetSummary < targetSLS.nls {
+			targetSummary = targetSLS.nls
+		}
+	} else {
+		targetSummary = targetSLS.sls
+		if targetSummary < targetSLS.nls {
+			targetSummary = targetSLS.nls
+		}
+	}
 	canAddLoad := !targetSLS.highDiskSpaceUtilization &&
-		((targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange) ||
+		(targetSummary < loadNoChange ||
 			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
 				targetSLS.nls <= srcSLS.nls))
 	// We already filtered out stores >= loadNoChange before attempting to add
