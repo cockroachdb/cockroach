@@ -83,25 +83,10 @@ type raftLog struct {
 	applied uint64
 
 	logger raftlogger.Logger
-
-	// maxApplyingEntsSize limits the outstanding byte size of the messages
-	// returned from calls to nextCommittedEnts that have not been acknowledged
-	// by a call to appliedTo.
-	maxApplyingEntsSize entryEncodingSize
 }
 
-// newLog returns log using the given storage and default options. It
-// recovers the log to the state that it just commits and applies the
-// latest snapshot.
+// newLog returns a raft log initialized to the state in the given storage.
 func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
-	return newLogWithSize(storage, logger, noLimit)
-}
-
-// newLogWithSize returns a log using the given storage and max
-// message size.
-func newLogWithSize(
-	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
-) *raftLog {
 	compacted, lastIndex := storage.Compacted(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
@@ -109,10 +94,9 @@ func newLogWithSize(
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
-		storage:             storage,
-		unstable:            newUnstable(last, logger),
-		termCache:           newTermCache(termCacheSize, last),
-		maxApplyingEntsSize: maxApplyingEntsSize,
+		storage:   storage,
+		unstable:  newUnstable(last, logger),
+		termCache: newTermCache(termCacheSize, last),
 
 		// Initialize our committed and applied pointers to the time of the last
 		// compaction.
@@ -292,7 +276,7 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 	if span.Empty() {
 		return nil
 	}
-	ents, err := l.slice(uint64(span.After), uint64(span.Last), l.maxApplyingEntsSize)
+	ents, err := l.slice(uint64(span.After), uint64(span.Last), noLimit)
 	if err != nil {
 		l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
 	}
