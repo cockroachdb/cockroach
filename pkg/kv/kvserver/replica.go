@@ -2737,6 +2737,21 @@ func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
 }
 
+// TODO(wenyihu6): rename the *ForTesting functions to be Testing* (see
+// #144119 for more details).
+
+// SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
+// to be the given policy. It is a test-only helper method.
+func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
+	r.cachedClosedTimestampPolicy.Store(int32(policy))
+}
+
+// GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
+// It is a test-only helper method.
+func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+}
+
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
 // replicate queue iff:
 //
