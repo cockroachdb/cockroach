@@ -86,7 +86,7 @@ func executeSupportedDDLs(
 	// here because these connnections are managed by the mixedversion
 	// framework, which already closes them at the end of the test.
 	testUtils, err := newCommonTestUtils(
-		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes, false, false,
+		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes,
 	)
 	if err != nil {
 		return err
