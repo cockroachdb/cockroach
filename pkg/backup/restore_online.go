@@ -61,6 +61,8 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 	settings.WithVisibility(settings.Reserved),
 )
 
+const linkCompleteKey = "link_complete"
+
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
 // files in the entries in those spans were ingested the amount ingested between

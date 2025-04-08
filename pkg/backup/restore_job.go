@@ -297,11 +297,27 @@ func restore(
 		return emptyRowCount, nil
 	}
 
+	job := resumer.job
+	details := job.Details().(jobspb.RestoreDetails)
+
+	if details.OnlineImpl() {
+		var linkPhaseComplete bool
+		if err := execCtx.ExecCfg().InternalDB.Txn(restoreCtx, func(ctx context.Context, txn isql.Txn) error {
+			jobInfo := jobs.InfoStorageForJob(txn, resumer.job.ID())
+			_, ok, err := jobInfo.Get(ctx, "get-link-complete-key", linkCompleteKey)
+			linkPhaseComplete = ok
+			return err
+		}); err != nil {
+			log.Warningf(restoreCtx, "failed to get checkpoint for link phase %v", err)
+		}
+		if linkPhaseComplete {
+			return emptyRowCount, nil
+		}
+	}
+
 	// If we've already migrated some of the system tables we're about to
 	// restore, this implies that a previous attempt restored all of this data.
 	// We want to avoid restoring again since we'll be shadowing migrated keys.
-	job := resumer.job
-	details := job.Details().(jobspb.RestoreDetails)
 	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
 		return emptyRowCount, nil
 	}
@@ -1982,6 +1998,16 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
+
+	if details.OnlineImpl() {
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			jobInfo := jobs.InfoStorageForJob(txn, r.job.ID())
+			return jobInfo.Write(ctx, linkCompleteKey, []byte{})
+		}); err != nil {
+			log.Warningf(ctx, "failed to checkpoint link flow %v", err)
+		}
+	}
+
 	if details.ExperimentalCopy {
 		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
 		if err != nil {
