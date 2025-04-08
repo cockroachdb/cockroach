@@ -29,6 +29,7 @@ import (
 type PolicyRefresher struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
+	knobs    *TestingKnobs
 
 	// getLeaseholderReplicas returns the set of replicas that are currently
 	// leaseholders of the node.
@@ -64,6 +65,7 @@ func NewPolicyRefresher(
 	settings *cluster.Settings,
 	getLeaseholderReplicas func() []Replica,
 	getNodeLatencies func() map[roachpb.NodeID]time.Duration,
+	knobs *TestingKnobs,
 ) *PolicyRefresher {
 	if getLeaseholderReplicas == nil || getNodeLatencies == nil {
 		log.Fatalf(context.Background(), "getLeaseholderReplicas and getNodeLatencies must be non-nil")
@@ -72,6 +74,7 @@ func NewPolicyRefresher(
 	refresher := &PolicyRefresher{
 		stopper:                stopper,
 		settings:               settings,
+		knobs:                  knobs,
 		getLeaseholderReplicas: getLeaseholderReplicas,
 		getNodeLatencies:       getNodeLatencies,
 		refreshNotificationCh:  make(chan struct{}, 1),
@@ -127,6 +130,10 @@ func (pr *PolicyRefresher) updateLatencyCache() {
 // getCurrentLatencies returns the current latency information if auto-tuning is
 // enabled and the cluster has been fully upgraded to v25.2, or nil otherwise.
 func (pr *PolicyRefresher) getCurrentLatencies() map[roachpb.NodeID]time.Duration {
+	// Testing knobs only.
+	if pr.knobs != nil && pr.knobs.InjectedLatencies != nil {
+		return pr.knobs.InjectedLatencies()
+	}
 	if !closedts.LeadForGlobalReadsAutoTuneEnabled.Get(&pr.settings.SV) || !pr.settings.Version.IsActive(context.TODO(), clusterversion.V25_2) {
 		return nil
 	}
