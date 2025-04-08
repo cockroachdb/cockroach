@@ -467,6 +467,7 @@ func (r *Replica) leasePostApplyLocked(
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
 	r.shMu.state.Lease = newLease
+	r.mu.mmaRangeMessageNeeded.set()
 
 	now := r.store.Clock().NowAsClockTimestamp()
 

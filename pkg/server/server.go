@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -50,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -501,7 +505,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 
-	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	// TODO(kvoli,sumeerbhola): Find a better place for this, it is adqeuate here
+	// but passing into the Stores struct seems odd, given this is w.r.t a
+	// Server, or ignoring SQL, a KVServer Node.
+	kvRuntimeLoadMonitor := load.NewRuntimeLoadMonitor()
+	_ = kvRuntimeLoadMonitor.Start(ctx, stopper)
+	stores := kvserver.NewStores(cfg.AmbientCtx, clock, kvRuntimeLoadMonitor)
 
 	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
@@ -571,6 +580,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeLiveCountFn,
 		nodeLivenessFn,
 		/* deterministic */ false,
+	)
+
+	mmAllocator := mma.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	// TODO: Move this into a dedicated integration struct (per node, not
+	// per-store) for mma.Allocator.
+	g.RegisterCallbackWithOrigTimestamp(
+		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+		func(_ string, content roachpb.Value, origTimestampNanos int64) {
+			var storeDesc roachpb.StoreDescriptor
+			if err := content.GetProto(&storeDesc); err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			storeLoadMsg := allocator.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
+			mmAllocator.SetStore(storeDesc)
+			mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
+		},
 	)
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
@@ -889,6 +916,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ScanMinIdleTime:              cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
+		MMAllocator:                  mmAllocator,
 		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
 		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:          tsDB,
@@ -915,6 +943,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
+		NodeCapacityProvider:         stores,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)

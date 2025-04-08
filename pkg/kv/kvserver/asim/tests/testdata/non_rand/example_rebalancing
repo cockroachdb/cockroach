@@ -5,11 +5,11 @@
 gen_cluster nodes=7
 ----
 
-gen_ranges ranges=7 placement_skew=true
+gen_ranges ranges=7 placement_type=skewed
 ----
 
 # Create a load generator, where there are 7k ops/s and the access follows a
-# zipfian distribution on the keyspace.
+# uniform distribution on the keyspace.
 gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 ----
 
@@ -27,7 +27,7 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 
 # The generators are then called and 2 simulation runs, named samples are
-# created and evaluated. Each sample has a fixed duration of 5 minutes.
+# created and evaluated. Each sample has a fixed duration of 3 minutes.
 # Following the evaluation, the samples are checked individually against the
 # existing assertions, added above. If any assertion fails, the reason is
 # printed. If no assertions fail, then OK is printed.
@@ -44,23 +44,47 @@ plot stat=qps sample=2
 ----
 ----
 
- 5021 ┤ ╭╮
- 4686 ┤ ││
- 4351 ┤ │╰╮
- 4017 ┤ │ ╰──────────────────────╮
- 3682 ┤ │                        │
- 3347 ┤ │                        │
- 3013 ┤ │                        │
- 2678 ┤ │                        │
- 2343 ┤ │                        ╰╮
- 2008 ┤ │                         │ ╭───────────────────────╮
- 1674 ┤ │                         │╭╯                       │
- 1339 ┤ │                         ││                        │
- 1004 ┤ │ ╭────────────────────────╯╭─────────────────────────────────────────────────
-  669 ┤ │╭│ │                       │                         │
-  335 ┤ │││ │                       │                         │
-    0 ┼─────────────────────────────╯─────────────────────────╯
+ 4933 ┤ ╭╮
+ 4604 ┤ ││
+ 4275 ┤ ││
+ 3946 ┤ ││
+ 3617 ┤ ││
+ 3288 ┤ │╰╮
+ 2960 ┤ │ ╰──────────────────────╮
+ 2631 ┤ │                        │
+ 2302 ┤ │                        │
+ 1973 ┤ │  ╭─────────────────────╮  ╭───────────────────────╮
+ 1644 ┤ │  │                     │  │                       │
+ 1315 ┤ │  │                     │╮ │                       │
+  987 ┤ │ ╭─╭─────────────────────────────────────────────────╭───────────────────────
+  658 ┤ │╭│ │                      ╭╯                         │
+  329 ┤ │││ │                      │                          │
+    0 ┼───────────────────────────────────────────────────────╯
                                              qps
+----
+----
+
+plot stat=replica_moves sample=2
+----
+----
+
+ 6.00 ┤   ╭───────────────────────────────────────────────────────────────────────────
+ 5.60 ┤  ╭╯
+ 5.20 ┤  │
+ 4.80 ┤  │
+ 4.40 ┤  │
+ 4.00 ┤  │
+ 3.60 ┤  │
+ 3.20 ┤ ╭╯
+ 2.80 ┤ │
+ 2.40 ┤ │
+ 2.00 ┤ │
+ 1.60 ┤ │
+ 1.20 ┤╭╯╭────────────────────────────────────────────────────────────────────────────
+ 0.80 ┤│ │
+ 0.40 ┤│ │
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                        replica_moves
 ----
 ----
 
@@ -71,15 +95,16 @@ setting gossip_delay=20s
 ----
 
 # Evaluate with the updated gossip setting but otherwise identical generators
-# and seed. Here we see that neither the balance assertion nor steady state
-# assertion is reached due to how the system reacts to the long gossip delays.
+# and seed. Here we see that the balance assertion and steady state assertion
+# are reached, but after more fluctuation and a longer duration of 5m, due to
+# how the system reacts to the long gossip delays.
 eval duration=5m samples=2 seed=42
 ----
 OK
 
-# To investigate further, plot the QPS output again. The plotted output matches
-# expectations given the assertion failed, The system exhibits thrashing as
-# rebalancing occurs frequently but without actually achieving convergence.
+# To investigate further, plot the QPS output again. The plotted output
+# exhibits thrashing as rebalancing occurs frequently with eventual
+# convergence.
 plot stat=qps sample=3
 ----
 ----
@@ -93,40 +118,40 @@ plot stat=qps sample=3
  4200 ┤ │    │
  3733 ┤ │    │
  3267 ┤ │    │
- 2800 ┤ │    ╰╮╭────╮╭─╮ ╭────────────╮ ╭─────────────╮
- 2333 ┤ │     ││    ││ │ │            ╰╮│             │
- 1867 ┤ │     ╭╯╭───│╯─│─╯─────╮ ╭─────╮│             ╰╮
- 1400 ┤ │     │ │   │ ││ │     │ │     ││              │
-  933 ┤ │    ╭│╭╯   │╭╯╰╭───────────────│──────────────╰──────────────────────────────
-  467 ┤ │    │││    ││  │       │      ││               │
-    0 ┼─────────────────────────────────╯───────────────╯
+ 2800 ┤ │    ╰╮╭────╮
+ 2333 ┤ │     ││    │
+ 1867 ┤ │     ╭╯╭───│──╮╭─────────────╮
+ 1400 ┤ │     │ │   │  ││    │        ╰╮
+  933 ┤ │    ╭│╭╯   │╭────────────────────────────────────────────────────────────────
+  467 ┤ │    │││    │││││    ││         │
+    0 ┼──────────────╯──╯─────╯─────────╯
                                              qps
 ----
 ----
 
 # Plot the replica movements for the same sample, we should see a steadily
 # increasing counter for each store; indicating that rebalancing activity is
-# persistent.
+# persistent, until convergence.
 plot stat=replica_moves sample=3
 ----
 ----
 
- 14.00 ┤                         ╭─────────────────────────────────────────────────────
- 13.07 ┤                        ╭╯
- 12.13 ┤                ╭───────╯
- 11.20 ┤        ╭───────╯
- 10.27 ┤       ╭╯
-  9.33 ┤       │
-  8.40 ┤       │
-  7.47 ┤       │
-  6.53 ┤      ╭╯
-  5.60 ┤      │                         ╭──────────────────────────────────────────────
-  4.67 ┤      │      ╭─────────────────────────────────────────────────────────────────
-  3.73 ┤      │      │   ╭──────────────╯
-  2.80 ┤     ╭╯      │  ╭╯──────╯
-  1.87 ┤     │  ╭────╯──╯──────╭───────────────────────────────────────────────────────
-  0.93 ┤     │╭╭╯────│  ╭──────╯                        ╭──────────────────────────────
-  0.00 ┼────────────────────────────────────────────────╯
+ 15.00 ┤                      ╭────────────────────────────────────────────────────────
+ 14.00 ┤                      │
+ 13.00 ┤                ╭─────╯
+ 12.00 ┤                │
+ 11.00 ┤        ╭───────╯
+ 10.00 ┤       ╭╯
+  9.00 ┤       │
+  8.00 ┤       │
+  7.00 ┤       │
+  6.00 ┤      ╭╯
+  5.00 ┤      │      ╭─────────────────────────────────────────────────────────────────
+  4.00 ┤      │      │        ╭────╭───────────────────────────────────────────────────
+  3.00 ┤      │      │  ╭──────────╯───╯
+  2.00 ┤     ╭╯ ╭────╯──╯     ╭────────────────────────────────────────────────────────
+  1.00 ┤     │╭╭╯────│  ╭─────╯    ╭───────────────────────────────────────────────────
+  0.00 ┼───────────────────────────╯
                                          replica_moves
 ----
 ----

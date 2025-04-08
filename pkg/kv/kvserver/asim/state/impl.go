@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -189,16 +192,21 @@ func (s *state) String() string {
 		}
 	}
 	builder.WriteString("] ")
+	builder.WriteString("\n")
 
 	nRanges := len(orderedRanges)
 	iterRanges := 0
 	builder.WriteString(fmt.Sprintf("ranges(%d)=[", nRanges))
+	numOfRangesPerLine := 5
 	for _, r := range orderedRanges {
 		builder.WriteString(r.String())
 		if iterRanges < nRanges-1 {
 			builder.WriteString(",")
 		}
 		iterRanges++
+		if iterRanges%numOfRangesPerLine == 0 {
+			builder.WriteString("\n")
+		}
 	}
 	builder.WriteString("]")
 
@@ -254,6 +262,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 	}
 }
 
+// capacity returns the store capacity of the store with the given storeID.
 func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
 	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
@@ -265,8 +274,10 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// We re-use the existing store capacity and selectively zero out the fields
 	// we intend to change.
 	capacity := store.desc.Capacity
+	capacity.CPUPerSecond = 0
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
+	capacity.WriteBytesPerSecond = 0
 	capacity.LogicalBytes = 0
 	capacity.LeaseCount = 0
 	capacity.RangeCount = 0
@@ -275,20 +286,19 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 
 	for _, repl := range s.Replicas(storeID) {
 		rangeID := repl.Range()
-		replicaID := repl.ReplicaID()
 		rng, _ := s.Range(rangeID)
-		if rng.Leaseholder() == replicaID {
-			// TODO(kvoli): We currently only consider load on the leaseholder
-			// replica for a range. The other replicas have an estimate that is
-			// calculated within the allocation algorithm. Adapt this to
-			// support follower reads, when added to the workload generator.
-			usage := s.RangeUsageInfo(rng.RangeID(), storeID)
-			capacity.QueriesPerSecond += usage.QueriesPerSecond
-			capacity.WritesPerSecond += usage.WritesPerSecond
-			capacity.LogicalBytes += usage.LogicalBytes
+		usage := s.RangeUsageInfo(rng.RangeID(), storeID)
+		leaseholder, _ := s.LeaseholderStore(rangeID)
+
+		capacity.RangeCount++
+		if leaseholder.StoreID() == storeID {
 			capacity.LeaseCount++
 		}
-		capacity.RangeCount++
+		capacity.QueriesPerSecond += usage.QueriesPerSecond
+		capacity.WritesPerSecond += usage.WritesPerSecond
+		capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
+		capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
+		capacity.LogicalBytes += usage.LogicalBytes
 	}
 
 	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
@@ -316,6 +326,11 @@ func (s *state) Nodes() []Node {
 		return cmp.Compare(a.NodeID(), b.NodeID())
 	})
 	return nodes
+}
+
+func (s *state) Node(nodeID NodeID) Node {
+	node := s.nodes[nodeID]
+	return node
 }
 
 // RangeFor returns the range containing Key in [StartKey, EndKey). This
@@ -412,9 +427,10 @@ func (s *state) AddNode() Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
 	node := &node{
-		nodeID: nodeID,
-		desc:   roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
-		stores: []StoreID{},
+		nodeID:      nodeID,
+		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
+		stores:      []StoreID{},
+		mmAllocator: mma.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed))),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -551,6 +567,50 @@ func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
 	store.desc.Capacity.Capacity = capacity
 }
 
+func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.cpuRateCapacity = cpuRateCapacity
+}
+
+func (s *state) SetSimulationSettings(Key string, Value interface{}) {
+	settingsValue := reflect.ValueOf(s.settings).Elem()
+	settingsType := settingsValue.Type()
+
+	for i := 0; i < settingsValue.NumField(); i++ {
+		field := settingsType.Field(i)
+		if field.Name == Key {
+			fieldValue := settingsValue.Field(i)
+			if fieldValue.CanSet() {
+				newValue := reflect.ValueOf(Value)
+				if newValue.Type().ConvertibleTo(fieldValue.Type()) {
+					fieldValue.Set(newValue.Convert(fieldValue.Type()))
+				}
+			}
+			break
+		}
+	}
+}
+
+func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
+	node := s.nodes[nodeID]
+	stores := node.Stores()
+	cpuRate := 0
+	for _, storeID := range stores {
+		capacity := s.capacity(storeID)
+		cpuRate += int(capacity.CPUPerSecond)
+	}
+
+	return roachpb.NodeCapacity{
+		StoresCPURate:       int64(cpuRate),
+		NumStores:           int32(len(stores)),
+		NodeCPURateUsage:    int64(cpuRate),
+		NodeCPURateCapacity: node.cpuRateCapacity,
+	}
+}
+
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
@@ -582,7 +642,6 @@ func (s *state) addReplica(
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
-	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -590,8 +649,13 @@ func (s *state) addReplica(
 	// exists at all times.
 	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
+		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
+	// NB: We only publish the capacity change events leaving the range in a
+	// consistent state. This is because they may call back into the state to
+	// generate the store descriptor for gossip.
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 	return replica, true
 }
 
@@ -906,10 +970,12 @@ func (s *state) RangeSpan(rangeID RangeID) (Key, Key, bool) {
 // if the Replica for the Range on the Store is already the leaseholder.
 func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	if !s.ValidTransfer(rangeID, storeID) {
+		fmt.Printf("invalid transfer: range %d, store %d\n", rangeID, storeID)
 		return false
 	}
 	oldStore, ok := s.LeaseholderStore(rangeID)
 	if !ok {
+		fmt.Printf("store %d not found\n", oldStore.StoreID())
 		return false
 	}
 
@@ -929,6 +995,8 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
 	s.setLeaseholder(rangeID, storeID)
+	s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, oldStoreID)
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -936,7 +1004,6 @@ func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -944,7 +1011,6 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
-			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
@@ -961,10 +1027,12 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// The store doesn't exist, not a valid transfer target.
 	if _, ok := s.Store(storeID); !ok {
+		fmt.Printf("store %d not found\n", storeID)
 		return false
 	}
 	// The range doesn't exist, not a valid transfer target.
 	if _, ok := s.Range(rangeID); !ok {
+		fmt.Printf("range %d not found\n", rangeID)
 		return false
 	}
 	rng, _ := s.Range(rangeID)
@@ -973,11 +1041,13 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// A replica for the range does not exist on the store, we cannot transfer
 	// a lease to it.
 	if !ok {
+		fmt.Printf("replica %d not found\n", rangeID)
 		return false
 	}
 	// The leaseholder replica for the range is already on the store, we can't
 	// transfer it to ourselves.
 	if repl == rng.Leaseholder() {
+		fmt.Printf("leaseholder replica %d already on store %d\n", rangeID, storeID)
 		return false
 	}
 	return true
@@ -1025,29 +1095,35 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
-// ReplicaLoad returns the usage information for the Range with ID
-// RangeID on the store with ID StoreID.
+// ReplicaLoad returns the usage information for the Range with ID RangeID on
+// the store with ID StoreID. If the given store has a replica for the range,
+// this returns the write-bytes-per-second, raft cpu, written keys and logical
+// bytes. If the given store is the leaseholder for the range, then then the
+// request cpu and qps is also returned. If the given store does not have a
+// replica for the range, this function panics.
 func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
-	// NB: we only return the actual replica load, if the range leaseholder is
-	// currently on the store given. Otherwise, return an empty, zero counter
-	// value.
-	store, ok := s.LeaseholderStore(rangeID)
+	r, ok := s.Range(rangeID)
 	if !ok {
-		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
+		panic(fmt.Sprintf("no range found for range %v", rangeID))
 	}
-
-	r, _ := s.Range(rangeID)
-	// TODO(kvoli): The requested storeID is not the leaseholder. Non
-	// leaseholder load tracking is not currently supported but is checked by
-	// other components such as hot ranges. In this case, ignore it but we
-	// should also track non leaseholder load. See load.go for more. Return an
-	// empty initialized load counter here.
-	if store.StoreID() != storeID {
-		return allocator.RangeUsageInfo{LogicalBytes: r.Size()}
+	if _, ok = r.Replica(storeID); !ok {
+		panic(fmt.Sprintf("no replica found for range %v on store %v [replicas=%v]",
+			rangeID, storeID, r.Replicas()))
+	}
+	leaseholderStore, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		panic(fmt.Sprintf("no leaseholder store found for range %v", rangeID))
 	}
 
 	usage := s.load[rangeID].Load()
 	usage.LogicalBytes = r.Size()
+	if leaseholderStore.StoreID() != storeID {
+		// See the method comment, we don't include the request cpu or qps for
+		// non-leaseholder replicas.
+		usage.RequestCPUNanosPerSecond = 0
+		usage.QueriesPerSecond = 0
+	}
+
 	return usage
 }
 
@@ -1077,12 +1153,17 @@ func (s *state) UpdateStorePool(
 		storeIDs = append(storeIDs, storeIDA)
 	}
 	sort.Sort(storeIDs)
+	store := s.stores[storeID]
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := *detail
 		copiedDesc := *detail.Desc
 		copiedDetail.Desc = &copiedDesc
 		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+		// TODO: Support origin timestamps.
+		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, s.clock.Now().UnixNano())
+		s.nodes[store.nodeID].mmAllocator.SetStore(copiedDesc)
+		s.nodes[store.nodeID].mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
 	}
 }
 
@@ -1326,10 +1407,12 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 
 // node is an implementation of the Node interface.
 type node struct {
-	nodeID NodeID
-	desc   roachpb.NodeDescriptor
+	nodeID          NodeID
+	desc            roachpb.NodeDescriptor
+	cpuRateCapacity int64
 
-	stores []StoreID
+	stores      []StoreID
+	mmAllocator mma.Allocator
 }
 
 // NodeID returns the ID of this node.
@@ -1345,6 +1428,10 @@ func (n *node) Stores() []StoreID {
 // Descriptor returns the descriptor for this node.
 func (n *node) Descriptor() roachpb.NodeDescriptor {
 	return n.desc
+}
+
+func (n *node) MMAllocator() mma.Allocator {
+	return n.mmAllocator
 }
 
 // store is an implementation of the Store interface.
@@ -1447,7 +1534,7 @@ func (r *rng) String() string {
 
 	for i, storeID := range storeIDs {
 		replica := r.replicas[storeID]
-		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
+		builder.WriteString(fmt.Sprintf("s%d:r%d(%s)", storeID, replica.replicaID, replica.desc.Type))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
