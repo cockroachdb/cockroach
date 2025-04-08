@@ -857,7 +857,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 		return nil
 	}
 
-	advanced, err := ca.frontier.ForwardResolvedSpan(ca.Ctx(), resolved)
+	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
@@ -1618,7 +1618,7 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 }
 
 func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
-	frontierChanged, err := cf.frontier.ForwardResolvedSpan(cf.Ctx(), resolved)
+	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
