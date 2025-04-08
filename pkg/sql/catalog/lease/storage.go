@@ -94,9 +94,7 @@ var LeaseRenewalDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
-	base.DefaultDescriptorLeaseRenewalTimeout,
-	settings.NonNegativeDuration,
-)
+	base.DefaultDescriptorLeaseRenewalTimeout)
 
 // LeaseRenewalCrossValidate controls if cross validation should be done during
 // lease renewal.

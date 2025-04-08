@@ -279,7 +279,6 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	"storage.wal_failover.unhealthy_op_threshold",
 	"the latency of a WAL write considered unhealthy and triggers a failover to a secondary WAL location",
 	100*time.Millisecond,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 

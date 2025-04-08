@@ -85,7 +85,6 @@ var RangeFeedLaggingCTCancelDuration = settings.RegisterDurationSetting(
 		"`kv.closed_timestamp.target_duration` behind the current time,"+
 		"for at least this duration, cancel the rangefeed",
 	time.Minute,
-	settings.NonNegativeDuration,
 )
 
 type rangeFeedCTLagObserver struct {

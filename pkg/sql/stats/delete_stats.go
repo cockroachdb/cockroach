@@ -39,7 +39,6 @@ var TableStatisticsRetentionPeriod = settings.RegisterDurationSetting(
 	"sql.stats.non_default_columns.min_retention_period",
 	"minimum retention period for table statistics collected on non-default columns",
 	defaultKeepTime,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // DeleteOldStatsForColumns deletes old statistics from the

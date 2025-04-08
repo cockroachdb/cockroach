@@ -68,9 +68,7 @@ var LeaseDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_duration",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
-	base.DefaultDescriptorLeaseDuration,
-	settings.NonNegativeDuration,
-)
+	base.DefaultDescriptorLeaseDuration)
 
 // LeaseJitterFraction controls the percent jitter around sql lease durations
 var LeaseJitterFraction = settings.RegisterFloatSetting(
@@ -86,7 +84,6 @@ var LeaseMonitorRangeFeedCheckInterval = settings.RegisterDurationSetting(
 	"the leasing subsystem will check for checkpoints for the range feed within "+
 		"this interval",
 	time.Minute*5,
-	settings.NonNegativeDuration,
 )
 
 var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
@@ -95,7 +92,6 @@ var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
 	"once the range feed has stopped receiving checkpoints for this "+
 		"period of time the range feed will be restarted",
 	time.Minute*25,
-	settings.NonNegativeDuration,
 )
 
 var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLevel,

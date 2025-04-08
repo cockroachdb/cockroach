@@ -111,7 +111,6 @@ var FlowTokenDropInterval = settings.RegisterDurationSetting(
 	"the interval at which the raft transport checks for pending flow token dispatches "+
 		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
 	30*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // FlowTokenDispatchInterval determines the frequency at which we check for
@@ -143,7 +142,6 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	"kvadmission.raft_transport.connected_store_expiration",
 	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // Controller provides admission control for the KV layer.

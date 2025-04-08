@@ -47,7 +47,6 @@ var TempObjectCleanupInterval = settings.RegisterDurationSetting(
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
 	30*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // TempObjectWaitInterval is a ClusterSetting controlling how long
@@ -57,7 +56,6 @@ var TempObjectWaitInterval = settings.RegisterDurationSetting(
 	"sql.temp_object_cleaner.wait_interval",
 	"how long after creation a temporary object will be cleaned up",
 	30*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var (

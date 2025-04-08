@@ -54,7 +54,6 @@ var idleWaitDuration = settings.RegisterDurationSetting(
 	"sql.gc_job.idle_wait_duration",
 	"after this duration of waiting for an update, the gc job will mark itself idle",
 	time.Second,
-	settings.NonNegativeDuration,
 )
 
 type schemaChangeGCResumer struct {
@@ -427,7 +426,6 @@ var EmptySpanPollInterval = settings.RegisterDurationSetting(
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 func waitForEmptyPrefix(

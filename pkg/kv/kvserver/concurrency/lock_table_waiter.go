@@ -68,7 +68,6 @@ var LockTableDeadlockOrLivenessDetectionPushDelay = settings.RegisterDurationSet
 	//
 	// TODO(nvanbenschoten): increasing this default value.
 	100*time.Millisecond,
-	settings.NonNegativeDuration,
 	settings.WithName("kv.lock_table.deadlock_detection_or_liveness_push_delay"),
 	// Old setting name when liveness and deadlock push delays could be set
 	// independently.

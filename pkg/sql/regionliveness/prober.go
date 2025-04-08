@@ -44,7 +44,6 @@ var RegionLivenessProbeTimeout = settings.RegisterDurationSetting(settings.Appli
 	"set the probing timeout for region liveness, which will be the maximum "+
 		"time a query to a region can take before it starts getting quarantined",
 	15*time.Second, /* 15 seconds */
-	settings.NonNegativeDuration,
 	settings.WithVisibility(settings.Reserved))
 
 // LiveRegions are regions which are currently still avaialble,

@@ -34,7 +34,6 @@ var Timeout = settings.RegisterDurationSetting(
 	"cloudstorage.timeout",
 	"the timeout for import/export storage operations",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var httpCustomCA = settings.RegisterStringSetting(

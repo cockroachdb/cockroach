@@ -58,7 +58,6 @@ var metricsPollerInterval = settings.RegisterDurationSetting(
 	"spanconfig.kvsubscriber.metrics_poller_interval",
 	"the interval at which the spanconfig.kvsubscriber.* metrics are kept up-to-date; set to 0 to disable the mechanism",
 	5*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // KVSubscriber is used to subscribe to global span configuration changes. It's

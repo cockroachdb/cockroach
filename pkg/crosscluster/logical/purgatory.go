@@ -21,7 +21,6 @@ var retryQueueAgeLimit = settings.RegisterDurationSetting(
 	"logical_replication.consumer.retry_queue_duration",
 	"maximum time an incoming update can be retried before it is sent to the DLQ",
 	time.Minute,
-	settings.NonNegativeDuration,
 )
 
 var retryQueueBackoff = settings.RegisterDurationSetting(
@@ -29,7 +28,6 @@ var retryQueueBackoff = settings.RegisterDurationSetting(
 	"logical_replication.consumer.retry_queue_backoff",
 	"minimum delay between retries of items in the retry queue",
 	time.Second*3,
-	settings.NonNegativeDuration,
 )
 
 var retryQueueSizeLimit = settings.RegisterByteSizeSetting(

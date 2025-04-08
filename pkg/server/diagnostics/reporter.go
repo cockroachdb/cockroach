@@ -67,7 +67,6 @@ var reportFrequency = settings.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // Reporter is a helper struct that phones home to report usage and diagnostics.

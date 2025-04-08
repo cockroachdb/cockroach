@@ -69,7 +69,6 @@ var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
 	"cloudstorage.gs.chunking.retry_timeout",
 	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
 	60*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("cloudstorage.gs.chunking.per_chunk_retry.timeout"),
 )
 

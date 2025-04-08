@@ -52,7 +52,6 @@ var SlowSplitTracingThreshold = settings.RegisterDurationSetting(
 	"kv.split.slow_split_tracing_threshold",
 	"the duration after which a trace of the split is logged",
 	slowSplitThresholdDefault,
-	settings.NonNegativeDuration,
 )
 
 var (

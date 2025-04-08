@@ -33,7 +33,6 @@ var historyRetentionExpirationPollInterval = settings.RegisterDurationSetting(
 	"sql.history_retention_job.poll_interval",
 	"controls how frequently the history retention job checks if the PTS record should be released",
 	time.Minute,
-	settings.NonNegativeDuration,
 )
 
 func ExtendHistoryRetention(

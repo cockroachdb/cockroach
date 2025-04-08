@@ -45,7 +45,6 @@ var StatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"minimum execution time to cause statement statistics to be collected. "+
 		"If configured, no transaction stats are collected.",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // DumpStmtStatsToLogBeforeReset specifies whether we dump the statements

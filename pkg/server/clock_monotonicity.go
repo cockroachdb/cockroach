@@ -36,7 +36,6 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
-		settings.NonNegativeDuration,
 		settings.WithPublic)
 )
 

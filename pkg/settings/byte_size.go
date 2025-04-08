@@ -60,7 +60,7 @@ func RegisterByteSizeSetting(
 			}
 			hasExplicitValidationFn = true
 			if err := opt.validateInt64Fn(v); err != nil {
-				return errors.Wrapf(err, "invalid value for %s", key)
+				return err
 			}
 		}
 		if !hasExplicitValidationFn {

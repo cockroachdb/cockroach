@@ -227,7 +227,6 @@ var (
 		"kv.trace.slow_request_stacks.threshold",
 		`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
 		time.Second*30,
-		settings.NonNegativeDuration,
 	)
 
 	livenessRangeCompactInterval = settings.RegisterDurationSetting(
@@ -235,7 +234,6 @@ var (
 		"kv.liveness_range_compact.interval",
 		`interval at which the liveness range is compacted. A value of 0 disables the periodic compaction`,
 		0,
-		settings.NonNegativeDuration,
 	)
 )
 

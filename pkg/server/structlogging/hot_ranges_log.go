@@ -32,7 +32,6 @@ var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 	"server.telemetry.hot_ranges_stats.interval",
 	"the time interval to log hot ranges stats",
 	4*time.Hour,
-	settings.NonNegativeDuration,
 )
 
 var TelemetryHotRangesStatsEnabled = settings.RegisterBoolSetting(
@@ -47,7 +46,6 @@ var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
 	"server.telemetry.hot_ranges_stats.logging_delay",
 	"the time delay between emitting individual hot ranges stats logs",
 	1*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // hotRangesLoggingScheduler is responsible for logging index usage stats
