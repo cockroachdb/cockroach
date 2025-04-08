@@ -179,9 +179,8 @@ func RegisterDurationSetting(
 	return setting
 }
 
-// RegisterPublicDurationSettingWithExplicitUnit defines a new
-// public setting with type duration which requires an explicit unit when being
-// set.
+// RegisterDurationSettingWithExplicitUnit defines a new setting with type
+// duration which requires an explicit unit when being set.
 func RegisterDurationSettingWithExplicitUnit(
 	class Class, key InternalKey, desc string, defaultValue time.Duration, opts ...SettingOption,
 ) *DurationSettingWithExplicitUnit {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -31,13 +30,8 @@ var DataValidDurationSetting = settings.RegisterDurationSetting(
 	"obs.tablemetadata.data_valid_duration",
 	"the duration for which the data in system.table_metadata is considered valid",
 	defaultDataValidDuration,
-	settings.WithValidateDuration(func(t time.Duration) error {
-		// This prevents the update loop from running too frequently.
-		if t < time.Minute {
-			return errors.New("validity period can't be less than 1 minute")
-		}
-		return nil
-	}),
+	// This prevents the update loop from running too frequently.
+	settings.DurationWithMinimum(time.Minute),
 	settings.WithPublic)
 
 var updateJobBatchSizeSetting = settings.RegisterIntSetting(

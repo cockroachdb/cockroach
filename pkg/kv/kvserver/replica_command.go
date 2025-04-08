@@ -3234,7 +3234,8 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 	"kv.trace.snapshot.enable_threshold",
 	"enables tracing and gathers timing information on all snapshots;"+
 		"snapshots with a duration longer than this threshold will have their "+
-		"trace logged (set to 0 to disable);", 0,
+		"trace logged (set to 0 to disable);",
+	0,
 )
 
 var externalFileSnapshotting = settings.RegisterBoolSetting(

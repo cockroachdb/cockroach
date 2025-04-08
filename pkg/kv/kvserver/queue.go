@@ -51,8 +51,7 @@ const (
 var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"kv.queue.process.guaranteed_time_budget",
-	"the guaranteed duration before which the processing of a queue may "+
-		"time out",
+	"the guaranteed duration before which the processing of a queue may time out",
 	defaultProcessTimeout,
 	settings.WithVisibility(settings.Reserved),
 )
