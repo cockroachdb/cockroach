@@ -116,6 +116,10 @@ type TestingKnobs struct {
 	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
 	// to pass to the constructor of the kv feed to change aggregator buffer.
 	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
+
+	// OverrideContinuousTelemetryLastEmit is used in case the KV server fails and we
+	// want to prevent unecessary emits to telemetry.
+	OverrideContinuousTelemetryLastEmit func(lastEmitTime int64) int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
