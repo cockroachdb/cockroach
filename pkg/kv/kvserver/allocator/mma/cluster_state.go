@@ -1488,6 +1488,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	targetSS *storeState,
 	delta LoadVector,
 	means *meansForStoreSet,
+	onlyConsiderTargetCPUSummary bool,
 ) bool {
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
@@ -1514,7 +1515,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// delay making a potentially non-ideal choice of targetSS until it has no
 	// pending changes.
 	var targetSummary loadSummary
-	if false {
+	if onlyConsiderTargetCPUSummary {
 		targetSummary = targetSLS.dimSummary[CPURate]
 		if targetSummary < targetSLS.nls {
 			targetSummary = targetSLS.nls
