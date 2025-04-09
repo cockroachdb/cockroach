@@ -151,13 +151,38 @@ func TestStatusVars(t *testing.T) {
 
 	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String()); err != nil {
 		t.Fatal(err)
-	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
-		t.Errorf("expected sql_bytesout, got: %s", body)
+	} else {
+		if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
+			t.Errorf("expected sql_bytesout, got: %s", body)
+		}
+		if !bytes.Contains(body, []byte(`# TYPE sql_insert_count counter`)) {
+			t.Errorf("expected sql_insert_count, got: %s", body)
+		}
 	}
 	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"load").String()); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
 		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
+
+	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath("/metrics").String()); err != nil {
+		t.Fatal(err)
+	} else {
+		if !bytes.Contains(body, []byte(`# TYPE sql_bytesout counter`)) {
+			t.Errorf("expected sql_bytesout, got: %s", body)
+		}
+		if !bytes.Contains(body, []byte(`# TYPE sql_count counter`)) {
+			t.Errorf("expected sql_count, got: %s", body)
+		}
 	}
 }
 
