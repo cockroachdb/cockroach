@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1577,6 +1579,9 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 // getTestingEnrichedSourceData creates an enrichedSourceData
 // for use in tests.
 func getTestingEnrichedSourceData() enrichedSourceData {
+	primaryKeysBuilder := json.NewArrayBuilder(1)
+	primaryKeysBuilder.Add(json.FromString("test_primary_key"))
+
 	return enrichedSourceData{
 		jobID:              "test_id",
 		dbVersion:          "test_db_version",
@@ -1585,6 +1590,17 @@ func getTestingEnrichedSourceData() enrichedSourceData {
 		sourceNodeLocality: "test_source_node_locality",
 		nodeName:           "test_node_name",
 		nodeID:             "test_node_id",
+		tableSchemaInfo: map[descpb.ID]tableSchemaInfo{
+			// We use 42 here since that is compatible with the tableID in
+			// cdcevent.TestingMakeEventRowFromEncDatums
+			42: {
+				tableName:       "test_table_name",
+				dbName:          "test_db_name",
+				schemaName:      "test_schema_name",
+				primaryKeys:     []string{"test_primary_key"},
+				primaryKeysJSON: primaryKeysBuilder.Build(),
+			},
+		},
 	}
 }
 
