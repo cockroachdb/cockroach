@@ -7,8 +7,8 @@ package kvserver
 
 import (
 	"context"
-	"math"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -3093,7 +3093,7 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	var conf roachpb.SpanConfig
 	func() {
 		r.mu.RLock()
-		r.mu.RUnlock()
+		defer r.mu.RUnlock()
 		raftStatus = r.raftStatusRLocked()
 		needed = r.mu.mmaRangeMessageNeeded.getNeededAndReset(
 			rload, raftStatus, sendStreamStats)
