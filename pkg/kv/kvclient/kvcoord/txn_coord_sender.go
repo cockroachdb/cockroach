@@ -1167,12 +1167,20 @@ func (tc *TxnCoordSender) SetBufferedWritesEnabled(enabled bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	if tc.mu.active && enabled && !tc.interceptorAlloc.txnWriteBuffer.enabled {
-		panic("cannot enable buffered writes on a running transaction")
+	if enabled == tc.interceptorAlloc.txnWriteBuffer.enabled {
+		// No-op since we don't change whether write buffering is enabled.
+		return
+	}
+
+	if tc.mu.active {
+		if enabled {
+			panic("cannot enable buffered writes on a running transaction")
+		}
+		// When disabling write buffering, if we evaluated any requests, we need
+		// to ensure to flush the buffer.
+		tc.interceptorAlloc.txnWriteBuffer.flushOnNextBatch = true
 	}
 	tc.interceptorAlloc.txnWriteBuffer.enabled = enabled
-	// TODO(yuzefovich): flush the buffer when going from "enabled" to
-	// "disabled".
 }
 
 // BufferedWritesEnabled is part of the kv.TxnSender interface.
