@@ -13,21 +13,27 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var errSilent = errors.New("silent")
+
 func (ctx *jsonpathCtx) evalArrayWildcard(jsonValue json.JSON) ([]json.JSON, error) {
 	if jsonValue.Type() == json.ArrayJSONType {
 		// Do not evaluate any paths, just unwrap the current target.
 		return ctx.unwrapCurrentTargetAndEval(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
 	} else if !ctx.strict {
 		return []json.JSON{jsonValue}, nil
-	} else {
+	} else if !ctx.silent {
 		return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath wildcard array accessor can only be applied to an array")
 	}
+	return nil, nil
 }
 
 func (ctx *jsonpathCtx) evalArrayList(
 	arrayList jsonpath.ArrayList, jsonValue json.JSON,
 ) ([]json.JSON, error) {
 	if ctx.strict && jsonValue.Type() != json.ArrayJSONType {
+		if ctx.silent {
+			return nil, nil
+		}
 		return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath array accessor can only be applied to an array")
 	}
 
@@ -50,21 +56,33 @@ func (ctx *jsonpathCtx) evalArrayList(
 		if idxRange, ok := idxAccessor.(jsonpath.ArrayIndexRange); ok {
 			from, err = ctx.resolveArrayIndex(idxRange.Start, jsonValue)
 			if err != nil {
+				if errors.Is(err, errSilent) {
+					return nil, nil
+				}
 				return nil, err
 			}
 			to, err = ctx.resolveArrayIndex(idxRange.End, jsonValue)
 			if err != nil {
+				if errors.Is(err, errSilent) {
+					return nil, nil
+				}
 				return nil, err
 			}
 		} else {
 			from, err = ctx.resolveArrayIndex(idxAccessor, jsonValue)
 			if err != nil {
+				if errors.Is(err, errSilent) {
+					return nil, nil
+				}
 				return nil, err
 			}
 			to = from
 		}
 
 		if ctx.strict && (from < 0 || from > to || to >= length) {
+			if ctx.silent {
+				return nil, nil
+			}
 			return nil, pgerror.Newf(pgcode.InvalidSQLJSONSubscript,
 				"jsonpath array subscript is out of bounds")
 		}
@@ -100,6 +118,9 @@ func (ctx *jsonpathCtx) resolveArrayIndex(
 		return 0, err
 	}
 	if len(evalResults) != 1 || evalResults[0].Type() != json.NumberJSONType {
+		if ctx.silent {
+			return -1, errSilent
+		}
 		return -1, pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is not a single numeric value")
 	}
 	i, err := asInt(evalResults[0])
@@ -123,7 +144,7 @@ func asInt(j json.JSON) (int, error) {
 
 func jsonArrayValueAtIndex(ctx *jsonpathCtx, jsonValue json.JSON, index int) (json.JSON, error) {
 	if ctx.strict && jsonValue.Type() != json.ArrayJSONType {
-		return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath array accessor can only be applied to an array")
+		return nil, errors.AssertionFailedf("jsonpath array accessor can only be applied to an array")
 	} else if jsonValue.Type() != json.ArrayJSONType {
 		if index == 0 {
 			return jsonValue, nil
@@ -132,10 +153,9 @@ func jsonArrayValueAtIndex(ctx *jsonpathCtx, jsonValue json.JSON, index int) (js
 	}
 
 	if ctx.strict && index >= jsonValue.Len() {
-		return nil, pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is out of bounds")
+		return nil, errors.AssertionFailedf("jsonpath array subscript is out of bounds")
 	}
 	if index < 0 {
-		// Shouldn't happen, would have been caught above.
 		return nil, errors.AssertionFailedf("negative array index")
 	}
 	return jsonValue.FetchValIdx(index)

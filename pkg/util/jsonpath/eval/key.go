@@ -20,18 +20,19 @@ func (ctx *jsonpathCtx) evalKey(
 		if err != nil {
 			return nil, err
 		}
-		if val == nil && ctx.strict {
-			return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key))
-		} else if val != nil {
-			return []json.JSON{val}, nil
+		if val == nil {
+			if ctx.strict && !ctx.silent {
+				return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key))
+			}
+			return nil, nil
 		}
-		return []json.JSON{}, nil
+		return []json.JSON{val}, nil
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(key, jsonValue, false /* unwrapNext */)
-	} else if ctx.strict {
+	} else if ctx.strict && !ctx.silent {
 		return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "jsonpath member accessor can only be applied to an object")
 	}
-	return []json.JSON{}, nil
+	return nil, nil
 }
 
 func (ctx *jsonpathCtx) evalAnyKey(
@@ -41,9 +42,9 @@ func (ctx *jsonpathCtx) evalAnyKey(
 		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
-	} else if ctx.strict {
+	} else if ctx.strict && !ctx.silent {
 		return nil, pgerror.Newf(pgcode.SQLJSONObjectNotFound,
 			"jsonpath wildcard member accessor can only be applied to an object")
 	}
-	return []json.JSON{}, nil
+	return nil, nil
 }

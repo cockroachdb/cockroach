@@ -68,6 +68,9 @@ func (ctx *jsonpathCtx) evalOperation(
 		if err != nil {
 			return nil, err
 		}
+		if results == nil {
+			return nil, nil
+		}
 		return []json.JSON{results}, nil
 	case jsonpath.OpPlus, jsonpath.OpMinus:
 		return ctx.evalUnaryArithmetic(op, jsonValue)
@@ -142,6 +145,12 @@ func (ctx *jsonpathCtx) evalExists(
 	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+	}
+	if l == nil {
+		if !ctx.strict {
+			return jsonpathBoolFalse, nil
+		}
+		return jsonpathBoolUnknown, nil
 	}
 	if len(l) == 0 {
 		return jsonpathBoolFalse, nil
@@ -254,14 +263,14 @@ func (ctx *jsonpathCtx) evalPredicate(
 ) (jsonpathBool, error) {
 	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
-	if err != nil {
+	if err != nil || left == nil {
 		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
 	var right []json.JSON
 	if evalRight {
 		// The right argument results are conditionally evaluated and unwrapped.
 		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
-		if err != nil {
+		if err != nil || right == nil {
 			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 		}
 	} else {
@@ -366,7 +375,10 @@ func (ctx *jsonpathCtx) evalUnaryArithmetic(
 
 	for i := range len(operands) {
 		if operands[i].Type() != json.NumberJSONType {
-			return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
+			if ctx.silent {
+				return nil, nil
+			}
+			return nil, pgerror.Newf(pgcode.SQLJSONNumberNotFound,
 				"operand of unary jsonpath operator %s is not a numeric value",
 				jsonpath.OperationTypeStrings[op.Type])
 		}
@@ -393,11 +405,17 @@ func (ctx *jsonpathCtx) evalArithmetic(
 	}
 
 	if len(left) != 1 || left[0].Type() != json.NumberJSONType {
+		if ctx.silent {
+			return nil, nil
+		}
 		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
 			"left operand of jsonpath operator %s is not a single numeric value",
 			jsonpath.OperationTypeStrings[op.Type])
 	}
 	if len(right) != 1 || right[0].Type() != json.NumberJSONType {
+		if ctx.silent {
+			return nil, nil
+		}
 		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
 			"right operand of jsonpath operator %s is not a single numeric value",
 			jsonpath.OperationTypeStrings[op.Type])
@@ -405,8 +423,22 @@ func (ctx *jsonpathCtx) evalArithmetic(
 
 	leftNum, _ := left[0].AsDecimal()
 	rightNum, _ := right[0].AsDecimal()
+	res, err := performArithmetic(op, leftNum, rightNum)
+	if err != nil {
+		if ctx.silent {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return json.FromDecimal(*res), nil
+}
+
+func performArithmetic(
+	op jsonpath.Operation, leftNum, rightNum *apd.Decimal,
+) (*apd.Decimal, error) {
 	var res apd.Decimal
 	var cond apd.Condition
+	var err error
 	switch op.Type {
 	case jsonpath.OpAdd:
 		_, err = tree.DecimalCtx.Add(&res, leftNum, rightNum)
@@ -438,5 +470,5 @@ func (ctx *jsonpathCtx) evalArithmetic(
 	if err != nil {
 		return nil, err
 	}
-	return json.FromDecimal(res), nil
+	return &res, nil
 }

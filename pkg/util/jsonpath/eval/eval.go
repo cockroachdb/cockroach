@@ -25,6 +25,7 @@ type jsonpathCtx struct {
 	root   json.JSON
 	vars   json.JSON
 	strict bool
+	silent bool
 
 	// innermostArrayLength stores the length of the innermost array. If the current
 	// evaluation context is not evaluating on an array, this value is -1.
@@ -36,7 +37,7 @@ func JsonpathQuery(
 ) ([]tree.DJSON, error) {
 	parsedPath, err := parser.Parse(string(path))
 	if err != nil {
-		return []tree.DJSON{}, err
+		return nil, err
 	}
 	expr := parsedPath.AST
 
@@ -44,11 +45,8 @@ func JsonpathQuery(
 		root:                 target.JSON,
 		vars:                 vars.JSON,
 		strict:               expr.Strict,
+		silent:               bool(silent),
 		innermostArrayLength: -1,
-	}
-	// When silent is true, overwrite the strict mode.
-	if bool(silent) {
-		ctx.strict = false
 	}
 
 	j, err := ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
@@ -145,7 +143,7 @@ func (ctx *jsonpathCtx) executeAnyItem(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
 ) ([]json.JSON, error) {
 	if jsonValue.Len() == 0 {
-		return []json.JSON{}, nil
+		return nil, nil
 	}
 	var agg []json.JSON
 	processItem := func(item json.JSON) error {
