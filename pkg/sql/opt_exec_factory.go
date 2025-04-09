@@ -1262,7 +1262,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalDB.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ef.planner, ie.(*InternalExecutor), "" /* requesterUsername */)
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {

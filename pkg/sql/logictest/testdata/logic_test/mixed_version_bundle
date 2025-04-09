@@ -1,0 +1,36 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This is a sanity check that stmt bundle collection works around the
+# V25_2_AddUsernameToStmtDiagRequest migration. Note that we don't inspect the
+# contents of the bundles (this is done elsewhere), so the check here is simply
+# that the bundle can be collected.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY);
+
+# Note that because only 'query' directive supports 'nodeidx' option, we cannot
+# control which node we're talking to, so we'll always talk to node 0. As such,
+# we upgrade node 1 followed by node 0 followed by node 2 so that we test the
+# following states:
+# - cluster is at old version
+# - cluster is at mixed version, gateway is at old version
+# - cluster is at mixed version, gateway is at new version
+# - cluster is at new version.
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
+
+upgrade 1
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
+
+upgrade 0
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
+
+upgrade 2
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;

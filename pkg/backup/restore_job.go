@@ -952,12 +952,7 @@ func createImportingDescriptors(
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
 	manifest backuppb.BackupManifest,
-) (
-	dataToPreRestore *restorationDataBase,
-	preValidation *restorationDataBase,
-	trackedRestore *mainRestorationData,
-	err error,
-) {
+) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	const kvTrace = false
 
@@ -1585,14 +1580,14 @@ func createImportingDescriptors(
 		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
-	dataToPreRestore = &restorationDataBase{
+	dataToPreRestore := &restorationDataBase{
 		spans:        preRestoreSpans,
 		tableRekeys:  rekeys,
 		tenantRekeys: tenantRekeys,
 		pkIDs:        pkIDs,
 	}
 
-	trackedRestore = &mainRestorationData{
+	trackedRestore := &mainRestorationData{
 		restorationDataBase{
 			spans:        postRestoreSpans,
 			tableRekeys:  rekeys,
@@ -1601,7 +1596,7 @@ func createImportingDescriptors(
 		},
 	}
 
-	preValidation = &restorationDataBase{}
+	preValidation := &restorationDataBase{}
 	// During a RESTORE with verify_backup_table_data data, progress on
 	// verifySpans should be the source of job progress (as it will take the most time); therefore,
 	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
@@ -1641,6 +1636,17 @@ func createImportingDescriptors(
 				trackedRestore.systemTables = append(trackedRestore.systemTables, table)
 			}
 		}
+	}
+	for _, tenant := range details.Tenants {
+		to, err := roachpb.MakeTenantID(tenant.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		from := to
+		if details.PreRewriteTenantId != nil {
+			from = *details.PreRewriteTenantId
+		}
+		trackedRestore.addTenant(from, to)
 	}
 	return dataToPreRestore, preValidation, trackedRestore, nil
 }
@@ -1785,7 +1791,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
 			return err
 		}
-		return r.doDownloadFiles(ctx, p, details.DownloadSpans)
+		return r.doDownloadFiles(ctx, p)
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
@@ -1832,6 +1838,21 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
+	if details.OnlineImpl() && len(details.DownloadSpans) == 0 {
+		// Persist the download spans before the link phase begins as OnFailOrCancel
+		// could use them if called.
+		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
+		if err != nil {
+			return err
+		}
+		// Ensure we have the latest copy of the job details.
+		details = r.job.Details().(jobspb.RestoreDetails)
+		details.DownloadSpans = downloadSpans
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+			return errors.Wrap(err, "updating job details with download spans")
+		}
+	}
+
 	// Refresh the job details since they may have been updated when creating the
 	// importing descriptors.
 	details = r.job.Details().(jobspb.RestoreDetails)
@@ -1855,7 +1876,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			err.Error())
 	}
 
-	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
+	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
@@ -1886,19 +1907,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return nil
 	}
 
-	for _, tenant := range details.Tenants {
-		to, err := roachpb.MakeTenantID(tenant.ID)
-		if err != nil {
-			return err
-		}
-		from := to
-		if details.PreRewriteTenantId != nil {
-			from = *details.PreRewriteTenantId
-		}
-		mainData.addTenant(from, to)
-	}
-
-	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
+	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.getTenantRekeys())
 	if err != nil {
 		return err
 	}
@@ -1934,7 +1943,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			if err := r.restoreSystemTables(
-				ctx, p.ExecCfg().InternalDB, preData.systemTables,
+				ctx, p.ExecCfg().InternalDB, preData.getSystemTables(),
 			); err != nil {
 				return err
 			}
@@ -2009,11 +2018,13 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if details.ExperimentalCopy {
-		downloadSpans, err := getDownloadSpans(p.ExecCfg().Codec, preData, mainData)
-		if err != nil {
-			return err
+		if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+			return errors.AssertionFailedf("download spans should have been persisted to job details")
 		}
-		if err := r.doDownloadFiles(ctx, p, downloadSpans); err != nil {
+		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
+		// and is instead passed an execCfg and the download spans and anything else
+		// it needs. If that occured, we would not need to update details above.
+		if err := r.doDownloadFiles(ctx, p); err != nil {
 			return err
 		}
 	}
@@ -2048,7 +2059,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
 		if err := r.restoreSystemTables(
-			ctx, p.ExecCfg().InternalDB, mainData.systemTables,
+			ctx, p.ExecCfg().InternalDB, mainData.getSystemTables(),
 		); err != nil {
 			return err
 		}
@@ -2059,7 +2070,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	} else if isSystemUserRestore(details) {
-		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.systemTables); err != nil {
+		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
@@ -2099,7 +2110,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	r.restoreStats = resTotal
-	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
+	if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg()); err != nil {
 		return err
 	}
 

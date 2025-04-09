@@ -582,7 +582,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 }
 
 func getDownloadSpans(
-	codec keys.SQLCodec, preRestoreData *restorationDataBase, mainRestoreData *mainRestorationData,
+	codec keys.SQLCodec, preRestoreData restorationData, mainRestoreData restorationData,
 ) (roachpb.Spans, error) {
 	rekey := mainRestoreData.getRekeys()
 	rekey = append(rekey, preRestoreData.getRekeys()...)
@@ -594,7 +594,10 @@ func getDownloadSpans(
 	if err != nil {
 		return nil, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
-	downloadSpans := mainRestoreData.getSpans()
+	downloadSpans := make([]roachpb.Span, 0, len(mainRestoreData.getSpans())+len(preRestoreData.getSpans()))
+	for _, span := range mainRestoreData.getSpans() {
+		downloadSpans = append(downloadSpans, span.Clone())
+	}
 
 	// Intentionally download preRestoreData after the main data. During a cluster
 	// restore, preRestore data are linked to a temp system db that are then
@@ -602,10 +605,13 @@ func getDownloadSpans(
 	// should never be queried. We still want to download this data, however, to
 	// protect against external storage deletions of these linked in ssts, but at
 	// lower priority to the main data.
-	downloadSpans = append(downloadSpans, preRestoreData.getSpans()...)
+	for _, span := range preRestoreData.getSpans() {
+		downloadSpans = append(downloadSpans, span.Clone())
+	}
+
 	for i := range downloadSpans {
 		var err error
-		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
+		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i], execinfrapb.ElidePrefix_None)
 		if err != nil {
 			return nil, err
 		}
@@ -614,28 +620,24 @@ func getDownloadSpans(
 }
 
 func (r *restoreResumer) maybeWriteDownloadJob(
-	ctx context.Context,
-	execConfig *sql.ExecutorConfig,
-	preRestoreData *restorationDataBase,
-	mainRestoreData *mainRestorationData,
+	ctx context.Context, execConfig *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if !details.ExperimentalOnline {
 		return nil
 	}
 
-	downloadSpans, err := getDownloadSpans(execConfig.Codec, preRestoreData, mainRestoreData)
-	if err != nil {
-		return errors.Wrap(err, "failed to get download spans")
+	if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+		return errors.AssertionFailedf("download spans should have been persisted to job details")
 	}
 
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
+	log.Infof(ctx, "creating job to track downloads in %d spans", len(details.DownloadSpans))
 	downloadJobRecord := jobs.Record{
 		Description: fmt.Sprintf("Background Data Download for %s", r.job.Payload().Description),
 		Username:    r.job.Payload().UsernameProto.Decode(),
 		Details: jobspb.RestoreDetails{
 			DownloadJob:                        true,
-			DownloadSpans:                      downloadSpans,
+			DownloadSpans:                      details.DownloadSpans,
 			PostDownloadTableAutoStatsSettings: details.PostDownloadTableAutoStatsSettings},
 		Progress: jobspb.RestoreProgress{},
 	}
@@ -747,15 +749,13 @@ func getRemainingExternalFileBytes(
 	return remaining, nil
 }
 
-func (r *restoreResumer) doDownloadFiles(
-	ctx context.Context, execCtx sql.JobExecContext, downloadSpans roachpb.Spans,
-) error {
+func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	grp := ctxgroup.WithContext(ctx)
 	completionPoller := make(chan struct{})
 
-	grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpans, completionPoller))
+	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
 	grp.GoCtx(func(ctx context.Context) error {
 		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
 	})

@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -140,6 +141,7 @@ func buildStatementBundle(
 	db *kv.DB,
 	p *planner,
 	ie *InternalExecutor,
+	requesterUsername string,
 	stmtRawSQL string,
 	plan *planTop,
 	planString string,
@@ -152,7 +154,7 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, p, ie, requesterUsername, stmtRawSQL, plan, trace, placeholders, sv)
 	if err != nil {
 		return diagnosticsBundle{collectionErr: err}
 	}
@@ -209,9 +211,10 @@ func (bundle *diagnosticsBundle) insert(
 type stmtBundleBuilder struct {
 	flags explain.Flags
 
-	db *kv.DB
-	p  *planner
-	ie *InternalExecutor
+	db                *kv.DB
+	p                 *planner
+	ie                *InternalExecutor
+	requesterUsername string
 
 	stmt         string
 	plan         *planTop
@@ -230,6 +233,7 @@ func makeStmtBundleBuilder(
 	db *kv.DB,
 	p *planner,
 	ie *InternalExecutor,
+	requesterUsername string,
 	stmtRawSQL string,
 	plan *planTop,
 	trace tracingpb.Recording,
@@ -237,7 +241,8 @@ func makeStmtBundleBuilder(
 	sv *settings.Values,
 ) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
-		flags: flags, db: db, p: p, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
+		flags: flags, db: db, p: p, ie: ie, requesterUsername: requesterUsername,
+		plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
 	err := b.buildPrettyStatement(stmtRawSQL)
 	if err != nil {
@@ -545,7 +550,7 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 )
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
-	c := makeStmtEnvCollector(ctx, b.p, b.ie)
+	c := makeStmtEnvCollector(ctx, b.p, b.ie, b.requesterUsername)
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
@@ -930,10 +935,19 @@ type stmtEnvCollector struct {
 	ctx context.Context
 	p   *planner
 	ie  *InternalExecutor
+	ieo sessiondata.InternalExecutorOverride
 }
 
-func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor) stmtEnvCollector {
-	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
+func makeStmtEnvCollector(
+	ctx context.Context, p *planner, ie *InternalExecutor, requesterUsername string,
+) stmtEnvCollector {
+	ieo := sessiondata.NoSessionDataOverride
+	if requesterUsername != "" {
+		ieo = sessiondata.InternalExecutorOverride{
+			User: username.MakeSQLUsernameFromPreNormalizedString(requesterUsername),
+		}
+	}
+	return stmtEnvCollector{ctx: ctx, p: p, ie: ie, ieo: ieo}
 }
 
 // query is a helper to run a query that returns a single string value. It
@@ -953,7 +967,7 @@ func (c *stmtEnvCollector) queryEx(query string, numCols int, emptyOk bool) ([]s
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		c.ieo,
 		query,
 	)
 	if err != nil {
@@ -1159,7 +1173,7 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
+		c.ieo,
 		fmt.Sprintf(`SELECT variable, value, default_value FROM crdb_internal.cluster_settings%s`, suffix),
 	)
 	if err != nil {
