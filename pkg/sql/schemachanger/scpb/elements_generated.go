@@ -9,10 +9,11 @@ package scpb
 
 import "fmt"
 
+
 func (e AliasType) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_AliasType) Element() Element {
+func (e * ElementProto_AliasType) Element() Element {
 	return e.AliasType
 }
 
@@ -21,7 +22,7 @@ func (e *ElementProto_AliasType) Element() Element {
 func ForEachAliasType(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *AliasType),
 ) {
-	c.FilterAliasType().ForEach(fn)
+  c.FilterAliasType().ForEach(fn)
 }
 
 // FindAliasType finds the first element of type AliasType.
@@ -49,7 +50,7 @@ func (c *ElementCollection[E]) FilterAliasType() *ElementCollection[*AliasType] 
 func (e CheckConstraint) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_CheckConstraint) Element() Element {
+func (e * ElementProto_CheckConstraint) Element() Element {
 	return e.CheckConstraint
 }
 
@@ -58,7 +59,7 @@ func (e *ElementProto_CheckConstraint) Element() Element {
 func ForEachCheckConstraint(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CheckConstraint),
 ) {
-	c.FilterCheckConstraint().ForEach(fn)
+  c.FilterCheckConstraint().ForEach(fn)
 }
 
 // FindCheckConstraint finds the first element of type CheckConstraint.
@@ -86,7 +87,7 @@ func (c *ElementCollection[E]) FilterCheckConstraint() *ElementCollection[*Check
 func (e CheckConstraintUnvalidated) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_CheckConstraintUnvalidated) Element() Element {
+func (e * ElementProto_CheckConstraintUnvalidated) Element() Element {
 	return e.CheckConstraintUnvalidated
 }
 
@@ -95,7 +96,7 @@ func (e *ElementProto_CheckConstraintUnvalidated) Element() Element {
 func ForEachCheckConstraintUnvalidated(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CheckConstraintUnvalidated),
 ) {
-	c.FilterCheckConstraintUnvalidated().ForEach(fn)
+  c.FilterCheckConstraintUnvalidated().ForEach(fn)
 }
 
 // FindCheckConstraintUnvalidated finds the first element of type CheckConstraintUnvalidated.
@@ -123,7 +124,7 @@ func (c *ElementCollection[E]) FilterCheckConstraintUnvalidated() *ElementCollec
 func (e Column) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Column) Element() Element {
+func (e * ElementProto_Column) Element() Element {
 	return e.Column
 }
 
@@ -132,7 +133,7 @@ func (e *ElementProto_Column) Element() Element {
 func ForEachColumn(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Column),
 ) {
-	c.FilterColumn().ForEach(fn)
+  c.FilterColumn().ForEach(fn)
 }
 
 // FindColumn finds the first element of type Column.
@@ -160,7 +161,7 @@ func (c *ElementCollection[E]) FilterColumn() *ElementCollection[*Column] {
 func (e ColumnComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnComment) Element() Element {
+func (e * ElementProto_ColumnComment) Element() Element {
 	return e.ColumnComment
 }
 
@@ -169,7 +170,7 @@ func (e *ElementProto_ColumnComment) Element() Element {
 func ForEachColumnComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnComment),
 ) {
-	c.FilterColumnComment().ForEach(fn)
+  c.FilterColumnComment().ForEach(fn)
 }
 
 // FindColumnComment finds the first element of type ColumnComment.
@@ -197,7 +198,7 @@ func (c *ElementCollection[E]) FilterColumnComment() *ElementCollection[*ColumnC
 func (e ColumnComputeExpression) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnComputeExpression) Element() Element {
+func (e * ElementProto_ColumnComputeExpression) Element() Element {
 	return e.ColumnComputeExpression
 }
 
@@ -206,7 +207,7 @@ func (e *ElementProto_ColumnComputeExpression) Element() Element {
 func ForEachColumnComputeExpression(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnComputeExpression),
 ) {
-	c.FilterColumnComputeExpression().ForEach(fn)
+  c.FilterColumnComputeExpression().ForEach(fn)
 }
 
 // FindColumnComputeExpression finds the first element of type ColumnComputeExpression.
@@ -234,7 +235,7 @@ func (c *ElementCollection[E]) FilterColumnComputeExpression() *ElementCollectio
 func (e ColumnDefaultExpression) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnDefaultExpression) Element() Element {
+func (e * ElementProto_ColumnDefaultExpression) Element() Element {
 	return e.ColumnDefaultExpression
 }
 
@@ -243,7 +244,7 @@ func (e *ElementProto_ColumnDefaultExpression) Element() Element {
 func ForEachColumnDefaultExpression(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnDefaultExpression),
 ) {
-	c.FilterColumnDefaultExpression().ForEach(fn)
+  c.FilterColumnDefaultExpression().ForEach(fn)
 }
 
 // FindColumnDefaultExpression finds the first element of type ColumnDefaultExpression.
@@ -271,7 +272,7 @@ func (c *ElementCollection[E]) FilterColumnDefaultExpression() *ElementCollectio
 func (e ColumnFamily) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnFamily) Element() Element {
+func (e * ElementProto_ColumnFamily) Element() Element {
 	return e.ColumnFamily
 }
 
@@ -280,7 +281,7 @@ func (e *ElementProto_ColumnFamily) Element() Element {
 func ForEachColumnFamily(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnFamily),
 ) {
-	c.FilterColumnFamily().ForEach(fn)
+  c.FilterColumnFamily().ForEach(fn)
 }
 
 // FindColumnFamily finds the first element of type ColumnFamily.
@@ -308,7 +309,7 @@ func (c *ElementCollection[E]) FilterColumnFamily() *ElementCollection[*ColumnFa
 func (e ColumnName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnName) Element() Element {
+func (e * ElementProto_ColumnName) Element() Element {
 	return e.ColumnName
 }
 
@@ -317,7 +318,7 @@ func (e *ElementProto_ColumnName) Element() Element {
 func ForEachColumnName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnName),
 ) {
-	c.FilterColumnName().ForEach(fn)
+  c.FilterColumnName().ForEach(fn)
 }
 
 // FindColumnName finds the first element of type ColumnName.
@@ -345,7 +346,7 @@ func (c *ElementCollection[E]) FilterColumnName() *ElementCollection[*ColumnName
 func (e ColumnNotNull) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnNotNull) Element() Element {
+func (e * ElementProto_ColumnNotNull) Element() Element {
 	return e.ColumnNotNull
 }
 
@@ -354,7 +355,7 @@ func (e *ElementProto_ColumnNotNull) Element() Element {
 func ForEachColumnNotNull(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnNotNull),
 ) {
-	c.FilterColumnNotNull().ForEach(fn)
+  c.FilterColumnNotNull().ForEach(fn)
 }
 
 // FindColumnNotNull finds the first element of type ColumnNotNull.
@@ -382,7 +383,7 @@ func (c *ElementCollection[E]) FilterColumnNotNull() *ElementCollection[*ColumnN
 func (e ColumnOnUpdateExpression) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnOnUpdateExpression) Element() Element {
+func (e * ElementProto_ColumnOnUpdateExpression) Element() Element {
 	return e.ColumnOnUpdateExpression
 }
 
@@ -391,7 +392,7 @@ func (e *ElementProto_ColumnOnUpdateExpression) Element() Element {
 func ForEachColumnOnUpdateExpression(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
 ) {
-	c.FilterColumnOnUpdateExpression().ForEach(fn)
+  c.FilterColumnOnUpdateExpression().ForEach(fn)
 }
 
 // FindColumnOnUpdateExpression finds the first element of type ColumnOnUpdateExpression.
@@ -419,7 +420,7 @@ func (c *ElementCollection[E]) FilterColumnOnUpdateExpression() *ElementCollecti
 func (e ColumnType) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ColumnType) Element() Element {
+func (e * ElementProto_ColumnType) Element() Element {
 	return e.ColumnType
 }
 
@@ -428,7 +429,7 @@ func (e *ElementProto_ColumnType) Element() Element {
 func ForEachColumnType(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnType),
 ) {
-	c.FilterColumnType().ForEach(fn)
+  c.FilterColumnType().ForEach(fn)
 }
 
 // FindColumnType finds the first element of type ColumnType.
@@ -456,7 +457,7 @@ func (c *ElementCollection[E]) FilterColumnType() *ElementCollection[*ColumnType
 func (e CompositeType) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_CompositeType) Element() Element {
+func (e * ElementProto_CompositeType) Element() Element {
 	return e.CompositeType
 }
 
@@ -465,7 +466,7 @@ func (e *ElementProto_CompositeType) Element() Element {
 func ForEachCompositeType(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeType),
 ) {
-	c.FilterCompositeType().ForEach(fn)
+  c.FilterCompositeType().ForEach(fn)
 }
 
 // FindCompositeType finds the first element of type CompositeType.
@@ -493,7 +494,7 @@ func (c *ElementCollection[E]) FilterCompositeType() *ElementCollection[*Composi
 func (e CompositeTypeAttrName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_CompositeTypeAttrName) Element() Element {
+func (e * ElementProto_CompositeTypeAttrName) Element() Element {
 	return e.CompositeTypeAttrName
 }
 
@@ -502,7 +503,7 @@ func (e *ElementProto_CompositeTypeAttrName) Element() Element {
 func ForEachCompositeTypeAttrName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeTypeAttrName),
 ) {
-	c.FilterCompositeTypeAttrName().ForEach(fn)
+  c.FilterCompositeTypeAttrName().ForEach(fn)
 }
 
 // FindCompositeTypeAttrName finds the first element of type CompositeTypeAttrName.
@@ -530,7 +531,7 @@ func (c *ElementCollection[E]) FilterCompositeTypeAttrName() *ElementCollection[
 func (e CompositeTypeAttrType) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_CompositeTypeAttrType) Element() Element {
+func (e * ElementProto_CompositeTypeAttrType) Element() Element {
 	return e.CompositeTypeAttrType
 }
 
@@ -539,7 +540,7 @@ func (e *ElementProto_CompositeTypeAttrType) Element() Element {
 func ForEachCompositeTypeAttrType(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
 ) {
-	c.FilterCompositeTypeAttrType().ForEach(fn)
+  c.FilterCompositeTypeAttrType().ForEach(fn)
 }
 
 // FindCompositeTypeAttrType finds the first element of type CompositeTypeAttrType.
@@ -567,7 +568,7 @@ func (c *ElementCollection[E]) FilterCompositeTypeAttrType() *ElementCollection[
 func (e ConstraintComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ConstraintComment) Element() Element {
+func (e * ElementProto_ConstraintComment) Element() Element {
 	return e.ConstraintComment
 }
 
@@ -576,7 +577,7 @@ func (e *ElementProto_ConstraintComment) Element() Element {
 func ForEachConstraintComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ConstraintComment),
 ) {
-	c.FilterConstraintComment().ForEach(fn)
+  c.FilterConstraintComment().ForEach(fn)
 }
 
 // FindConstraintComment finds the first element of type ConstraintComment.
@@ -604,7 +605,7 @@ func (c *ElementCollection[E]) FilterConstraintComment() *ElementCollection[*Con
 func (e ConstraintWithoutIndexName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ConstraintWithoutIndexName) Element() Element {
+func (e * ElementProto_ConstraintWithoutIndexName) Element() Element {
 	return e.ConstraintWithoutIndexName
 }
 
@@ -613,7 +614,7 @@ func (e *ElementProto_ConstraintWithoutIndexName) Element() Element {
 func ForEachConstraintWithoutIndexName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ConstraintWithoutIndexName),
 ) {
-	c.FilterConstraintWithoutIndexName().ForEach(fn)
+  c.FilterConstraintWithoutIndexName().ForEach(fn)
 }
 
 // FindConstraintWithoutIndexName finds the first element of type ConstraintWithoutIndexName.
@@ -641,7 +642,7 @@ func (c *ElementCollection[E]) FilterConstraintWithoutIndexName() *ElementCollec
 func (e Database) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Database) Element() Element {
+func (e * ElementProto_Database) Element() Element {
 	return e.Database
 }
 
@@ -650,7 +651,7 @@ func (e *ElementProto_Database) Element() Element {
 func ForEachDatabase(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Database),
 ) {
-	c.FilterDatabase().ForEach(fn)
+  c.FilterDatabase().ForEach(fn)
 }
 
 // FindDatabase finds the first element of type Database.
@@ -678,7 +679,7 @@ func (c *ElementCollection[E]) FilterDatabase() *ElementCollection[*Database] {
 func (e DatabaseComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_DatabaseComment) Element() Element {
+func (e * ElementProto_DatabaseComment) Element() Element {
 	return e.DatabaseComment
 }
 
@@ -687,7 +688,7 @@ func (e *ElementProto_DatabaseComment) Element() Element {
 func ForEachDatabaseComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseComment),
 ) {
-	c.FilterDatabaseComment().ForEach(fn)
+  c.FilterDatabaseComment().ForEach(fn)
 }
 
 // FindDatabaseComment finds the first element of type DatabaseComment.
@@ -715,7 +716,7 @@ func (c *ElementCollection[E]) FilterDatabaseComment() *ElementCollection[*Datab
 func (e DatabaseData) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_DatabaseData) Element() Element {
+func (e * ElementProto_DatabaseData) Element() Element {
 	return e.DatabaseData
 }
 
@@ -724,7 +725,7 @@ func (e *ElementProto_DatabaseData) Element() Element {
 func ForEachDatabaseData(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseData),
 ) {
-	c.FilterDatabaseData().ForEach(fn)
+  c.FilterDatabaseData().ForEach(fn)
 }
 
 // FindDatabaseData finds the first element of type DatabaseData.
@@ -752,7 +753,7 @@ func (c *ElementCollection[E]) FilterDatabaseData() *ElementCollection[*Database
 func (e DatabaseRegionConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_DatabaseRegionConfig) Element() Element {
+func (e * ElementProto_DatabaseRegionConfig) Element() Element {
 	return e.DatabaseRegionConfig
 }
 
@@ -761,7 +762,7 @@ func (e *ElementProto_DatabaseRegionConfig) Element() Element {
 func ForEachDatabaseRegionConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseRegionConfig),
 ) {
-	c.FilterDatabaseRegionConfig().ForEach(fn)
+  c.FilterDatabaseRegionConfig().ForEach(fn)
 }
 
 // FindDatabaseRegionConfig finds the first element of type DatabaseRegionConfig.
@@ -789,7 +790,7 @@ func (c *ElementCollection[E]) FilterDatabaseRegionConfig() *ElementCollection[*
 func (e DatabaseRoleSetting) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_DatabaseRoleSetting) Element() Element {
+func (e * ElementProto_DatabaseRoleSetting) Element() Element {
 	return e.DatabaseRoleSetting
 }
 
@@ -798,7 +799,7 @@ func (e *ElementProto_DatabaseRoleSetting) Element() Element {
 func ForEachDatabaseRoleSetting(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseRoleSetting),
 ) {
-	c.FilterDatabaseRoleSetting().ForEach(fn)
+  c.FilterDatabaseRoleSetting().ForEach(fn)
 }
 
 // FindDatabaseRoleSetting finds the first element of type DatabaseRoleSetting.
@@ -826,7 +827,7 @@ func (c *ElementCollection[E]) FilterDatabaseRoleSetting() *ElementCollection[*D
 func (e DatabaseZoneConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_DatabaseZoneConfig) Element() Element {
+func (e * ElementProto_DatabaseZoneConfig) Element() Element {
 	return e.DatabaseZoneConfig
 }
 
@@ -835,7 +836,7 @@ func (e *ElementProto_DatabaseZoneConfig) Element() Element {
 func ForEachDatabaseZoneConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseZoneConfig),
 ) {
-	c.FilterDatabaseZoneConfig().ForEach(fn)
+  c.FilterDatabaseZoneConfig().ForEach(fn)
 }
 
 // FindDatabaseZoneConfig finds the first element of type DatabaseZoneConfig.
@@ -863,7 +864,7 @@ func (c *ElementCollection[E]) FilterDatabaseZoneConfig() *ElementCollection[*Da
 func (e EnumType) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_EnumType) Element() Element {
+func (e * ElementProto_EnumType) Element() Element {
 	return e.EnumType
 }
 
@@ -872,7 +873,7 @@ func (e *ElementProto_EnumType) Element() Element {
 func ForEachEnumType(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *EnumType),
 ) {
-	c.FilterEnumType().ForEach(fn)
+  c.FilterEnumType().ForEach(fn)
 }
 
 // FindEnumType finds the first element of type EnumType.
@@ -900,7 +901,7 @@ func (c *ElementCollection[E]) FilterEnumType() *ElementCollection[*EnumType] {
 func (e EnumTypeValue) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_EnumTypeValue) Element() Element {
+func (e * ElementProto_EnumTypeValue) Element() Element {
 	return e.EnumTypeValue
 }
 
@@ -909,7 +910,7 @@ func (e *ElementProto_EnumTypeValue) Element() Element {
 func ForEachEnumTypeValue(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *EnumTypeValue),
 ) {
-	c.FilterEnumTypeValue().ForEach(fn)
+  c.FilterEnumTypeValue().ForEach(fn)
 }
 
 // FindEnumTypeValue finds the first element of type EnumTypeValue.
@@ -937,7 +938,7 @@ func (c *ElementCollection[E]) FilterEnumTypeValue() *ElementCollection[*EnumTyp
 func (e ForeignKeyConstraint) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ForeignKeyConstraint) Element() Element {
+func (e * ElementProto_ForeignKeyConstraint) Element() Element {
 	return e.ForeignKeyConstraint
 }
 
@@ -946,7 +947,7 @@ func (e *ElementProto_ForeignKeyConstraint) Element() Element {
 func ForEachForeignKeyConstraint(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ForeignKeyConstraint),
 ) {
-	c.FilterForeignKeyConstraint().ForEach(fn)
+  c.FilterForeignKeyConstraint().ForEach(fn)
 }
 
 // FindForeignKeyConstraint finds the first element of type ForeignKeyConstraint.
@@ -974,7 +975,7 @@ func (c *ElementCollection[E]) FilterForeignKeyConstraint() *ElementCollection[*
 func (e ForeignKeyConstraintUnvalidated) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_ForeignKeyConstraintUnvalidated) Element() Element {
+func (e * ElementProto_ForeignKeyConstraintUnvalidated) Element() Element {
 	return e.ForeignKeyConstraintUnvalidated
 }
 
@@ -983,7 +984,7 @@ func (e *ElementProto_ForeignKeyConstraintUnvalidated) Element() Element {
 func ForEachForeignKeyConstraintUnvalidated(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ForeignKeyConstraintUnvalidated),
 ) {
-	c.FilterForeignKeyConstraintUnvalidated().ForEach(fn)
+  c.FilterForeignKeyConstraintUnvalidated().ForEach(fn)
 }
 
 // FindForeignKeyConstraintUnvalidated finds the first element of type ForeignKeyConstraintUnvalidated.
@@ -1011,7 +1012,7 @@ func (c *ElementCollection[E]) FilterForeignKeyConstraintUnvalidated() *ElementC
 func (e Function) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Function) Element() Element {
+func (e * ElementProto_Function) Element() Element {
 	return e.Function
 }
 
@@ -1020,7 +1021,7 @@ func (e *ElementProto_Function) Element() Element {
 func ForEachFunction(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Function),
 ) {
-	c.FilterFunction().ForEach(fn)
+  c.FilterFunction().ForEach(fn)
 }
 
 // FindFunction finds the first element of type Function.
@@ -1048,7 +1049,7 @@ func (c *ElementCollection[E]) FilterFunction() *ElementCollection[*Function] {
 func (e FunctionBody) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionBody) Element() Element {
+func (e * ElementProto_FunctionBody) Element() Element {
 	return e.FunctionBody
 }
 
@@ -1057,7 +1058,7 @@ func (e *ElementProto_FunctionBody) Element() Element {
 func ForEachFunctionBody(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionBody),
 ) {
-	c.FilterFunctionBody().ForEach(fn)
+  c.FilterFunctionBody().ForEach(fn)
 }
 
 // FindFunctionBody finds the first element of type FunctionBody.
@@ -1085,7 +1086,7 @@ func (c *ElementCollection[E]) FilterFunctionBody() *ElementCollection[*Function
 func (e FunctionLeakProof) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionLeakProof) Element() Element {
+func (e * ElementProto_FunctionLeakProof) Element() Element {
 	return e.FunctionLeakProof
 }
 
@@ -1094,7 +1095,7 @@ func (e *ElementProto_FunctionLeakProof) Element() Element {
 func ForEachFunctionLeakProof(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionLeakProof),
 ) {
-	c.FilterFunctionLeakProof().ForEach(fn)
+  c.FilterFunctionLeakProof().ForEach(fn)
 }
 
 // FindFunctionLeakProof finds the first element of type FunctionLeakProof.
@@ -1122,7 +1123,7 @@ func (c *ElementCollection[E]) FilterFunctionLeakProof() *ElementCollection[*Fun
 func (e FunctionName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionName) Element() Element {
+func (e * ElementProto_FunctionName) Element() Element {
 	return e.FunctionName
 }
 
@@ -1131,7 +1132,7 @@ func (e *ElementProto_FunctionName) Element() Element {
 func ForEachFunctionName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionName),
 ) {
-	c.FilterFunctionName().ForEach(fn)
+  c.FilterFunctionName().ForEach(fn)
 }
 
 // FindFunctionName finds the first element of type FunctionName.
@@ -1159,7 +1160,7 @@ func (c *ElementCollection[E]) FilterFunctionName() *ElementCollection[*Function
 func (e FunctionNullInputBehavior) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionNullInputBehavior) Element() Element {
+func (e * ElementProto_FunctionNullInputBehavior) Element() Element {
 	return e.FunctionNullInputBehavior
 }
 
@@ -1168,7 +1169,7 @@ func (e *ElementProto_FunctionNullInputBehavior) Element() Element {
 func ForEachFunctionNullInputBehavior(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
 ) {
-	c.FilterFunctionNullInputBehavior().ForEach(fn)
+  c.FilterFunctionNullInputBehavior().ForEach(fn)
 }
 
 // FindFunctionNullInputBehavior finds the first element of type FunctionNullInputBehavior.
@@ -1196,7 +1197,7 @@ func (c *ElementCollection[E]) FilterFunctionNullInputBehavior() *ElementCollect
 func (e FunctionSecurity) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionSecurity) Element() Element {
+func (e * ElementProto_FunctionSecurity) Element() Element {
 	return e.FunctionSecurity
 }
 
@@ -1205,7 +1206,7 @@ func (e *ElementProto_FunctionSecurity) Element() Element {
 func ForEachFunctionSecurity(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionSecurity),
 ) {
-	c.FilterFunctionSecurity().ForEach(fn)
+  c.FilterFunctionSecurity().ForEach(fn)
 }
 
 // FindFunctionSecurity finds the first element of type FunctionSecurity.
@@ -1233,7 +1234,7 @@ func (c *ElementCollection[E]) FilterFunctionSecurity() *ElementCollection[*Func
 func (e FunctionVolatility) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_FunctionVolatility) Element() Element {
+func (e * ElementProto_FunctionVolatility) Element() Element {
 	return e.FunctionVolatility
 }
 
@@ -1242,7 +1243,7 @@ func (e *ElementProto_FunctionVolatility) Element() Element {
 func ForEachFunctionVolatility(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionVolatility),
 ) {
-	c.FilterFunctionVolatility().ForEach(fn)
+  c.FilterFunctionVolatility().ForEach(fn)
 }
 
 // FindFunctionVolatility finds the first element of type FunctionVolatility.
@@ -1270,7 +1271,7 @@ func (c *ElementCollection[E]) FilterFunctionVolatility() *ElementCollection[*Fu
 func (e IndexColumn) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexColumn) Element() Element {
+func (e * ElementProto_IndexColumn) Element() Element {
 	return e.IndexColumn
 }
 
@@ -1279,7 +1280,7 @@ func (e *ElementProto_IndexColumn) Element() Element {
 func ForEachIndexColumn(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexColumn),
 ) {
-	c.FilterIndexColumn().ForEach(fn)
+  c.FilterIndexColumn().ForEach(fn)
 }
 
 // FindIndexColumn finds the first element of type IndexColumn.
@@ -1307,7 +1308,7 @@ func (c *ElementCollection[E]) FilterIndexColumn() *ElementCollection[*IndexColu
 func (e IndexComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexComment) Element() Element {
+func (e * ElementProto_IndexComment) Element() Element {
 	return e.IndexComment
 }
 
@@ -1316,7 +1317,7 @@ func (e *ElementProto_IndexComment) Element() Element {
 func ForEachIndexComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexComment),
 ) {
-	c.FilterIndexComment().ForEach(fn)
+  c.FilterIndexComment().ForEach(fn)
 }
 
 // FindIndexComment finds the first element of type IndexComment.
@@ -1344,7 +1345,7 @@ func (c *ElementCollection[E]) FilterIndexComment() *ElementCollection[*IndexCom
 func (e IndexData) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexData) Element() Element {
+func (e * ElementProto_IndexData) Element() Element {
 	return e.IndexData
 }
 
@@ -1353,7 +1354,7 @@ func (e *ElementProto_IndexData) Element() Element {
 func ForEachIndexData(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexData),
 ) {
-	c.FilterIndexData().ForEach(fn)
+  c.FilterIndexData().ForEach(fn)
 }
 
 // FindIndexData finds the first element of type IndexData.
@@ -1381,7 +1382,7 @@ func (c *ElementCollection[E]) FilterIndexData() *ElementCollection[*IndexData] 
 func (e IndexName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexName) Element() Element {
+func (e * ElementProto_IndexName) Element() Element {
 	return e.IndexName
 }
 
@@ -1390,7 +1391,7 @@ func (e *ElementProto_IndexName) Element() Element {
 func ForEachIndexName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexName),
 ) {
-	c.FilterIndexName().ForEach(fn)
+  c.FilterIndexName().ForEach(fn)
 }
 
 // FindIndexName finds the first element of type IndexName.
@@ -1418,7 +1419,7 @@ func (c *ElementCollection[E]) FilterIndexName() *ElementCollection[*IndexName] 
 func (e IndexPartitioning) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexPartitioning) Element() Element {
+func (e * ElementProto_IndexPartitioning) Element() Element {
 	return e.IndexPartitioning
 }
 
@@ -1427,7 +1428,7 @@ func (e *ElementProto_IndexPartitioning) Element() Element {
 func ForEachIndexPartitioning(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexPartitioning),
 ) {
-	c.FilterIndexPartitioning().ForEach(fn)
+  c.FilterIndexPartitioning().ForEach(fn)
 }
 
 // FindIndexPartitioning finds the first element of type IndexPartitioning.
@@ -1455,7 +1456,7 @@ func (c *ElementCollection[E]) FilterIndexPartitioning() *ElementCollection[*Ind
 func (e IndexZoneConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_IndexZoneConfig) Element() Element {
+func (e * ElementProto_IndexZoneConfig) Element() Element {
 	return e.IndexZoneConfig
 }
 
@@ -1464,7 +1465,7 @@ func (e *ElementProto_IndexZoneConfig) Element() Element {
 func ForEachIndexZoneConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexZoneConfig),
 ) {
-	c.FilterIndexZoneConfig().ForEach(fn)
+  c.FilterIndexZoneConfig().ForEach(fn)
 }
 
 // FindIndexZoneConfig finds the first element of type IndexZoneConfig.
@@ -1492,7 +1493,7 @@ func (c *ElementCollection[E]) FilterIndexZoneConfig() *ElementCollection[*Index
 func (e LDRJobIDs) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_LDRJobIDs) Element() Element {
+func (e * ElementProto_LDRJobIDs) Element() Element {
 	return e.LDRJobIDs
 }
 
@@ -1501,7 +1502,7 @@ func (e *ElementProto_LDRJobIDs) Element() Element {
 func ForEachLDRJobIDs(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *LDRJobIDs),
 ) {
-	c.FilterLDRJobIDs().ForEach(fn)
+  c.FilterLDRJobIDs().ForEach(fn)
 }
 
 // FindLDRJobIDs finds the first element of type LDRJobIDs.
@@ -1529,7 +1530,7 @@ func (c *ElementCollection[E]) FilterLDRJobIDs() *ElementCollection[*LDRJobIDs] 
 func (e NamedRangeZoneConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_NamedRangeZoneConfig) Element() Element {
+func (e * ElementProto_NamedRangeZoneConfig) Element() Element {
 	return e.NamedRangeZoneConfig
 }
 
@@ -1538,7 +1539,7 @@ func (e *ElementProto_NamedRangeZoneConfig) Element() Element {
 func ForEachNamedRangeZoneConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *NamedRangeZoneConfig),
 ) {
-	c.FilterNamedRangeZoneConfig().ForEach(fn)
+  c.FilterNamedRangeZoneConfig().ForEach(fn)
 }
 
 // FindNamedRangeZoneConfig finds the first element of type NamedRangeZoneConfig.
@@ -1566,7 +1567,7 @@ func (c *ElementCollection[E]) FilterNamedRangeZoneConfig() *ElementCollection[*
 func (e Namespace) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Namespace) Element() Element {
+func (e * ElementProto_Namespace) Element() Element {
 	return e.Namespace
 }
 
@@ -1575,7 +1576,7 @@ func (e *ElementProto_Namespace) Element() Element {
 func ForEachNamespace(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Namespace),
 ) {
-	c.FilterNamespace().ForEach(fn)
+  c.FilterNamespace().ForEach(fn)
 }
 
 // FindNamespace finds the first element of type Namespace.
@@ -1603,7 +1604,7 @@ func (c *ElementCollection[E]) FilterNamespace() *ElementCollection[*Namespace] 
 func (e Owner) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Owner) Element() Element {
+func (e * ElementProto_Owner) Element() Element {
 	return e.Owner
 }
 
@@ -1612,7 +1613,7 @@ func (e *ElementProto_Owner) Element() Element {
 func ForEachOwner(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Owner),
 ) {
-	c.FilterOwner().ForEach(fn)
+  c.FilterOwner().ForEach(fn)
 }
 
 // FindOwner finds the first element of type Owner.
@@ -1640,7 +1641,7 @@ func (c *ElementCollection[E]) FilterOwner() *ElementCollection[*Owner] {
 func (e PartitionZoneConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PartitionZoneConfig) Element() Element {
+func (e * ElementProto_PartitionZoneConfig) Element() Element {
 	return e.PartitionZoneConfig
 }
 
@@ -1649,7 +1650,7 @@ func (e *ElementProto_PartitionZoneConfig) Element() Element {
 func ForEachPartitionZoneConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PartitionZoneConfig),
 ) {
-	c.FilterPartitionZoneConfig().ForEach(fn)
+  c.FilterPartitionZoneConfig().ForEach(fn)
 }
 
 // FindPartitionZoneConfig finds the first element of type PartitionZoneConfig.
@@ -1677,7 +1678,7 @@ func (c *ElementCollection[E]) FilterPartitionZoneConfig() *ElementCollection[*P
 func (e Policy) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Policy) Element() Element {
+func (e * ElementProto_Policy) Element() Element {
 	return e.Policy
 }
 
@@ -1686,7 +1687,7 @@ func (e *ElementProto_Policy) Element() Element {
 func ForEachPolicy(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Policy),
 ) {
-	c.FilterPolicy().ForEach(fn)
+  c.FilterPolicy().ForEach(fn)
 }
 
 // FindPolicy finds the first element of type Policy.
@@ -1714,7 +1715,7 @@ func (c *ElementCollection[E]) FilterPolicy() *ElementCollection[*Policy] {
 func (e PolicyDeps) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PolicyDeps) Element() Element {
+func (e * ElementProto_PolicyDeps) Element() Element {
 	return e.PolicyDeps
 }
 
@@ -1723,7 +1724,7 @@ func (e *ElementProto_PolicyDeps) Element() Element {
 func ForEachPolicyDeps(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyDeps),
 ) {
-	c.FilterPolicyDeps().ForEach(fn)
+  c.FilterPolicyDeps().ForEach(fn)
 }
 
 // FindPolicyDeps finds the first element of type PolicyDeps.
@@ -1751,7 +1752,7 @@ func (c *ElementCollection[E]) FilterPolicyDeps() *ElementCollection[*PolicyDeps
 func (e PolicyName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PolicyName) Element() Element {
+func (e * ElementProto_PolicyName) Element() Element {
 	return e.PolicyName
 }
 
@@ -1760,7 +1761,7 @@ func (e *ElementProto_PolicyName) Element() Element {
 func ForEachPolicyName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyName),
 ) {
-	c.FilterPolicyName().ForEach(fn)
+  c.FilterPolicyName().ForEach(fn)
 }
 
 // FindPolicyName finds the first element of type PolicyName.
@@ -1788,7 +1789,7 @@ func (c *ElementCollection[E]) FilterPolicyName() *ElementCollection[*PolicyName
 func (e PolicyRole) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PolicyRole) Element() Element {
+func (e * ElementProto_PolicyRole) Element() Element {
 	return e.PolicyRole
 }
 
@@ -1797,7 +1798,7 @@ func (e *ElementProto_PolicyRole) Element() Element {
 func ForEachPolicyRole(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyRole),
 ) {
-	c.FilterPolicyRole().ForEach(fn)
+  c.FilterPolicyRole().ForEach(fn)
 }
 
 // FindPolicyRole finds the first element of type PolicyRole.
@@ -1825,7 +1826,7 @@ func (c *ElementCollection[E]) FilterPolicyRole() *ElementCollection[*PolicyRole
 func (e PolicyUsingExpr) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PolicyUsingExpr) Element() Element {
+func (e * ElementProto_PolicyUsingExpr) Element() Element {
 	return e.PolicyUsingExpr
 }
 
@@ -1834,7 +1835,7 @@ func (e *ElementProto_PolicyUsingExpr) Element() Element {
 func ForEachPolicyUsingExpr(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyUsingExpr),
 ) {
-	c.FilterPolicyUsingExpr().ForEach(fn)
+  c.FilterPolicyUsingExpr().ForEach(fn)
 }
 
 // FindPolicyUsingExpr finds the first element of type PolicyUsingExpr.
@@ -1862,7 +1863,7 @@ func (c *ElementCollection[E]) FilterPolicyUsingExpr() *ElementCollection[*Polic
 func (e PolicyWithCheckExpr) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PolicyWithCheckExpr) Element() Element {
+func (e * ElementProto_PolicyWithCheckExpr) Element() Element {
 	return e.PolicyWithCheckExpr
 }
 
@@ -1871,7 +1872,7 @@ func (e *ElementProto_PolicyWithCheckExpr) Element() Element {
 func ForEachPolicyWithCheckExpr(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PolicyWithCheckExpr),
 ) {
-	c.FilterPolicyWithCheckExpr().ForEach(fn)
+  c.FilterPolicyWithCheckExpr().ForEach(fn)
 }
 
 // FindPolicyWithCheckExpr finds the first element of type PolicyWithCheckExpr.
@@ -1899,7 +1900,7 @@ func (c *ElementCollection[E]) FilterPolicyWithCheckExpr() *ElementCollection[*P
 func (e PrimaryIndex) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_PrimaryIndex) Element() Element {
+func (e * ElementProto_PrimaryIndex) Element() Element {
 	return e.PrimaryIndex
 }
 
@@ -1908,7 +1909,7 @@ func (e *ElementProto_PrimaryIndex) Element() Element {
 func ForEachPrimaryIndex(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PrimaryIndex),
 ) {
-	c.FilterPrimaryIndex().ForEach(fn)
+  c.FilterPrimaryIndex().ForEach(fn)
 }
 
 // FindPrimaryIndex finds the first element of type PrimaryIndex.
@@ -1936,7 +1937,7 @@ func (c *ElementCollection[E]) FilterPrimaryIndex() *ElementCollection[*PrimaryI
 func (e RowLevelSecurityEnabled) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_RowLevelSecurityEnabled) Element() Element {
+func (e * ElementProto_RowLevelSecurityEnabled) Element() Element {
 	return e.RowLevelSecurityEnabled
 }
 
@@ -1945,7 +1946,7 @@ func (e *ElementProto_RowLevelSecurityEnabled) Element() Element {
 func ForEachRowLevelSecurityEnabled(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *RowLevelSecurityEnabled),
 ) {
-	c.FilterRowLevelSecurityEnabled().ForEach(fn)
+  c.FilterRowLevelSecurityEnabled().ForEach(fn)
 }
 
 // FindRowLevelSecurityEnabled finds the first element of type RowLevelSecurityEnabled.
@@ -1973,7 +1974,7 @@ func (c *ElementCollection[E]) FilterRowLevelSecurityEnabled() *ElementCollectio
 func (e RowLevelSecurityForced) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_RowLevelSecurityForced) Element() Element {
+func (e * ElementProto_RowLevelSecurityForced) Element() Element {
 	return e.RowLevelSecurityForced
 }
 
@@ -1982,7 +1983,7 @@ func (e *ElementProto_RowLevelSecurityForced) Element() Element {
 func ForEachRowLevelSecurityForced(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *RowLevelSecurityForced),
 ) {
-	c.FilterRowLevelSecurityForced().ForEach(fn)
+  c.FilterRowLevelSecurityForced().ForEach(fn)
 }
 
 // FindRowLevelSecurityForced finds the first element of type RowLevelSecurityForced.
@@ -2010,7 +2011,7 @@ func (c *ElementCollection[E]) FilterRowLevelSecurityForced() *ElementCollection
 func (e RowLevelTTL) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_RowLevelTTL) Element() Element {
+func (e * ElementProto_RowLevelTTL) Element() Element {
 	return e.RowLevelTTL
 }
 
@@ -2019,7 +2020,7 @@ func (e *ElementProto_RowLevelTTL) Element() Element {
 func ForEachRowLevelTTL(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *RowLevelTTL),
 ) {
-	c.FilterRowLevelTTL().ForEach(fn)
+  c.FilterRowLevelTTL().ForEach(fn)
 }
 
 // FindRowLevelTTL finds the first element of type RowLevelTTL.
@@ -2047,7 +2048,7 @@ func (c *ElementCollection[E]) FilterRowLevelTTL() *ElementCollection[*RowLevelT
 func (e Schema) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Schema) Element() Element {
+func (e * ElementProto_Schema) Element() Element {
 	return e.Schema
 }
 
@@ -2056,7 +2057,7 @@ func (e *ElementProto_Schema) Element() Element {
 func ForEachSchema(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Schema),
 ) {
-	c.FilterSchema().ForEach(fn)
+  c.FilterSchema().ForEach(fn)
 }
 
 // FindSchema finds the first element of type Schema.
@@ -2084,7 +2085,7 @@ func (c *ElementCollection[E]) FilterSchema() *ElementCollection[*Schema] {
 func (e SchemaChild) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SchemaChild) Element() Element {
+func (e * ElementProto_SchemaChild) Element() Element {
 	return e.SchemaChild
 }
 
@@ -2093,7 +2094,7 @@ func (e *ElementProto_SchemaChild) Element() Element {
 func ForEachSchemaChild(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaChild),
 ) {
-	c.FilterSchemaChild().ForEach(fn)
+  c.FilterSchemaChild().ForEach(fn)
 }
 
 // FindSchemaChild finds the first element of type SchemaChild.
@@ -2121,7 +2122,7 @@ func (c *ElementCollection[E]) FilterSchemaChild() *ElementCollection[*SchemaChi
 func (e SchemaComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SchemaComment) Element() Element {
+func (e * ElementProto_SchemaComment) Element() Element {
 	return e.SchemaComment
 }
 
@@ -2130,7 +2131,7 @@ func (e *ElementProto_SchemaComment) Element() Element {
 func ForEachSchemaComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaComment),
 ) {
-	c.FilterSchemaComment().ForEach(fn)
+  c.FilterSchemaComment().ForEach(fn)
 }
 
 // FindSchemaComment finds the first element of type SchemaComment.
@@ -2158,7 +2159,7 @@ func (c *ElementCollection[E]) FilterSchemaComment() *ElementCollection[*SchemaC
 func (e SchemaParent) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SchemaParent) Element() Element {
+func (e * ElementProto_SchemaParent) Element() Element {
 	return e.SchemaParent
 }
 
@@ -2167,7 +2168,7 @@ func (e *ElementProto_SchemaParent) Element() Element {
 func ForEachSchemaParent(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaParent),
 ) {
-	c.FilterSchemaParent().ForEach(fn)
+  c.FilterSchemaParent().ForEach(fn)
 }
 
 // FindSchemaParent finds the first element of type SchemaParent.
@@ -2195,7 +2196,7 @@ func (c *ElementCollection[E]) FilterSchemaParent() *ElementCollection[*SchemaPa
 func (e SecondaryIndex) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SecondaryIndex) Element() Element {
+func (e * ElementProto_SecondaryIndex) Element() Element {
 	return e.SecondaryIndex
 }
 
@@ -2204,7 +2205,7 @@ func (e *ElementProto_SecondaryIndex) Element() Element {
 func ForEachSecondaryIndex(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SecondaryIndex),
 ) {
-	c.FilterSecondaryIndex().ForEach(fn)
+  c.FilterSecondaryIndex().ForEach(fn)
 }
 
 // FindSecondaryIndex finds the first element of type SecondaryIndex.
@@ -2232,7 +2233,7 @@ func (c *ElementCollection[E]) FilterSecondaryIndex() *ElementCollection[*Second
 func (e SecondaryIndexPartial) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SecondaryIndexPartial) Element() Element {
+func (e * ElementProto_SecondaryIndexPartial) Element() Element {
 	return e.SecondaryIndexPartial
 }
 
@@ -2241,7 +2242,7 @@ func (e *ElementProto_SecondaryIndexPartial) Element() Element {
 func ForEachSecondaryIndexPartial(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
 ) {
-	c.FilterSecondaryIndexPartial().ForEach(fn)
+  c.FilterSecondaryIndexPartial().ForEach(fn)
 }
 
 // FindSecondaryIndexPartial finds the first element of type SecondaryIndexPartial.
@@ -2269,7 +2270,7 @@ func (c *ElementCollection[E]) FilterSecondaryIndexPartial() *ElementCollection[
 func (e Sequence) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Sequence) Element() Element {
+func (e * ElementProto_Sequence) Element() Element {
 	return e.Sequence
 }
 
@@ -2278,7 +2279,7 @@ func (e *ElementProto_Sequence) Element() Element {
 func ForEachSequence(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Sequence),
 ) {
-	c.FilterSequence().ForEach(fn)
+  c.FilterSequence().ForEach(fn)
 }
 
 // FindSequence finds the first element of type Sequence.
@@ -2306,7 +2307,7 @@ func (c *ElementCollection[E]) FilterSequence() *ElementCollection[*Sequence] {
 func (e SequenceOption) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SequenceOption) Element() Element {
+func (e * ElementProto_SequenceOption) Element() Element {
 	return e.SequenceOption
 }
 
@@ -2315,7 +2316,7 @@ func (e *ElementProto_SequenceOption) Element() Element {
 func ForEachSequenceOption(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceOption),
 ) {
-	c.FilterSequenceOption().ForEach(fn)
+  c.FilterSequenceOption().ForEach(fn)
 }
 
 // FindSequenceOption finds the first element of type SequenceOption.
@@ -2343,7 +2344,7 @@ func (c *ElementCollection[E]) FilterSequenceOption() *ElementCollection[*Sequen
 func (e SequenceOwner) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_SequenceOwner) Element() Element {
+func (e * ElementProto_SequenceOwner) Element() Element {
 	return e.SequenceOwner
 }
 
@@ -2352,7 +2353,7 @@ func (e *ElementProto_SequenceOwner) Element() Element {
 func ForEachSequenceOwner(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceOwner),
 ) {
-	c.FilterSequenceOwner().ForEach(fn)
+  c.FilterSequenceOwner().ForEach(fn)
 }
 
 // FindSequenceOwner finds the first element of type SequenceOwner.
@@ -2380,7 +2381,7 @@ func (c *ElementCollection[E]) FilterSequenceOwner() *ElementCollection[*Sequenc
 func (e Table) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Table) Element() Element {
+func (e * ElementProto_Table) Element() Element {
 	return e.Table
 }
 
@@ -2389,7 +2390,7 @@ func (e *ElementProto_Table) Element() Element {
 func ForEachTable(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Table),
 ) {
-	c.FilterTable().ForEach(fn)
+  c.FilterTable().ForEach(fn)
 }
 
 // FindTable finds the first element of type Table.
@@ -2417,7 +2418,7 @@ func (c *ElementCollection[E]) FilterTable() *ElementCollection[*Table] {
 func (e TableComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableComment) Element() Element {
+func (e * ElementProto_TableComment) Element() Element {
 	return e.TableComment
 }
 
@@ -2426,7 +2427,7 @@ func (e *ElementProto_TableComment) Element() Element {
 func ForEachTableComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableComment),
 ) {
-	c.FilterTableComment().ForEach(fn)
+  c.FilterTableComment().ForEach(fn)
 }
 
 // FindTableComment finds the first element of type TableComment.
@@ -2454,7 +2455,7 @@ func (c *ElementCollection[E]) FilterTableComment() *ElementCollection[*TableCom
 func (e TableData) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableData) Element() Element {
+func (e * ElementProto_TableData) Element() Element {
 	return e.TableData
 }
 
@@ -2463,7 +2464,7 @@ func (e *ElementProto_TableData) Element() Element {
 func ForEachTableData(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableData),
 ) {
-	c.FilterTableData().ForEach(fn)
+  c.FilterTableData().ForEach(fn)
 }
 
 // FindTableData finds the first element of type TableData.
@@ -2491,7 +2492,7 @@ func (c *ElementCollection[E]) FilterTableData() *ElementCollection[*TableData] 
 func (e TableLocalityGlobal) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableLocalityGlobal) Element() Element {
+func (e * ElementProto_TableLocalityGlobal) Element() Element {
 	return e.TableLocalityGlobal
 }
 
@@ -2500,7 +2501,7 @@ func (e *ElementProto_TableLocalityGlobal) Element() Element {
 func ForEachTableLocalityGlobal(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityGlobal),
 ) {
-	c.FilterTableLocalityGlobal().ForEach(fn)
+  c.FilterTableLocalityGlobal().ForEach(fn)
 }
 
 // FindTableLocalityGlobal finds the first element of type TableLocalityGlobal.
@@ -2528,7 +2529,7 @@ func (c *ElementCollection[E]) FilterTableLocalityGlobal() *ElementCollection[*T
 func (e TableLocalityPrimaryRegion) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableLocalityPrimaryRegion) Element() Element {
+func (e * ElementProto_TableLocalityPrimaryRegion) Element() Element {
 	return e.TableLocalityPrimaryRegion
 }
 
@@ -2537,7 +2538,7 @@ func (e *ElementProto_TableLocalityPrimaryRegion) Element() Element {
 func ForEachTableLocalityPrimaryRegion(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityPrimaryRegion),
 ) {
-	c.FilterTableLocalityPrimaryRegion().ForEach(fn)
+  c.FilterTableLocalityPrimaryRegion().ForEach(fn)
 }
 
 // FindTableLocalityPrimaryRegion finds the first element of type TableLocalityPrimaryRegion.
@@ -2565,7 +2566,7 @@ func (c *ElementCollection[E]) FilterTableLocalityPrimaryRegion() *ElementCollec
 func (e TableLocalityRegionalByRow) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableLocalityRegionalByRow) Element() Element {
+func (e * ElementProto_TableLocalityRegionalByRow) Element() Element {
 	return e.TableLocalityRegionalByRow
 }
 
@@ -2574,7 +2575,7 @@ func (e *ElementProto_TableLocalityRegionalByRow) Element() Element {
 func ForEachTableLocalityRegionalByRow(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
 ) {
-	c.FilterTableLocalityRegionalByRow().ForEach(fn)
+  c.FilterTableLocalityRegionalByRow().ForEach(fn)
 }
 
 // FindTableLocalityRegionalByRow finds the first element of type TableLocalityRegionalByRow.
@@ -2602,7 +2603,7 @@ func (c *ElementCollection[E]) FilterTableLocalityRegionalByRow() *ElementCollec
 func (e TableLocalitySecondaryRegion) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableLocalitySecondaryRegion) Element() Element {
+func (e * ElementProto_TableLocalitySecondaryRegion) Element() Element {
 	return e.TableLocalitySecondaryRegion
 }
 
@@ -2611,7 +2612,7 @@ func (e *ElementProto_TableLocalitySecondaryRegion) Element() Element {
 func ForEachTableLocalitySecondaryRegion(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalitySecondaryRegion),
 ) {
-	c.FilterTableLocalitySecondaryRegion().ForEach(fn)
+  c.FilterTableLocalitySecondaryRegion().ForEach(fn)
 }
 
 // FindTableLocalitySecondaryRegion finds the first element of type TableLocalitySecondaryRegion.
@@ -2639,7 +2640,7 @@ func (c *ElementCollection[E]) FilterTableLocalitySecondaryRegion() *ElementColl
 func (e TablePartitioning) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TablePartitioning) Element() Element {
+func (e * ElementProto_TablePartitioning) Element() Element {
 	return e.TablePartitioning
 }
 
@@ -2648,7 +2649,7 @@ func (e *ElementProto_TablePartitioning) Element() Element {
 func ForEachTablePartitioning(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TablePartitioning),
 ) {
-	c.FilterTablePartitioning().ForEach(fn)
+  c.FilterTablePartitioning().ForEach(fn)
 }
 
 // FindTablePartitioning finds the first element of type TablePartitioning.
@@ -2676,7 +2677,7 @@ func (c *ElementCollection[E]) FilterTablePartitioning() *ElementCollection[*Tab
 func (e TableSchemaLocked) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableSchemaLocked) Element() Element {
+func (e * ElementProto_TableSchemaLocked) Element() Element {
 	return e.TableSchemaLocked
 }
 
@@ -2685,7 +2686,7 @@ func (e *ElementProto_TableSchemaLocked) Element() Element {
 func ForEachTableSchemaLocked(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableSchemaLocked),
 ) {
-	c.FilterTableSchemaLocked().ForEach(fn)
+  c.FilterTableSchemaLocked().ForEach(fn)
 }
 
 // FindTableSchemaLocked finds the first element of type TableSchemaLocked.
@@ -2713,7 +2714,7 @@ func (c *ElementCollection[E]) FilterTableSchemaLocked() *ElementCollection[*Tab
 func (e TableZoneConfig) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TableZoneConfig) Element() Element {
+func (e * ElementProto_TableZoneConfig) Element() Element {
 	return e.TableZoneConfig
 }
 
@@ -2722,7 +2723,7 @@ func (e *ElementProto_TableZoneConfig) Element() Element {
 func ForEachTableZoneConfig(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableZoneConfig),
 ) {
-	c.FilterTableZoneConfig().ForEach(fn)
+  c.FilterTableZoneConfig().ForEach(fn)
 }
 
 // FindTableZoneConfig finds the first element of type TableZoneConfig.
@@ -2750,7 +2751,7 @@ func (c *ElementCollection[E]) FilterTableZoneConfig() *ElementCollection[*Table
 func (e TemporaryIndex) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TemporaryIndex) Element() Element {
+func (e * ElementProto_TemporaryIndex) Element() Element {
 	return e.TemporaryIndex
 }
 
@@ -2759,7 +2760,7 @@ func (e *ElementProto_TemporaryIndex) Element() Element {
 func ForEachTemporaryIndex(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TemporaryIndex),
 ) {
-	c.FilterTemporaryIndex().ForEach(fn)
+  c.FilterTemporaryIndex().ForEach(fn)
 }
 
 // FindTemporaryIndex finds the first element of type TemporaryIndex.
@@ -2787,7 +2788,7 @@ func (c *ElementCollection[E]) FilterTemporaryIndex() *ElementCollection[*Tempor
 func (e Trigger) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_Trigger) Element() Element {
+func (e * ElementProto_Trigger) Element() Element {
 	return e.Trigger
 }
 
@@ -2796,7 +2797,7 @@ func (e *ElementProto_Trigger) Element() Element {
 func ForEachTrigger(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Trigger),
 ) {
-	c.FilterTrigger().ForEach(fn)
+  c.FilterTrigger().ForEach(fn)
 }
 
 // FindTrigger finds the first element of type Trigger.
@@ -2824,7 +2825,7 @@ func (c *ElementCollection[E]) FilterTrigger() *ElementCollection[*Trigger] {
 func (e TriggerDeps) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerDeps) Element() Element {
+func (e * ElementProto_TriggerDeps) Element() Element {
 	return e.TriggerDeps
 }
 
@@ -2833,7 +2834,7 @@ func (e *ElementProto_TriggerDeps) Element() Element {
 func ForEachTriggerDeps(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerDeps),
 ) {
-	c.FilterTriggerDeps().ForEach(fn)
+  c.FilterTriggerDeps().ForEach(fn)
 }
 
 // FindTriggerDeps finds the first element of type TriggerDeps.
@@ -2861,7 +2862,7 @@ func (c *ElementCollection[E]) FilterTriggerDeps() *ElementCollection[*TriggerDe
 func (e TriggerEnabled) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerEnabled) Element() Element {
+func (e * ElementProto_TriggerEnabled) Element() Element {
 	return e.TriggerEnabled
 }
 
@@ -2870,7 +2871,7 @@ func (e *ElementProto_TriggerEnabled) Element() Element {
 func ForEachTriggerEnabled(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerEnabled),
 ) {
-	c.FilterTriggerEnabled().ForEach(fn)
+  c.FilterTriggerEnabled().ForEach(fn)
 }
 
 // FindTriggerEnabled finds the first element of type TriggerEnabled.
@@ -2898,7 +2899,7 @@ func (c *ElementCollection[E]) FilterTriggerEnabled() *ElementCollection[*Trigge
 func (e TriggerEvents) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerEvents) Element() Element {
+func (e * ElementProto_TriggerEvents) Element() Element {
 	return e.TriggerEvents
 }
 
@@ -2907,7 +2908,7 @@ func (e *ElementProto_TriggerEvents) Element() Element {
 func ForEachTriggerEvents(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerEvents),
 ) {
-	c.FilterTriggerEvents().ForEach(fn)
+  c.FilterTriggerEvents().ForEach(fn)
 }
 
 // FindTriggerEvents finds the first element of type TriggerEvents.
@@ -2935,7 +2936,7 @@ func (c *ElementCollection[E]) FilterTriggerEvents() *ElementCollection[*Trigger
 func (e TriggerFunctionCall) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerFunctionCall) Element() Element {
+func (e * ElementProto_TriggerFunctionCall) Element() Element {
 	return e.TriggerFunctionCall
 }
 
@@ -2944,7 +2945,7 @@ func (e *ElementProto_TriggerFunctionCall) Element() Element {
 func ForEachTriggerFunctionCall(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerFunctionCall),
 ) {
-	c.FilterTriggerFunctionCall().ForEach(fn)
+  c.FilterTriggerFunctionCall().ForEach(fn)
 }
 
 // FindTriggerFunctionCall finds the first element of type TriggerFunctionCall.
@@ -2972,7 +2973,7 @@ func (c *ElementCollection[E]) FilterTriggerFunctionCall() *ElementCollection[*T
 func (e TriggerName) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerName) Element() Element {
+func (e * ElementProto_TriggerName) Element() Element {
 	return e.TriggerName
 }
 
@@ -2981,7 +2982,7 @@ func (e *ElementProto_TriggerName) Element() Element {
 func ForEachTriggerName(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerName),
 ) {
-	c.FilterTriggerName().ForEach(fn)
+  c.FilterTriggerName().ForEach(fn)
 }
 
 // FindTriggerName finds the first element of type TriggerName.
@@ -3009,7 +3010,7 @@ func (c *ElementCollection[E]) FilterTriggerName() *ElementCollection[*TriggerNa
 func (e TriggerTiming) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerTiming) Element() Element {
+func (e * ElementProto_TriggerTiming) Element() Element {
 	return e.TriggerTiming
 }
 
@@ -3018,7 +3019,7 @@ func (e *ElementProto_TriggerTiming) Element() Element {
 func ForEachTriggerTiming(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerTiming),
 ) {
-	c.FilterTriggerTiming().ForEach(fn)
+  c.FilterTriggerTiming().ForEach(fn)
 }
 
 // FindTriggerTiming finds the first element of type TriggerTiming.
@@ -3046,7 +3047,7 @@ func (c *ElementCollection[E]) FilterTriggerTiming() *ElementCollection[*Trigger
 func (e TriggerTransition) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerTransition) Element() Element {
+func (e * ElementProto_TriggerTransition) Element() Element {
 	return e.TriggerTransition
 }
 
@@ -3055,7 +3056,7 @@ func (e *ElementProto_TriggerTransition) Element() Element {
 func ForEachTriggerTransition(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerTransition),
 ) {
-	c.FilterTriggerTransition().ForEach(fn)
+  c.FilterTriggerTransition().ForEach(fn)
 }
 
 // FindTriggerTransition finds the first element of type TriggerTransition.
@@ -3083,7 +3084,7 @@ func (c *ElementCollection[E]) FilterTriggerTransition() *ElementCollection[*Tri
 func (e TriggerWhen) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TriggerWhen) Element() Element {
+func (e * ElementProto_TriggerWhen) Element() Element {
 	return e.TriggerWhen
 }
 
@@ -3092,7 +3093,7 @@ func (e *ElementProto_TriggerWhen) Element() Element {
 func ForEachTriggerWhen(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerWhen),
 ) {
-	c.FilterTriggerWhen().ForEach(fn)
+  c.FilterTriggerWhen().ForEach(fn)
 }
 
 // FindTriggerWhen finds the first element of type TriggerWhen.
@@ -3120,7 +3121,7 @@ func (c *ElementCollection[E]) FilterTriggerWhen() *ElementCollection[*TriggerWh
 func (e TypeComment) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_TypeComment) Element() Element {
+func (e * ElementProto_TypeComment) Element() Element {
 	return e.TypeComment
 }
 
@@ -3129,7 +3130,7 @@ func (e *ElementProto_TypeComment) Element() Element {
 func ForEachTypeComment(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TypeComment),
 ) {
-	c.FilterTypeComment().ForEach(fn)
+  c.FilterTypeComment().ForEach(fn)
 }
 
 // FindTypeComment finds the first element of type TypeComment.
@@ -3157,7 +3158,7 @@ func (c *ElementCollection[E]) FilterTypeComment() *ElementCollection[*TypeComme
 func (e UniqueWithoutIndexConstraint) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_UniqueWithoutIndexConstraint) Element() Element {
+func (e * ElementProto_UniqueWithoutIndexConstraint) Element() Element {
 	return e.UniqueWithoutIndexConstraint
 }
 
@@ -3166,7 +3167,7 @@ func (e *ElementProto_UniqueWithoutIndexConstraint) Element() Element {
 func ForEachUniqueWithoutIndexConstraint(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
 ) {
-	c.FilterUniqueWithoutIndexConstraint().ForEach(fn)
+  c.FilterUniqueWithoutIndexConstraint().ForEach(fn)
 }
 
 // FindUniqueWithoutIndexConstraint finds the first element of type UniqueWithoutIndexConstraint.
@@ -3194,7 +3195,7 @@ func (c *ElementCollection[E]) FilterUniqueWithoutIndexConstraint() *ElementColl
 func (e UniqueWithoutIndexConstraintUnvalidated) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_UniqueWithoutIndexConstraintUnvalidated) Element() Element {
+func (e * ElementProto_UniqueWithoutIndexConstraintUnvalidated) Element() Element {
 	return e.UniqueWithoutIndexConstraintUnvalidated
 }
 
@@ -3203,7 +3204,7 @@ func (e *ElementProto_UniqueWithoutIndexConstraintUnvalidated) Element() Element
 func ForEachUniqueWithoutIndexConstraintUnvalidated(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraintUnvalidated),
 ) {
-	c.FilterUniqueWithoutIndexConstraintUnvalidated().ForEach(fn)
+  c.FilterUniqueWithoutIndexConstraintUnvalidated().ForEach(fn)
 }
 
 // FindUniqueWithoutIndexConstraintUnvalidated finds the first element of type UniqueWithoutIndexConstraintUnvalidated.
@@ -3231,7 +3232,7 @@ func (c *ElementCollection[E]) FilterUniqueWithoutIndexConstraintUnvalidated() *
 func (e UserPrivileges) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_UserPrivileges) Element() Element {
+func (e * ElementProto_UserPrivileges) Element() Element {
 	return e.UserPrivileges
 }
 
@@ -3240,7 +3241,7 @@ func (e *ElementProto_UserPrivileges) Element() Element {
 func ForEachUserPrivileges(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UserPrivileges),
 ) {
-	c.FilterUserPrivileges().ForEach(fn)
+  c.FilterUserPrivileges().ForEach(fn)
 }
 
 // FindUserPrivileges finds the first element of type UserPrivileges.
@@ -3268,7 +3269,7 @@ func (c *ElementCollection[E]) FilterUserPrivileges() *ElementCollection[*UserPr
 func (e View) element() {}
 
 // Element implements ElementGetter.
-func (e *ElementProto_View) Element() Element {
+func (e * ElementProto_View) Element() Element {
 	return e.View
 }
 
@@ -3277,7 +3278,7 @@ func (e *ElementProto_View) Element() Element {
 func ForEachView(
 	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *View),
 ) {
-	c.FilterView().ForEach(fn)
+  c.FilterView().ForEach(fn)
 }
 
 // FindView finds the first element of type View.
@@ -3300,385 +3301,384 @@ func (c *ElementCollection[E]) FilterView() *ElementCollection[*View] {
 		return ok
 	})
 	return (*ElementCollection[*View])(ret)
-} //
+}//
 // SetElements sets the element inside the protobuf.
-func (e *ElementProto) SetElement(element Element) {
+func (e* ElementProto) SetElement(element Element) {
 	switch t := element.(type) {
-	default:
-		panic(fmt.Sprintf("unknown type %T", t))
+		default:
+			panic(fmt.Sprintf("unknown type %T", t))
 
-	case *AliasType:
-		e.ElementOneOf = &ElementProto_AliasType{AliasType: t}
-	case *CheckConstraint:
-		e.ElementOneOf = &ElementProto_CheckConstraint{CheckConstraint: t}
-	case *CheckConstraintUnvalidated:
-		e.ElementOneOf = &ElementProto_CheckConstraintUnvalidated{CheckConstraintUnvalidated: t}
-	case *Column:
-		e.ElementOneOf = &ElementProto_Column{Column: t}
-	case *ColumnComment:
-		e.ElementOneOf = &ElementProto_ColumnComment{ColumnComment: t}
-	case *ColumnComputeExpression:
-		e.ElementOneOf = &ElementProto_ColumnComputeExpression{ColumnComputeExpression: t}
-	case *ColumnDefaultExpression:
-		e.ElementOneOf = &ElementProto_ColumnDefaultExpression{ColumnDefaultExpression: t}
-	case *ColumnFamily:
-		e.ElementOneOf = &ElementProto_ColumnFamily{ColumnFamily: t}
-	case *ColumnName:
-		e.ElementOneOf = &ElementProto_ColumnName{ColumnName: t}
-	case *ColumnNotNull:
-		e.ElementOneOf = &ElementProto_ColumnNotNull{ColumnNotNull: t}
-	case *ColumnOnUpdateExpression:
-		e.ElementOneOf = &ElementProto_ColumnOnUpdateExpression{ColumnOnUpdateExpression: t}
-	case *ColumnType:
-		e.ElementOneOf = &ElementProto_ColumnType{ColumnType: t}
-	case *CompositeType:
-		e.ElementOneOf = &ElementProto_CompositeType{CompositeType: t}
-	case *CompositeTypeAttrName:
-		e.ElementOneOf = &ElementProto_CompositeTypeAttrName{CompositeTypeAttrName: t}
-	case *CompositeTypeAttrType:
-		e.ElementOneOf = &ElementProto_CompositeTypeAttrType{CompositeTypeAttrType: t}
-	case *ConstraintComment:
-		e.ElementOneOf = &ElementProto_ConstraintComment{ConstraintComment: t}
-	case *ConstraintWithoutIndexName:
-		e.ElementOneOf = &ElementProto_ConstraintWithoutIndexName{ConstraintWithoutIndexName: t}
-	case *Database:
-		e.ElementOneOf = &ElementProto_Database{Database: t}
-	case *DatabaseComment:
-		e.ElementOneOf = &ElementProto_DatabaseComment{DatabaseComment: t}
-	case *DatabaseData:
-		e.ElementOneOf = &ElementProto_DatabaseData{DatabaseData: t}
-	case *DatabaseRegionConfig:
-		e.ElementOneOf = &ElementProto_DatabaseRegionConfig{DatabaseRegionConfig: t}
-	case *DatabaseRoleSetting:
-		e.ElementOneOf = &ElementProto_DatabaseRoleSetting{DatabaseRoleSetting: t}
-	case *DatabaseZoneConfig:
-		e.ElementOneOf = &ElementProto_DatabaseZoneConfig{DatabaseZoneConfig: t}
-	case *EnumType:
-		e.ElementOneOf = &ElementProto_EnumType{EnumType: t}
-	case *EnumTypeValue:
-		e.ElementOneOf = &ElementProto_EnumTypeValue{EnumTypeValue: t}
-	case *ForeignKeyConstraint:
-		e.ElementOneOf = &ElementProto_ForeignKeyConstraint{ForeignKeyConstraint: t}
-	case *ForeignKeyConstraintUnvalidated:
-		e.ElementOneOf = &ElementProto_ForeignKeyConstraintUnvalidated{ForeignKeyConstraintUnvalidated: t}
-	case *Function:
-		e.ElementOneOf = &ElementProto_Function{Function: t}
-	case *FunctionBody:
-		e.ElementOneOf = &ElementProto_FunctionBody{FunctionBody: t}
-	case *FunctionLeakProof:
-		e.ElementOneOf = &ElementProto_FunctionLeakProof{FunctionLeakProof: t}
-	case *FunctionName:
-		e.ElementOneOf = &ElementProto_FunctionName{FunctionName: t}
-	case *FunctionNullInputBehavior:
-		e.ElementOneOf = &ElementProto_FunctionNullInputBehavior{FunctionNullInputBehavior: t}
-	case *FunctionSecurity:
-		e.ElementOneOf = &ElementProto_FunctionSecurity{FunctionSecurity: t}
-	case *FunctionVolatility:
-		e.ElementOneOf = &ElementProto_FunctionVolatility{FunctionVolatility: t}
-	case *IndexColumn:
-		e.ElementOneOf = &ElementProto_IndexColumn{IndexColumn: t}
-	case *IndexComment:
-		e.ElementOneOf = &ElementProto_IndexComment{IndexComment: t}
-	case *IndexData:
-		e.ElementOneOf = &ElementProto_IndexData{IndexData: t}
-	case *IndexName:
-		e.ElementOneOf = &ElementProto_IndexName{IndexName: t}
-	case *IndexPartitioning:
-		e.ElementOneOf = &ElementProto_IndexPartitioning{IndexPartitioning: t}
-	case *IndexZoneConfig:
-		e.ElementOneOf = &ElementProto_IndexZoneConfig{IndexZoneConfig: t}
-	case *LDRJobIDs:
-		e.ElementOneOf = &ElementProto_LDRJobIDs{LDRJobIDs: t}
-	case *NamedRangeZoneConfig:
-		e.ElementOneOf = &ElementProto_NamedRangeZoneConfig{NamedRangeZoneConfig: t}
-	case *Namespace:
-		e.ElementOneOf = &ElementProto_Namespace{Namespace: t}
-	case *Owner:
-		e.ElementOneOf = &ElementProto_Owner{Owner: t}
-	case *PartitionZoneConfig:
-		e.ElementOneOf = &ElementProto_PartitionZoneConfig{PartitionZoneConfig: t}
-	case *Policy:
-		e.ElementOneOf = &ElementProto_Policy{Policy: t}
-	case *PolicyDeps:
-		e.ElementOneOf = &ElementProto_PolicyDeps{PolicyDeps: t}
-	case *PolicyName:
-		e.ElementOneOf = &ElementProto_PolicyName{PolicyName: t}
-	case *PolicyRole:
-		e.ElementOneOf = &ElementProto_PolicyRole{PolicyRole: t}
-	case *PolicyUsingExpr:
-		e.ElementOneOf = &ElementProto_PolicyUsingExpr{PolicyUsingExpr: t}
-	case *PolicyWithCheckExpr:
-		e.ElementOneOf = &ElementProto_PolicyWithCheckExpr{PolicyWithCheckExpr: t}
-	case *PrimaryIndex:
-		e.ElementOneOf = &ElementProto_PrimaryIndex{PrimaryIndex: t}
-	case *RowLevelSecurityEnabled:
-		e.ElementOneOf = &ElementProto_RowLevelSecurityEnabled{RowLevelSecurityEnabled: t}
-	case *RowLevelSecurityForced:
-		e.ElementOneOf = &ElementProto_RowLevelSecurityForced{RowLevelSecurityForced: t}
-	case *RowLevelTTL:
-		e.ElementOneOf = &ElementProto_RowLevelTTL{RowLevelTTL: t}
-	case *Schema:
-		e.ElementOneOf = &ElementProto_Schema{Schema: t}
-	case *SchemaChild:
-		e.ElementOneOf = &ElementProto_SchemaChild{SchemaChild: t}
-	case *SchemaComment:
-		e.ElementOneOf = &ElementProto_SchemaComment{SchemaComment: t}
-	case *SchemaParent:
-		e.ElementOneOf = &ElementProto_SchemaParent{SchemaParent: t}
-	case *SecondaryIndex:
-		e.ElementOneOf = &ElementProto_SecondaryIndex{SecondaryIndex: t}
-	case *SecondaryIndexPartial:
-		e.ElementOneOf = &ElementProto_SecondaryIndexPartial{SecondaryIndexPartial: t}
-	case *Sequence:
-		e.ElementOneOf = &ElementProto_Sequence{Sequence: t}
-	case *SequenceOption:
-		e.ElementOneOf = &ElementProto_SequenceOption{SequenceOption: t}
-	case *SequenceOwner:
-		e.ElementOneOf = &ElementProto_SequenceOwner{SequenceOwner: t}
-	case *Table:
-		e.ElementOneOf = &ElementProto_Table{Table: t}
-	case *TableComment:
-		e.ElementOneOf = &ElementProto_TableComment{TableComment: t}
-	case *TableData:
-		e.ElementOneOf = &ElementProto_TableData{TableData: t}
-	case *TableLocalityGlobal:
-		e.ElementOneOf = &ElementProto_TableLocalityGlobal{TableLocalityGlobal: t}
-	case *TableLocalityPrimaryRegion:
-		e.ElementOneOf = &ElementProto_TableLocalityPrimaryRegion{TableLocalityPrimaryRegion: t}
-	case *TableLocalityRegionalByRow:
-		e.ElementOneOf = &ElementProto_TableLocalityRegionalByRow{TableLocalityRegionalByRow: t}
-	case *TableLocalitySecondaryRegion:
-		e.ElementOneOf = &ElementProto_TableLocalitySecondaryRegion{TableLocalitySecondaryRegion: t}
-	case *TablePartitioning:
-		e.ElementOneOf = &ElementProto_TablePartitioning{TablePartitioning: t}
-	case *TableSchemaLocked:
-		e.ElementOneOf = &ElementProto_TableSchemaLocked{TableSchemaLocked: t}
-	case *TableZoneConfig:
-		e.ElementOneOf = &ElementProto_TableZoneConfig{TableZoneConfig: t}
-	case *TemporaryIndex:
-		e.ElementOneOf = &ElementProto_TemporaryIndex{TemporaryIndex: t}
-	case *Trigger:
-		e.ElementOneOf = &ElementProto_Trigger{Trigger: t}
-	case *TriggerDeps:
-		e.ElementOneOf = &ElementProto_TriggerDeps{TriggerDeps: t}
-	case *TriggerEnabled:
-		e.ElementOneOf = &ElementProto_TriggerEnabled{TriggerEnabled: t}
-	case *TriggerEvents:
-		e.ElementOneOf = &ElementProto_TriggerEvents{TriggerEvents: t}
-	case *TriggerFunctionCall:
-		e.ElementOneOf = &ElementProto_TriggerFunctionCall{TriggerFunctionCall: t}
-	case *TriggerName:
-		e.ElementOneOf = &ElementProto_TriggerName{TriggerName: t}
-	case *TriggerTiming:
-		e.ElementOneOf = &ElementProto_TriggerTiming{TriggerTiming: t}
-	case *TriggerTransition:
-		e.ElementOneOf = &ElementProto_TriggerTransition{TriggerTransition: t}
-	case *TriggerWhen:
-		e.ElementOneOf = &ElementProto_TriggerWhen{TriggerWhen: t}
-	case *TypeComment:
-		e.ElementOneOf = &ElementProto_TypeComment{TypeComment: t}
-	case *UniqueWithoutIndexConstraint:
-		e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraint{UniqueWithoutIndexConstraint: t}
-	case *UniqueWithoutIndexConstraintUnvalidated:
-		e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraintUnvalidated{UniqueWithoutIndexConstraintUnvalidated: t}
-	case *UserPrivileges:
-		e.ElementOneOf = &ElementProto_UserPrivileges{UserPrivileges: t}
-	case *View:
-		e.ElementOneOf = &ElementProto_View{View: t}
-	}
+		case *AliasType:
+			e.ElementOneOf = &ElementProto_AliasType{ AliasType: t}
+		case *CheckConstraint:
+			e.ElementOneOf = &ElementProto_CheckConstraint{ CheckConstraint: t}
+		case *CheckConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_CheckConstraintUnvalidated{ CheckConstraintUnvalidated: t}
+		case *Column:
+			e.ElementOneOf = &ElementProto_Column{ Column: t}
+		case *ColumnComment:
+			e.ElementOneOf = &ElementProto_ColumnComment{ ColumnComment: t}
+		case *ColumnComputeExpression:
+			e.ElementOneOf = &ElementProto_ColumnComputeExpression{ ColumnComputeExpression: t}
+		case *ColumnDefaultExpression:
+			e.ElementOneOf = &ElementProto_ColumnDefaultExpression{ ColumnDefaultExpression: t}
+		case *ColumnFamily:
+			e.ElementOneOf = &ElementProto_ColumnFamily{ ColumnFamily: t}
+		case *ColumnName:
+			e.ElementOneOf = &ElementProto_ColumnName{ ColumnName: t}
+		case *ColumnNotNull:
+			e.ElementOneOf = &ElementProto_ColumnNotNull{ ColumnNotNull: t}
+		case *ColumnOnUpdateExpression:
+			e.ElementOneOf = &ElementProto_ColumnOnUpdateExpression{ ColumnOnUpdateExpression: t}
+		case *ColumnType:
+			e.ElementOneOf = &ElementProto_ColumnType{ ColumnType: t}
+		case *CompositeType:
+			e.ElementOneOf = &ElementProto_CompositeType{ CompositeType: t}
+		case *CompositeTypeAttrName:
+			e.ElementOneOf = &ElementProto_CompositeTypeAttrName{ CompositeTypeAttrName: t}
+		case *CompositeTypeAttrType:
+			e.ElementOneOf = &ElementProto_CompositeTypeAttrType{ CompositeTypeAttrType: t}
+		case *ConstraintComment:
+			e.ElementOneOf = &ElementProto_ConstraintComment{ ConstraintComment: t}
+		case *ConstraintWithoutIndexName:
+			e.ElementOneOf = &ElementProto_ConstraintWithoutIndexName{ ConstraintWithoutIndexName: t}
+		case *Database:
+			e.ElementOneOf = &ElementProto_Database{ Database: t}
+		case *DatabaseComment:
+			e.ElementOneOf = &ElementProto_DatabaseComment{ DatabaseComment: t}
+		case *DatabaseData:
+			e.ElementOneOf = &ElementProto_DatabaseData{ DatabaseData: t}
+		case *DatabaseRegionConfig:
+			e.ElementOneOf = &ElementProto_DatabaseRegionConfig{ DatabaseRegionConfig: t}
+		case *DatabaseRoleSetting:
+			e.ElementOneOf = &ElementProto_DatabaseRoleSetting{ DatabaseRoleSetting: t}
+		case *DatabaseZoneConfig:
+			e.ElementOneOf = &ElementProto_DatabaseZoneConfig{ DatabaseZoneConfig: t}
+		case *EnumType:
+			e.ElementOneOf = &ElementProto_EnumType{ EnumType: t}
+		case *EnumTypeValue:
+			e.ElementOneOf = &ElementProto_EnumTypeValue{ EnumTypeValue: t}
+		case *ForeignKeyConstraint:
+			e.ElementOneOf = &ElementProto_ForeignKeyConstraint{ ForeignKeyConstraint: t}
+		case *ForeignKeyConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_ForeignKeyConstraintUnvalidated{ ForeignKeyConstraintUnvalidated: t}
+		case *Function:
+			e.ElementOneOf = &ElementProto_Function{ Function: t}
+		case *FunctionBody:
+			e.ElementOneOf = &ElementProto_FunctionBody{ FunctionBody: t}
+		case *FunctionLeakProof:
+			e.ElementOneOf = &ElementProto_FunctionLeakProof{ FunctionLeakProof: t}
+		case *FunctionName:
+			e.ElementOneOf = &ElementProto_FunctionName{ FunctionName: t}
+		case *FunctionNullInputBehavior:
+			e.ElementOneOf = &ElementProto_FunctionNullInputBehavior{ FunctionNullInputBehavior: t}
+		case *FunctionSecurity:
+			e.ElementOneOf = &ElementProto_FunctionSecurity{ FunctionSecurity: t}
+		case *FunctionVolatility:
+			e.ElementOneOf = &ElementProto_FunctionVolatility{ FunctionVolatility: t}
+		case *IndexColumn:
+			e.ElementOneOf = &ElementProto_IndexColumn{ IndexColumn: t}
+		case *IndexComment:
+			e.ElementOneOf = &ElementProto_IndexComment{ IndexComment: t}
+		case *IndexData:
+			e.ElementOneOf = &ElementProto_IndexData{ IndexData: t}
+		case *IndexName:
+			e.ElementOneOf = &ElementProto_IndexName{ IndexName: t}
+		case *IndexPartitioning:
+			e.ElementOneOf = &ElementProto_IndexPartitioning{ IndexPartitioning: t}
+		case *IndexZoneConfig:
+			e.ElementOneOf = &ElementProto_IndexZoneConfig{ IndexZoneConfig: t}
+		case *LDRJobIDs:
+			e.ElementOneOf = &ElementProto_LDRJobIDs{ LDRJobIDs: t}
+		case *NamedRangeZoneConfig:
+			e.ElementOneOf = &ElementProto_NamedRangeZoneConfig{ NamedRangeZoneConfig: t}
+		case *Namespace:
+			e.ElementOneOf = &ElementProto_Namespace{ Namespace: t}
+		case *Owner:
+			e.ElementOneOf = &ElementProto_Owner{ Owner: t}
+		case *PartitionZoneConfig:
+			e.ElementOneOf = &ElementProto_PartitionZoneConfig{ PartitionZoneConfig: t}
+		case *Policy:
+			e.ElementOneOf = &ElementProto_Policy{ Policy: t}
+		case *PolicyDeps:
+			e.ElementOneOf = &ElementProto_PolicyDeps{ PolicyDeps: t}
+		case *PolicyName:
+			e.ElementOneOf = &ElementProto_PolicyName{ PolicyName: t}
+		case *PolicyRole:
+			e.ElementOneOf = &ElementProto_PolicyRole{ PolicyRole: t}
+		case *PolicyUsingExpr:
+			e.ElementOneOf = &ElementProto_PolicyUsingExpr{ PolicyUsingExpr: t}
+		case *PolicyWithCheckExpr:
+			e.ElementOneOf = &ElementProto_PolicyWithCheckExpr{ PolicyWithCheckExpr: t}
+		case *PrimaryIndex:
+			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
+		case *RowLevelSecurityEnabled:
+			e.ElementOneOf = &ElementProto_RowLevelSecurityEnabled{ RowLevelSecurityEnabled: t}
+		case *RowLevelSecurityForced:
+			e.ElementOneOf = &ElementProto_RowLevelSecurityForced{ RowLevelSecurityForced: t}
+		case *RowLevelTTL:
+			e.ElementOneOf = &ElementProto_RowLevelTTL{ RowLevelTTL: t}
+		case *Schema:
+			e.ElementOneOf = &ElementProto_Schema{ Schema: t}
+		case *SchemaChild:
+			e.ElementOneOf = &ElementProto_SchemaChild{ SchemaChild: t}
+		case *SchemaComment:
+			e.ElementOneOf = &ElementProto_SchemaComment{ SchemaComment: t}
+		case *SchemaParent:
+			e.ElementOneOf = &ElementProto_SchemaParent{ SchemaParent: t}
+		case *SecondaryIndex:
+			e.ElementOneOf = &ElementProto_SecondaryIndex{ SecondaryIndex: t}
+		case *SecondaryIndexPartial:
+			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
+		case *Sequence:
+			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
+		case *SequenceOption:
+			e.ElementOneOf = &ElementProto_SequenceOption{ SequenceOption: t}
+		case *SequenceOwner:
+			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
+		case *Table:
+			e.ElementOneOf = &ElementProto_Table{ Table: t}
+		case *TableComment:
+			e.ElementOneOf = &ElementProto_TableComment{ TableComment: t}
+		case *TableData:
+			e.ElementOneOf = &ElementProto_TableData{ TableData: t}
+		case *TableLocalityGlobal:
+			e.ElementOneOf = &ElementProto_TableLocalityGlobal{ TableLocalityGlobal: t}
+		case *TableLocalityPrimaryRegion:
+			e.ElementOneOf = &ElementProto_TableLocalityPrimaryRegion{ TableLocalityPrimaryRegion: t}
+		case *TableLocalityRegionalByRow:
+			e.ElementOneOf = &ElementProto_TableLocalityRegionalByRow{ TableLocalityRegionalByRow: t}
+		case *TableLocalitySecondaryRegion:
+			e.ElementOneOf = &ElementProto_TableLocalitySecondaryRegion{ TableLocalitySecondaryRegion: t}
+		case *TablePartitioning:
+			e.ElementOneOf = &ElementProto_TablePartitioning{ TablePartitioning: t}
+		case *TableSchemaLocked:
+			e.ElementOneOf = &ElementProto_TableSchemaLocked{ TableSchemaLocked: t}
+		case *TableZoneConfig:
+			e.ElementOneOf = &ElementProto_TableZoneConfig{ TableZoneConfig: t}
+		case *TemporaryIndex:
+			e.ElementOneOf = &ElementProto_TemporaryIndex{ TemporaryIndex: t}
+		case *Trigger:
+			e.ElementOneOf = &ElementProto_Trigger{ Trigger: t}
+		case *TriggerDeps:
+			e.ElementOneOf = &ElementProto_TriggerDeps{ TriggerDeps: t}
+		case *TriggerEnabled:
+			e.ElementOneOf = &ElementProto_TriggerEnabled{ TriggerEnabled: t}
+		case *TriggerEvents:
+			e.ElementOneOf = &ElementProto_TriggerEvents{ TriggerEvents: t}
+		case *TriggerFunctionCall:
+			e.ElementOneOf = &ElementProto_TriggerFunctionCall{ TriggerFunctionCall: t}
+		case *TriggerName:
+			e.ElementOneOf = &ElementProto_TriggerName{ TriggerName: t}
+		case *TriggerTiming:
+			e.ElementOneOf = &ElementProto_TriggerTiming{ TriggerTiming: t}
+		case *TriggerTransition:
+			e.ElementOneOf = &ElementProto_TriggerTransition{ TriggerTransition: t}
+		case *TriggerWhen:
+			e.ElementOneOf = &ElementProto_TriggerWhen{ TriggerWhen: t}
+		case *TypeComment:
+			e.ElementOneOf = &ElementProto_TypeComment{ TypeComment: t}
+		case *UniqueWithoutIndexConstraint:
+			e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraint{ UniqueWithoutIndexConstraint: t}
+		case *UniqueWithoutIndexConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_UniqueWithoutIndexConstraintUnvalidated{ UniqueWithoutIndexConstraintUnvalidated: t}
+		case *UserPrivileges:
+			e.ElementOneOf = &ElementProto_UserPrivileges{ UserPrivileges: t}
+		case *View:
+			e.ElementOneOf = &ElementProto_View{ View: t}}
 }
-
+//
 // GetElementOneOfProtos returns all one of protos.
 func GetElementOneOfProtos() []interface{} {
-	return []interface{}{
+	return []interface{} {
 
-		((*ElementProto_AliasType)(nil)),
-		((*ElementProto_CheckConstraint)(nil)),
-		((*ElementProto_CheckConstraintUnvalidated)(nil)),
-		((*ElementProto_Column)(nil)),
-		((*ElementProto_ColumnComment)(nil)),
-		((*ElementProto_ColumnComputeExpression)(nil)),
-		((*ElementProto_ColumnDefaultExpression)(nil)),
-		((*ElementProto_ColumnFamily)(nil)),
-		((*ElementProto_ColumnName)(nil)),
-		((*ElementProto_ColumnNotNull)(nil)),
-		((*ElementProto_ColumnOnUpdateExpression)(nil)),
-		((*ElementProto_ColumnType)(nil)),
-		((*ElementProto_CompositeType)(nil)),
-		((*ElementProto_CompositeTypeAttrName)(nil)),
-		((*ElementProto_CompositeTypeAttrType)(nil)),
-		((*ElementProto_ConstraintComment)(nil)),
-		((*ElementProto_ConstraintWithoutIndexName)(nil)),
-		((*ElementProto_Database)(nil)),
-		((*ElementProto_DatabaseComment)(nil)),
-		((*ElementProto_DatabaseData)(nil)),
-		((*ElementProto_DatabaseRegionConfig)(nil)),
-		((*ElementProto_DatabaseRoleSetting)(nil)),
-		((*ElementProto_DatabaseZoneConfig)(nil)),
-		((*ElementProto_EnumType)(nil)),
-		((*ElementProto_EnumTypeValue)(nil)),
-		((*ElementProto_ForeignKeyConstraint)(nil)),
-		((*ElementProto_ForeignKeyConstraintUnvalidated)(nil)),
-		((*ElementProto_Function)(nil)),
-		((*ElementProto_FunctionBody)(nil)),
-		((*ElementProto_FunctionLeakProof)(nil)),
-		((*ElementProto_FunctionName)(nil)),
-		((*ElementProto_FunctionNullInputBehavior)(nil)),
-		((*ElementProto_FunctionSecurity)(nil)),
-		((*ElementProto_FunctionVolatility)(nil)),
-		((*ElementProto_IndexColumn)(nil)),
-		((*ElementProto_IndexComment)(nil)),
-		((*ElementProto_IndexData)(nil)),
-		((*ElementProto_IndexName)(nil)),
-		((*ElementProto_IndexPartitioning)(nil)),
-		((*ElementProto_IndexZoneConfig)(nil)),
-		((*ElementProto_LDRJobIDs)(nil)),
-		((*ElementProto_NamedRangeZoneConfig)(nil)),
-		((*ElementProto_Namespace)(nil)),
-		((*ElementProto_Owner)(nil)),
-		((*ElementProto_PartitionZoneConfig)(nil)),
-		((*ElementProto_Policy)(nil)),
-		((*ElementProto_PolicyDeps)(nil)),
-		((*ElementProto_PolicyName)(nil)),
-		((*ElementProto_PolicyRole)(nil)),
-		((*ElementProto_PolicyUsingExpr)(nil)),
-		((*ElementProto_PolicyWithCheckExpr)(nil)),
-		((*ElementProto_PrimaryIndex)(nil)),
-		((*ElementProto_RowLevelSecurityEnabled)(nil)),
-		((*ElementProto_RowLevelSecurityForced)(nil)),
-		((*ElementProto_RowLevelTTL)(nil)),
-		((*ElementProto_Schema)(nil)),
-		((*ElementProto_SchemaChild)(nil)),
-		((*ElementProto_SchemaComment)(nil)),
-		((*ElementProto_SchemaParent)(nil)),
-		((*ElementProto_SecondaryIndex)(nil)),
-		((*ElementProto_SecondaryIndexPartial)(nil)),
-		((*ElementProto_Sequence)(nil)),
-		((*ElementProto_SequenceOption)(nil)),
-		((*ElementProto_SequenceOwner)(nil)),
-		((*ElementProto_Table)(nil)),
-		((*ElementProto_TableComment)(nil)),
-		((*ElementProto_TableData)(nil)),
-		((*ElementProto_TableLocalityGlobal)(nil)),
-		((*ElementProto_TableLocalityPrimaryRegion)(nil)),
-		((*ElementProto_TableLocalityRegionalByRow)(nil)),
-		((*ElementProto_TableLocalitySecondaryRegion)(nil)),
-		((*ElementProto_TablePartitioning)(nil)),
-		((*ElementProto_TableSchemaLocked)(nil)),
-		((*ElementProto_TableZoneConfig)(nil)),
-		((*ElementProto_TemporaryIndex)(nil)),
-		((*ElementProto_Trigger)(nil)),
-		((*ElementProto_TriggerDeps)(nil)),
-		((*ElementProto_TriggerEnabled)(nil)),
-		((*ElementProto_TriggerEvents)(nil)),
-		((*ElementProto_TriggerFunctionCall)(nil)),
-		((*ElementProto_TriggerName)(nil)),
-		((*ElementProto_TriggerTiming)(nil)),
-		((*ElementProto_TriggerTransition)(nil)),
-		((*ElementProto_TriggerWhen)(nil)),
-		((*ElementProto_TypeComment)(nil)),
-		((*ElementProto_UniqueWithoutIndexConstraint)(nil)),
-		((*ElementProto_UniqueWithoutIndexConstraintUnvalidated)(nil)),
-		((*ElementProto_UserPrivileges)(nil)),
-		((*ElementProto_View)(nil))}
+	((*ElementProto_AliasType)(nil)),
+	((*ElementProto_CheckConstraint)(nil)),
+	((*ElementProto_CheckConstraintUnvalidated)(nil)),
+	((*ElementProto_Column)(nil)),
+	((*ElementProto_ColumnComment)(nil)),
+	((*ElementProto_ColumnComputeExpression)(nil)),
+	((*ElementProto_ColumnDefaultExpression)(nil)),
+	((*ElementProto_ColumnFamily)(nil)),
+	((*ElementProto_ColumnName)(nil)),
+	((*ElementProto_ColumnNotNull)(nil)),
+	((*ElementProto_ColumnOnUpdateExpression)(nil)),
+	((*ElementProto_ColumnType)(nil)),
+	((*ElementProto_CompositeType)(nil)),
+	((*ElementProto_CompositeTypeAttrName)(nil)),
+	((*ElementProto_CompositeTypeAttrType)(nil)),
+	((*ElementProto_ConstraintComment)(nil)),
+	((*ElementProto_ConstraintWithoutIndexName)(nil)),
+	((*ElementProto_Database)(nil)),
+	((*ElementProto_DatabaseComment)(nil)),
+	((*ElementProto_DatabaseData)(nil)),
+	((*ElementProto_DatabaseRegionConfig)(nil)),
+	((*ElementProto_DatabaseRoleSetting)(nil)),
+	((*ElementProto_DatabaseZoneConfig)(nil)),
+	((*ElementProto_EnumType)(nil)),
+	((*ElementProto_EnumTypeValue)(nil)),
+	((*ElementProto_ForeignKeyConstraint)(nil)),
+	((*ElementProto_ForeignKeyConstraintUnvalidated)(nil)),
+	((*ElementProto_Function)(nil)),
+	((*ElementProto_FunctionBody)(nil)),
+	((*ElementProto_FunctionLeakProof)(nil)),
+	((*ElementProto_FunctionName)(nil)),
+	((*ElementProto_FunctionNullInputBehavior)(nil)),
+	((*ElementProto_FunctionSecurity)(nil)),
+	((*ElementProto_FunctionVolatility)(nil)),
+	((*ElementProto_IndexColumn)(nil)),
+	((*ElementProto_IndexComment)(nil)),
+	((*ElementProto_IndexData)(nil)),
+	((*ElementProto_IndexName)(nil)),
+	((*ElementProto_IndexPartitioning)(nil)),
+	((*ElementProto_IndexZoneConfig)(nil)),
+	((*ElementProto_LDRJobIDs)(nil)),
+	((*ElementProto_NamedRangeZoneConfig)(nil)),
+	((*ElementProto_Namespace)(nil)),
+	((*ElementProto_Owner)(nil)),
+	((*ElementProto_PartitionZoneConfig)(nil)),
+	((*ElementProto_Policy)(nil)),
+	((*ElementProto_PolicyDeps)(nil)),
+	((*ElementProto_PolicyName)(nil)),
+	((*ElementProto_PolicyRole)(nil)),
+	((*ElementProto_PolicyUsingExpr)(nil)),
+	((*ElementProto_PolicyWithCheckExpr)(nil)),
+	((*ElementProto_PrimaryIndex)(nil)),
+	((*ElementProto_RowLevelSecurityEnabled)(nil)),
+	((*ElementProto_RowLevelSecurityForced)(nil)),
+	((*ElementProto_RowLevelTTL)(nil)),
+	((*ElementProto_Schema)(nil)),
+	((*ElementProto_SchemaChild)(nil)),
+	((*ElementProto_SchemaComment)(nil)),
+	((*ElementProto_SchemaParent)(nil)),
+	((*ElementProto_SecondaryIndex)(nil)),
+	((*ElementProto_SecondaryIndexPartial)(nil)),
+	((*ElementProto_Sequence)(nil)),
+	((*ElementProto_SequenceOption)(nil)),
+	((*ElementProto_SequenceOwner)(nil)),
+	((*ElementProto_Table)(nil)),
+	((*ElementProto_TableComment)(nil)),
+	((*ElementProto_TableData)(nil)),
+	((*ElementProto_TableLocalityGlobal)(nil)),
+	((*ElementProto_TableLocalityPrimaryRegion)(nil)),
+	((*ElementProto_TableLocalityRegionalByRow)(nil)),
+	((*ElementProto_TableLocalitySecondaryRegion)(nil)),
+	((*ElementProto_TablePartitioning)(nil)),
+	((*ElementProto_TableSchemaLocked)(nil)),
+	((*ElementProto_TableZoneConfig)(nil)),
+	((*ElementProto_TemporaryIndex)(nil)),
+	((*ElementProto_Trigger)(nil)),
+	((*ElementProto_TriggerDeps)(nil)),
+	((*ElementProto_TriggerEnabled)(nil)),
+	((*ElementProto_TriggerEvents)(nil)),
+	((*ElementProto_TriggerFunctionCall)(nil)),
+	((*ElementProto_TriggerName)(nil)),
+	((*ElementProto_TriggerTiming)(nil)),
+	((*ElementProto_TriggerTransition)(nil)),
+	((*ElementProto_TriggerWhen)(nil)),
+	((*ElementProto_TypeComment)(nil)),
+	((*ElementProto_UniqueWithoutIndexConstraint)(nil)),
+	((*ElementProto_UniqueWithoutIndexConstraintUnvalidated)(nil)),
+	((*ElementProto_UserPrivileges)(nil)),
+	((*ElementProto_View)(nil)),}
 }
-
-// GetElementTypes returns all element types.
+//
+// GetElementTypes returns all element types. 
 func GetElementTypes() []interface{} {
 
-	return []interface{}{
+	return []interface{} {
 
-		((*AliasType)(nil)),
-		((*CheckConstraint)(nil)),
-		((*CheckConstraintUnvalidated)(nil)),
-		((*Column)(nil)),
-		((*ColumnComment)(nil)),
-		((*ColumnComputeExpression)(nil)),
-		((*ColumnDefaultExpression)(nil)),
-		((*ColumnFamily)(nil)),
-		((*ColumnName)(nil)),
-		((*ColumnNotNull)(nil)),
-		((*ColumnOnUpdateExpression)(nil)),
-		((*ColumnType)(nil)),
-		((*CompositeType)(nil)),
-		((*CompositeTypeAttrName)(nil)),
-		((*CompositeTypeAttrType)(nil)),
-		((*ConstraintComment)(nil)),
-		((*ConstraintWithoutIndexName)(nil)),
-		((*Database)(nil)),
-		((*DatabaseComment)(nil)),
-		((*DatabaseData)(nil)),
-		((*DatabaseRegionConfig)(nil)),
-		((*DatabaseRoleSetting)(nil)),
-		((*DatabaseZoneConfig)(nil)),
-		((*EnumType)(nil)),
-		((*EnumTypeValue)(nil)),
-		((*ForeignKeyConstraint)(nil)),
-		((*ForeignKeyConstraintUnvalidated)(nil)),
-		((*Function)(nil)),
-		((*FunctionBody)(nil)),
-		((*FunctionLeakProof)(nil)),
-		((*FunctionName)(nil)),
-		((*FunctionNullInputBehavior)(nil)),
-		((*FunctionSecurity)(nil)),
-		((*FunctionVolatility)(nil)),
-		((*IndexColumn)(nil)),
-		((*IndexComment)(nil)),
-		((*IndexData)(nil)),
-		((*IndexName)(nil)),
-		((*IndexPartitioning)(nil)),
-		((*IndexZoneConfig)(nil)),
-		((*LDRJobIDs)(nil)),
-		((*NamedRangeZoneConfig)(nil)),
-		((*Namespace)(nil)),
-		((*Owner)(nil)),
-		((*PartitionZoneConfig)(nil)),
-		((*Policy)(nil)),
-		((*PolicyDeps)(nil)),
-		((*PolicyName)(nil)),
-		((*PolicyRole)(nil)),
-		((*PolicyUsingExpr)(nil)),
-		((*PolicyWithCheckExpr)(nil)),
-		((*PrimaryIndex)(nil)),
-		((*RowLevelSecurityEnabled)(nil)),
-		((*RowLevelSecurityForced)(nil)),
-		((*RowLevelTTL)(nil)),
-		((*Schema)(nil)),
-		((*SchemaChild)(nil)),
-		((*SchemaComment)(nil)),
-		((*SchemaParent)(nil)),
-		((*SecondaryIndex)(nil)),
-		((*SecondaryIndexPartial)(nil)),
-		((*Sequence)(nil)),
-		((*SequenceOption)(nil)),
-		((*SequenceOwner)(nil)),
-		((*Table)(nil)),
-		((*TableComment)(nil)),
-		((*TableData)(nil)),
-		((*TableLocalityGlobal)(nil)),
-		((*TableLocalityPrimaryRegion)(nil)),
-		((*TableLocalityRegionalByRow)(nil)),
-		((*TableLocalitySecondaryRegion)(nil)),
-		((*TablePartitioning)(nil)),
-		((*TableSchemaLocked)(nil)),
-		((*TableZoneConfig)(nil)),
-		((*TemporaryIndex)(nil)),
-		((*Trigger)(nil)),
-		((*TriggerDeps)(nil)),
-		((*TriggerEnabled)(nil)),
-		((*TriggerEvents)(nil)),
-		((*TriggerFunctionCall)(nil)),
-		((*TriggerName)(nil)),
-		((*TriggerTiming)(nil)),
-		((*TriggerTransition)(nil)),
-		((*TriggerWhen)(nil)),
-		((*TypeComment)(nil)),
-		((*UniqueWithoutIndexConstraint)(nil)),
-		((*UniqueWithoutIndexConstraintUnvalidated)(nil)),
-		((*UserPrivileges)(nil)),
-		((*View)(nil))}
+	((*AliasType)(nil)),
+	((*CheckConstraint)(nil)),
+	((*CheckConstraintUnvalidated)(nil)),
+	((*Column)(nil)),
+	((*ColumnComment)(nil)),
+	((*ColumnComputeExpression)(nil)),
+	((*ColumnDefaultExpression)(nil)),
+	((*ColumnFamily)(nil)),
+	((*ColumnName)(nil)),
+	((*ColumnNotNull)(nil)),
+	((*ColumnOnUpdateExpression)(nil)),
+	((*ColumnType)(nil)),
+	((*CompositeType)(nil)),
+	((*CompositeTypeAttrName)(nil)),
+	((*CompositeTypeAttrType)(nil)),
+	((*ConstraintComment)(nil)),
+	((*ConstraintWithoutIndexName)(nil)),
+	((*Database)(nil)),
+	((*DatabaseComment)(nil)),
+	((*DatabaseData)(nil)),
+	((*DatabaseRegionConfig)(nil)),
+	((*DatabaseRoleSetting)(nil)),
+	((*DatabaseZoneConfig)(nil)),
+	((*EnumType)(nil)),
+	((*EnumTypeValue)(nil)),
+	((*ForeignKeyConstraint)(nil)),
+	((*ForeignKeyConstraintUnvalidated)(nil)),
+	((*Function)(nil)),
+	((*FunctionBody)(nil)),
+	((*FunctionLeakProof)(nil)),
+	((*FunctionName)(nil)),
+	((*FunctionNullInputBehavior)(nil)),
+	((*FunctionSecurity)(nil)),
+	((*FunctionVolatility)(nil)),
+	((*IndexColumn)(nil)),
+	((*IndexComment)(nil)),
+	((*IndexData)(nil)),
+	((*IndexName)(nil)),
+	((*IndexPartitioning)(nil)),
+	((*IndexZoneConfig)(nil)),
+	((*LDRJobIDs)(nil)),
+	((*NamedRangeZoneConfig)(nil)),
+	((*Namespace)(nil)),
+	((*Owner)(nil)),
+	((*PartitionZoneConfig)(nil)),
+	((*Policy)(nil)),
+	((*PolicyDeps)(nil)),
+	((*PolicyName)(nil)),
+	((*PolicyRole)(nil)),
+	((*PolicyUsingExpr)(nil)),
+	((*PolicyWithCheckExpr)(nil)),
+	((*PrimaryIndex)(nil)),
+	((*RowLevelSecurityEnabled)(nil)),
+	((*RowLevelSecurityForced)(nil)),
+	((*RowLevelTTL)(nil)),
+	((*Schema)(nil)),
+	((*SchemaChild)(nil)),
+	((*SchemaComment)(nil)),
+	((*SchemaParent)(nil)),
+	((*SecondaryIndex)(nil)),
+	((*SecondaryIndexPartial)(nil)),
+	((*Sequence)(nil)),
+	((*SequenceOption)(nil)),
+	((*SequenceOwner)(nil)),
+	((*Table)(nil)),
+	((*TableComment)(nil)),
+	((*TableData)(nil)),
+	((*TableLocalityGlobal)(nil)),
+	((*TableLocalityPrimaryRegion)(nil)),
+	((*TableLocalityRegionalByRow)(nil)),
+	((*TableLocalitySecondaryRegion)(nil)),
+	((*TablePartitioning)(nil)),
+	((*TableSchemaLocked)(nil)),
+	((*TableZoneConfig)(nil)),
+	((*TemporaryIndex)(nil)),
+	((*Trigger)(nil)),
+	((*TriggerDeps)(nil)),
+	((*TriggerEnabled)(nil)),
+	((*TriggerEvents)(nil)),
+	((*TriggerFunctionCall)(nil)),
+	((*TriggerName)(nil)),
+	((*TriggerTiming)(nil)),
+	((*TriggerTransition)(nil)),
+	((*TriggerWhen)(nil)),
+	((*TypeComment)(nil)),
+	((*UniqueWithoutIndexConstraint)(nil)),
+	((*UniqueWithoutIndexConstraintUnvalidated)(nil)),
+	((*UserPrivileges)(nil)),
+	((*View)(nil)),}
 }
-
+//
 // ForEachElementType loops over each element type
 func ForEachElementType(fn func(e Element) error) error {
 	for _, e := range GetElementTypes() {
