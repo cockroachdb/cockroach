@@ -131,7 +131,7 @@ type TxnSender interface {
 	// gateway node until the commit time. Only allowed on the RootTxn. Buffered
 	// writes cannot be enabled on a txn that performed any requests. When
 	// disabling buffered writes, if there are any writes in the buffer, they
-	// are flushed.
+	// are flushed with the next BatchRequest.
 	SetBufferedWritesEnabled(bool)
 
 	// BufferedWritesEnabled returns whether the buffered writes are enabled.

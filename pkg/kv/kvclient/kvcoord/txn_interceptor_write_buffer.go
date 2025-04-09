@@ -153,6 +153,11 @@ type txnWriteBuffer struct {
 	// use buffered writes, we can skip the AbortSpan check on the server.
 	enabled bool
 
+	// flushOnNextBatch, if set, indicates that write buffering has just been
+	// disabled, and the interceptor should flush any buffered writes when it
+	// sees the next BatchRequest.
+	flushOnNextBatch bool
+
 	buffer        btree
 	bufferIDAlloc uint64
 	bufferSize    int64
@@ -166,9 +171,23 @@ type txnWriteBuffer struct {
 	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
 }
 
+func (twb *txnWriteBuffer) setEnabled(enabled bool) {
+	if !enabled && twb.buffer.Len() > 0 {
+		// When disabling write buffering, if we evaluated any requests, we need
+		// to ensure to flush the buffer.
+		twb.flushOnNextBatch = true
+	}
+	twb.enabled = enabled
+}
+
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
+	if twb.flushOnNextBatch {
+		twb.flushOnNextBatch = false
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
 	if !twb.enabled {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
@@ -355,7 +374,14 @@ func (twb *txnWriteBuffer) setWrapped(wrapped lockedSender) {
 
 // populateLeafInputState is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
-	if !twb.enabled || twb.buffer.Len() == 0 {
+	// Note that we don't short-circuit this method if twb.enabled is false in
+	// case write buffering was just disabled, yet we haven't flushed the
+	// buffer.
+	//
+	// At the time of writing, this could only happen when we encountered a DDL
+	// stmt which shouldn't need the LeafTxn support, but we choose to lean on
+	// the safe side and simply ignore twb.enabled boolean.
+	if twb.buffer.Len() == 0 {
 		return
 	}
 	tis.BufferedWrites = make([]roachpb.BufferedWrite, 0, twb.buffer.Len())
