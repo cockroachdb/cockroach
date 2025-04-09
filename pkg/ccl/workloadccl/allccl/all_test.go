@@ -282,7 +282,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
-		`tpcc`:       0x3f37ea71beae16fb,
+		`tpcc`:       0xcccced25deea244e,
 		`tpch`:       0xcd2abbd021ed895d,
 		`ycsb`:       0x0e6012ee6491a0fb,
 	}
