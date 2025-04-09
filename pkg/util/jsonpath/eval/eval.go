@@ -22,13 +22,36 @@ var (
 type jsonpathCtx struct {
 	// Root of the given JSON object ($). We store this because we will need to
 	// support queries with multiple root elements (ex. $.a ? ($.b == "hello").
-	root   json.JSON
-	vars   json.JSON
+	root json.JSON
+	// vars is the JSON object that contains the variables that may be used in
+	// the JSONPath query. It is a JSON object that contains key-value pairs of
+	// variable names to their corresponding values.
+	vars json.JSON
+	// strict variable is used to determine if how structural errors within the
+	// JSON objects are handled. If strict is true, the query will error out on
+	// structural errors (ex. key accessors on arrays, key accessors on invalid
+	// keys, etc.). Otherwise, the query will attempt to continue execution.
+	// This is controlled by the strict or lax keywords at the start of the
+	// JSONPath query.
 	strict bool
+	// silent variable is used to determine how errors should be thrown during
+	// evaluation. If silent is true, the query will not throw most errors. If
+	// silent is false, the query will throw errors such as key accessors in
+	// strict mode on invalid keys. However, if silent is true, the query will
+	// return nothing. This is controlled by the optional silent variable in
+	// jsonb_path_* builtin functions.
+	silent bool
 
 	// innermostArrayLength stores the length of the innermost array. If the current
 	// evaluation context is not evaluating on an array, this value is -1.
 	innermostArrayLength int
+}
+
+func maybeThrowError(ctx *jsonpathCtx, err error) error {
+	if ctx.silent {
+		return nil
+	}
+	return err
 }
 
 func JsonpathQuery(
@@ -36,7 +59,7 @@ func JsonpathQuery(
 ) ([]tree.DJSON, error) {
 	parsedPath, err := parser.Parse(string(path))
 	if err != nil {
-		return []tree.DJSON{}, err
+		return nil, err
 	}
 	expr := parsedPath.AST
 
@@ -44,11 +67,8 @@ func JsonpathQuery(
 		root:                 target.JSON,
 		vars:                 vars.JSON,
 		strict:               expr.Strict,
+		silent:               bool(silent),
 		innermostArrayLength: -1,
-	}
-	// When silent is true, overwrite the strict mode.
-	if bool(silent) {
-		ctx.strict = false
 	}
 
 	j, err := ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
@@ -145,7 +165,7 @@ func (ctx *jsonpathCtx) executeAnyItem(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
 ) ([]json.JSON, error) {
 	if jsonValue.Len() == 0 {
-		return []json.JSON{}, nil
+		return nil, nil
 	}
 	var agg []json.JSON
 	processItem := func(item json.JSON) error {
