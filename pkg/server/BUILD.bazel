@@ -543,6 +543,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
