@@ -56,13 +56,12 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 		// it is a BACKFILL we have already seen, then it is fine for it to be
 		// an earlier timestamp than the latest boundary.
 		boundaryTS := r.Timestamp
-		_, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+		if _, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
 			return elem.Compare(ts)
-		})
-		if ok {
+		}); ok {
 			break
 		}
-		if err := f.assertBoundaryNotEarlier(r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 		f.backfills = append(f.backfills, boundaryTS)
@@ -72,7 +71,7 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 		// EXIT and RESTART are final boundaries that cause the changefeed
 		// processors to all move to draining and so should not be followed
 		// by any other boundaries.
-		if err := f.assertBoundaryNotEarlier(r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 		f.boundaryTime = r.Timestamp
@@ -88,9 +87,10 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 	// If the frontier changed, we check if the frontier has advanced past any known backfills.
 	if frontierChanged {
 		frontier := f.Frontier()
-		i, _ := slices.BinarySearchFunc(f.backfills, frontier, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
-			return elem.Compare(ts)
-		})
+		i, _ := slices.BinarySearchFunc(f.backfills, frontier,
+			func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+				return elem.Compare(ts)
+			})
 		f.backfills = f.backfills[i:]
 	}
 	return frontierChanged, nil
@@ -103,10 +103,9 @@ func (f *frontierResolvedSpanFrontier) ForwardResolvedSpan(
 // happening at different timestamps.
 func (f *frontierResolvedSpanFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 	boundaryTS := r.Timestamp
-	_, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+	if _, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
 		return elem.Compare(ts)
-	})
-	if ok {
+	}); ok {
 		return true
 	}
 

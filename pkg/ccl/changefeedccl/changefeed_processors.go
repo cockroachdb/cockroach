@@ -2050,7 +2050,7 @@ func (f *schemaChangeFrontier) ForwardResolvedSpan(
 		// Boundary resolved events should be ingested from the schema feed
 		// serially, where the changefeed won't even observe a new schema change
 		// boundary until it has progressed past the current boundary.
-		if err := f.assertBoundaryNotEarlier(r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 		if r.Timestamp.After(f.boundaryTime) {
@@ -2142,17 +2142,23 @@ func (f *schemaChangeFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 	return false
 }
 
-// assertBoundaryNotEarlier is a helper method provided to assert that a
-// resolved span does not have an earlier boundary than the existing one.
-func (f *schemaChangeFrontier) assertBoundaryNotEarlier(r jobspb.ResolvedSpan) error {
+// assertBoundaryNotEarlierOrDifferent is a helper method that asserts that a
+// resolved span does not have an earlier boundary than the existing one
+// nor is it at the same time as the existing one with a different type.
+func (f *schemaChangeFrontier) assertBoundaryNotEarlierOrDifferent(r jobspb.ResolvedSpan) error {
 	boundaryType := r.BoundaryType
 	if boundaryType == jobspb.ResolvedSpan_NONE {
-		return errors.AssertionFailedf("assertBoundaryNotEarlier should not be called for NONE boundary")
+		return errors.AssertionFailedf("assertBoundaryNotEarlierOrDifferent should not be called for NONE boundary")
 	}
 	boundaryTS := r.Timestamp
 	if f.boundaryTime.After(boundaryTS) {
 		return errors.AssertionFailedf("received resolved span for %s "+
 			"with %v boundary (%v), which is earlier than previously received %v boundary (%v)",
+			r.Span, r.BoundaryType, r.Timestamp, f.boundaryType, f.boundaryTime)
+	}
+	if f.boundaryTime.Equal(boundaryTS) && f.boundaryType != boundaryType {
+		return errors.AssertionFailedf("received resolved span for %s "+
+			"with %v boundary (%v), which has a different type from previously received %v boundary (%v) with same timestamp",
 			r.Span, r.BoundaryType, r.Timestamp, f.boundaryType, f.boundaryTime)
 	}
 	return nil
