@@ -35,6 +35,7 @@ Release justification: non-production (release infra) change.
 const (
 	releasedVersionFlag = "released-version"
 	nextVersionFlag     = "next-version"
+	versionBumpOnly     = "version-bump-only"
 )
 
 var updateVersionsFlags = struct {
@@ -46,6 +47,7 @@ var updateVersionsFlags = struct {
 	smtpHost           string
 	smtpPort           int
 	emailAddresses     []string
+	versionBumpOnly    bool
 }{}
 
 var updateVersionsCmd = &cobra.Command{
@@ -57,6 +59,7 @@ var updateVersionsCmd = &cobra.Command{
 
 func init() {
 	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.dryRun, dryRun, false, "print diff and emails without any side effects")
+	updateVersionsCmd.Flags().BoolVar(&updateVersionsFlags.versionBumpOnly, versionBumpOnly, false, "only bump the version, do not create any other PRs")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.releasedVersionStr, releasedVersionFlag, "", "released cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.nextVersionStr, nextVersionFlag, "", "next cockroachdb version")
 	updateVersionsCmd.Flags().StringVar(&updateVersionsFlags.templatesDir, templatesDir, "", "templates directory")
@@ -489,6 +492,10 @@ func generateRepoList(
 			},
 		}
 		reposToWorkOn = append(reposToWorkOn, repo)
+	}
+	if updateVersionsFlags.versionBumpOnly {
+		log.Println("Version bump only, skipping other PRs")
+		return reposToWorkOn, nil
 	}
 
 	// 2. Brew. Update for all stable releases
