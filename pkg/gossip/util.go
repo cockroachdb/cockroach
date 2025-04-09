@@ -8,9 +8,11 @@ package gossip
 import (
 	"bytes"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SystemConfigDeltaFilter keeps track of SystemConfig values so that unmodified
@@ -89,6 +91,21 @@ func (df *SystemConfigDeltaFilter) ForModified(
 			// New key.
 			fn(newKV)
 			newIdx++
+		}
+	}
+}
+
+// batchAndConsume waits on a channel to allow batching more events. It keeps
+// while consuming events as they come to avoid blocking the channel producer.
+func batchAndConsume(ch <-chan struct{}, batchDuration time.Duration) {
+	var batchTimer timeutil.Timer
+	defer batchTimer.Stop()
+	batchTimer.Reset(batchDuration)
+	for !batchTimer.Read {
+		select {
+		case <-ch: // event happened while we are waiting for our batchTimer to end.
+		case <-batchTimer.C:
+			batchTimer.Read = true
 		}
 	}
 }

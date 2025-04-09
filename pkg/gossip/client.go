@@ -330,6 +330,7 @@ func (c *client) gossip(
 
 	errCh := make(chan error, 1)
 	initCh := make(chan struct{}, 1)
+
 	// This wait group is used to allow the caller to wait until gossip
 	// processing is terminated.
 	wg.Add(1)
@@ -394,6 +395,9 @@ func (c *client) gossip(
 		case <-initTimer.C:
 			maybeRegister()
 		case <-sendGossipChan:
+			// We need to send the gossip delta to the remote server. Wait a bit to
+			// batch the updates in one message.
+			batchAndConsume(sendGossipChan, infosBatchDelay)
 			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}
