@@ -1137,7 +1137,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	// Layers below us expect that writes inside a batch are in sequence number
 	// order but the iterator above returns data in key order. Here we re-sort it
-	// which is unfortunate but required we make a change to the pipeliner.
+	// which is unfortunate but required unless we make a change to the pipeliner.
 	slices.SortFunc(reqs, func(a kvpb.RequestUnion, b kvpb.RequestUnion) int {
 		aHeader := a.GetInner().Header()
 		bHeader := b.GetInner().Header()
