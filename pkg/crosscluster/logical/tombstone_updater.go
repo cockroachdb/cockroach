@@ -8,7 +8,6 @@ package logical
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // tombstoneUpdater is a helper for updating the mvcc origin timestamp assigned
@@ -40,12 +40,8 @@ type tombstoneUpdater struct {
 		// deleter is a row.Deleter that uses the leased descriptor. Callers should
 		// use getDeleter to ensure the lease is valid for the current transaction.
 		deleter row.Deleter
-		// columns are the name of the columns that are expected in the cdc row.
-		columns []string
 	}
 
-	// scratch is a scratch buffer for the tombstone updater. This is reused
-	// across calls to addToBatch to avoid allocations.
 	scratch []tree.Datum
 }
 
@@ -56,7 +52,6 @@ func (c *tombstoneUpdater) ReleaseLeases(ctx context.Context) {
 		c.leased.descriptor.Release(ctx)
 		c.leased.descriptor = nil
 		c.leased.deleter = row.Deleter{}
-		c.leased.columns = c.leased.columns[:0]
 	}
 }
 
@@ -78,19 +73,31 @@ func newTombstoneUpdater(
 	}
 }
 
+// updateTombstoneAny is an `updateTombstone` wrapper that accepts the []any
+// datum slice from the original sql writer's datum builder.
+func (tu *tombstoneUpdater) updateTombstoneAny(
+	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, datums []any,
+) (batchStats, error) {
+	tu.scratch = tu.scratch[:0]
+	for _, datum := range datums {
+		tu.scratch = append(tu.scratch, datum.(tree.Datum))
+	}
+	return tu.updateTombstone(ctx, txn, mvccTimestamp, tu.scratch)
+}
+
 // updateTombstone attempts to update the tombstone for the given row. This is
 // expected to always succeed. The delete will only return zero rows if the
 // operation loses LWW or the row does not exist. So if the cput fails on a
 // condition, it should also fail on LWW, which is treated as a success.
 func (tu *tombstoneUpdater) updateTombstone(
-	ctx context.Context, txn isql.Txn, afterRow cdcevent.Row,
+	ctx context.Context, txn isql.Txn, mvccTimestamp hlc.Timestamp, afterRow []tree.Datum,
 ) (batchStats, error) {
 	err := func() error {
 		if txn != nil {
 			// If updateTombstone is called in a transaction, create and run a batch
 			// in the transaction.
 			batch := txn.KV().NewBatch()
-			if err := tu.addToBatch(ctx, txn.KV(), batch, afterRow); err != nil {
+			if err := tu.addToBatch(ctx, txn.KV(), batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
 			return txn.KV().Run(ctx, batch)
@@ -99,13 +106,13 @@ func (tu *tombstoneUpdater) updateTombstone(
 		// 1pc transaction.
 		return tu.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			batch := txn.NewBatch()
-			if err := tu.addToBatch(ctx, txn, batch, afterRow); err != nil {
+			if err := tu.addToBatch(ctx, txn, batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
 			return txn.CommitInBatch(ctx, batch)
 		})
 	}()
-	if err != nil && isLwwLoser(err) {
+	if err != nil {
 		if isLwwLoser(err) {
 			return batchStats{kvWriteTooOld: 1}, nil
 		}
@@ -115,44 +122,28 @@ func (tu *tombstoneUpdater) updateTombstone(
 }
 
 func (tu *tombstoneUpdater) addToBatch(
-	ctx context.Context, txn *kv.Txn, batch *kv.Batch, afterRow cdcevent.Row,
+	ctx context.Context,
+	txn *kv.Txn,
+	batch *kv.Batch,
+	mvccTimestamp hlc.Timestamp,
+	afterRow []tree.Datum,
 ) error {
 	deleter, err := tu.getDeleter(ctx, txn)
 	if err != nil {
 		return err
 	}
 
-	tu.scratch = tu.scratch[:0]
-
-	// Note that the columns in the cdcevent row are decoded using a descriptor
-	// for the source column, whereas the row.Deleter column list is initialized
-	// using columns from the destination table. This is funky, but it works
-	// because we validate LDR schemas are compatible.
-
-	datums, err := afterRow.DatumsNamed(tu.leased.columns)
-	if err != nil {
-		return err
-	}
-	if err := datums.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		tu.scratch = append(tu.scratch, d)
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	// the index helpers are never really used since we are always updating a
-	// tombstone.
 	var ph row.PartialIndexUpdateHelper
 	var vh row.VectorIndexUpdateHelper
 
 	return deleter.DeleteRow(
 		ctx,
 		batch,
-		tu.scratch,
+		afterRow,
 		ph,
 		vh,
 		&row.OriginTimestampCPutHelper{
-			OriginTimestamp:    afterRow.MvccTimestamp,
+			OriginTimestamp:    mvccTimestamp,
 			PreviousWasDeleted: true,
 		},
 		false, /* mustValidateOldPKValues */
@@ -174,10 +165,6 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 		cols, err := writeableColunms(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
 		if err != nil {
 			return row.Deleter{}, err
-		}
-
-		for _, col := range cols {
-			tu.leased.columns = append(tu.leased.columns, col.GetName())
 		}
 
 		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
