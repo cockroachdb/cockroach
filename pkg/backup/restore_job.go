@@ -936,12 +936,7 @@ func createImportingDescriptors(
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
 	manifest backuppb.BackupManifest,
-) (
-	dataToPreRestore *restorationDataBase,
-	preValidation *restorationDataBase,
-	trackedRestore *mainRestorationData,
-	err error,
-) {
+) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	const kvTrace = false
 
@@ -1569,14 +1564,14 @@ func createImportingDescriptors(
 		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
 	}
 
-	dataToPreRestore = &restorationDataBase{
+	dataToPreRestore := &restorationDataBase{
 		spans:        preRestoreSpans,
 		tableRekeys:  rekeys,
 		tenantRekeys: tenantRekeys,
 		pkIDs:        pkIDs,
 	}
 
-	trackedRestore = &mainRestorationData{
+	trackedRestore := &mainRestorationData{
 		restorationDataBase{
 			spans:        postRestoreSpans,
 			tableRekeys:  rekeys,
@@ -1585,7 +1580,7 @@ func createImportingDescriptors(
 		},
 	}
 
-	preValidation = &restorationDataBase{}
+	preValidation := &restorationDataBase{}
 	// During a RESTORE with verify_backup_table_data data, progress on
 	// verifySpans should be the source of job progress (as it will take the most time); therefore,
 	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
@@ -1625,6 +1620,17 @@ func createImportingDescriptors(
 				trackedRestore.systemTables = append(trackedRestore.systemTables, table)
 			}
 		}
+	}
+	for _, tenant := range details.Tenants {
+		to, err := roachpb.MakeTenantID(tenant.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		from := to
+		if details.PreRewriteTenantId != nil {
+			from = *details.PreRewriteTenantId
+		}
+		trackedRestore.addTenant(from, to)
 	}
 	return dataToPreRestore, preValidation, trackedRestore, nil
 }
@@ -1870,19 +1876,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return nil
 	}
 
-	for _, tenant := range details.Tenants {
-		to, err := roachpb.MakeTenantID(tenant.ID)
-		if err != nil {
-			return err
-		}
-		from := to
-		if details.PreRewriteTenantId != nil {
-			from = *details.PreRewriteTenantId
-		}
-		mainData.addTenant(from, to)
-	}
-
-	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
+	_, err = protectRestoreTargets(ctx, p.ExecCfg(), r.job, details, mainData.getTenantRekeys())
 	if err != nil {
 		return err
 	}
@@ -1918,7 +1912,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			if err := r.restoreSystemTables(
-				ctx, p.ExecCfg().InternalDB, preData.systemTables,
+				ctx, p.ExecCfg().InternalDB, preData.getSystemTables(),
 			); err != nil {
 				return err
 			}
@@ -2022,7 +2016,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
 		if err := r.restoreSystemTables(
-			ctx, p.ExecCfg().InternalDB, mainData.systemTables,
+			ctx, p.ExecCfg().InternalDB, mainData.getSystemTables(),
 		); err != nil {
 			return err
 		}
@@ -2033,7 +2027,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	} else if isSystemUserRestore(details) {
-		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.systemTables); err != nil {
+		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)

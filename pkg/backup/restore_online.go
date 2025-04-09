@@ -568,7 +568,7 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 }
 
 func getDownloadSpans(
-	codec keys.SQLCodec, preRestoreData *restorationDataBase, mainRestoreData *mainRestorationData,
+	codec keys.SQLCodec, preRestoreData restorationData, mainRestoreData restorationData,
 ) (roachpb.Spans, error) {
 	rekey := mainRestoreData.getRekeys()
 	rekey = append(rekey, preRestoreData.getRekeys()...)
@@ -602,8 +602,8 @@ func getDownloadSpans(
 func (r *restoreResumer) maybeWriteDownloadJob(
 	ctx context.Context,
 	execConfig *sql.ExecutorConfig,
-	preRestoreData *restorationDataBase,
-	mainRestoreData *mainRestorationData,
+	preRestoreData restorationData,
+	mainRestoreData restorationData,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if !details.ExperimentalOnline {
