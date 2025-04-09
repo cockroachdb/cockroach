@@ -8,6 +8,7 @@ package gossip
 import (
 	"bytes"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -90,5 +91,19 @@ func (df *SystemConfigDeltaFilter) ForModified(
 			fn(newKV)
 			newIdx++
 		}
+	}
+}
+
+// batchAndConsume waits on a channel to allow more probability of more events
+// being ready, then it attempts to consume from the channel in case events
+// actually happened after the sleep.
+func batchAndConsume(ch <-chan struct{}, wait time.Duration) {
+	time.Sleep(wait)
+
+	// Attempt to consume from the channel in case a producer was able to produce
+	// work during sleeping.
+	select {
+	case <-ch:
+	default:
 	}
 }

@@ -394,6 +394,9 @@ func (c *client) gossip(
 		case <-initTimer.C:
 			maybeRegister()
 		case <-sendGossipChan:
+			// We need to send the gossip delta to the remote server. Wait a bit to
+			// batch the updates in one message.
+			batchAndConsume(sendGossipChan, infosBatchDelay)
 			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}

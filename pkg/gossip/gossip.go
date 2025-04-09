@@ -118,6 +118,10 @@ const (
 	// we didn't need to tighten the last time we checked.
 	gossipTightenInterval = time.Second
 
+	// infosBatchDelay controls how much time do we wait to batch infos before
+	// sending them.
+	infosBatchDelay = 10 * time.Millisecond
+
 	unknownNodeID roachpb.NodeID = 0
 )
 

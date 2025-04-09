@@ -201,6 +201,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		case err := <-errCh:
 			return err
 		case <-ready:
+			batchAndConsume(ready, infosBatchDelay)
 		}
 	}
 }
