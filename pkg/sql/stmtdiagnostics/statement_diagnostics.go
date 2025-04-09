@@ -768,8 +768,10 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if b, ok := row[7].(*tree.DBool); ok {
 			redacted = bool(*b)
 		}
-		if u, ok := row[8].(*tree.DString); ok {
-			username = string(*u)
+		if isUsernameSet {
+			if u, ok := row[8].(*tree.DString); ok {
+				username = string(*u)
+			}
 		}
 		ids.Add(int(id))
 		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
