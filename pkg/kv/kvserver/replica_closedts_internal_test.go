@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,12 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
-
-// TestingSetCachedClosedTimestampPolicy sets the closed timestamp policy on r
-// to be the given policy. It is a test-only helper method.
-func (r *Replica) TestingSetCachedClosedTimestampPolicy(policy ctpb.RangeClosedTimestampPolicy) {
-	r.cachedClosedTimestampPolicy.Store(int32(policy))
-}
 
 func TestSideTransportClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()

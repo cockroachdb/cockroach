@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultMaxNetworkRTT = 150 * time.Millisecond
+	DefaultMaxNetworkRTT = 150 * time.Millisecond
 )
 
 // computeLeadTimeForGlobalReads calculates how far ahead of the current time a
@@ -118,7 +118,7 @@ func TargetForPolicy(
 			targetOffsetTime = leadTargetOverride
 			break
 		}
-		targetOffsetTime = computeLeadTimeForGlobalReads(defaultMaxNetworkRTT,
+		targetOffsetTime = computeLeadTimeForGlobalReads(DefaultMaxNetworkRTT,
 			maxClockOffset, sideTransportCloseInterval)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
