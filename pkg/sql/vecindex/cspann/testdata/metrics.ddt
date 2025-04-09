@@ -12,7 +12,7 @@ vec7: (0, 0)
 vec8: (1, 4)
 vec9: (5, 2)
 ----
-• 1 (4.625, 5.25)
+• 1 (0, 0)
 │
 ├───• 2 (8.5, 5.5)
 │   │
@@ -20,28 +20,30 @@ vec9: (5, 2)
 │   ├───• vec2 (3, 10)
 │   └───• vec9 (5, 2)
 │
-├───• 4 (0, -0.5)
+├───• 5 (1, 6.25)
 │   │
-│   ├───• vec7 (0, 0)
-│   └───• vec1 (0, -1)
+│   ├───• vec5 (3, 6)
+│   ├───• vec4 (2, 7)
+│   ├───• vec3 (-2, 8)
+│   └───• vec8 (1, 4)
 │
-└───• 5 (1, 6.25)
+└───• 4 (0, -0.5)
     │
-    ├───• vec5 (3, 6)
-    ├───• vec4 (2, 7)
-    ├───• vec3 (-2, 8)
-    └───• vec8 (1, 4)
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
 
 metrics
 ----
 2 successful splits
 0 pending splits/merges
 
-# Delete vector from primary index, but not from secondary index.
-delete not-found
-vec3
+# Insert more vectors into the index to trigger a split, but don't process the
+# split so there is a pending split fixup.
+insert skip-fixups
+vec10: (1, 8)
+vec11: (3, 5)
 ----
-• 1 (4.625, 5.25)
+• 1 (0, 0)
 │
 ├───• 2 (8.5, 5.5)
 │   │
@@ -49,27 +51,21 @@ vec3
 │   ├───• vec2 (3, 10)
 │   └───• vec9 (5, 2)
 │
-├───• 4 (0, -0.5)
+├───• 5 (1, 6.25)
 │   │
-│   ├───• vec7 (0, 0)
-│   └───• vec1 (0, -1)
+│   ├───• vec5 (3, 6)
+│   ├───• vec4 (2, 7)
+│   ├───• vec3 (-2, 8)
+│   ├───• vec8 (1, 4)
+│   ├───• vec10 (1, 8)
+│   └───• vec11 (3, 5)
 │
-└───• 5 (1, 6.25)
+└───• 4 (0, -0.5)
     │
-    ├───• vec5 (3, 6)
-    ├───• vec4 (2, 7)
-    ├───• vec3 (MISSING)
-    └───• vec8 (1, 4)
-
-# Search for fixup, which will enqueue a fixup that removes the vector from the
-# index.
-search max-results=1
-(-2, 8)
-----
-vec4: 17 (centroid=1.25)
-6 leaf vectors, 9 vectors, 4 full vectors, 3 partitions
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
 
 metrics
 ----
 2 successful splits
-0 pending splits/merges
+1 pending splits/merges

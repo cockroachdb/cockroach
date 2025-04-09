@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
@@ -162,6 +164,11 @@ func main() {
 	fmt.Print(HideCursor)
 	defer fmt.Print(ShowCursor)
 
+	// Start pprof server at http://localhost:8080/debug/pprof/
+	go func() {
+		http.ListenAndServe("localhost:8080", nil)
+	}()
+
 	switch flag.Arg(0) {
 	// Search an index that has been built and cached on disk.
 	case "search":
@@ -287,7 +294,7 @@ func (vb *vectorBench) SearchIndex() {
 		minPartitionSize, maxPartitionSize, *flagBeamSize)
 	fmt.Println(vb.provider.FormatStats())
 
-	fmt.Printf(White + "beam\trecall\tleaf\tall\tfull\tpartns\tqps\n" + Reset)
+	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
 
 	// Search multiple times with different beam sizes.
 	beamSizeStrs := strings.Split(*flagSearchBeamSizes, ",")
@@ -432,6 +439,7 @@ func newVectorProvider(
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
+		UseNewFixups:     true,
 	}
 
 	if *flagMemStore {

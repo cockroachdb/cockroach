@@ -45,48 +45,87 @@ vec11: (1, 1)
 vec12: (5, 4)
 vec13: (6, 2)
 ----
-• 1 (1.5, 1.875)
+• 1 (0, 0)
 │
-├───• 2 (1, -2)
+├───• 9 (4.5, 3.5)
 │   │
-│   └───• vec6 (1, -6)
+│   ├───• vec12 (5, 4)
+│   └───• vec3 (4, 3)
 │
-├───• 4 (-1.6667, 8)
+├───• 7 (-2, 4.5)
 │   │
-│   ├───• vec8 (-2, 8)
-│   ├───• vec4 (-4, 5)
-│   ├───• vec5 (1, 11)
-│   └───• vec9 (2, 8)
-│
-├───• 6 (0, 3.5)
-│   │
-│   ├───• vec10 (0, 3)
 │   ├───• vec7 (0, 4)
+│   ├───• vec4 (-4, 5)
+│   └───• vec10 (0, 3)
+│
+├───• 4 (1, -2)
+│   │
 │   ├───• vec1 (1, 2)
+│   ├───• vec6 (1, -6)
 │   └───• vec11 (1, 1)
 │
-└───• 7 (5.3333, 3.6667)
+├───• 6 (-0.5, 9.5)
+│   │
+│   ├───• vec5 (1, 11)
+│   ├───• vec8 (-2, 8)
+│   └───• vec9 (2, 8)
+│
+└───• 8 (6.5, 3)
     │
-    ├───• vec3 (4, 3)
-    ├───• vec2 (7, 4)
-    ├───• vec12 (5, 4)
-    └───• vec13 (6, 2)
+    ├───• vec13 (6, 2)
+    └───• vec2 (7, 4)
+
+force-split partition-key=1
+----
+• 1 (0, 0)
+│
+├───• 10 (-1.25, 7)
+│   │
+│   ├───• 6 (-0.5, 9.5)
+│   │   │
+│   │   ├───• vec5 (1, 11)
+│   │   ├───• vec8 (-2, 8)
+│   │   └───• vec9 (2, 8)
+│   │
+│   └───• 7 (-2, 4.5)
+│       │
+│       ├───• vec7 (0, 4)
+│       ├───• vec4 (-4, 5)
+│       └───• vec10 (0, 3)
+│
+└───• 11 (4, 1.5)
+    │
+    ├───• 4 (1, -2)
+    │   │
+    │   ├───• vec1 (1, 2)
+    │   ├───• vec6 (1, -6)
+    │   └───• vec11 (1, 1)
+    │
+    ├───• 9 (4.5, 3.5)
+    │   │
+    │   ├───• vec12 (5, 4)
+    │   └───• vec3 (4, 3)
+    │
+    └───• 8 (6.5, 3)
+        │
+        ├───• vec13 (6, 2)
+        └───• vec2 (7, 4)
 
 # Search for closest vectors with beam-size=1.
 search max-results=2 beam-size=1
 (1, 6)
 ----
-vec7: 5 (centroid=0.5)
-vec10: 10 (centroid=0.5)
-4 leaf vectors, 8 vectors, 4 full vectors, 2 partitions
+vec7: 5 (centroid=2.06)
+vec10: 10 (centroid=2.5)
+3 leaf vectors, 7 vectors, 3 full vectors, 3 partitions
 
 # Search for closest vectors with beam-size=2.
 search max-results=2 beam-size=2
 (1, 6)
 ----
-vec7: 5 (centroid=0.5)
-vec9: 5 (centroid=3.67)
-8 leaf vectors, 12 vectors, 7 full vectors, 3 partitions
+vec7: 5 (centroid=2.06)
+vec9: 5 (centroid=2.92)
+6 leaf vectors, 10 vectors, 6 full vectors, 4 partitions
 
 # ----------------------------------------------------------------------
 # Search tree with only duplicate vectors.
@@ -99,19 +138,22 @@ vec4: (4, 9)
 vec5: (4, 9)
 vec6: (4, 9)
 ----
-• 1 (4, 9)
+• 1 (0, 0)
 │
-├───• 2 (4, 9)
+├───• 5 (4, 9)
 │   │
-│   ├───• vec1 (4, 9)
-│   └───• vec2 (4, 9)
+│   ├───• vec5 (4, 9)
+│   └───• vec6 (4, 9)
 │
-└───• 3 (4, 9)
+├───• 3 (4, 9)
+│   │
+│   ├───• vec3 (4, 9)
+│   └───• vec4 (4, 9)
+│
+└───• 4 (4, 9)
     │
-    ├───• vec3 (4, 9)
-    ├───• vec4 (4, 9)
-    ├───• vec5 (4, 9)
-    └───• vec6 (4, 9)
+    ├───• vec1 (4, 9)
+    └───• vec2 (4, 9)
 
 # Ensure that search result returns multiple keys.
 search max-results=3
@@ -120,7 +162,7 @@ search max-results=3
 vec1: 2 (centroid=0)
 vec2: 2 (centroid=0)
 vec3: 2 (centroid=0)
-6 leaf vectors, 8 vectors, 6 full vectors, 3 partitions
+4 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
 
 # ----------------------------------------------------------------------
 # Search tree with duplicate keys. This can happen when a vector is updated in
@@ -135,22 +177,22 @@ vec5: (6, 1)
 vec1: (10, 5)
 vec1: (-2, -2)
 ----
-• 1 (2, 3.5)
+• 1 (0, 0)
+│
+├───• 5 (8.5, 4.5)
+│   │
+│   ├───• vec2 (7, 4)
+│   └───• vec1 (-2, -2)
 │
 ├───• 3 (-1.5, 3.5)
 │   │
 │   ├───• vec4 (-4, 5)
 │   └───• vec1 (-2, -2)
 │
-├───• 4 (5, 2)
-│   │
-│   ├───• vec3 (4, 3)
-│   └───• vec5 (6, 1)
-│
-└───• 5 (8.5, 4.5)
+└───• 4 (5, 2)
     │
-    ├───• vec2 (7, 4)
-    └───• vec1 (-2, -2)
+    ├───• vec3 (4, 3)
+    └───• vec5 (6, 1)
 
 # Ensure that search result doesn't contain duplicates.
 search max-results=6
