@@ -138,6 +138,8 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 
 	// Test definitions which indicates which version of the corpus to fetch,
 	// and the binary to validate against.
+	// Note: Testing against 23.1 corpus files has been removed since we no longer
+	// run nightlies on that branch because that version is end of life.
 	compatTests := []struct {
 		testName               string
 		binaryVersion          *clusterupgrade.Version
@@ -149,11 +151,6 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 			binaryVersion:          predecessorVersion,
 			corpusVersion:          fmt.Sprintf("mixed-release-%s", releaseSeries(currentVersion)),
 			alternateCorpusVersion: "mixed-master",
-		},
-		{
-			testName:      "forwards compatibility",
-			binaryVersion: currentVersion,
-			corpusVersion: fmt.Sprintf("release-%s", releaseSeries(predecessorVersion)),
 		},
 		{
 			testName:      "same version",
