@@ -1601,7 +1601,7 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, timestamp hlc.Clock
 	// Fast path optimization for either no observed timestamps or
 	// exactly one, for the same nodeID as we're updating.
 	if l := len(t.ObservedTimestamps); l == 0 {
-		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: timestamp}}
+		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: timestamp}} // TODO: 0.6% of allocations
 		return
 	} else if l == 1 && t.ObservedTimestamps[0].NodeID == nodeID {
 		if timestamp.Less(t.ObservedTimestamps[0].Timestamp) {
