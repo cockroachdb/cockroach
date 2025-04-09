@@ -7355,6 +7355,19 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT privileges ON ALL ROUTINES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -7513,6 +7526,32 @@ revoke_stmt:
       Privileges: $5.privilegeList(),
       Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
+        AllProceduresInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
+| REVOKE privileges ON ALL ROUTINES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL ROUTINES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllFunctionsInSchema: true,
         AllProceduresInSchema: true,
       },
       Grantees: $13.roleSpecList(),
@@ -12901,9 +12940,9 @@ target_object_type:
   {
     $$.val = privilege.Routines
   }
-| ROUTINES error
+| ROUTINES
   {
-    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON ROUTINES ...")
+    $$.val = privilege.Routines
   }
 
 opt_for_roles:
