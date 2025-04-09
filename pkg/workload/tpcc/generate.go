@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	randold "golang.org/x/exp/rand"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -57,6 +58,7 @@ const (
 
 type generateLocals struct {
 	rng       tpccRand
+	rngOld    tpccRandOld
 	uuidAlloc uuid.UUID
 }
 
@@ -480,8 +482,8 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
-	numOrderLines := randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
+	l.rngOld.Seed(RandomSeed.Seed() + uint64(rowIdx))
+	numOrderLines := randIntOld(l.rngOld.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -500,7 +502,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 			// We need a random permutation of customers that stable for all orders in a
 			// district, so use the district ID to seed the random permutation.
 			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
-			for i, cID := range rand.New(rand.NewPCG(uint64(dID), 0)).Perm(numCustomersPerDistrict) {
+			for i, cID := range randold.New(randold.NewSource(uint64(dID))).Perm(numCustomersPerDistrict) {
 				w.randomCIDsCache.values[dID][i] = cID + 1
 			}
 		}
@@ -512,7 +514,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	var carrierID int64
 	if oID < 2101 {
 		carrierSet = true
-		carrierID = randInt(l.rng.Rand, 1, 10)
+		carrierID = randIntOld(l.rngOld.Rand, 1, 10)
 	}
 
 	cb.Reset(orderTypes, 1, coldata.StandardColumnFactory)
@@ -601,15 +603,15 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(orderRowIdx)))
-	numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
+	l.rngOld.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
+	numOrderLines := int(randIntOld(l.rngOld.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
 	// NB: There is one batch of order_line rows per order
 	oID := (orderRowIdx % numOrdersPerDistrict) + 1
 	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (orderRowIdx / numOrdersPerWarehouse)
 
-	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
+	ao := aCharsOffset(l.rngOld.Intn(len(aCharsAlphabet)))
 	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)
 	olOIDCol := cb.ColVec(0).Int64()
 	olDIDCol := cb.ColVec(1).Int64()
@@ -634,14 +636,14 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 			amount = 0
 			deliveryDSet = true
 		} else {
-			amount = float64(randInt(l.rng.Rand, 1, 999999)) / 100.0
+			amount = float64(randIntOld(l.rngOld.Rand, 1, 999999)) / 100.0
 		}
 
 		olOIDCol[rowIdx] = int64(oID)
 		olDIDCol[rowIdx] = int64(dID)
 		olWIDCol[rowIdx] = int64(wID)
 		olNumberCol[rowIdx] = int64(olNumber)
-		olIIDCol[rowIdx] = randInt(l.rng.Rand, 1, 100000)
+		olIIDCol[rowIdx] = randIntOld(l.rngOld.Rand, 1, 100000)
 		olSupplyWIDCol[rowIdx] = int64(wID)
 		if deliveryDSet {
 			olDeliveryDCol.Set(rowIdx, w.nowTime)
@@ -650,7 +652,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 		}
 		olQuantityCol[rowIdx] = 5
 		olAmountCol[rowIdx] = amount
-		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))
+		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnlyOld(&l.rngOld, &ao, a, 24, 24))
 	}
 }
 
