@@ -50,6 +50,7 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
 )
