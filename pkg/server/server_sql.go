@@ -779,17 +779,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext:   cfg.AmbientCtx,
-		Settings:         cfg.Settings,
-		RuntimeStats:     cfg.runtime,
-		LogicalClusterID: clusterIDForSQL,
-		ClusterName:      cfg.ClusterName,
-		NodeID:           cfg.nodeIDContainer,
-		Locality:         cfg.Locality,
-		Codec:            codec,
-		DB:               cfg.internalDB,
-		RPCContext:       cfg.rpcContext,
-		Stopper:          cfg.stopper,
+		AmbientContext:    cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		RuntimeStats:      cfg.runtime,
+		LogicalClusterID:  clusterIDForSQL,
+		ClusterName:       cfg.ClusterName,
+		NodeID:            cfg.nodeIDContainer,
+		Locality:          cfg.Locality,
+		LocalityAddresses: cfg.LocalityAddresses,
+		Codec:             codec,
+		DB:                cfg.internalDB,
+		RPCContext:        cfg.rpcContext,
+		Stopper:           cfg.stopper,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -1564,9 +1565,9 @@ func (s *SQLServer) preStart(
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
 			if hasNodeID {
 				// Write/acquire our instance row.
-				return s.sqlInstanceStorage.CreateNodeInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), nodeID, []roachpb.LocalityAddress{})
+				return s.sqlInstanceStorage.CreateNodeInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), nodeID, s.distSQLServer.LocalityAddresses)
 			}
-			return s.sqlInstanceStorage.CreateInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), []roachpb.LocalityAddress{})
+			return s.sqlInstanceStorage.CreateInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), s.distSQLServer.LocalityAddresses)
 		})
 	if err != nil {
 		return err
