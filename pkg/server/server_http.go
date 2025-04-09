@@ -9,8 +9,10 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
@@ -40,6 +43,27 @@ type httpServer struct {
 	// gzMux is an HTTP handler that gzip-compresses mux.
 	gzMux http.Handler
 	proxy *nodeProxy
+}
+
+// timeoutListener is a wrapped net.Listener that sets a read deadline
+// on the connection after accepting it.
+type timeoutListener struct {
+	net.Listener
+	timeout time.Duration
+}
+
+func (l *timeoutListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	err = conn.SetReadDeadline(timeutil.Now().Add(l.timeout))
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }
 
 func newHTTPServer(
@@ -298,7 +322,16 @@ func startHTTPService(
 	}
 
 	if uiTLSConfig != nil {
-		httpMux := cmux.New(httpLn)
+		// We can add connection timeouts via the HTTPS server, however there is an edge case
+		// where a TCP connection that has not sent enough data to be matched by cmux causes
+		// the multiplexer to hang indefinitley on reading from the connection. This could
+		// prevent CRDB from shutting down. So we use this timeoutListener to timeout those
+		// problematic connections.
+		wrappedLn := &timeoutListener{
+			Listener: httpLn,
+			timeout:  20 * time.Second,
+		}
+		httpMux := cmux.New(wrappedLn)
 		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
 
