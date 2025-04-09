@@ -394,6 +394,8 @@ type Server struct {
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
+	LabelValueConfig *metric.LabelValueConfig
+
 	mu struct {
 		syncutil.Mutex
 		connectionCount     int64
@@ -491,6 +493,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
+		LabelValueConfig:        metric.NewLabelValueConfig(),
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
@@ -837,6 +840,12 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 // GetBytesMonitor returns this server's BytesMonitor.
 func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
 	return s.pool
+}
+
+func (s *Server) UpdateLabelValueConfig(sv *settings.Values, registry *metric.Registry) {
+	s.LabelValueConfig.SetAppNameLabelEnabled(metric.AppNameLabelEnabled.Get(sv))
+	s.LabelValueConfig.SetDBNameLabelEnabled(metric.DBNameLabelEnabled.Get(sv))
+	registry.ReinitialiseChildMetrics(s.LabelValueConfig)
 }
 
 // SetupConn creates a connExecutor for the client connection.
