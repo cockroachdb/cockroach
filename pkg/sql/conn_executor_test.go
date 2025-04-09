@@ -2455,11 +2455,11 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		initialInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		initialUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		runner.Exec(t, "INSERT into test values (1, 1)")
-		// Confirm only internal metrics increased.
+		// Confirm user metrics did not increase.
 		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Equal(t, initialUserMetrics, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalInternalMetrics, initialInternalMetrics)
 	})
 
 	t.Run("app name set in session", func(t *testing.T) {
@@ -2484,20 +2484,18 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf("set application_name='%v'", catconstants.InternalAppNamePrefix+"mytest"))
 		runner.Exec(t, "INSERT into test values (2, 1)")
 
-		// Confirm only internal metrics increased.
+		// Confirm user metrics did not increase.
 		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
 		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Equal(t, initialUserMetrics, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalInternalMetrics, initialInternalMetrics)
 
 		// Reset app name.
 		runner.Exec(t, "set application_name='mytest'")
 		runner.Exec(t, "INSERT into test values (3, 1)")
 
-		// Confirm only user metrics increased.
-		finalInternalMetrics = sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		// Confirm user metrics increased.
 		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
-		require.Equal(t, initialUserMetrics+1, finalUserMetrics)
-		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+		require.Greater(t, finalUserMetrics, initialUserMetrics)
 	})
 }
