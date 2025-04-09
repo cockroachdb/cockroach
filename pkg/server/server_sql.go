@@ -111,7 +111,6 @@ import (
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -721,26 +720,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
 	cfg.stopper.AddCloser(tempEngine)
-	// Remove temporary directory linked to tempEngine after closing
-	// tempEngine.
-	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		useStore := cfg.TempStorageConfig.Spec
-		var err error
-		if useStore.InMemory {
-			// Used store is in-memory so we remove the temp
-			// directory directly since there is no record file.
-			err = os.RemoveAll(cfg.TempStorageConfig.Path)
-		} else {
-			// If record file exists, we invoke CleanupTempDirs to
-			// also remove the record after the temp directory is
-			// removed.
-			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			err = fs.CleanupTempDirs(recordPath)
-		}
-		if err != nil {
-			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
-		}
-	}))
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(distSQLMetrics)
