@@ -274,7 +274,7 @@ func TestMVCCHistories(t *testing.T) {
 			buf.Printf(">> %s:\n", name)
 
 			// Dump point keys.
-			iter, err := r.NewIter(sstable.NoTransforms, nil, nil)
+			iter, err := r.NewIter(sstable.NoTransforms, nil, nil, sstable.AssertNoBlobHandles)
 			if err != nil {
 				return err
 			}
