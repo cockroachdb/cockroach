@@ -19,6 +19,7 @@ func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error)
 			return nil, err
 		}
 		if val == nil {
+			// TODO(normanchenn): check this during parsing.
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", scalar.Variable)
 		}
 		return val, nil
