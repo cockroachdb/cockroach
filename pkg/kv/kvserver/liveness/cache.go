@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -242,16 +241,14 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 	// within the liveness threshold. Note that LastUpdatedTime is set
 	// when the store detail is created and will have a non-zero value
 	// even before the first gossip arrives for a store.
-
-	// NB: nodeDialer is nil in some tests.
-	connected := c.nodeDialer == nil || c.nodeDialer.ConnHealth(l.NodeID, rpc.SystemClass) == nil
 	lastDescUpdate := c.lastDescriptorUpdate(l.NodeID)
 
 	return l.CreateNodeVitality(
 		c.clock.Now(),
 		lastDescUpdate.lastUpdateTime,
 		lastDescUpdate.lastUnavailableTime,
-		connected,
+		c.nodeDialer,
+		nil,
 		TimeUntilNodeDead.Get(&c.st.SV),
 		TimeAfterNodeSuspect.Get(&c.st.SV),
 	)

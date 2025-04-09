@@ -2090,6 +2090,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
 			// As above, the bazel build tag has an impact here.
 			stream.GrepNot(`pkg/testutils/docker/single_node_docker_test.go`),
+			// TODO(#143870): remove uses of this package.
+			stream.GrepNot(`"golang.org/x/exp/rand" is deprecated`),
 		}
 		for analyzerName, config := range nogoConfig {
 			if !staticcheckCheckNameRe.MatchString(analyzerName) {

@@ -8,6 +8,8 @@ package livenesspb
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -173,8 +175,11 @@ type NodeVitality struct {
 	draining bool
 	// membership is whether the node is active or in a state of decommissioning.
 	membership MembershipStatus
+	// nodeDialer is used to calculate if we are directly connected to this node
+	// or not.
+	nodeDialer *nodedialer.Dialer
 	// connected is whether we are currently directly connect to this node.
-	connected bool
+	connected *bool
 
 	// When the record is created. Records are not held for long, but they should
 	// always give consistent results when asked.
@@ -285,7 +290,7 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 			return nv.isAliveAndConnected()
 		}
 	case NetworkMap:
-		return nv.connected
+		return nv.IsConnected()
 	case LossOfQuorum:
 		return nv.isAlive()
 	case ReplicaGCQueue:
@@ -315,7 +320,7 @@ func (nv NodeVitality) isAvailableNotDraining() bool {
 }
 
 func (nv NodeVitality) isAliveAndConnected() bool {
-	return nv.isAvailableNotDraining() && nv.connected
+	return nv.isAvailableNotDraining() && nv.IsConnected()
 }
 
 // isAliveEpoch is used for epoch leases. It is similar to isAlive, but doesn't
@@ -527,6 +532,14 @@ func (nv NodeVitality) LivenessStatus() NodeLivenessStatus {
 
 }
 
+func (nv NodeVitality) IsConnected() bool {
+	if nv.connected == nil {
+		connected := nv.nodeDialer == nil || nv.nodeDialer.ConnHealth(nv.nodeID, rpc.SystemClass) == nil
+		nv.connected = &connected
+	}
+	return *nv.connected
+}
+
 // CreateNodeVitality creates a NodeVitality record based on a liveness record
 // and information whether it should be treated as dead or alive. Computing
 // whether it is dead or alive requires external data sources so the information
@@ -535,7 +548,8 @@ func (l Liveness) CreateNodeVitality(
 	now hlc.Timestamp,
 	descUpdateTime hlc.Timestamp,
 	descUnavailableTime hlc.Timestamp,
-	connected bool,
+	dialer *nodedialer.Dialer,
+	connected *bool,
 	timeUntilNodeDead time.Duration,
 	timeAfterNodeSuspect time.Duration,
 ) NodeVitality {
@@ -546,6 +560,7 @@ func (l Liveness) CreateNodeVitality(
 		nodeID:               l.NodeID,
 		draining:             l.Draining,
 		membership:           l.Membership,
+		nodeDialer:           dialer,
 		connected:            connected,
 		now:                  now,
 		descUpdateTime:       descUpdateTime,

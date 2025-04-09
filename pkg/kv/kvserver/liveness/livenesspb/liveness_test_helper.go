@@ -49,10 +49,12 @@ func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
 
 func (e testNodeVitalityEntry) convert() NodeVitality {
 	now := e.clock.Now()
+	connected := true
 	if e.Alive {
-		return e.Liveness.CreateNodeVitality(now, now, hlc.Timestamp{}, true, time.Second, time.Second)
+		return e.Liveness.CreateNodeVitality(now, now, hlc.Timestamp{}, nil, &connected, time.Second, time.Second)
 	} else {
-		return e.Liveness.CreateNodeVitality(now, now.AddDuration(-time.Hour), hlc.Timestamp{}, false, time.Second, time.Second)
+		connected = false
+		return e.Liveness.CreateNodeVitality(now, now.AddDuration(-time.Hour), hlc.Timestamp{}, nil, &connected, time.Second, time.Second)
 	}
 }
 
@@ -159,10 +161,11 @@ func (tnv TestNodeVitality) RestartNode(id roachpb.NodeID) {
 // FakeNodeVitality creates a node vitality record that is either dead or alive
 // by all accounts.
 func FakeNodeVitality(alive bool) NodeVitality {
+	connected := true
 	if alive {
 		return NodeVitality{
 			nodeID:               1,
-			connected:            true,
+			connected:            &connected,
 			now:                  hlc.Timestamp{}.AddDuration(time.Nanosecond),
 			timeUntilNodeDead:    time.Second,
 			timeAfterNodeSuspect: time.Second,
@@ -170,9 +173,10 @@ func FakeNodeVitality(alive bool) NodeVitality {
 			livenessEpoch:        1,
 		}
 	} else {
+		connected = false
 		return NodeVitality{
 			nodeID:        1,
-			connected:     false,
+			connected:     &connected,
 			livenessEpoch: 1,
 		}
 	}
