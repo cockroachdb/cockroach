@@ -1646,6 +1646,23 @@ func (ef *execFactory) ConstructUpdateSwap(
 		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
 	}
 
+	// For update swap, fetch columns need to include at least every column that
+	// could appear in the primary index.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if !fetchColOrdSet.Contains(col.Ordinal()) {
+			return nil, errors.AssertionFailedf("fetch columns missing col %v", col.ColName())
+		}
+	}
+
+	if !checks.Empty() {
+		return nil, errors.AssertionFailedf("update swap does not support checks")
+	}
+
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 
@@ -1907,6 +1924,19 @@ func (ef *execFactory) ConstructDeleteSwap(
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
+	// For delete swap, fetch columns need to include at least every column that
+	// could appear in the primary index.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if !fetchColOrdSet.Contains(col.Ordinal()) {
+			return nil, errors.AssertionFailedf("fetch columns missing col %v", col.ColName())
+		}
+	}
+
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 
