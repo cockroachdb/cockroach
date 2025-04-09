@@ -27,7 +27,6 @@ WHERE variable IN (
 ORDER BY variable
 ----
 kv.rangefeed.enabled false
-physical_replication.enabled false
 server.controller.default_target_cluster application
 spanconfig.range_coalescing.application.enabled false
 spanconfig.range_coalescing.system.enabled false
