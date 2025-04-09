@@ -2944,7 +2944,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
 	ex.extraTxnState.txnRewindPos = pos
 	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.extraTxnState.rewindPosSnapshot.savepoints = ex.extraTxnState.savepoints.clone()
-	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone()
+	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone() // TODO: This is indirectly 7% of allocations.
 	return ex.commitPrepStmtNamespace(ctx)
 }
 
@@ -3920,7 +3920,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
-	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError // TODO: 2.9% of allocations
 	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		evalCtx.AsOfSystemTime.MaxTimestampBound = ex.extraTxnState.descCollection.GetMaxTimestampBound()
 	} else if newTxn {
@@ -4871,7 +4871,7 @@ func withPlanGist(ctx context.Context, gist string) context.Context {
 	if gist == "" {
 		return ctx
 	}
-	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
+	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist) // TODO: This is 1.5% of allocations, some here (I think to box gist) and some indirectly.
 }
 
 func planGistFromCtx(ctx context.Context) string {

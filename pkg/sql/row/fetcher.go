@@ -479,8 +479,8 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 		rf.kvFetcher = args.StreamingKVFetcher
 	} else if !args.WillUseKVProvider {
-		var kvPairsRead int64
-		var batchRequestsIssued int64
+		var kvPairsRead int64         // TODO: Can we eliminate this allocation? ~0.4% of allocations
+		var batchRequestsIssued int64 // TODO: Can we eliminate this allocation? ~0.4% of allocations
 		fetcherArgs := newTxnKVFetcherArgs{
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
@@ -501,7 +501,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
 			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues()
 		}
-		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
+		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs)) // TODO: ~1% of allocations. Can we reuse the kv fetcher?
 	}
 
 	return nil

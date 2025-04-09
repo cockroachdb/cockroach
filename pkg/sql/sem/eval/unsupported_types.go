@@ -25,7 +25,7 @@ type unsupportedTypeChecker struct {
 // be used to check whether a type is allowed by the current cluster version.
 func NewUnsupportedTypeChecker(handle clusterversion.Handle) tree.UnsupportedTypeChecker {
 	// There are currently no types to check. Uncomment this code if a new type is introduced.
-	return &unsupportedTypeChecker{version: handle}
+	return &unsupportedTypeChecker{version: handle} // TODO: 2.75% of allocations.
 }
 
 var _ tree.UnsupportedTypeChecker = (*unsupportedTypeChecker)(nil)

@@ -345,7 +345,7 @@ func (p *planner) runExecBuild(
 		ctx,
 		&p.curPlan,
 		&p.stmt,
-		newExecFactory(ctx, p),
+		newExecFactory(ctx, p), // TODO: 0.6% of allocations. We don't need to allocate this if we have a pre-compiled plan (see prototype in #143540).
 		execMemo,
 		p.SemaCtx(),
 		p.EvalContext(),
@@ -428,7 +428,7 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg redact.SafeString) {
 	if log.VDepth(1, 1) {
 		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.p.stmt)
 	} else {
-		log.Eventf(ctx, "%s", string(msg))
+		log.Eventf(ctx, "%s", string(msg)) // TODO: 0.7% allocations.
 	}
 }
 

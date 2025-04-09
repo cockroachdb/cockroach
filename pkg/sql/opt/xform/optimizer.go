@@ -126,7 +126,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		evalCtx:  evalCtx,
 		catalog:  catalog,
 		f:        o.f,
-		stateMap: make(map[groupStateKey]*groupState),
+		stateMap: make(map[groupStateKey]*groupState), // TODO: 0.7% of allocations. We don't need to do this if we have a generic query plan.
 	}
 	o.cancelChecker.Reset(ctx)
 	o.f.Init(ctx, evalCtx, catalog)

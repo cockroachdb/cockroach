@@ -235,7 +235,7 @@ func newRootTxnCoordSender(
 		log.Fatalf(context.TODO(), "cannot initialize root txn with seq != 0: %s", txn)
 	}
 
-	tcs := &TxnCoordSender{
+	tcs := &TxnCoordSender{ // TODO: 0.7% of allocations
 		typ:                   kv.RootTxn,
 		TxnCoordSenderFactory: tcf,
 	}

@@ -131,7 +131,7 @@ func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.C
 		mem = &memo.Memo{}
 	}
 	mem.Init(ctx, evalCtx)
-	mem.SetReplacer(func(e opt.Expr, replace memo.ReplaceFunc) opt.Expr {
+	mem.SetReplacer(func(e opt.Expr, replace memo.ReplaceFunc) opt.Expr { // TODO: 1% of allocations. Do we need to do this for every query? Not for generic query plans.
 		return f.Replace(e, ReplaceFunc(replace))
 	})
 
