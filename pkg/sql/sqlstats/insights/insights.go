@@ -133,18 +133,16 @@ type PercentileValues struct {
 }
 
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics, knobs *TestingKnobs) *Provider {
+func New(st *cluster.Settings, metrics Metrics) *Provider {
 	store := newStore(st)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
 	return &Provider{
 		store: store,
-		ingester: newConcurrentBufferIngester(
-			newRegistry(st, &compositeDetector{detectors: []detector{
-				&latencyThresholdDetector{st: st},
-				anomalyDetector,
-			}}, store, knobs),
-		),
+		registry: newRegistry(st, &compositeDetector{detectors: []detector{
+			&latencyThresholdDetector{st: st},
+			anomalyDetector,
+		}}, store),
 		anomalyDetector: anomalyDetector,
 	}
 }
