@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -434,7 +435,7 @@ func TestMVCCHistories(t *testing.T) {
 							}
 						}
 						for i, sst := range e.ssts {
-							err = storage.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
+							err = storageutils.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
 							if err != nil {
 								if foundErr == nil {
 									// Handle the error below.

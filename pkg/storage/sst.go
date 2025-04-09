@@ -8,7 +8,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -20,9 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
@@ -1355,111 +1352,4 @@ func UpdateSSTTimestamps(
 	}
 
 	return sstOut.Bytes(), statsDelta, nil
-}
-
-// ReportSSTEntries iterates through an SST and dumps the raw SST data into the
-// buffer in a format suitable for datadriven testing output.
-//
-// TODO(tbg): this should live in a testutil package.
-func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error {
-	r, err := sstable.NewMemReader(sst, sstable.ReaderOptions{
-		Comparer:   &EngineComparer,
-		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
-	})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = r.Close() }()
-	buf.Printf(">> %s:\n", name)
-
-	// Dump point keys.
-	iter, err := r.NewIter(sstable.NoTransforms, nil, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = iter.Close() }()
-	for kv := iter.First(); kv != nil; kv = iter.Next() {
-		if err := iter.Error(); err != nil {
-			return err
-		}
-		key, err := DecodeMVCCKey(kv.K.UserKey)
-		if err != nil {
-			return err
-		}
-		v, _, err := kv.Value(nil)
-		if err != nil {
-			return err
-		}
-		value, err := DecodeMVCCValue(v)
-		if err != nil {
-			return err
-		}
-		buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
-	}
-
-	// Dump rangedels.
-	if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
-		return err
-	} else if rdIter != nil {
-		defer rdIter.Close()
-		s, err := rdIter.First()
-		for ; s != nil; s, err = rdIter.Next() {
-			start, err := DecodeMVCCKey(s.Start)
-			if err != nil {
-				return err
-			}
-			end, err := DecodeMVCCKey(s.End)
-			if err != nil {
-				return err
-			}
-			for _, k := range s.Keys {
-				buf.Printf("%s: %s\n", strings.ToLower(k.Kind().String()),
-					roachpb.Span{Key: start.Key, EndKey: end.Key})
-			}
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	// Dump range keys.
-	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
-		return err
-	} else if rkIter != nil {
-		defer rkIter.Close()
-		s, err := rkIter.First()
-		for ; s != nil; s, err = rkIter.Next() {
-			start, err := DecodeMVCCKey(s.Start)
-			if err != nil {
-				return err
-			}
-			end, err := DecodeMVCCKey(s.End)
-			if err != nil {
-				return err
-			}
-			for _, k := range s.Keys {
-				buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
-					roachpb.Span{Key: start.Key, EndKey: end.Key})
-				if len(k.Suffix) > 0 {
-					ts, err := mvccencoding.DecodeMVCCTimestampSuffix(k.Suffix)
-					if err != nil {
-						return err
-					}
-					buf.Printf("/%s", ts)
-				}
-				if k.Kind() == pebble.InternalKeyKindRangeKeySet {
-					value, err := DecodeMVCCValue(k.Value)
-					if err != nil {
-						return err
-					}
-					buf.Printf(" -> %s", value)
-				}
-				buf.Printf("\n")
-			}
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

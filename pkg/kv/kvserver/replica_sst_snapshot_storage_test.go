@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -331,7 +332,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	for i := range fileNames {
 		name := fmt.Sprintf("sst%d", i)
-		require.NoError(t, storage.ReportSSTEntries(&buf, name, actualSSTs[i]))
+		require.NoError(t, storageutils.ReportSSTEntries(&buf, name, actualSSTs[i]))
 	}
 	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", t.Name())))
 }
