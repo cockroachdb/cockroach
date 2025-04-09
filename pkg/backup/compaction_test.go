@@ -282,7 +282,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		var jobID jobspb.JobID
 		pause := rand.Intn(2) == 0
 		if pause {
-			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 		}
 		db.QueryRow(
 			t,
