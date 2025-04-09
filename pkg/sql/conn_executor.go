@@ -2856,7 +2856,7 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
 	ex.extraTxnState.txnRewindPos = pos
 	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.extraTxnState.rewindPosSnapshot.savepoints = ex.extraTxnState.savepoints.clone()
-	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone()
+	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone() // TODO: This is indirectly 7% of allocations.
 	return ex.commitPrepStmtNamespace(ctx)
 }
 
@@ -4786,7 +4786,7 @@ func withPlanGist(ctx context.Context, gist string) context.Context {
 	if gist == "" {
 		return ctx
 	}
-	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
+	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist) // TODO: This is 1.5% of allocations, some here (I think to box gist) and some indirectly.
 }
 
 func planGistFromCtx(ctx context.Context) string {

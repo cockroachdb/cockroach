@@ -35,7 +35,7 @@ type Annotations []interface{}
 
 // MakeAnnotations allocates an annotations container of the given size.
 func MakeAnnotations(numAnnotations AnnotationIdx) Annotations {
-	return make(Annotations, numAnnotations)
+	return make(Annotations, numAnnotations) // TODO: 0.8% of allocations
 }
 
 // Set an annotation in the container.
