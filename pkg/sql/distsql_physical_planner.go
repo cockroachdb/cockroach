@@ -212,10 +212,10 @@ func NewDistSQLPlanner(
 	parallelChecksConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
 		dsp.parallelChecksSem.UpdateCapacity(uint64(parallelChecksConcurrencyLimit.Get(&st.SV)))
 	})
+	// rpcCtx might be nil in some tests.
 	if rpcCtx != nil {
-		// rpcCtx might be nil in some tests.
-		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
 		rpcCtx.Stopper.AddCloser(dsp.parallelChecksSem.Closer("stopper"))
+		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
 	}
 
 	dsp.runnerCoordinator.init(ctx, stopper, &st.SV)

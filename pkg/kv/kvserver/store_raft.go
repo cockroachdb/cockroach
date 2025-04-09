@@ -883,18 +883,17 @@ func (s *Store) processRaft(ctx context.Context) {
 
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
-	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
-		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
-	}))
 
 	for _, w := range s.syncWaiters {
 		w.Start(ctx, s.stopper)
 	}
 
-	// We'll want to cancel all in-flight proposals. Proposals embed tracing
-	// spans in them, and we don't want to be leaking any.
 	s.stopper.AddCloser(stop.CloserFn(func() {
+		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
+
+		// We'll want to cancel all in-flight proposals. Proposals embed tracing
+		// spans in them, and we don't want to be leaking any.
 		s.VisitReplicas(func(r *Replica) (more bool) {
 			r.mu.Lock()
 			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
