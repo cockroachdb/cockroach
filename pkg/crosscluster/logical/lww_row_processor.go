@@ -711,7 +711,7 @@ func (lww *lwwQuerier) DeleteRow(
 		// NOTE: at this point we don't know if we are updating a tombstone or if
 		// we are losing LWW. As long as it is a LWW loss or a tombstone update,
 		// updateTombstone will return okay.
-		return lww.tombstoneUpdaters[row.TableID].updateTombstone(ctx, txn, row)
+		return lww.tombstoneUpdaters[row.TableID].updateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
 	}
 	return batchStats{}, nil
 }
