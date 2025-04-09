@@ -39,6 +39,7 @@ import (
 func TestBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 144110, "flaky test")
 
 	ctx := context.Background()
 	tempDir, tempDirCleanup := testutils.TempDir(t)
