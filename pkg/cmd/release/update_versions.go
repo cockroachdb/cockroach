@@ -572,13 +572,15 @@ func generateRepoList(
 		// TODO: add a check to make sure the merge generates no unexpected
 		// changes (we can ignore version.txt changes). The "ours" strategy
 		// doesn't account for changes in the merge branch.
+		commitMessage := generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion)
+		commitMessage += "\nDocs: noop merge\n"
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         baseBranch,
 			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, baseBranch, randomString(4)),
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
+			commitMessage:  commitMessage,
 			fn: func(gitDir string) error {
 				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", remoteOrigin+"/"+mergeBranch)
 				cmd.Dir = gitDir
