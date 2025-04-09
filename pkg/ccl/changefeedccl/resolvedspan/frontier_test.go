@@ -49,11 +49,16 @@ func TestAggregatorFrontier(t *testing.T) {
 	testBoundarySpan(t, ctx, f, "d", "e", backfillTS.Prev(), jobspb.ResolvedSpan_BACKFILL, statementTime)
 	testBoundarySpan(t, ctx, f, "e", "f", backfillTS.Prev(), jobspb.ResolvedSpan_BACKFILL, backfillTS.Prev())
 
-	// Confirm that attempting to signal an earlier boundary causes an assertion error.
+	// Verify that attempting to signal an earlier boundary causes an assertion error.
 	illegalBoundaryTS := makeTS(15)
 	testIllegalBoundarySpan(t, ctx, f, "a", "f", illegalBoundaryTS, jobspb.ResolvedSpan_BACKFILL)
 	testIllegalBoundarySpan(t, ctx, f, "a", "f", illegalBoundaryTS, jobspb.ResolvedSpan_RESTART)
 	testIllegalBoundarySpan(t, ctx, f, "a", "f", illegalBoundaryTS, jobspb.ResolvedSpan_EXIT)
+
+	// Verify that attempting to signal a boundary at the latest boundary time with a different
+	// boundary type causes an assertion error.
+	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS.Prev(), jobspb.ResolvedSpan_RESTART)
+	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS.Prev(), jobspb.ResolvedSpan_EXIT)
 
 	// Forward spans representing actual backfill.
 	testBackfillSpan(t, ctx, f, "d", "e", backfillTS, backfillTS.Prev())
@@ -122,6 +127,11 @@ func TestCoordinatorFrontier(t *testing.T) {
 	// Verify that no other boundary spans at earlier timestamp are allowed.
 	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS1.Prev(), jobspb.ResolvedSpan_RESTART)
 	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS1.Prev(), jobspb.ResolvedSpan_EXIT)
+
+	// Verify that attempting to signal a boundary at the latest boundary time with a different
+	// boundary type causes an assertion error.
+	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS2.Prev(), jobspb.ResolvedSpan_RESTART)
+	testIllegalBoundarySpan(t, ctx, f, "a", "f", backfillTS2.Prev(), jobspb.ResolvedSpan_EXIT)
 
 	// Forward spans completing first backfill and signalling and completing second backfill.
 	testBackfillSpan(t, ctx, f, "b", "f", backfillTS1, backfillTS1)
