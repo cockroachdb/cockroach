@@ -141,6 +141,18 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaMessagesSent = metric.Metadata{
+		Name:        "gossip.messages.sent",
+		Help:        "Number of sent gossip messages",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMessagesReceived = metric.Metadata{
+		Name:        "gossip.messages.received",
+		Help:        "Number of received gossip messages",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaInfosSent = metric.Metadata{
 		Name:        "gossip.infos.sent",
 		Help:        "Number of sent gossip Info objects",
