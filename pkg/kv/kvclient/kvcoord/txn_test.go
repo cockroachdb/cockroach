@@ -1037,19 +1037,38 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 func TestTxnContinueAfterCputError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s := createTestDB(t)
-	defer s.Stop()
 
-	txn := s.DB.NewTxn(ctx, "test txn")
-	// Note: Since we're expecting the CPut to fail, the massaging done by
-	// StrToCPutExistingValue() is not actually necessary.
-	expVal := kvclientutils.StrToCPutExistingValue("dummy")
-	err := txn.CPut(ctx, "a", "val", expVal)
-	require.IsType(t, &kvpb.ConditionFailedError{}, err)
+	testutils.RunTrueAndFalse(t, "bufferedWritesEnabled", func(t *testing.T, bufferedWritesEnabled bool) {
+		ctx := context.Background()
+		s := createTestDB(t)
+		defer s.Stop()
 
-	require.NoError(t, txn.Put(ctx, "a", "b'"))
-	require.NoError(t, txn.Commit(ctx))
+		txn := s.DB.NewTxn(ctx, "test txn")
+
+		if bufferedWritesEnabled {
+			txn.SetBufferedWritesEnabled(true)
+		}
+
+		// Note: Since we're expecting the CPut to fail, the massaging done by
+		// StrToCPutExistingValue() is not actually necessary.
+		expVal := kvclientutils.StrToCPutExistingValue("dummy")
+		err := txn.CPut(ctx, "a", "val", expVal)
+		require.IsType(t, &kvpb.ConditionFailedError{}, err)
+
+		// Write to a different key.
+		require.NoError(t, txn.Put(ctx, "b", "b'"))
+		require.NoError(t, txn.Commit(ctx))
+
+		// We've successfully commited the transaction. The write to key "b"
+		// should be visible whereas the write to keyA shouldn't.
+		val, err := s.DB.Get(ctx, "a")
+		require.NoError(t, err)
+		require.False(t, val.Exists())
+
+		val, err = s.DB.Get(ctx, "b")
+		require.NoError(t, err)
+		require.Equal(t, "b'", string(val.ValueBytes()))
+	})
 }
 
 // Test that a transaction can be used after a locking request returns a
@@ -2013,7 +2032,6 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				if expErr {
 					require.Error(t, err)
 					require.IsType(t, &kvpb.ConditionFailedError{}, err)
-					return err
 				} else {
 					require.NoError(t, err)
 				}
@@ -2025,10 +2043,11 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				}
 			})
 
-			if commit && !expErr {
+			if commit {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
+				testutils.IsError(err, "abort")
 			}
 
 			// Verify the values are visible only if the transaction commited
