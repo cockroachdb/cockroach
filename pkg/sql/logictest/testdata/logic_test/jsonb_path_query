@@ -1018,10 +1018,10 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
 SELECT jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 
-statement error pgcode 22038 pq: operand of unary jsonpath operator - is not a numeric value
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
 SELECT jsonb_path_query('[1, 2, 3, 4, "hello"]', '-$[*]');
 
-statement error pgcode 22038 pq: operand of unary jsonpath operator \+ is not a numeric value
+statement error pgcode 2203B pq: operand of unary jsonpath operator \+ is not a numeric value
 SELECT jsonb_path_query('null', '+$');
 
 query T
@@ -1191,3 +1191,187 @@ query T
 SELECT jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
 ----
 0
+
+statement error pgcode 2203A pq: JSON object does not contain key "a"
+SELECT jsonb_path_query('{}', 'strict $.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{}', '$.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '$.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict 0 / 0', '{}', true);
+
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', 'strict 0 / 0', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '0 / 0', '{}', true);
+
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', '0 / 0', '{}', false);
+
+query T
+SELECT jsonb_path_query('{}', 'strict (0 / 0) < (0 / 0)', '{}', true);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', 'strict (0 / 0) < (0 / 0)', '{}', false);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '(0 / 0) < (0 / 0)', '{}', true);
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '(0 / 0) < (0 / 0)', '{}', false);
+----
+null
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $[*]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath wildcard array accessor can only be applied to an array
+SELECT jsonb_path_query('{}', 'strict $[*]', '{}', false);
+
+query T
+SELECT jsonb_path_query('{}', '$[*]', '{}', true);
+----
+{}
+
+query T
+SELECT jsonb_path_query('{}', '$[*]', '{}', false);
+----
+{}
+
+query empty
+SELECT jsonb_path_query('{"a": 1}', 'strict $[0]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": 1}', 'strict $[0]', '{}', false);
+
+query T
+SELECT jsonb_path_query('{"a": 1}', '$[0]', '{}', true);
+----
+{"a": 1}
+
+query T
+SELECT jsonb_path_query('{"a": 1}', '$[0]', '{}', false);
+----
+{"a": 1}
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[3]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[3]', '{}', true);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $["a"]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $["a"]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$["a"]', '{}', true);
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1, 2, 3]', '$["a"]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', 'strict $.a[1 to 3]', '{}', true);
+
+statement error pgcode 22039 pq: jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": "hello"}', 'strict $.a[1 to 3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[1 to 3]', '{}', true);
+
+query empty
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[1 to 3]', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', 'strict $.a', '{}', true);
+
+statement error pgcode 2203A pq: jsonpath member accessor can only be applied to an object
+SELECT jsonb_path_query('"abc"', 'strict $.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.a', '{}', true);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.a', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', 'strict $.*', '{}', true);
+
+statement error pgcode 2203C pq: jsonpath wildcard member accessor can only be applied to an object
+SELECT jsonb_path_query('"abc"', 'strict $.*', '{}', false);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.*', '{}', true);
+
+query empty
+SELECT jsonb_path_query('"abc"', '$.*', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict -$', '{}', true);
+
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
+SELECT jsonb_path_query('{}', 'strict -$', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '-$', '{}', true);
+
+statement error pgcode 2203B pq: operand of unary jsonpath operator - is not a numeric value
+SELECT jsonb_path_query('{}', '-$', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $ - 1', '{}', true);
+
+statement error pgcode 22038 pq: left operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', 'strict $ - 1', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '$ - 1', '{}', true);
+
+statement error pgcode 22038 pq: left operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', '$ - 1', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', 'strict 1 - $', '{}', true);
+
+statement error pgcode 22038 pq: right operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', 'strict 1 - $', '{}', false);
+
+query empty
+SELECT jsonb_path_query('{}', '1 - $', '{}', true);
+
+statement error pgcode 22038 pq: right operand of jsonpath operator - is not a single numeric value
+SELECT jsonb_path_query('{}', '1 - $', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', 'strict $var', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', 'strict $var', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', '$var', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "var"
+SELECT jsonb_path_query('{}', '$var', '{}', false);
