@@ -1,0 +1,639 @@
+/* setup */
+CREATE TABLE t (k INT PRIMARY KEY, v VARCHAR(256));
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+CREATE INDEX idx1 ON t (lower(v));
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
+increment telemetry for sql.schema.qualifcation.virtual
+increment telemetry for sql.schema.new_column_type.string
+increment telemetry for sql.schema.expression_index
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t
+write *eventpb.CreateIndex to event log:
+  indexName: idx1
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: lower(v)
+  +      id: 3
+  +      inaccessible: true
+  +      name: crdb_internal_idx_expr
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_idx_expr
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx1
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 1
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_idx_expr
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextColumnId: 4
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": k
+  +        "2": v
+  +        "3": crdb_internal_idx_expr
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +        "2": idx1
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
+  +        statement: CREATE INDEX idx1 ON t (lower(v))
+  +        statementTag: CREATE INDEX
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: lower(v)
+  +      id: 3
+  +      inaccessible: true
+  +      name: crdb_internal_idx_expr
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_idx_expr
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx1
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 1
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_idx_expr
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextColumnId: 4
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (lower(v))"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 8 with 1 ValidationType op
+validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 8 with 5 MutationType ops
+upsert descriptor #104
+  ...
+       expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+       name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Validating
+     columns:
+     - id: 1
+  ...
+     modificationTime: {}
+     mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        constraintId: 2
+  -        expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - column:
+         computeExpr: lower(v)
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 3 of 8 with 1 BackfillType op pending"
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 8 with 1 BackfillType op
+backfill indexes [2] from index #1 in table #104
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 8 with 4 MutationType ops
+upsert descriptor #104
+  ...
+       expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+       name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       mutationId: 1
+       state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 5 of 8 with 1 MutationType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 8 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 6 of 8 with 1 BackfillType op pending"
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 8 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #104
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 8 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 1
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - constraint:
+         check:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 8 of 8 with 1 ValidationType op pending"
+commit transaction #9
+begin transaction #10
+## PostCommitPhase stage 8 of 8 with 1 ValidationType op
+validate forward indexes [2] in table #104
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    constraintId: 2
+  -    expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+         visibleType: 7
+         width: 256
+  +  - computeExpr: lower(v)
+  +    id: 3
+  +    inaccessible: true
+  +    name: crdb_internal_idx_expr
+  +    nullable: true
+  +    type:
+  +      family: StringFamily
+  +      oid: 25
+  +    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "3": crdb_internal_idx_expr
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx1
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
+  -        statement: CREATE INDEX idx1 ON t (lower(v))
+  -        statementTag: CREATE INDEX
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 104
+  +  indexes:
+  +  - createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 2
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 3
+  +    keyColumnNames:
+  +    - crdb_internal_idx_expr
+  +    keySuffixColumnIds:
+  +    - 1
+  +    name: idx1
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    vecConfig: {}
+  +    version: 4
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      computeExpr: lower(v)
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_idx_expr
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -      virtual: true
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_internal_idx_expr
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: idx1
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_internal_idx_expr
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      useDeletePreservingEncoding: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        constraintId: 2
+  -        expr: CASE WHEN (crdb_internal.assignment_cast(lower(v), NULL::STRING)) IS NULL THEN true ELSE true END
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Dropping
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+adding table for stats refresh: 104
+create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (lower(v))"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #11
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

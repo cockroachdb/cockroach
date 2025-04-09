@@ -97,10 +97,10 @@ DROP INDEX idx3 CASCADE
   {indexId: 6, name: idx3, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC]
   {indexId: 6, tableId: 104}
-- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [5]}, ABSENT], PUBLIC]
-  {columnIds: [5], constraintId: 2, expr: 'crdb_internal_i_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)', fromHashShardedColumn: true, referencedColumnIds: [5], tableId: 104}
-- [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC]
-  {constraintId: 2, name: check_crdb_internal_i_shard_16, tableId: 104}
+- [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [5]}, ABSENT], PUBLIC]
+  {columnIds: [5], constraintId: 3, expr: 'crdb_internal_i_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)', fromHashShardedColumn: true, referencedColumnIds: [5], tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 3}, ABSENT], PUBLIC]
+  {constraintId: 3, name: check_crdb_internal_i_shard_16, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC]
