@@ -201,6 +201,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		case err := <-errCh:
 			return err
 		case <-ready:
+			// We just sleep here instead of calling batchAndConsume() because the
+			// channel is closed, and sleeping won't block the sender of the channel.
+			time.Sleep(infosBatchDelay)
 		}
 	}
 }
