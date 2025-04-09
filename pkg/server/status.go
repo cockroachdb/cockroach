@@ -122,7 +122,7 @@ const (
 
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer, expfmt.Format) error
+	PrintAsText(io.Writer, expfmt.Format, bool) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -2391,8 +2391,9 @@ func (s *systemStatusServer) RaftDebug(
 }
 
 type varsHandler struct {
-	metricSource metricMarshaler
-	st           *cluster.Settings
+	metricSource    metricMarshaler
+	st              *cluster.Settings
+	useStaticLabels bool
 }
 
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
@@ -2400,7 +2401,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
-	err := h.metricSource.PrintAsText(w, contentType)
+	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

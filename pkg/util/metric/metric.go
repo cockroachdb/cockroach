@@ -39,6 +39,13 @@ const (
 	CardinalityLimit = 2000
 )
 
+// Maintaining a list of static label names here to avoid duplication and
+// encourage reuse of label names across the codebase.
+const (
+	LabelQueryType     = "query_type"
+	LabelQueryInternal = "query_internal"
+)
+
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
 	// GetName returns the fully-qualified name of the metric.
@@ -1561,4 +1568,18 @@ func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	}
 
 	return metrics
+}
+
+func MakeLabelPairs(labelNamesAndValues ...string) []*LabelPair {
+	if len(labelNamesAndValues)%2 != 0 {
+		panic("labelNamesAndValues must be a list with even length of label names and values")
+	}
+	labelPairs := make([]*LabelPair, 0, len(labelNamesAndValues)/2)
+	for i := 0; i < len(labelNamesAndValues); i += 2 {
+		labelPairs = append(labelPairs, &LabelPair{
+			Name:  &labelNamesAndValues[i],
+			Value: &labelNamesAndValues[i+1],
+		})
+	}
+	return labelPairs
 }

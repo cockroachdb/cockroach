@@ -108,9 +108,10 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 	}
 	s.mu.errorLogLimiter = cache.NewUnorderedCache(cacheConfig)
 
-	// /_status/{healthz,vars} matches CRDB's healthcheck and metrics
+	// /metrics and /_status/{healthz,vars} matches CRDB's healthcheck and metrics
 	// endpoints.
-	mux.HandleFunc("/_status/vars/", s.handleVars)
+	mux.HandleFunc("/metrics", s.handleMetricsWithLabels)
+	mux.HandleFunc("/_status/vars/", s.handleMetricsWithoutLabels)
 	mux.HandleFunc("/_status/healthz/", s.handleHealth)
 	mux.HandleFunc("/_status/cancel/", s.handleCancel)
 
@@ -145,16 +146,25 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("OK"))
 }
 
-func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMetricsWithLabels(w http.ResponseWriter, r *http.Request) {
+	s.handleMetricsHelper(w, r, true)
+}
+
+func (s *Server) handleMetricsWithoutLabels(w http.ResponseWriter, r *http.Request) {
+	s.handleMetricsHelper(w, r, false)
+}
+
+func (s *Server) handleMetricsHelper(w http.ResponseWriter, r *http.Request, useStaticLabels bool) {
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	scrape := func(pm *metric.PrometheusExporter) {
-		pm.ScrapeRegistry(s.metricsRegistry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
+		pm.ScrapeRegistry(s.metricsRegistry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true), metric.WithUseStaticLabels(useStaticLabels))
 	}
 	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
 }
 
 // handleCancel processes a cancel request that has been forwarded from another
@@ -200,7 +210,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeHTTP starts the proxy's HTTP server on the given listener.
-// The server provides Prometheus metrics at /_status/vars,
+// The server provides Prometheus metrics at /metrics and/_status/vars,
 // a health check endpoint at /_status/healthz, and pprof debug
 // endpoints at /debug/pprof.
 func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
