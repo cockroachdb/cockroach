@@ -343,6 +343,9 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// sqlStatsIngester provides the interface to consume stats about a sql execution.
+	sqlStatsIngester *sslocal.SQLStatsIngester
+
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
 	schemaTelemetryController *schematelemetrycontroller.Controller
@@ -438,13 +441,7 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
-		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			insightsProvider.Writer().Clear()
-		}
-	})
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -466,6 +463,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
+	sqlStatsIngester := sslocal.NewSQLStatsIngester(cfg.SQLStatsTestingKnobs, insightsProvider)
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
+		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
+			sqlStatsIngester.Clear()
+		}
+	})
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
@@ -474,6 +478,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool:                    pool,
 		localSqlStats:           memSQLStats,
 		reportedStats:           reportedSQLStats,
+		sqlStatsIngester:        sqlStatsIngester,
 		reportedStatsController: reportedSQLStatsController,
 		insights:                insightsProvider,
 		reCache:                 tree.NewRegexpCache(512),
@@ -657,7 +662,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
-	s.insights.Start(ctx, stopper)
+	s.sqlStatsIngester.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
@@ -1219,14 +1224,10 @@ func (s *Server) newConnExecutor(
 	ex.applicationStats = applicationStats
 	// We ignore statements and transactions run by the internal executor by
 	// passing a nil writer.
-	var writer *insights.ConcurrentBufferIngester
-	if !ex.sessionData().Internal {
-		writer = ex.server.insights.Writer()
-	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		writer,
+		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
 		underOuterTxn,
@@ -1273,17 +1274,8 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
-	if lm := ex.server.cfg.LeaseManager; executorType == executorTypeExec && lm != nil {
-		if desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID); err != nil {
-			log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
-		} else {
-			defer desc.Release(ctx)
-			// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
-			// which guarantees that all user tenant sql connections to the reader tenant will
-			// correctly set this
-			ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
-		}
-	}
+	// Determine if we are running on a PCR reader catalog.
+	ex.initPCRReaderCatalog(ctx)
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -3850,6 +3842,34 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
+}
+
+// initPCRReaderCatalog leases the system database to determine if
+// we are connecting to a PCR reader catalog, if this has not been attempted
+// before.
+func (ex *connExecutor) initPCRReaderCatalog(ctx context.Context) {
+	// Wait up to 10 seconds attempting to acquire the lease on the system
+	// database. Normally we should already have a lease on this object,
+	// unless there is some availability issue.
+	const initPCRReaderCatalogTimeout = 10 * time.Second
+	err := timeutil.RunWithTimeout(ctx, "detect-pcr-reader-catalog", initPCRReaderCatalogTimeout,
+		func(ctx context.Context) error {
+			if lm := ex.server.cfg.LeaseManager; ex.executorType == executorTypeExec && lm != nil {
+				desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID)
+				if err != nil {
+					return err
+				}
+				defer desc.Release(ctx)
+				// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
+				// which guarantees that all user tenant sql connections to the reader tenant will
+				// correctly set this
+				ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
+			}
+			return nil
+		})
+	if err != nil {
+		log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+	}
 }
 
 // GetPCRReaderTimestamp if the system database is setup as PCR

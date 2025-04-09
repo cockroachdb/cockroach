@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -89,7 +90,7 @@ func TestInsightsIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Eventually see one recorded insight.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
 			"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
 		if err = row.Scan(&count, &queryText); err != nil {
@@ -99,10 +100,10 @@ func TestInsightsIntegration(t *testing.T) {
 			return fmt.Errorf("expected 1, but was %d, queryText:%s", count, queryText)
 		}
 		return nil
-	}, 1*time.Second)
+	})
 
 	// Verify the table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT "+
 			"query, "+
 			"status, "+
@@ -147,12 +148,12 @@ func TestInsightsIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
 
 	// TODO (xzhang) Turn this into a datadriven test
 	// https://github.com/cockroachdb/cockroach/issues/95010
 	// Verify the txn table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT "+
 			"query, "+
 			"start_time, "+
@@ -194,7 +195,7 @@ func TestInsightsIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
 }
 
 func TestFailedInsights(t *testing.T) {
@@ -275,8 +276,7 @@ func TestFailedInsights(t *testing.T) {
 			_, _ = conn.ExecContext(ctx, tc.stmt)
 
 			var query, status, problem, errorCode, errorMsg string
-			testutils.SucceedsWithin(t, func() error {
-
+			testutils.SucceedsSoon(t, func() error {
 				// Query the node execution insights table.
 				row := conn.QueryRowContext(ctx, `
 SELECT query, 
@@ -289,7 +289,7 @@ WHERE query = $1 AND app_name = $2 `,
 					tc.fingerprint, appName)
 
 				return row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
-			}, 1*time.Second)
+			})
 
 			require.Equal(t, tc.status, status)
 			require.Equal(t, tc.problem, problem)
@@ -362,7 +362,7 @@ WHERE query = $1 AND app_name = $2 `,
 			}
 
 			var query, problems, status, errorCode, errorMsg string
-			testutils.SucceedsWithin(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 
 				// Query the node txn execution insights table.
 				row := conn.QueryRowContext(ctx, `
@@ -375,7 +375,7 @@ FROM crdb_internal.node_txn_execution_insights
 WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 
 				return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
-			}, 1*time.Second)
+			})
 
 			require.Equal(t, tc.txnStatus, status)
 			require.Equal(t, tc.errorCode, errorCode)
@@ -587,7 +587,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep(.11)")
 	require.NoError(t, err)
 
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRowContext(ctx, "SELECT "+
 			"implicit_txn "+
 			"FROM crdb_internal.node_execution_insights where "+
@@ -604,7 +604,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 2*time.Second)
+	})
 
 	var priorities = []struct {
 		setPriorityQuery      string
@@ -639,7 +639,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	}
 
 	for _, p := range priorities {
-		testutils.SucceedsWithin(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
 			require.NoError(t, errTxn)
 
@@ -654,9 +654,9 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 			errTxn = tx.Commit()
 			require.NoError(t, errTxn)
 			return nil
-		}, 2*time.Second)
+		})
 
-		testutils.SucceedsWithin(t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			row := conn.QueryRowContext(ctx, "SELECT "+
 				"query, "+
 				"priority, "+
@@ -685,7 +685,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 			}
 
 			return nil
-		}, 2*time.Second)
+		})
 	}
 }
 
@@ -911,7 +911,7 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	}
 
 	// Verify the table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rows, err := sqlConn.QueryContext(ctx, "SELECT "+
 			"query, "+
 			"array_to_string(index_recommendations, ';') as cmb_index_recommendations "+
@@ -952,7 +952,7 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
 }
 
 // TestInsightsClearsPerSessionMemory ensures that memory allocated
@@ -966,8 +966,8 @@ func TestInsightsClearsPerSessionMemory(t *testing.T) {
 	clearedSessionID := clusterunique.ID{}
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Insights: &insights.TestingKnobs{
-				OnSessionClear: func(sessionID clusterunique.ID) {
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				OnIngesterSessionClear: func(sessionID clusterunique.ID) {
 					defer close(sessionClosedCh)
 					clearedSessionID = sessionID
 				},
