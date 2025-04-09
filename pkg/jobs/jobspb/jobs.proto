@@ -633,8 +633,8 @@ message RestoreDetails {
 
   bool experimental_online = 31;
 
-  // DownloadSpans indicates this job is the download-step of a multi-step
-  // online restore.
+  // DownloadSpans indicates this job has run a link phase. These spans must be
+  // downloaded, else the OnFailOrCancel has to excice these spans.
   repeated roachpb.Span download_spans = 32 [(gogoproto.nullable) = false];
 
   // Removes regions.

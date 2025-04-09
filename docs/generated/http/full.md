@@ -4542,7 +4542,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 
@@ -4646,7 +4646,7 @@ Support status: [reserved](#support-status)
 | statement_diagnostics_id | [int64](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-int64) |  |  | [reserved](#support-status) |
 | requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
-| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, and redacted fields? | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsReportsResponse-google.protobuf.Timestamp) |  | TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted, and username fields? | [reserved](#support-status) |
 
 
 

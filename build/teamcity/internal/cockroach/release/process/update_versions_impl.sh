@@ -10,11 +10,16 @@ set -xeuo pipefail
 
 to=dev-inf+release-dev@cockroachlabs.com
 dry_run=true
+version_bump_only=false
 # override dev defaults with production values
 if [[ -z "${DRY_RUN}" ]] ; then
   echo "Setting production values"
   to=release-engineering-team@cockroachlabs.com
   dry_run=false
+fi
+
+if [[ -n "${VERSION_BUMP_ONLY}" ]] ; then
+  version_bump_only=true
 fi
 
 # run git fetch in order to get all remote branches
@@ -31,6 +36,7 @@ bazel build --config=crosslinux //pkg/cmd/release
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   update-versions \
   --dry-run=$dry_run \
+  --version-bump-only=$version_bump_only \
   --released-version=$RELEASED_VERSION \
   --next-version=$NEXT_VERSION \
   --template-dir=pkg/cmd/release/templates \

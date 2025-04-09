@@ -229,6 +229,8 @@ const (
 
 	V25_2_SetUiDefaultTimezoneSetting
 
+	V25_2_AddUsernameToStmtDiagRequest
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -280,9 +282,10 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 
 	// v25.2 versions. Internal versions must be even.
-	V25_2_Start:                       {Major: 25, Minor: 1, Internal: 2},
-	V25_2_AddSqlActivityFlushJob:      {Major: 25, Minor: 1, Internal: 4},
-	V25_2_SetUiDefaultTimezoneSetting: {Major: 25, Minor: 1, Internal: 6},
+	V25_2_Start:                        {Major: 25, Minor: 1, Internal: 2},
+	V25_2_AddSqlActivityFlushJob:       {Major: 25, Minor: 1, Internal: 4},
+	V25_2_SetUiDefaultTimezoneSetting:  {Major: 25, Minor: 1, Internal: 6},
+	V25_2_AddUsernameToStmtDiagRequest: {Major: 25, Minor: 1, Internal: 8},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

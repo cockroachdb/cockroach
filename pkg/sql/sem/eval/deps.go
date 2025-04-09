@@ -741,6 +741,7 @@ type StmtDiagnosticsRequestInsertFunc func(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
+	username string,
 ) error
 
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME

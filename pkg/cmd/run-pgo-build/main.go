@@ -16,9 +16,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,11 @@ var (
 
 	outFile = flag.String("out", "", "where to store the result pprof profile")
 )
+
+type profileWithName struct {
+	filename        string
+	profileContents []byte
+}
 
 type Build struct {
 	ID         int64
@@ -147,6 +154,7 @@ func downloadArtifacts(buildID int64, tmpDir string) (ReadAtCloser, int64, error
 // The .pprof files will be parsed and put into the profilesChan.
 // wg.Done() will be called when this function completes.
 func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sync.WaitGroup) {
+	fmt.Printf("processing zip file %s\n", f.FileHeader.Name)
 	archive, err := f.Open()
 	if err != nil {
 		panic(err)
@@ -161,7 +169,7 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 	if err != nil {
 		panic(err)
 	}
-	var profiles []*profile.Profile
+	profilesByDir := make(map[string][]profileWithName)
 	for _, file := range zipReader.File {
 		if strings.HasSuffix(file.FileHeader.Name, ".pprof") &&
 			strings.Contains(file.FileHeader.Name, "/cpuprof.") &&
@@ -170,24 +178,43 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 			if err != nil {
 				panic(err)
 			}
-			prof, err := profile.Parse(pprofFile)
-			_ = pprofFile.Close()
-			if err != nil {
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, pprofFile); err != nil {
 				panic(err)
 			}
-			profiles = append(profiles, prof)
+			if err := pprofFile.Close(); err != nil {
+				fmt.Printf("Failed to close profile file from zip reader: %+v (this is not a fatal error)\n", err)
+				continue
+			}
+			key := filepath.Base(filepath.Dir(file.FileHeader.Name))
+			profilesByDir[key] = append(profilesByDir[key], profileWithName{
+				filename:        filepath.Base(file.FileHeader.Name),
+				profileContents: buf.Bytes(),
+			})
 		}
 	}
-	// There will be a lot of data in the profiles and we don't need all of
-	// it. We'll pick every 25th profile to reduce the size of the final
-	// result.
-	var idx, selected int
-	for idx < len(profiles) {
-		profilesChan <- profiles[idx]
-		selected += 1
-		idx += 25
+	for _, val := range profilesByDir {
+		// The profiles contain a timestamp in their filenames, so sorting them
+		// puts them in chronological order.
+		slices.SortFunc(val, func(a, b profileWithName) int {
+			return strings.Compare(a.filename, b.filename)
+		})
 	}
-	fmt.Printf("Picked %d out of %d profiles\n", selected, len(profiles))
+	for key, profiles := range profilesByDir {
+		// We select one profile from about 75% of the way through the
+		// test. The idea is that at around this time, the node is
+		// likely to be doing interesting work that is related to the
+		// test (as opposed to something less relevant like setup
+		// tasks).
+		selected := int(math.Floor(0.75 * float64(len(profiles))))
+		fmt.Printf("Selected profile %d of %d from dir %s (%s)\n", selected, len(profiles), key, profiles[selected].filename)
+		contents := profiles[selected].profileContents
+		prof, err := profile.Parse(bytes.NewReader(contents))
+		if err != nil {
+			panic(err)
+		}
+		profilesChan <- prof
+	}
 	wg.Done()
 }
 
