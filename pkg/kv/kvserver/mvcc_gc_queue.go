@@ -604,7 +604,7 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	b.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
 
 	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
-		log.VErrEventf(ctx, 2, "%s", err)
+		log.Infof(ctx, "%s", err)
 		return err
 	}
 	return nil
