@@ -12,6 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 )
 
+var (
+	errKeyAccessOnNonObject = pgerror.Newf(pgcode.SQLJSONMemberNotFound, "jsonpath member accessor can only be applied to an object")
+	errWildcardOnNonObject  = pgerror.Newf(pgcode.SQLJSONObjectNotFound, "jsonpath wildcard member accessor can only be applied to an object")
+)
+
 func (ctx *jsonpathCtx) evalKey(
 	key jsonpath.Key, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
@@ -20,18 +25,20 @@ func (ctx *jsonpathCtx) evalKey(
 		if err != nil {
 			return nil, err
 		}
-		if val == nil && ctx.strict {
-			return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key))
-		} else if val != nil {
-			return []json.JSON{val}, nil
+		if val == nil {
+			if ctx.strict {
+				return nil, maybeThrowError(ctx,
+					pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key)))
+			}
+			return nil, nil
 		}
-		return []json.JSON{}, nil
+		return []json.JSON{val}, nil
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(key, jsonValue, false /* unwrapNext */)
 	} else if ctx.strict {
-		return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "jsonpath member accessor can only be applied to an object")
+		return nil, maybeThrowError(ctx, errKeyAccessOnNonObject)
 	}
-	return []json.JSON{}, nil
+	return nil, nil
 }
 
 func (ctx *jsonpathCtx) evalAnyKey(
@@ -42,8 +49,7 @@ func (ctx *jsonpathCtx) evalAnyKey(
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
 	} else if ctx.strict {
-		return nil, pgerror.Newf(pgcode.SQLJSONObjectNotFound,
-			"jsonpath wildcard member accessor can only be applied to an object")
+		return nil, maybeThrowError(ctx, errWildcardOnNonObject)
 	}
-	return []json.JSON{}, nil
+	return nil, nil
 }
