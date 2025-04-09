@@ -235,6 +235,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.MaxOffset = kvServerCfg.BaseConfig.MaxOffset
 	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
+	baseCfg.LocalityAddresses = kvServerCfg.Config.LocalityAddresses
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
