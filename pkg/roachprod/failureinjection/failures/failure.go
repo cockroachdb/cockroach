@@ -7,10 +7,16 @@ package failures
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,9 +42,9 @@ type FailureMode interface {
 	// Inject a failure into the system.
 	Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
-	// Restore reverses the effects of Inject. The same args passed to Inject
-	// must be passed to Restore.
-	Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error
+	// Recover reverses the effects of Inject. The same args passed to Inject
+	// must be passed to Recover.
+	Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
 	// Cleanup uninstalls any dependencies that were installed by Setup.
 	Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error
@@ -46,8 +52,14 @@ type FailureMode interface {
 	// WaitForFailureToPropagate waits until the failure is at full effect.
 	WaitForFailureToPropagate(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
-	// WaitForFailureToRestore waits until the failure was restored completely along with any side effects.
-	WaitForFailureToRestore(ctx context.Context, l *logger.Logger, args FailureArgs) error
+	// WaitForFailureToRecover waits until the failure was recovered completely along with any side effects.
+	WaitForFailureToRecover(ctx context.Context, l *logger.Logger, args FailureArgs) error
+}
+
+type diskDevice struct {
+	name  string
+	major int
+	minor int
 }
 
 // GenericFailure is a generic helper struct that FailureModes can embed to
@@ -59,18 +71,20 @@ type GenericFailure struct {
 	// runTitle is the title to prefix command output with.
 	runTitle          string
 	networkInterfaces []string
+	diskDevice        diskDevice
 }
 
 func (f *GenericFailure) Run(
 	ctx context.Context, l *logger.Logger, node install.Nodes, args ...string,
 ) error {
 	cmd := strings.Join(args, " ")
+	l.Printf("running cmd: %s", cmd)
 	// In general, most failures shouldn't be run locally out of caution.
 	if f.c.IsLocal() {
-		l.Printf("Local cluster detected, logging command instead of running:\n%s", cmd)
+		l.Printf("Local cluster detected, skipping command execution")
 		return nil
 	}
-	return f.c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(node), f.runTitle, cmd)
+	return f.c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(node), fmt.Sprintf("%s-%d", f.runTitle, node), cmd)
 }
 
 func (f *GenericFailure) RunWithDetails(
@@ -82,7 +96,7 @@ func (f *GenericFailure) RunWithDetails(
 		l.Printf("Local cluster detected, logging command instead of running:\n%s", cmd)
 		return install.RunResultDetails{}, nil
 	}
-	res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(node), f.runTitle, cmd)
+	res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(node), fmt.Sprintf("%s-%d", f.runTitle, node), cmd)
 	if err != nil {
 		return install.RunResultDetails{}, err
 	}
@@ -106,4 +120,136 @@ func (f *GenericFailure) NetworkInterfaces(
 		}
 	}
 	return f.networkInterfaces, nil
+}
+
+func getDiskDevice(ctx context.Context, f *GenericFailure, l *logger.Logger) error {
+	if f.diskDevice.name == "" {
+		res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(f.c.Nodes[:1]), "Get Disk Device", "lsblk -o NAME,MAJ:MIN,MOUNTPOINTS | grep /mnt/data1 | awk '{print $1, $2}'")
+		if err != nil {
+			return errors.Wrapf(err, "error when determining block device")
+		}
+		parts := strings.Split(strings.TrimSpace(res[0].Stdout), " ")
+		if len(parts) != 2 {
+			return errors.Newf("unexpected output from lsblk: %s", res[0].Stdout)
+		}
+		f.diskDevice.name = strings.TrimSpace(parts[0])
+		major, minor, found := strings.Cut(parts[1], ":")
+		if !found {
+			return errors.Newf("unexpected output from lsblk: %s", res[0].Stdout)
+		}
+		if f.diskDevice.major, err = strconv.Atoi(major); err != nil {
+			return err
+		}
+		if f.diskDevice.minor, err = strconv.Atoi(minor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *GenericFailure) DiskDeviceName(ctx context.Context, l *logger.Logger) (string, error) {
+	if err := getDiskDevice(ctx, f, l); err != nil {
+		return "", err
+	}
+	return "/dev/" + f.diskDevice.name, nil
+}
+
+func (f *GenericFailure) DiskDeviceMajorMinor(
+	ctx context.Context, l *logger.Logger,
+) (int, int, error) {
+	if err := getDiskDevice(ctx, f, l); err != nil {
+		return 0, 0, err
+	}
+	return f.diskDevice.major, f.diskDevice.minor, nil
+}
+
+func (f *GenericFailure) PingNode(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes,
+) error {
+	// TODO(darryl): Consider having failure modes accept a db connection pool
+	// in makeFailureFunc() or having each failureMode manage it's own pool.
+	res, err := f.c.ExecSQL(
+		ctx, l, nodes, install.SystemInterfaceName,
+		0, install.AuthUserCert, "", /* database */
+		[]string{"-e", "SELECT 1"},
+	)
+
+	return errors.CombineErrors(err, res[0].Err)
+}
+
+func (f *GenericFailure) WaitForSQLReady(
+	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+) error {
+	start := timeutil.Now()
+	err := retryForDuration(ctx, timeout, func() error {
+		if err := f.PingNode(ctx, l, node); err == nil {
+			l.Printf("Connected to node %d after %s", node, timeutil.Since(start))
+			return nil
+		}
+		return errors.Newf("unable to connect to node %d", node)
+	})
+
+	return errors.Wrapf(err, "never connected to node %d after %s", node, timeout)
+}
+
+// WaitForSQLUnavailable pings a node until the SQL connection is unavailable.
+func (f *GenericFailure) WaitForSQLUnavailable(
+	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+) error {
+	start := timeutil.Now()
+	err := retryForDuration(ctx, timeout, func() error {
+		if err := f.PingNode(ctx, l, node); err != nil {
+			l.Printf("Connections to node %d unavailable after %s", node, timeutil.Since(start))
+			//nolint:returnerrcheck
+			return nil
+		}
+		return errors.Newf("unable to connect to node %d", node)
+	})
+
+	return errors.Wrapf(err, "connections to node %d never unavailable after %s", node, timeout)
+}
+
+func (f *GenericFailure) StopCluster(
+	ctx context.Context, l *logger.Logger, stopOpts roachprod.StopOpts,
+) error {
+	return f.c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.GracePeriod, "" /* VirtualClusterName*/)
+}
+
+func (f *GenericFailure) StartCluster(ctx context.Context, l *logger.Logger) error {
+	return f.StartNodes(ctx, l, f.c.Nodes)
+}
+
+func (f *GenericFailure) StartNodes(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes,
+) error {
+	// Invoke the cockroach start script directly so we restart the nodes with the same
+	// arguments as before.
+	return f.Run(ctx, l, nodes, "./cockroach.sh")
+}
+
+// retryForDuration retries the given function until it returns nil or
+// the context timeout is exceeded.
+func retryForDuration(ctx context.Context, timeout time.Duration, fn func() error) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	retryOpts := retry.Options{MaxRetries: 0}
+	r := retry.StartWithCtx(timeoutCtx, retryOpts)
+	for r.Next() {
+		if err := fn(); err == nil {
+			return nil
+		}
+	}
+	return errors.Newf("failed after %s", timeout)
+}
+
+// forEachNode is a helper function that calls fn for each node in nodes.
+func forEachNode(nodes install.Nodes, fn func(install.Nodes) error) error {
+	// TODO (darryl): Consider parallelizing this, for now all usages
+	// are fast enough for sequential calls.
+	for _, node := range nodes {
+		if err := fn(install.Nodes{node}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
