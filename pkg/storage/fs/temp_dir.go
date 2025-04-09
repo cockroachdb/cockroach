@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
@@ -46,36 +45,36 @@ func unlockFile(lock lockStruct) error {
 // parentDir and returns the absolute path of the temporary directory.
 // It is advised to invoke CleanupTempDirs before creating new temporary
 // directories in cases where the disk is completely full.
-func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, error) {
+func CreateTempDir(parentDir, prefix string) (_ string, unlockDirFn func(), _ error) {
 	// We generate a unique temporary directory with the specified prefix.
 	tempPath, err := os.MkdirTemp(parentDir, prefix)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// TempDir creates a directory with permissions 0700. Manually change the
 	// permissions to be 0755 like every other directory created by cockroach.
 	if err := os.Chmod(tempPath, 0755); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	absPath, err := filepath.Abs(tempPath)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Create a lock file.
 	flock, err := lockFile(filepath.Join(absPath, lockFilename))
 	if err != nil {
-		return "", errors.Wrapf(err, "could not create lock on new temporary directory")
+		return "", nil, errors.Wrapf(err, "could not create lock on new temporary directory")
 	}
-	stopper.AddCloser(stop.CloserFn(func() {
+	unlockDirFn = func() {
 		if err := unlockFile(flock); err != nil {
 			log.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
 		}
-	}))
+	}
 
-	return absPath, nil
+	return absPath, unlockDirFn, nil
 }
 
 // RecordTempDir records tempPath to the record file specified by recordPath to
