@@ -122,7 +122,8 @@ func backupRestoreRoundTrip(
 
 			return conn, err
 		}
-		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), sp.mock, sp.onlineRestore)
+		// TODO (msbutler): enable compaction for online restore test once inc layer limit is increased.
+		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore))
 		if err != nil {
 			return err
 		}

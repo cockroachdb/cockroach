@@ -226,6 +226,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/roachprod-microbench/util",
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/grafana",
@@ -377,7 +378,6 @@ go_test(
         "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_exp//rand",
         "@org_golang_x_oauth2//:oauth2",
     ],
 )

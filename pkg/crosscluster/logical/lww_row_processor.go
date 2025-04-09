@@ -280,6 +280,10 @@ func (srp *sqlRowProcessor) ReleaseLeases(ctx context.Context) {
 	srp.querier.ReleaseLeases(ctx)
 }
 
+func (srp *sqlRowProcessor) BatchSize() int {
+	return int(flushBatchSize.Get(&srp.settings.SV))
+}
+
 func (*sqlRowProcessor) Close(ctx context.Context) {}
 
 var errInjected = errors.New("injected synthetic error")
@@ -474,6 +478,7 @@ func makeSQLProcessor(
 	}
 
 	lwwQuerier := &lwwQuerier{
+		sd:       sd,
 		settings: settings,
 		codec:    codec,
 		db:       db,
@@ -559,6 +564,7 @@ func (m *muxQuerier) ReleaseLeases(ctx context.Context) {
 //
 // See the design document for possible solutions to these problems.
 type lwwQuerier struct {
+	sd                *sessiondata.SessionData
 	settings          *cluster.Settings
 	codec             keys.SQLCodec
 	db                descs.DB
@@ -588,6 +594,7 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 		lww.db.KV(),
 		lww.leaseMgr,
 		catid.DescID(targetDescID),
+		lww.sd,
 		lww.settings,
 	)
 

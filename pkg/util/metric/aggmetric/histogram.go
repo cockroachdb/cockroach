@@ -92,7 +92,7 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 }
 
 // GetName is part of the metric.Iterable interface.
-func (a *AggHistogram) GetName() string { return a.h.GetName() }
+func (a *AggHistogram) GetName(useStaticLabels bool) string { return a.h.GetName(useStaticLabels) }
 
 // GetHelp is part of the metric.Iterable interface.
 func (a *AggHistogram) GetHelp() string { return a.h.GetHelp() }
@@ -132,8 +132,8 @@ func (a *AggHistogram) GetType() *prometheusgo.MetricType {
 }
 
 // GetLabels is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetLabels() []*prometheusgo.LabelPair {
-	return a.h.GetLabels()
+func (a *AggHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
+	return a.h.GetLabels(useStaticLabels)
 }
 
 // ToPrometheusMetric is part of the metric.PrometheusExportable interface.

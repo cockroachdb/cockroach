@@ -24,7 +24,7 @@ fi
 
 # Build test binary
 bazel build "//${TEST_PKG}:tests_test" \
-  --jobs 100 \
+  --jobs 50 \
   --crdb_test_off \
   --linkopt=-pie \
   --bes_keywords integration-test-artifact-build \

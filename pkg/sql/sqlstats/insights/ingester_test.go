@@ -81,9 +81,9 @@ func TestIngester(t *testing.T) {
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			for _, e := range tc.observations {
 				if e.statementID != 0 {
-					ingester.ObserveStatement(e.SessionID(), &sqlstats.RecordedStmtStats{StatementID: e.StatementID()})
+					ingester.ObserveStatement(&sqlstats.RecordedStmtStats{SessionID: e.SessionID(), StatementID: e.StatementID()})
 				} else {
-					ingester.ObserveTransaction(e.SessionID(), &sqlstats.RecordedTxnStats{TransactionID: e.TransactionID()})
+					ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{SessionID: e.SessionID(), TransactionID: e.TransactionID()})
 				}
 			}
 
@@ -145,9 +145,9 @@ func TestIngester_Clear(t *testing.T) {
 	}
 	for _, o := range ingesterObservations {
 		if o.statementID != 0 {
-			ingester.ObserveStatement(o.SessionID(), &sqlstats.RecordedStmtStats{StatementID: o.StatementID()})
+			ingester.ObserveStatement(&sqlstats.RecordedStmtStats{SessionID: o.SessionID(), StatementID: o.StatementID()})
 		} else {
-			ingester.ObserveTransaction(o.SessionID(), &sqlstats.RecordedTxnStats{TransactionID: o.TransactionID()})
+			ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{SessionID: o.SessionID(), TransactionID: o.TransactionID()})
 		}
 	}
 	empty := event{}
@@ -178,8 +178,8 @@ func TestIngester_Disabled(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st), nil))
-	ingester.ObserveStatement(clusterunique.ID{}, &sqlstats.RecordedStmtStats{})
-	ingester.ObserveTransaction(clusterunique.ID{}, &sqlstats.RecordedTxnStats{})
+	ingester.ObserveStatement(&sqlstats.RecordedStmtStats{})
+	ingester.ObserveTransaction(&sqlstats.RecordedTxnStats{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
@@ -211,7 +211,7 @@ func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *test
 		// twice. With no consumer of the channel running and no safeguards in
 		// place, this operation would block, which would be bad.
 		for i := 0; i < 2*bufferSize+1; i++ {
-			ingester.ObserveStatement(clusterunique.ID{}, &sqlstats.RecordedStmtStats{})
+			ingester.ObserveStatement(&sqlstats.RecordedStmtStats{})
 		}
 		done <- struct{}{}
 	}()

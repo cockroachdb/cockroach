@@ -23,6 +23,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/intentresolver",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/lockspanset",
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
         "//pkg/util/container/list",
@@ -101,7 +103,6 @@ go_test(
         "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
 )

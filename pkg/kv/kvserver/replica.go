@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -412,18 +413,19 @@ type Replica struct {
 		rangefeedCTLagObserver *rangeFeedCTLagObserver
 	}
 
-	// localMsgs contains a collection of raftpb.Message that target the local
-	// RawNode. They are to be delivered on the next iteration of handleRaftReady.
+	// localMsgs contains StorageAppend acknowledgements to be delivered to the
+	// local RawNode. The delivery happens on the next handleRaftReady.
 	//
 	// Locking notes:
 	// - Replica.localMsgs must be held to append messages to active.
 	// - Replica.raftMu and Replica.localMsgs must both be held to switch slices.
 	// - Replica.raftMu < Replica.localMsgs
 	//
-	// TODO(pav-kv): replace these with log marks for the latest completed write.
+	// TODO(pav-kv): the acknowledgements can be merged into one. We are only
+	// interested in the latest LogMark. The Responses can be concatenated.
 	localMsgs struct {
 		syncutil.Mutex
-		active, recycled []raftpb.Message
+		active, recycled []raft.StorageAppendAck
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are
@@ -558,6 +560,14 @@ type Replica struct {
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
 		raftLogLastCheckSize int64
+
+		// leaderID is the ID of the leader replica within the Raft group.
+		// NB: this is updated in a separate critical section from the Raft group,
+		// and can therefore briefly be out of sync with the Raft status.
+		leaderID roachpb.ReplicaID
+		// currentRACv2Mode is always in-sync with RawNode.
+		// MsgAppPull <=> LazyReplication.
+		currentRACv2Mode rac2.RaftMsgAppMode
 	}
 
 	mu struct {
@@ -859,10 +869,6 @@ type Replica struct {
 		// TODO(erikgrinaker): make this never be nil.
 		internalRaftGroup *raft.RawNode
 
-		// The ID of the leader replica within the Raft group. NB: this is updated
-		// in a separate critical section from the Raft group, and can therefore
-		// briefly be out of sync with the Raft status.
-		leaderID roachpb.ReplicaID
 		// The most recently added replica for the range and when it was added.
 		// Used to determine whether a replica is new enough that we shouldn't
 		// penalize it for being slightly behind. These field gets cleared out once
@@ -990,11 +996,6 @@ type Replica struct {
 		// implementation.
 		replicaFlowControlIntegration replicaFlowControlIntegration
 
-		// The currentRACv2Mode is always in-sync with RawNode.
-		// MsgAppPull <=> LazyReplication.
-		// Updated with both raftMu and mu held.
-		currentRACv2Mode rac2.RaftMsgAppMode
-
 		// raftTracer is used to trace raft messages that are sent with a
 		// tracing context.
 		raftTracer rafttrace.RaftTracer
@@ -1083,6 +1084,12 @@ type Replica struct {
 		// GC threshold for the range.
 		pendingGCThreshold hlc.Timestamp
 	}
+
+	// cachedClosedTimestampPolicy is the cached closed timestamp policy of the
+	// range. It is updated asynchronously by listening on span configuration
+	// changes, leaseholder changes, and periodically at the interval of
+	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
+	cachedClosedTimestampPolicy atomic.Int32
 }
 
 // String returns the string representation of the replica using an
@@ -1174,6 +1181,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.conf = conf
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
+	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -1303,10 +1311,11 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 func toClientClosedTsPolicy(
 	policy ctpb.RangeClosedTimestampPolicy,
 ) roachpb.RangeClosedTimestampPolicy {
-	switch policy {
-	case ctpb.LAG_BY_CLUSTER_SETTING:
+	switch {
+	case policy == ctpb.LAG_BY_CLUSTER_SETTING:
 		return roachpb.LAG_BY_CLUSTER_SETTING
-	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO:
+	case policy >= ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS:
 		return roachpb.LEAD_FOR_GLOBAL_READS
 	default:
 		panic(fmt.Sprintf("unknown policy locality %s", policy))
@@ -1314,23 +1323,59 @@ func toClientClosedTsPolicy(
 }
 
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
-// range, which is updated asynchronously by listening in on span configuration
-// changes.
+// range, which is updated asynchronously by listening on span configuration
+// changes, leaseholder changes, and periodically at the interval of
+// kv.closed_timestamp.policy_refresh_interval.
 //
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
-		if !r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
-			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
-		}
+	// TODO(wenyi): try to remove the need for this key comparison under RLock.
+	// See more in #143648.
+	if r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+		return ctpb.LAG_BY_CLUSTER_SETTING
+	}
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+}
+
+// RefreshPolicy updates the replica's cached closed timestamp policy based on
+// span configurations and provided node latencies.
+func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
+	policy := func() ctpb.RangeClosedTimestampPolicy {
+		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
 		// closing timestamps in the future, it would break liveness updates,
 		// which perform a 1PC transaction with a commit trigger and can not
 		// tolerate being pushed into the future.
+		if desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+			return ctpb.LAG_BY_CLUSTER_SETTING
+		}
+		if !conf.GlobalReads {
+			return ctpb.LAG_BY_CLUSTER_SETTING
+		}
+		// If the provided map is nil, the policy will be
+		// LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO. The latency will be hardcoded
+		// to closedts.DefaultMaxNetworkRTT in closed timestamp calculation.
+		if latencies == nil {
+			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+		}
+
+		// For ranges serving global reads, determine the maximum
+		// leaseholder-to-peer replica using the provided map and set an appropriate
+		// policy bucket. This then controls how far in the future timestamps will
+		// be closed for the range.
+		maxLatency := time.Duration(-1)
+		for _, peer := range r.shMu.state.Desc.InternalReplicas {
+			peerLatency := closedts.DefaultMaxNetworkRTT
+			if latency, ok := latencies[peer.NodeID]; ok {
+				peerLatency = latency
+			}
+			maxLatency = max(maxLatency, peerLatency)
+		}
+		return closedts.FindBucketBasedOnNetworkRTT(maxLatency)
 	}
-	return ctpb.LAG_BY_CLUSTER_SETTING
+	r.cachedClosedTimestampPolicy.Store(int32(policy()))
 }
 
 // NodeID returns the ID of the node this replica belongs to.
@@ -2708,6 +2753,21 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 // GetMutexForTesting returns the replica's mutex, for use in tests.
 func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
+}
+
+// TODO(wenyihu6): rename the *ForTesting functions to be Testing* (see
+// #144119 for more details).
+
+// SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
+// to be the given policy. It is a test-only helper method.
+func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
+	r.cachedClosedTimestampPolicy.Store(int32(policy))
+}
+
+// GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
+// It is a test-only helper method.
+func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
+	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the

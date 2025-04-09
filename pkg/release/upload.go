@@ -18,6 +18,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // PutReleaseOptions are options to for the PutRelease function.
@@ -114,14 +116,7 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions, body bytes.Buffer) {
 func createZip(files []ArchiveFile, body *bytes.Buffer, prefix string) error {
 	zw := zip.NewWriter(body)
 	for _, f := range files {
-		file, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			return fmt.Errorf("failed to open file: %s", f.LocalAbsolutePath)
-		}
-		//nolint:deferloop TODO(#137605)
-		defer func() { _ = file.Close() }()
-
-		stat, err := file.Stat()
+		stat, err := os.Stat(f.LocalAbsolutePath)
 		if err != nil {
 			return fmt.Errorf("failed to stat: %s", f.LocalAbsolutePath)
 		}
@@ -137,7 +132,8 @@ func createZip(files []ArchiveFile, body *bytes.Buffer, prefix string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(zfw, file); err != nil {
+
+		if err := readFile(f.LocalAbsolutePath, zfw); err != nil {
 			return err
 		}
 	}
@@ -151,14 +147,7 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 	gzw := gzip.NewWriter(body)
 	tw := tar.NewWriter(gzw)
 	for _, f := range files {
-		file, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			return fmt.Errorf("failed to open file: %s", f.LocalAbsolutePath)
-		}
-		//nolint:deferloop TODO(#137605)
-		defer func() { _ = file.Close() }()
-
-		stat, err := file.Stat()
+		stat, err := os.Stat(f.LocalAbsolutePath)
 		if err != nil {
 			return fmt.Errorf("failed to stat: %s", f.LocalAbsolutePath)
 		}
@@ -172,8 +161,7 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 		if err := tw.WriteHeader(tarHeader); err != nil {
 			return err
 		}
-
-		if _, err := io.Copy(tw, file); err != nil {
+		if err := readFile(f.LocalAbsolutePath, tw); err != nil {
 			return err
 		}
 	}
@@ -184,6 +172,15 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 		return err
 	}
 	return nil
+}
+
+func readFile(path string, dst io.Writer) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %s", path)
+	}
+	_, err = io.Copy(dst, file)
+	return errors.CombineErrors(err, file.Close())
 }
 
 // PutNonRelease uploads non-release related files.
@@ -201,10 +198,6 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 		if err != nil {
 			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
 		}
-		//nolint:deferloop TODO(#137605)
-		defer func() {
-			_ = fileToUpload.Close()
-		}()
 
 		versionKey := fmt.Sprintf("%s/%s", nonReleasePrefix, f.FilePath)
 		log.Printf("Uploading to %s", svc.URL(versionKey))
@@ -215,6 +208,7 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 		}); err != nil {
 			log.Fatalf("failed uploading %s: %s", versionKey, err)
 		}
+		_ = fileToUpload.Close()
 
 		latestSuffix := o.Branch
 		if latestSuffix == "master" {

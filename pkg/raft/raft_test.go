@@ -3120,7 +3120,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	n1.restore(s)
 	snap := n1.raftLog.nextUnstableSnapshot()
 	store.ApplySnapshot(*snap)
-	n1.appliedSnap(snap)
+	n1.appliedSnap(snap.Metadata.Index)
 
 	nt := newNetwork(n1, n2)
 
@@ -3824,7 +3824,7 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	follower := nt.peers[3].(*raft)
 	snap := follower.raftLog.nextUnstableSnapshot()
 	nt.storage[3].ApplySnapshot(*snap)
-	follower.appliedSnap(snap)
+	follower.appliedSnap(snap.Metadata.Index)
 	nt.msgHook = nil
 	nt.send(filtered)
 

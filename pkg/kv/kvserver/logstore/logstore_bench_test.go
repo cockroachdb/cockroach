@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -33,7 +34,10 @@ func (b *discardBatch) Commit(bool) error {
 
 type noopSyncCallback struct{}
 
-func (noopSyncCallback) OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats) {}
+func (noopSyncCallback) OnLogSync(
+	context.Context, raft.StorageAppendAck, storage.BatchCommitStats,
+) {
+}
 
 func BenchmarkLogStore_StoreEntries(b *testing.B) {
 	defer log.Scope(b).Close(b)
@@ -96,7 +100,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 	batch := &discardBatch{}
 	for i := 0; i < b.N; i++ {
 		batch.Batch = newStoreEntriesBatch(eng)
-		m := MsgStorageAppend{Entries: ents}
+		m := raft.StorageAppend{Entries: ents}
 		cb := noopSyncCallback{}
 		var err error
 		rs, err = s.storeEntriesAndCommitBatch(ctx, rs, m, cb, stats, batch)

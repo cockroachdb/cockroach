@@ -4569,7 +4569,7 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 
 	colTypes := getTypesFromResultColumns(planInfo.columns)
 	spec := &execinfrapb.VectorSearchSpec{
-		PrefixKey:           planInfo.prefixKey,
+		PrefixKeys:          planInfo.prefixKeys,
 		QueryVector:         queryVector,
 		TargetNeighborCount: planInfo.targetNeighborCount,
 	}

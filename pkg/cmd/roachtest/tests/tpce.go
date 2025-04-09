@@ -400,7 +400,7 @@ func GetTpceOpenmetricsBytes(
 	buffer.WriteString("# HELP tpce_latency Latency metrics for TPC-E transactions\n")
 
 	latencyString := func(quantile, latency string) string {
-		return fmt.Sprintf(`tpce_latency{%s,unit="ms",is_higher_better="false",quantile="%s"} %s %d\n`, labelString, quantile, latency, now)
+		return fmt.Sprintf("tpce_latency{%s,unit=\"ms\",is_higher_better=\"false\",quantile=\"%s\"} %s %d\n", labelString, quantile, latency, now)
 	}
 
 	buffer.WriteString(latencyString("0.5", metrics.P50Latency))
@@ -411,7 +411,7 @@ func GetTpceOpenmetricsBytes(
 	buffer.WriteString(fmt.Sprintf("tpce_latency_sum{%s} %d %d\n", labelString, 0, now))
 	buffer.WriteString(fmt.Sprintf("tpce_latency_count{%s} %s %d\n", labelString, countOfLatencies, now))
 	buffer.WriteString("# TYPE tpce_avg_latency gauge\n")
-	buffer.WriteString(fmt.Sprintf(`tpce_avg_latency{%s,unit="ms",is_higher_better="false"} %s %d\n`, labelString, metrics.AvgLatency, now))
+	buffer.WriteString(fmt.Sprintf("tpce_avg_latency{%s,unit=\"ms\",is_higher_better=\"false\"} %s %d\n", labelString, metrics.AvgLatency, now))
 	buffer.WriteString("# EOF")
 
 	metricsBytes := buffer.Bytes()

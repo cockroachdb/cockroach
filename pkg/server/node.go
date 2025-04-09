@@ -2427,8 +2427,7 @@ func (n *Node) GossipSubscription(
 				}
 			}
 			unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
-			//nolint:deferloop TODO(#137605)
-			defer unregister()
+			defer unregister() //nolint:deferloop
 		}
 	}
 	for {

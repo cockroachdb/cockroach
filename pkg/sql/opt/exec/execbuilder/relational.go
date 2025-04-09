@@ -463,7 +463,7 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			policiesApplied, found := rlsMeta.PoliciesApplied[tabID]
 			if found {
 				val := exec.RLSPoliciesApplied{
-					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt,
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt || policiesApplied.BypassRLS,
 				}
 				if applyFilterExpr {
 					val.Policies = policiesApplied.Filter
@@ -1325,6 +1325,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
+		eb.routineResultBuffers = b.routineResultBuffers
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -3550,6 +3551,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.BodyStmts,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
+		0,     /* resultBufferID */
 	)
 
 	r := tree.NewTypedRoutineExpr(
@@ -3561,12 +3563,14 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
+		false, /* discardLastStmtResult */
 		false, /* tailCall */
 		true,  /* procedure */
 		false, /* triggerFunc */
 		false, /* blockStart */
 		nil,   /* blockState */
 		nil,   /* cursorDeclaration */
+		nil,   /* firstStmtResultWriter */
 	)
 
 	var ep execPlan
@@ -3949,25 +3953,6 @@ func (b *Builder) buildVectorSearch(
 				"vector search output column %d is not a primary key column", col)
 		}
 	}
-	// Evaluate the prefix expressions.
-	var prefixKey constraint.Key
-	if len(search.PrefixVals) > 0 {
-		values := make([]tree.Datum, len(search.PrefixVals))
-		for i, expr := range search.PrefixVals {
-			// The expression is either a placeholder or a constant.
-			if p, ok := expr.(*memo.PlaceholderExpr); ok {
-				val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
-				if err != nil {
-					return execPlan{}, colOrdMap{}, err
-				}
-				values[i] = val
-			} else {
-				values[i] = memo.ExtractConstDatum(expr)
-			}
-		}
-		prefixKey = constraint.MakeCompositeKey(values...)
-	}
-
 	outColOrds, outColMap := b.getColumns(search.Cols, search.Table)
 	ctx := buildScalarCtx{}
 	queryVector, err := b.buildScalar(&ctx, search.QueryVector)
@@ -3978,7 +3963,7 @@ func (b *Builder) buildVectorSearch(
 
 	var res execPlan
 	res.root, err = b.factory.ConstructVectorSearch(
-		table, index, outColOrds, prefixKey, queryVector, targetNeighborCount,
+		table, index, outColOrds, search.PrefixConstraint, queryVector, targetNeighborCount,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

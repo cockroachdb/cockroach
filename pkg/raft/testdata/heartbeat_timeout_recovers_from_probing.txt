@@ -58,7 +58,7 @@ stabilize
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
   Ready:
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11

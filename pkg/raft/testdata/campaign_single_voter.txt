@@ -28,6 +28,8 @@ stabilize
   Ready:
   State:StateCandidate
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+  OnSync:
+  1->1 MsgVoteResp Term:1 Log:0/0
   INFO 1 received MsgVoteResp from 1 at term 1
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
@@ -38,6 +40,8 @@ stabilize
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
   Entries:
   1/3 EntryNormal ""
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0

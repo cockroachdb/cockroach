@@ -396,7 +396,7 @@ func (p *planner) maybeLogStatementInternal(
 			SQLInstanceIDs:           queryLevelStats.SQLInstanceIDs,
 			KVNodeIDs:                queryLevelStats.KVNodeIDs,
 			UsedFollowerRead:         queryLevelStats.UsedFollowerRead,
-			NetworkBytesSent:         queryLevelStats.NetworkBytesSent,
+			NetworkBytesSent:         queryLevelStats.DistSQLNetworkBytesSent,
 			MaxMemUsage:              queryLevelStats.MaxMemUsage,
 			MaxDiskUsage:             queryLevelStats.MaxDiskUsage,
 			KVBytesRead:              queryLevelStats.KVBytesRead,
@@ -404,7 +404,7 @@ func (p *planner) maybeLogStatementInternal(
 			KVRowsRead:               queryLevelStats.KVRowsRead,
 			KvTimeNanos:              queryLevelStats.KVTime.Nanoseconds(),
 			KvGrpcCalls:              queryLevelStats.KVBatchRequestsIssued,
-			NetworkMessages:          queryLevelStats.NetworkMessages,
+			NetworkMessages:          queryLevelStats.DistSQLNetworkMessages,
 			CpuTimeNanos:             queryLevelStats.CPUTime.Nanoseconds(),
 			IndexRecommendations:     indexRecs,
 			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
@@ -498,10 +498,10 @@ func (p *planner) logTransaction(
 
 	if txnStats.CollectedExecStats {
 		sampledTxn.SampledExecStats = &eventpb.SampledExecStats{
-			NetworkBytes:    txnStats.ExecStats.NetworkBytesSent,
+			NetworkBytes:    txnStats.ExecStats.DistSQLNetworkBytesSent,
 			MaxMemUsage:     txnStats.ExecStats.MaxMemUsage,
 			ContentionTime:  int64(txnStats.ExecStats.ContentionTime.Seconds()),
-			NetworkMessages: txnStats.ExecStats.NetworkMessages,
+			NetworkMessages: txnStats.ExecStats.DistSQLNetworkMessages,
 			MaxDiskUsage:    txnStats.ExecStats.MaxDiskUsage,
 			CPUSQLNanos:     txnStats.ExecStats.CPUTime.Nanoseconds(),
 			MVCCIteratorStats: eventpb.MVCCIteratorStats{

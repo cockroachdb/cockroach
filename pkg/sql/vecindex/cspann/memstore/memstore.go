@@ -460,8 +460,26 @@ func (s *Store) TryUpdatePartitionMetadata(
 		return cspann.NewConditionFailedError(*existing)
 	}
 
+	// Check whether new level is being added or removed.
+	if partitionKey == cspann.RootKey && metadata.Level != existing.Level {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		// Treat adding new level as if it were a new root partition.
+		memPart.lock.created = s.tickLocked()
+
+		// Grow or shrink CVStats slice. Stats are for non-leaf levels, so subtract
+		// one to get the new slice length.
+		expectedLevels := int(metadata.Level - 1)
+		if expectedLevels > len(s.mu.stats.CVStats) {
+			s.mu.stats.CVStats =
+				slices.Grow(s.mu.stats.CVStats, expectedLevels-len(s.mu.stats.CVStats))
+		}
+		s.mu.stats.CVStats = s.mu.stats.CVStats[:expectedLevels]
+	}
+
 	// Update the partition's metadata.
-	*memPart.lock.partition.Metadata() = metadata
+	*existing = metadata
 
 	return nil
 }
@@ -542,6 +560,34 @@ func (s *Store) TryRemoveFromPartition(
 	memPart.count.Store(int64(partition.Count()))
 
 	return removed, err
+}
+
+// TryClearPartition implements the Store interface.
+func (s *Store) TryClearPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expected cspann.PartitionMetadata,
+) (count int, err error) {
+	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, true /* isExclusive */)
+	if memPart == nil {
+		// Partition does not exist.
+		return -1, cspann.ErrPartitionNotFound
+	}
+	defer memPart.lock.Release()
+
+	// Check precondition.
+	partition := memPart.lock.partition
+	existing := partition.Metadata()
+	if !existing.Equal(&expected) {
+		return -1, cspann.NewConditionFailedError(*existing)
+	}
+
+	// Remove vectors from the partition and update partition count.
+	count = partition.Clear()
+	memPart.count.Store(0)
+
+	return count, nil
 }
 
 // EnsureUniquePartitionKey checks that the given partition key is not being
@@ -628,16 +674,19 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 			defer memPart.lock.ReleaseShared()
 
 			partition := memPart.lock.partition
-			if partition.Metadata().StateDetails.State != cspann.ReadyState {
-				return errors.AssertionFailedf("cannot save store with non-ready partition %v", qkey)
-			}
-
+			metadata := partition.Metadata()
 			partitionProto := PartitionProto{
 				TreeId:       qkey.treeID,
 				PartitionKey: qkey.partitionKey,
-				ChildKeys:    partition.ChildKeys(),
-				ValueBytes:   partition.ValueBytes(),
-				Level:        partition.Level(),
+				Metadata: PartitionMetadataProto{
+					Level:   partition.Level(),
+					State:   metadata.StateDetails.State,
+					Target1: metadata.StateDetails.Target1,
+					Target2: metadata.StateDetails.Target2,
+					Source:  metadata.StateDetails.Source,
+				},
+				ChildKeys:  partition.ChildKeys(),
+				ValueBytes: partition.ValueBytes(),
 			}
 
 			rabitq, ok := partition.QuantizedSet().(*quantize.RaBitQuantizedVectorSet)
@@ -712,7 +761,15 @@ func Load(data []byte) (*Store, error) {
 		}
 
 		metadata := cspann.PartitionMetadata{
-			Level: partitionProto.Level, Centroid: quantizedSet.GetCentroid()}
+			Level:    partitionProto.Metadata.Level,
+			Centroid: quantizedSet.GetCentroid(),
+			StateDetails: cspann.PartitionStateDetails{
+				State:   partitionProto.Metadata.State,
+				Target1: partitionProto.Metadata.Target1,
+				Target2: partitionProto.Metadata.Target2,
+				Source:  partitionProto.Metadata.Source,
+			},
+		}
 		memPart.lock.partition = cspann.NewPartition(metadata, quantizer, quantizedSet,
 			partitionProto.ChildKeys, partitionProto.ValueBytes)
 

@@ -188,6 +188,34 @@ events.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `hot_ranges_stats`
+
+An event of type `hot_ranges_stats`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeID` |  | no |
+| `Qps` |  | no |
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
+| `LeaseholderNodeID` | LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range. | no |
+| `WritesPerSecond` | Writes per second is the recent number of keys written per second on this range. | no |
+| `ReadsPerSecond` | Reads per second is the recent number of keys read per second on this range. | no |
+| `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
+| `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
+| `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
+| `Databases` | Databases for the range. | yes |
+| `Tables` | Tables for the range | yes |
+| `Indexes` | Indexes for the range | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `low_disk_space`
 
 An event of type `low_disk_space` is emitted when a store is reaching capacity, as we reach
@@ -3115,34 +3143,6 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
-### `hot_ranges_stats`
-
-An event of type `hot_ranges_stats`
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `RangeID` |  | no |
-| `Qps` |  | no |
-| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
-| `LeaseholderNodeID` | LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range. | no |
-| `WritesPerSecond` | Writes per second is the recent number of keys written per second on this range. | no |
-| `ReadsPerSecond` | Reads per second is the recent number of keys read per second on this range. | no |
-| `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
-| `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
-| `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
-| `Databases` | Databases for the range. | yes |
-| `Tables` | Tables for the range | yes |
-| `Indexes` | Indexes for the range | yes |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-
 ### `m_v_c_c_iterator_stats`
 
 Internal storage iteration statistics for a single execution.
@@ -3222,10 +3222,10 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `NetworkBytes` | NetworkBytes collects the number of bytes sent over the network. | no |
+| `NetworkBytes` | NetworkBytes collects the number of bytes sent over the network by DistSQL components. | no |
 | `MaxMemUsage` | MaxMemUsage collects the maximum memory usage that occurred on a node. | no |
 | `ContentionTime` | ContentionTime collects the time in seconds statements in the transaction spent contending. | no |
-| `NetworkMessages` | NetworkMessages collects the number of messages that were sent over the network. | no |
+| `NetworkMessages` | NetworkMessages collects the number of messages that were sent over the network by DistSQL components. | no |
 | `MaxDiskUsage` | MaxDiskUsage collects the maximum temporary disk usage that occurred. This is set in cases where a query had to spill to disk, e.g. when performing a large sort where not all of the tuples fit in memory. | no |
 | `CPUSQLNanos` | CPUSQLNanos collects the CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
 | `MVCCIteratorStats` | Internal storage iteration statistics. | yes |
@@ -3273,13 +3273,13 @@ contains common SQL event/execution details.
 | `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
 | `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
 | `Regions` | The regions of the nodes where SQL processors ran. | no |
-| `NetworkBytesSent` | The number of network bytes sent by nodes for this query. | no |
+| `NetworkBytesSent` | The number of network bytes by DistSQL components. | no |
 | `MaxMemUsage` | The maximum amount of memory usage by nodes for this query. | no |
 | `MaxDiskUsage` | The maximum amount of disk usage by nodes for this query. | no |
 | `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
 | `KVPairsRead` | The number of key-value pairs read at the KV layer for this query. | no |
 | `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
-| `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
+| `NetworkMessages` | The number of network messages sent by nodes for this query by DistSQL components. | no |
 | `IndexRecommendations` | Generated index recommendations for this query. | no |
 | `ScanCount` | The number of scans in the query plan. | no |
 | `ScanWithStatsCount` | The number of scans using statistics (including forecasted statistics) in the query plan. | no |

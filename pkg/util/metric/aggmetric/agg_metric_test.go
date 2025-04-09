@@ -35,7 +35,7 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 	// Flipping the includeAggregateMetrics flag should have no effect.
 	testutils.RunTrueAndFalse(t, "includeChildMetrics=false,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
 		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, false, includeAggregateMetrics)
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(false), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 		families, err := pe.Gather()
 		require.NoError(t, err)
 		require.Equal(t, 1, len(families))
@@ -46,7 +46,7 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "includeChildMetrics=true,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
 		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, true, includeAggregateMetrics)
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 		families, err := pe.Gather()
 		require.NoError(t, err)
 		require.Equal(t, 1, len(families))
@@ -318,12 +318,44 @@ func TestAggMetricClear(t *testing.T) {
 	})
 }
 
+func TestMetricKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name              string
+		labelValues       []string
+		expectedHashValue uint64
+	}{
+		{
+			name:              "empty label values",
+			labelValues:       []string{},
+			expectedHashValue: 0xcbf29ce484222325,
+		},
+		{
+			name:              "single label value",
+			labelValues:       []string{"test_db"},
+			expectedHashValue: 0x7b629443ea81c091,
+		},
+		{
+			name:              "multiple label values",
+			labelValues:       []string{"test_db", "test_app", "test_tenant"},
+			expectedHashValue: 0xa1aaab8437836050,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues...))
+		})
+	}
+}
+
 func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 	writePrometheusMetrics := func(t *testing.T) string {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
+			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string

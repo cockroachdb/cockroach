@@ -205,7 +205,8 @@ func TestRaftTracing(t *testing.T) {
 					// the ordering may change between 1->2 and 1->3. It should be
 					// sufficient to just check one of them for tracing.
 					`replica_raft.* 1->2 MsgApp`,
-					`replica_raft.* AppendThread->1 MsgStorageAppendResp`,
+					`replica_raft.* appended entries`,
+					`replica_raft.* synced log storage write at mark`,
 					`replica_raft.* applying entries`,
 					`ack-ing replication success to the client`,
 				}

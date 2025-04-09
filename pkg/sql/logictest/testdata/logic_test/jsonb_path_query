@@ -729,6 +729,9 @@ SELECT jsonb_path_query('{}', '3 % 2');
 ----
 1
 
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{}', '1 % 0');
+
 query T
 SELECT jsonb_path_query('{"a": 4, "b": 5}', '$.a + $.b');
 ----
@@ -914,6 +917,16 @@ SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H
 ----
 "He said \"Hello\\World!\""
 
+query T
+SELECT jsonb_path_query('["hello", "a"]', '$ like_regex "he"');
+----
+true
+
+query T
+SELECT jsonb_path_query('["hello", "a"]', 'strict $ like_regex "he"');
+----
+null
+
 query T rowsort
 SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
 ----
@@ -1054,3 +1067,124 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[1 to last, last to last]');
 3
 4
 4
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', 'exists($[*])');
+----
+true
+
+query T
+SELECT jsonb_path_query('[]', 'exists($[*])');
+----
+false
+
+query T
+SELECT jsonb_path_query('[{"items": [{"id": 1}, {"id": 2}]}, {"items": []}]', '$[*] ? (exists(@.items[*].id))');
+----
+{"items": [{"id": 1}, {"id": 2}]}
+
+query T
+SELECT jsonb_path_query('[{"a": 1, "b": 2}, {"a": 1}, {"b": 2}, {}]', '$[*] ? (exists(@.a) && exists(@.b))');
+----
+{"a": 1, "b": 2}
+
+query T
+SELECT jsonb_path_query('{}', '(1 + 2 == 3) is unknown');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', '($ < 1) is unknown');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', '(null like_regex "^he.*$") is unknown');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with "abc"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('["ab", "a"]', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": 1}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", 1]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', 'exists(2 + "3")');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '2 / 0 > 0');
+----
+null
+
+query T rowsort
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+----
+{"x": 2}
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+----
+{"y": 3}
+
+query T
+SELECT jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+----
+[{"x": 2}, {"y": 3}]
+
+query T
+SELECT jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+----
+0

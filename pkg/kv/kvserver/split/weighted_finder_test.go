@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand/v2"
 	"reflect"
 	"testing"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/rand"
 )
 
 type ZeroRandSource struct{}
@@ -27,7 +27,7 @@ func (r ZeroRandSource) Float64() float64 {
 	return 0
 }
 
-func (r ZeroRandSource) Intn(int) int {
+func (r ZeroRandSource) IntN(int) int {
 	return 0
 }
 
@@ -37,7 +37,7 @@ func (r WFLargestRandSource) Float64() float64 {
 	return 1
 }
 
-func (r WFLargestRandSource) Intn(int) int {
+func (r WFLargestRandSource) IntN(int) int {
 	return 0
 }
 
@@ -167,7 +167,7 @@ func TestSplitWeightedFinderKey(t *testing.T) {
 		{bestBalanceReservoir, keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.reservoir
@@ -327,7 +327,7 @@ func TestWeightedFinderNoSplitKeyCause(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 	weightedFinder.samples = samples
 	insufficientCounters, imbalance := weightedFinder.noSplitKeyCause()
@@ -397,7 +397,7 @@ func TestWeightedFinderPopularKey(t *testing.T) {
 		{sameKeySample, keys.SystemSQLCodec.TablePrefix(uint32(0)), 1},
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
@@ -485,7 +485,7 @@ func TestWeightedFinderAccessDirection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			finder := NewWeightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
+			finder := NewWeightedFinder(timeutil.Now(), rand.New(rand.NewPCG(2022, 0)))
 			finder.samples = tc.samples
 			direction := finder.AccessDirection()
 			if math.Abs(direction-tc.expectedDirection) > 1e-9 {

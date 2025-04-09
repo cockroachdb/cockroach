@@ -5911,6 +5911,115 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
+func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("cmd_lease=2"))
+
+	// Test Plan:
+	//
+	// - Reduce MaxRaftCommandSize
+	// - Move scratch range to known location.
+	// - Take out a large number of unreplicated locks
+	// - Transfer lease without an error
+	//
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
+	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 1<<20)
+	// To see the test fail:
+	// concurrency.MaxLockFlushSize.Override(ctx, &st.SV, 2<<20)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Settings: st},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+	desc, err := tc.LookupRange(scratch)
+	require.NoError(t, err)
+
+	// Start with the lease on store 1.
+	t.Logf("transfering to s1")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
+	t.Logf("done transfering to s1")
+
+	mkRandomScratchKey := func() roachpb.Key {
+		return append(scratch.Clone(), uuid.MakeV4().String()...)
+	}
+
+	numLocks := 9000
+	txn := tc.Server(1).DB().NewTxn(ctx, "test-lots-o-locks")
+	b := txn.NewBatch()
+	for range numLocks {
+		b.GetForUpdate(mkRandomScratchKey(), kvpb.BestEffort)
+		b.Requests()[len(b.Requests())-1].GetGet().LockNonExisting = true
+	}
+	require.NoError(t, txn.Run(ctx, b))
+
+	t.Log("transfering lease from s1 -> s2")
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+}
+
+func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("cmd_subsume=2"))
+
+	// Test Plan:
+	//
+	// - Reduce MaxRaftCommandSize
+	// - Move scratch range to known location.
+	// - Take out a large number of unreplicated locks
+	// - Merge range without an error
+	//
+	var (
+		splitPoint = "b"
+		ctx        = context.Background()
+		st         = cluster.MakeClusterSettings()
+	)
+
+	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
+	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 1<<20)
+	// To see the test fail:
+	// concurrency.MaxLockFlushSize.Override(ctx, &st.SV, 2<<20)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{Settings: st},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+
+	mkKey := func(s string) roachpb.Key {
+		prefix := scratch.Clone()
+		return append(prefix[:len(prefix):len(prefix)], s...)
+	}
+
+	splitKey := mkKey(splitPoint)
+	tc.SplitRangeOrFatal(t, splitKey)
+
+	mkRandomScratchKey := func() roachpb.Key {
+		return append(mkKey(splitPoint), uuid.MakeV4().String()...)
+	}
+
+	numLocks := 6000
+	txn := tc.Server(0).DB().NewTxn(ctx, "test-lots-o-locks")
+	b := txn.NewBatch()
+	for range numLocks {
+		b.GetForUpdate(mkRandomScratchKey(), kvpb.BestEffort)
+		b.Requests()[len(b.Requests())-1].GetGet().LockNonExisting = true
+	}
+	require.NoError(t, txn.Run(ctx, b))
+
+	// Merge Range
+	t.Logf("merging range %s", scratch)
+	_, err := tc.MergeRanges(scratch)
+	require.NoError(t, err)
+}
+
 func TestMergeReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6029,6 +6138,52 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCommitTriggerFailuresDontCauseUnexpectedCommittedError tests that errors
+// returned by the commit trigger don't cause transaction to unexpectedly
+// be marked as COMMITTED in the response.
+func TestCommitTriggerFailuresDontCauseUnexpectedCommittedError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Create an atomic boolean to control error injection
+	var shouldInjectError atomic.Bool
+
+	// errorInjector returns nil when the bool is false, and returns an error when
+	// the bool is true.
+	errorInjector := func() error {
+		if shouldInjectError.Load() {
+			return errors.New("boom")
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				CommitTriggerError: errorInjector,
+			},
+		}}},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+	db := tc.Server(0).DB()
+	tc.ScratchRange(t)
+
+	shouldInjectError.Store(true)
+	err := db.AdminSplit(ctx, scratchRKey("c"), hlc.MaxTimestamp)
+
+	// Verify that the error is expected.
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "boom")
+	require.False(t, errors.HasAssertionFailure(err), "%+v", err)
+
+	// Removing the error injector should allow the split to succeed.
+	shouldInjectError.Store(false)
+	require.NoError(t, db.AdminSplit(ctx, scratchRKey("c"), hlc.MaxTimestamp))
 }
 
 // BenchmarkLeaderTickWithLeaderLeases benchmarks the performance of the replica

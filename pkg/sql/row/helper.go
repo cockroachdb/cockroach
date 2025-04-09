@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -105,9 +106,10 @@ type RowHelper struct {
 	// Used to hold the row being written while writing tombstones.
 	tmpRow []tree.Datum
 
+	sd *sessiondata.SessionData
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
-	internal                     bool
 	metrics                      *rowinfra.Metrics
 }
 
@@ -116,8 +118,8 @@ func NewRowHelper(
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	uniqueWithTombstoneIndexes []catalog.Index,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
 	var uniqueWithTombstoneIndexesSet intsets.Fast
@@ -129,7 +131,7 @@ func NewRowHelper(
 		TableDesc:                  desc,
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
-		internal:                   internal,
+		sd:                         sd,
 		metrics:                    metrics,
 	}
 
@@ -432,7 +434,7 @@ func (rh *RowHelper) CheckRowSize(
 		FamilyID:   uint32(family),
 		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
 	}
-	if rh.internal && shouldErr {
+	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
 		shouldErr = false
 		shouldLog = true
@@ -442,7 +444,7 @@ func (rh *RowHelper) CheckRowSize(
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
 		var event logpb.EventPayload
-		if rh.internal {
+		if rh.sd.Internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
@@ -492,16 +494,35 @@ func delFn(
 	}
 }
 
+func delWithCPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	expVal []byte,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if traceKV {
+		if keyEncodingDirs != nil {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", keys.PrettyPrint(keyEncodingDirs, *key))
+		} else {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", *key)
+		}
+	}
+	b.CPut(key, nil, expVal)
+}
+
 func (rh *RowHelper) deleteIndexEntry(
 	ctx context.Context,
 	b Putter,
 	index catalog.Index,
 	key *roachpb.Key,
 	alreadyLocked bool,
+	lockNonUnique bool,
 	traceKV bool,
 	valDirs []encoding.Direction,
 ) error {
-	needsLock := !alreadyLocked && index.IsUnique()
+	needsLock := !alreadyLocked && (index.IsUnique() || lockNonUnique)
 	if index.UseDeletePreservingEncoding() {
 		if traceKV {
 			var suffix string
@@ -547,7 +568,10 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 	traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
+		log.VEventfDepth(
+			ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s (swap) @ %s", *key, value.PrettyPrint(),
+			oh.OriginTimestamp,
+		)
 	}
 	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
 }
@@ -556,7 +580,9 @@ func (oh *OriginTimestampCPutHelper) DelWithCPut(
 	ctx context.Context, b Putter, key *roachpb.Key, expVal []byte, traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
+		log.VEventfDepth(
+			ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp,
+		)
 	}
 	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp)
 }

@@ -246,7 +246,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
 	r.LeaderlessWatcher = NewLeaderlessWatcher(r)
-	r.mu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
+	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
 	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
@@ -277,6 +277,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
+	r.RefreshPolicy(nil)
 	return r
 }
 
@@ -373,7 +374,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		raftpb.PeerID(r.replicaID),
 		r.shMu.state.RaftAppliedIndex,
 		r.store.cfg,
-		r.mu.currentRACv2Mode == rac2.MsgAppPull,
+		r.shMu.currentRACv2Mode == rac2.MsgAppPull,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
 		r.store.raftMetrics,

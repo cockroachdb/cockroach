@@ -205,14 +205,13 @@ LIMIT
 
 		stats := &logstore.AppendStats{}
 
-		msgApp := raftpb.Message{
-			Type:      raftpb.MsgStorageAppend,
-			To:        raft.LocalAppendThread,
-			Term:      lastTerm,
-			LogTerm:   lastTerm,
-			Index:     uint64(lastIndex),
+		app := raft.StorageAppend{
+			HardState: raftpb.HardState{
+				Term:   lastTerm,
+				Commit: uint64(lastIndex) + uint64(len(ents)),
+			},
 			Entries:   ents,
-			Commit:    uint64(lastIndex) + uint64(len(ents)),
+			LeadTerm:  lastTerm,
 			Responses: []raftpb.Message{{}}, // need >0 responses so StoreEntries will sync
 		}
 
@@ -246,7 +245,7 @@ LIMIT
 		_, err = ls.StoreEntries(ctx, logstore.RaftState{
 			LastIndex: lastIndex,
 			LastTerm:  kvpb.RaftTerm(lastTerm),
-		}, logstore.MakeMsgStorageAppend(msgApp), (*wgSyncCallback)(wg), stats)
+		}, app, (*wgSyncCallback)(wg), stats)
 		require.NoError(t, err)
 		wg.Wait()
 
@@ -259,7 +258,7 @@ LIMIT
 type wgSyncCallback sync.WaitGroup
 
 func (w *wgSyncCallback) OnLogSync(
-	context.Context, logstore.MsgStorageAppendDone, storage.BatchCommitStats,
+	context.Context, raft.StorageAppendAck, storage.BatchCommitStats,
 ) {
 	(*sync.WaitGroup)(w).Done()
 }

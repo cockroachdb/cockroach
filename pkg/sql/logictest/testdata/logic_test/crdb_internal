@@ -123,7 +123,7 @@ pg_opclass                       true
 pg_operator                      false
 pg_opfamily                      true
 pg_partitioned_table             true
-pg_policies                      true
+pg_policies                      false
 pg_policy                        false
 pg_prepared_statements           false
 pg_prepared_xacts                false

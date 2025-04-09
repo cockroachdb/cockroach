@@ -265,11 +265,53 @@ DROP TABLE alter_test
 statement ok
 CREATE TABLE exec_test (
   a INT PRIMARY KEY,
+  b INT,
   vec1 VECTOR(3),
-  VECTOR INDEX (vec1)
+  VECTOR INDEX idx1 (vec1),
+  VECTOR INDEX idx2 (b, vec1)
 )
 
-# TODO(drewk): write these tests once execution is supported.
+statement ok
+INSERT INTO exec_test (a, b, vec1) VALUES
+  (1, 1, '[1, 2, 3]'),
+  (2, 1, '[4, 5, 6]'),
+  (3, 2, '[7, 8, 9]'),
+  (4, 2, '[10, 11, 12]'),
+  (5, 2, '[13, 14, 15]'),
+  (6, NULL, '[16, 17, 18]'),
+  (7, NULL, '[1, 1, 1]');
+
+# TODO(143209): write a full set of tests once we can make them deterministic.
+# For now, we can write tests that return every vector with a given prefix.
+query I rowsort
+SELECT a FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 7;
+----
+7
+1
+2
+3
+4
+5
+6
+
+query I rowsort
+SELECT a FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 2;
+----
+1
+2
+
+query I rowsort
+SELECT a FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
+----
+3
+4
+5
+
+query I rowsort
+SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
+----
+7
+6
 
 statement ok
 DROP TABLE exec_test

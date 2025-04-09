@@ -79,7 +79,7 @@ stabilize 3
 > 3 handling Ready
   Ready:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
-  Messages:
+  OnSync:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
 
 stabilize 1
@@ -122,7 +122,7 @@ stabilize 3
   Ready:
   HardState Term:1 Commit:11 Lead:1 LeadEpoch:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
 # The MsgAppResp lets the leader move the follower back to replicating state.

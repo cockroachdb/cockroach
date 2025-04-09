@@ -698,3 +698,44 @@ vectorized: true
   row 0, expr 0: gen_random_uuid()
   row 0, expr 1: 1
   row 0, expr 2: unique_rowid()
+
+# Sanity check the KV operations on an INSERT as well as the session variable
+# behavior.
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT NOT NULL,
+  w INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  UNIQUE INDEX (v),
+  FAMILY (k, i, u, v, w)
+);
+
+query T kvtrace
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+----
+Scan /Table/20/1/11{7-8}
+CPut /Table/117/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4/1:5:Int/5
+Put /Table/117/2/2/1/0 -> /BYTES/0x3306
+CPut /Table/117/3/3/0 -> /BYTES/0x892304
+CPut /Table/117/4/4/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE k = 1;
+
+statement ok
+SET use_cputs_on_non_unique_indexes = true;
+
+query T kvtrace
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+----
+CPut /Table/117/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4/1:5:Int/5
+CPut /Table/117/2/2/1/0 -> /BYTES/0x3306
+CPut /Table/117/3/3/0 -> /BYTES/0x892304
+CPut /Table/117/4/4/0 -> /BYTES/0x89
+
+statement ok
+RESET use_cputs_on_non_unique_indexes;

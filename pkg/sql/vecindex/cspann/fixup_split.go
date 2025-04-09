@@ -39,11 +39,11 @@ import (
 //     but instead are "forwarded" to the closest target sub-partition.
 //  7. Reload the splitting partition's vectors and copy the "left" subset to
 //     the left sub-partition.
-//  8. Update the left sub-partition's state from Updating to Ready.
-//  9. Copy the "right" subset of vectors to the right sub-partition.
-//  10. Update the right sub-partition's state from Updating to Ready. At this
+//  8. Copy the "right" subset of vectors to the right sub-partition. At this
 //     point, the splitting vectors are duplicated in the index. Any searches
 //     will filter out duplicates.
+//  9. Update the left sub-partition's state from Updating to Ready.
+//  10. Update the right sub-partition's state from Updating to Ready.
 //  11. Remove the splitting partition from its parent. The duplicates are no
 //     longer visible to searches.
 //  12. Delete the splitting partition from the index.
@@ -109,8 +109,19 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	metadata := *partition.Metadata()
-	if metadata.StateDetails.State != ReadyState && !fw.singleStep {
-		if !metadata.StateDetails.MaybeSplitStalled() {
+	if metadata.StateDetails.State == ReadyState {
+		// Check if partition size has decreased while the fixup was waiting to
+		// be processed. If it's gone down too much, abort the fixup (the partition
+		// is in the Ready state, so the fixup is not yet in progress). Note that
+		// even if it's below the max partition size, we still split, since if it
+		// exceeded that size, it's likely to do so again, and we don't want to be
+		// making expensive getPartition calls.
+		threshold := (fw.index.options.MaxPartitionSize + fw.index.options.MinPartitionSize) / 2
+		if partition.Count() <= threshold && !fw.singleStep {
+			return nil
+		}
+	} else {
+		if !metadata.StateDetails.MaybeSplitStalled(fw.index.options.StalledOpTimeout()) {
 			// There's evidence that another worker has been recently processing
 			// the partition, so don't process the fixup. This minimizes the
 			// possibility of multiple workers on different nodes doing duplicate
@@ -128,7 +139,7 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	log.VEventf(ctx, 2, "splitting partition %d with %d vectors (parent=%d, state=%s)",
-		partitionKey, parentPartitionKey, partition.Count(), metadata.StateDetails.String())
+		partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
 
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
@@ -216,10 +227,30 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// Add vectors to nearest partition.
-		err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
-		if err != nil {
-			return err
+		// If still updating the sub-partitions, then distribute vectors among them.
+		if leftMetadata.StateDetails.State == UpdatingState {
+			err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Update sub-partition states from Updating to Ready.
+		if leftMetadata.StateDetails.State == UpdatingState {
+			expected := leftMetadata
+			leftMetadata.StateDetails = MakeReadyDetails()
+			err = fw.updateMetadata(ctx, leftPartitionKey, leftMetadata, expected)
+			if err != nil {
+				return err
+			}
+		}
+		if rightMetadata.StateDetails.State == UpdatingState {
+			expected := rightMetadata
+			rightMetadata.StateDetails = MakeReadyDetails()
+			err = fw.updateMetadata(ctx, rightPartitionKey, rightMetadata, expected)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Check whether the splitting partition is the root.
@@ -230,11 +261,16 @@ func (fw *fixupWorker) splitPartition(
 			if err != nil {
 				return err
 			}
+
+			if fw.fp.onSuccessfulSplit != nil {
+				// Notify listener that a partition has been successfully split.
+				fw.fp.onSuccessfulSplit()
+			}
 		} else {
 			// This is the root partition, so remove all of its vectors rather than
 			// delete the root partition itself. Note that the vectors have already
 			// been copied to the two target partitions.
-			err = fw.clearPartition(ctx, partitionKey, partition)
+			err = fw.clearPartition(ctx, partitionKey, *partition.Metadata())
 			if err != nil {
 				return err
 			}
@@ -273,6 +309,11 @@ func (fw *fixupWorker) splitPartition(
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
+		}
+
+		if fw.fp.onSuccessfulSplit != nil {
+			// Notify listener that a partition has been successfully split.
+			fw.fp.onSuccessfulSplit()
 		}
 	}
 
@@ -363,29 +404,28 @@ func (fw *fixupWorker) addToPartition(
 	return nil
 }
 
-// clearPartition removes all vectors and associated data from the given
-// partition, leaving it empty, on the condition that the partition's state has
-// not changed unexpectedly. If that's the case, it returns errFixupAborted.
+// clearPartition removes all vectors from the given partition. This only
+// happens if the partition's metadata has not changed. If it has changed,
+// clearPartition returns errFixupAborted.
 func (fw *fixupWorker) clearPartition(
-	ctx context.Context, partitionKey PartitionKey, partition *Partition,
+	ctx context.Context, partitionKey PartitionKey, metadata PartitionMetadata,
 ) (err error) {
-	if partition.Metadata().StateDetails.State.AllowAddOrRemove() {
+	if metadata.StateDetails.State.AllowAddOrRemove() {
 		return errors.AssertionFailedf("cannot clear partition in state that allows adds/removes")
 	}
 
 	// Remove all children in the partition.
-	removed, err := fw.index.store.TryRemoveFromPartition(ctx, fw.treeKey,
-		partitionKey, partition.ChildKeys(), *partition.Metadata())
+	count, err := fw.index.store.TryClearPartition(ctx, fw.treeKey, partitionKey, metadata)
 	if err != nil {
 		metadata, err := suppressRaceErrors(err)
 		if err == nil {
 			// Another worker raced to update the metadata, so abort.
 			return errors.Wrapf(errFixupAborted,
-				"clearing % vectors from partition, %d expected %s, found %s", partition.Count(),
+				"clearing vectors from partition %d, expected %s, found %s",
 				partitionKey, metadata.StateDetails.String(), metadata.StateDetails.String())
 		}
 		return errors.Wrap(err, "clearing vectors")
-	} else if fw.singleStep && removed {
+	} else if fw.singleStep && count > 0 {
 		return errFixupAborted
 	}
 
@@ -444,13 +484,13 @@ func (fw *fixupWorker) createSplitSubPartition(
 	partitionKey PartitionKey,
 	centroid vector.T,
 ) (targetMetadata PartitionMetadata, err error) {
-	const format = "creating split sub-partition %d, with parent %d"
+	const format = "creating split sub-partition %d (source=%d, parent=%d)"
 
 	defer func() {
-		err = errors.Wrapf(err, format, partitionKey, parentPartitionKey)
+		err = errors.Wrapf(err, format, partitionKey, sourcePartitionKey, parentPartitionKey)
 	}()
 
-	log.VEventf(ctx, 2, format, partitionKey, parentPartitionKey)
+	log.VEventf(ctx, 2, format, partitionKey, sourcePartitionKey, parentPartitionKey)
 
 	// Create an empty partition in the Updating state.
 	targetMetadata = PartitionMetadata{
@@ -513,10 +553,9 @@ func (fw *fixupWorker) addToParentPartition(
 	log.VEventf(ctx, 2, format,
 		partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.State)
 
-	if !parentMetadata.StateDetails.State.AllowAddOrRemove() || parentMetadata.Level != parentLevel {
-		// Child could not be added to the parent because it doesn't exist or it
-		// no longer allows inserts, or it's at the wrong level (i.e. root after
-		// split or merge).
+	if parentMetadata.StateDetails.State != ReadyState || parentMetadata.Level != parentLevel {
+		// Only parent partitions in the Ready state at the expected level (level
+		// can change after split/merge) allow children to be added.
 		// TODO(andyk): Use parent state to identify alternate insert partition.
 		return errFixupAborted
 	}
@@ -539,15 +578,15 @@ func (fw *fixupWorker) addToParentPartition(
 func (fw *fixupWorker) deletePartition(
 	ctx context.Context, parentPartitionKey, partitionKey PartitionKey,
 ) (err error) {
-	const format = "deleting partition %d, with parent partition %d (state=%d)"
+	const format = "deleting partition %d (parent=%d, state=%s)"
 	var parentMetadata PartitionMetadata
 
 	defer func() {
 		err = errors.Wrapf(err, format,
-			partitionKey, parentPartitionKey, parentMetadata.StateDetails.State)
+			partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
 	}()
 
-	// Load parent partition to verify that it's in a state that allows inserts.
+	// Load parent partition to verify that it's in a state that allows removes.
 	var parentPartition *Partition
 	parentPartition, err = fw.getPartition(ctx, parentPartitionKey)
 	if err != nil {
@@ -557,7 +596,8 @@ func (fw *fixupWorker) deletePartition(
 		parentMetadata = *parentPartition.Metadata()
 	}
 
-	log.VEventf(ctx, 2, format, partitionKey, parentPartitionKey, parentMetadata.StateDetails.State)
+	log.VEventf(ctx, 2, format,
+		partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
 
 	if !parentMetadata.StateDetails.State.AllowAddOrRemove() {
 		// Child could not be removed from the parent because it doesn't exist or
@@ -578,31 +618,34 @@ func (fw *fixupWorker) deletePartition(
 			return errFixupAborted
 		}
 		return errors.Wrap(err, "removing partition from parent")
-	} else if fw.singleStep && removed {
-		return errFixupAborted
 	}
 
 	// Delete the partition, ignoring any partition not found error, as it means
-	// another worker already deleted the partition.
+	// another worker already deleted the partition. Do not delete the partition
+	// unless it was successfully removed from its parent, as otherwise we might
+	// delete a partition that has been re-parented, leaving the parent with a
+	// dangling reference.
+	//
 	// TODO(andyk): If the worker crashes or errors after removing this partition
-	// from its parent but before deleting it, it may never be cleaned up. This
-	// should be extremely rare, and therefore waste a tiny amount of storage, so
-	// it's probably not worth addressing.
-	err = fw.index.store.TryDeletePartition(ctx, fw.treeKey, partitionKey)
-	if err != nil {
-		if !errors.Is(err, ErrPartitionNotFound) {
-			return errors.Wrapf(err, "deleting partition")
+	// from its parent but before deleting it, it won't be cleaned up. This should
+	// be extremely rare, and therefore waste a tiny amount of storage, so it's
+	// probably not worth addressing.
+	if removed {
+		err = fw.index.store.TryDeletePartition(ctx, fw.treeKey, partitionKey)
+		if err != nil {
+			if !errors.Is(err, ErrPartitionNotFound) {
+				return errors.Wrapf(err, "deleting partition")
+			}
+		} else if fw.singleStep {
+			return errFixupAborted
 		}
-	} else if fw.singleStep {
-		return errFixupAborted
 	}
 
 	return nil
 }
 
 // copyToSplitSubPartitions copies the given set of vectors to left and right
-// sub-partitions, based on which centroid they're closer to. It also updates
-// the state of each sub-partition from Updating to Ready.
+// sub-partitions, based on which centroid they're closer to.
 func (fw *fixupWorker) copyToSplitSubPartitions(
 	ctx context.Context,
 	sourcePartition *Partition,
@@ -627,21 +670,16 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	leftOffsets, rightOffsets = kmeans.AssignPartitions(
 		vectors, leftMetadata.Centroid, rightMetadata.Centroid, tempOffsets)
 
-	// Sort vectors into contiguous left and right groupings.
-	sortVectors(&fw.workspace, vectors, leftOffsets, rightOffsets)
+	// Assign vectors and associated keys and values into contiguous left and right groupings.
+	childKeys := slices.Clone(sourcePartition.ChildKeys())
+	valueBytes := slices.Clone(sourcePartition.ValueBytes())
+	splitPartitionData(&fw.workspace, vectors, childKeys, valueBytes, leftOffsets, rightOffsets)
 	leftVectors := vectors
 	rightVectors := leftVectors.SplitAt(len(leftOffsets))
-
-	childKeys := make([]ChildKey, vectors.Count)
-	valueBytes := make([]ValueBytes, vectors.Count)
-	leftChildKeys := copyByOffsets(
-		sourcePartition.ChildKeys(), childKeys[:len(leftOffsets)], leftOffsets)
-	rightChildKeys := copyByOffsets(
-		sourcePartition.ChildKeys(), childKeys[len(leftOffsets):], rightOffsets)
-	leftValueBytes := copyByOffsets(
-		sourcePartition.ValueBytes(), valueBytes[:len(leftOffsets)], leftOffsets)
-	rightValueBytes := copyByOffsets(
-		sourcePartition.ValueBytes(), valueBytes[len(leftOffsets):], rightOffsets)
+	leftChildKeys := childKeys[:len(leftOffsets)]
+	rightChildKeys := childKeys[len(leftOffsets):]
+	leftValueBytes := valueBytes[:len(leftOffsets)]
+	rightValueBytes := valueBytes[len(leftOffsets):]
 
 	log.VEventf(ctx, 2, format,
 		len(leftOffsets), sourceState.Target1, len(rightOffsets), sourceState.Target2)
@@ -650,57 +688,25 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	// transactional; if an error occurs, any vectors already added may not be
 	// rolled back. This is OK, since the vectors are still present in the
 	// source partition.
-	if leftMetadata.StateDetails.State == UpdatingState {
-		leftPartitionKey := sourceState.Target1
-		err = fw.copyVectorsToSubPartition(ctx,
-			leftPartitionKey, leftMetadata, leftVectors, leftChildKeys, leftValueBytes)
-		if err != nil {
-			return err
-		}
-	}
-	if rightMetadata.StateDetails.State == UpdatingState {
-		if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
-			// This should have been a merge, not a split, but we're too far into the
-			// split operation to back out now, so avoid an empty non-root partition by
-			// duplicating the last remaining vector in both partitions.
-			rightVectors = leftVectors
-			rightChildKeys = leftChildKeys
-			rightValueBytes = leftValueBytes
-		}
-
-		rightPartitionKey := sourceState.Target2
-		err = fw.copyVectorsToSubPartition(ctx,
-			rightPartitionKey, rightMetadata, rightVectors, rightChildKeys, rightValueBytes)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// copyVectorsToSubPartition copies the given set of vectors, along with
-// associated keys and values, to a split sub-partition with the given key. The
-// vectors will only be added if the partition's metadata matches the expected
-// value. It also updates the state of the partition from Updating to Ready.
-func (fw *fixupWorker) copyVectorsToSubPartition(
-	ctx context.Context,
-	partitionKey PartitionKey,
-	metadata PartitionMetadata,
-	vectors vector.Set,
-	childKeys []ChildKey,
-	valueBytes []ValueBytes,
-) error {
-	// Add vectors to sub-partition, as long as metadata matches.
-	err := fw.addToPartition(ctx, partitionKey, vectors, childKeys, valueBytes, metadata)
+	leftPartitionKey := sourceState.Target1
+	err = fw.addToPartition(ctx,
+		leftPartitionKey, leftVectors, leftChildKeys, leftValueBytes, leftMetadata)
 	if err != nil {
 		return err
 	}
 
-	// Update partition state from Updating to Ready.
-	expected := metadata
-	metadata.StateDetails = MakeReadyDetails()
-	err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
+	if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
+		// This should have been a merge, not a split, but we're too far into the
+		// split operation to back out now, so avoid an empty non-root partition by
+		// duplicating the last remaining vector in both partitions.
+		rightVectors = leftVectors
+		rightChildKeys = leftChildKeys
+		rightValueBytes = leftValueBytes
+	}
+
+	rightPartitionKey := sourceState.Target2
+	err = fw.addToPartition(ctx,
+		rightPartitionKey, rightVectors, rightChildKeys, rightValueBytes, rightMetadata)
 	if err != nil {
 		return err
 	}
@@ -727,63 +733,63 @@ func suppressRaceErrors(err error) (PartitionMetadata, error) {
 	return PartitionMetadata{}, err
 }
 
-// sortVectors sorts the input vectors in-place, according to the provided left
-// and right offsets, which reference vectors by position. Vectors at left
-// offsets are sorted at the beginning of the slice, followed by vectors at
-// right offsets. The internal ordering among left and right vectors is not
-// defined.
+// splitPartitionData groups the provided partition data according to the left
+// and right offsets. All data referenced by left offsets will be moved to the
+// left of each set or slice. All data referenced by right offsets will be moved
+// to the right. The internal ordering of elements on each side is not defined.
 //
-// NOTE: The left and right offsets are modified in-place with the updated
-// positions of the vectors.
-func sortVectors(w *workspace.T, vectors vector.Set, leftOffsets, rightOffsets []uint64) {
+// TODO(andyk): Passing in left and right offsets makes this overly complex. It
+// would be better to pass an assignments slice of the same length as the
+// partition data, where 0=left and 1=right.
+func splitPartitionData(
+	w *workspace.T,
+	vectors vector.Set,
+	childKeys []ChildKey,
+	valueBytes []ValueBytes,
+	leftOffsets, rightOffsets []uint64,
+) {
 	tempVector := w.AllocFloats(vectors.Dims)
 	defer w.FreeFloats(tempVector)
 
-	// Sort left and right offsets.
-	slices.Sort(leftOffsets)
-	slices.Sort(rightOffsets)
-
-	// Any left offsets that point beyond the end of the left list indicate that
-	// a vector needs to be moved from the right half of vectors to the left half.
-	// The reverse is true for right offsets. Because the left and right offsets
-	// are in sorted order, out-of-bounds offsets must be at the end of the left
-	// list and the beginning of the right list. Therefore, the algorithm just
-	// needs to iterate over those out-of-bounds offsets and swap the positions
-	// of the referenced vectors.
-	li := len(leftOffsets) - 1
-	ri := 0
-
-	var rightToLeft, leftToRight vector.T
-	for li >= 0 {
-		left := int(leftOffsets[li])
-		if left < len(leftOffsets) {
-			break
+	left := 0
+	right := 0
+	for {
+		// Find a misplaced "right" element from the left side.
+		var leftOffset int
+		for {
+			if left >= len(leftOffsets) {
+				return
+			}
+			leftOffset = int(leftOffsets[left])
+			left++
+			if leftOffset >= len(leftOffsets) {
+				break
+			}
 		}
 
-		right := int(rightOffsets[ri])
-		if right >= len(leftOffsets) {
-			panic(errors.AssertionFailedf(
-				"expected equal number of left and right offsets that need to be swapped"))
+		// There must be a misplaced "left" element from the right side.
+		var rightOffset int
+		for {
+			rightOffset = int(rightOffsets[right])
+			right++
+			if rightOffset < len(leftOffsets) {
+				break
+			}
 		}
 
-		// Swap vectors.
-		rightToLeft = vectors.At(left)
-		leftToRight = vectors.At(right)
+		// Swap the two elements.
+		rightToLeft := vectors.At(leftOffset)
+		leftToRight := vectors.At(rightOffset)
 		copy(tempVector, rightToLeft)
 		copy(rightToLeft, leftToRight)
 		copy(leftToRight, tempVector)
 
-		leftOffsets[li] = uint64(left)
-		rightOffsets[ri] = uint64(right)
+		tempChildKey := childKeys[leftOffset]
+		childKeys[leftOffset] = childKeys[rightOffset]
+		childKeys[rightOffset] = tempChildKey
 
-		li--
-		ri++
+		tempValueBytes := valueBytes[leftOffset]
+		valueBytes[leftOffset] = valueBytes[rightOffset]
+		valueBytes[rightOffset] = tempValueBytes
 	}
-}
-
-func copyByOffsets[T any](source, target []T, offsets []uint64) []T {
-	for i := range offsets {
-		target[i] = source[offsets[i]]
-	}
-	return target
 }

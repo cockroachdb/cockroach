@@ -180,6 +180,16 @@ func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDe
 	}
 }
 
+// MakeDrainingForMergeDetails constructs state for a Merging partition,
+// including the target sub-partition to which vectors can be copied.
+func MakeDrainingForMergeDetails(target PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     DrainingForMergeState,
+		Target1:   target,
+		Timestamp: timeutil.Now(),
+	}
+}
+
 // MakeUpdatingDetails constructs state for an Updating partition, including the
 // source partition from which vectors are being copied.
 func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
@@ -202,19 +212,15 @@ func MakeAddingLevelDetails(target1, target2 PartitionKey) PartitionStateDetails
 	}
 }
 
-// stalledOpTimeout specifies how long a partition can remain in a non-ready
-// state before other fixup workers conclude a fixup has stalled (e.g. because
-// the original worker crashed) and attempt to assist. If this is set too high,
-// then a fixup can get stuck for too long. If it is set too low, then multiple
-// workers can assist at the same time, resulting in duplicate work.
-// TODO(andyk): Consider making this more dynamic, e.g. with
-// livenesspb.NodeVitalityInterface. Also, consider making a cluster setting.
-var stalledOpTimeout = 100 * time.Millisecond
+// DefaultStalledOpTimeout specifies how long a split/merge operation can remain
+// in the same state before another worker may attempt to assist.
+var DefaultStalledOpTimeout = 100 * time.Millisecond
 
 // MaybeSplitStalled returns true if this partition has been in a splitting
 // state for longer than the timeout, possibly indicating the fixup is stalled.
-func (psd *PartitionStateDetails) MaybeSplitStalled() bool {
-	if psd.State == SplittingState || psd.State == DrainingForSplitState {
+func (psd *PartitionStateDetails) MaybeSplitStalled(stalledOpTimeout time.Duration) bool {
+	switch psd.State {
+	case SplittingState, DrainingForSplitState, AddingLevelState:
 		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
 	}
 	return false
@@ -222,8 +228,9 @@ func (psd *PartitionStateDetails) MaybeSplitStalled() bool {
 
 // MaybeMergeStalled returns true if this partition has been in a merging
 // state for longer than the timeout, possibly indicating the fixup is stalled.
-func (psd *PartitionStateDetails) MaybeMergeStalled() bool {
-	if psd.State == MergingState || psd.State == DrainingForMergeState {
+func (psd *PartitionStateDetails) MaybeMergeStalled(stalledOpTimeout time.Duration) bool {
+	switch psd.State {
+	case MergingState, DrainingForMergeState, RemovingLevelState:
 		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
 	}
 	return false

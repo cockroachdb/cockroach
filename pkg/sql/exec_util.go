@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1872,6 +1873,10 @@ type BackupRestoreTestingKnobs struct {
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
+
+	// AfterLoadingCompactionManifestOnResume is run once the backup manifest has been
+	// loaded/created on the resumption of a compaction job.
+	AfterLoadingCompactionManifestOnResume func(manifest *backuppb.BackupManifest)
 
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
@@ -4097,6 +4102,30 @@ func (m *sessionDataMutator) SetOptimizerPlanLookupJoinsWithReverseScans(val boo
 
 func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
 	m.data.RegisterLatchWaitContentionEvents = val
+}
+
+func (m *sessionDataMutator) SetUseCPutsOnNonUniqueIndexes(val bool) {
+	m.data.UseCPutsOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetBufferedWritesUseLockingOnNonUniqueIndexes(val bool) {
+	m.data.BufferedWritesUseLockingOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseLockElisionMultipleFamilies(val bool) {
+	m.data.OptimizerUseLockElisionMultipleFamilies = val
+}
+
+func (m *sessionDataMutator) SetOptimizerEnableLockElision(val bool) {
+	m.data.OptimizerEnableLockElision = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
+	m.data.OptimizerUseDeleteRangeFastPath = val
+}
+
+func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
+	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

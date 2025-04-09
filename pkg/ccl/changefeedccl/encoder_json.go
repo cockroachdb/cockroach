@@ -701,7 +701,7 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 			}
 		}
 		if e.sourceField {
-			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
+			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated, evCtx)
 			if err != nil {
 				return nil, err
 			}

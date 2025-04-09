@@ -66,23 +66,23 @@ func TestTokenAdjustment(t *testing.T) {
 				admissionpb.ElasticWorkClass,
 			} {
 				fmt.Fprintf(buf, "  %-7v\n", wc)
-				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.Count[wc].GetName(), streamMetrics.Count[wc].Value())
-				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.BlockedCount[wc].GetName(), streamMetrics.BlockedCount[wc].Value())
-				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.TokensAvailable[wc].GetName(), ft(streamMetrics.TokensAvailable[wc].Value()))
-				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Deducted[wc].GetName(), ft(counterMetrics.Deducted[wc].Count()))
-				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Disconnected[wc].GetName(), ft(counterMetrics.Disconnected[wc].Count()))
-				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Returned[wc].GetName(), ft(counterMetrics.Returned[wc].Count()))
-				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Unaccounted[wc].GetName(), ft(counterMetrics.Unaccounted[wc].Count()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.Count[wc].GetName(false /* useStaticLabels */), streamMetrics.Count[wc].Value())
+				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.BlockedCount[wc].GetName(false /* useStaticLabels */), streamMetrics.BlockedCount[wc].Value())
+				fmt.Fprintf(buf, "    %-66v: %v\n", streamMetrics.TokensAvailable[wc].GetName(false /* useStaticLabels */), ft(streamMetrics.TokensAvailable[wc].Value()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Deducted[wc].GetName(false /* useStaticLabels */), ft(counterMetrics.Deducted[wc].Count()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Disconnected[wc].GetName(false /* useStaticLabels */), ft(counterMetrics.Disconnected[wc].Count()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Returned[wc].GetName(false /* useStaticLabels */), ft(counterMetrics.Returned[wc].Count()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", counterMetrics.Unaccounted[wc].GetName(false /* useStaticLabels */), ft(counterMetrics.Unaccounted[wc].Count()))
 			}
 			if t == SendToken {
 				sendQueueMetrics := counterMetrics.SendQueue[0]
 				fmt.Fprintf(buf, "  send queue token metrics\n")
-				fmt.Fprintf(buf, "    %-66v: %v\n", sendQueueMetrics.ForceFlushDeducted.GetName(), ft(sendQueueMetrics.ForceFlushDeducted.Count()))
+				fmt.Fprintf(buf, "    %-66v: %v\n", sendQueueMetrics.ForceFlushDeducted.GetName(false /* useStaticLabels */), ft(sendQueueMetrics.ForceFlushDeducted.Count()))
 				for _, wc := range []admissionpb.WorkClass{
 					admissionpb.RegularWorkClass,
 					admissionpb.ElasticWorkClass,
 				} {
-					fmt.Fprintf(buf, "    %-66v: %v\n", sendQueueMetrics.PreventionDeducted[wc].GetName(), ft(sendQueueMetrics.PreventionDeducted[wc].Count()))
+					fmt.Fprintf(buf, "    %-66v: %v\n", sendQueueMetrics.PreventionDeducted[wc].GetName(false /* useStaticLabels */), ft(sendQueueMetrics.PreventionDeducted[wc].Count()))
 				}
 			}
 		}

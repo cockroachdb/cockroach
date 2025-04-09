@@ -519,6 +519,46 @@ $[1 to last, last to last]
 ----
 $[1 to last,last to last] -- normalized!
 
+parse
+exists($.a)
+----
+exists ($."a") -- normalized!
+
+parse
+$.a ? (exists(@.b) && !exists(@.c))
+----
+$."a"?((exists (@."b") && !(exists (@."c")))) -- normalized!
+
+parse
+(1 + 2 == 3) is unknown
+----
+(((1 + 2) == 3)) is unknown -- normalized!
+
+parse
+($ < 1) is unknown
+----
+(($ < 1)) is unknown -- normalized!
+
+parse
+(null like_regex "^he.*$") is unknown
+----
+((null like_regex "^he.*$")) is unknown -- normalized!
+
+parse
+$ starts with "abc"
+----
+($ starts with "abc") -- normalized!
+
+parse
+$.a ? (@.b starts with "def")
+----
+$."a"?((@."b" starts with "def")) -- normalized!
+
+parse
+$.a starts with $var
+----
+($."a" starts with $"var") -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

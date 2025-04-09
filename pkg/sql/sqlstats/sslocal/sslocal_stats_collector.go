@@ -221,7 +221,7 @@ func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) error {
 	if s.sendInsights && s.insightsWriter != nil {
-		s.insightsWriter.ObserveStatement(value.SessionID, value)
+		s.insightsWriter.ObserveStatement(value)
 	}
 
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
@@ -243,7 +243,7 @@ func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, value *sqlstats.RecordedTxnStats,
 ) error {
 	if s.sendInsights && s.insightsWriter != nil {
-		s.insightsWriter.ObserveTransaction(value.SessionID, value)
+		s.insightsWriter.ObserveTransaction(value)
 	}
 
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.

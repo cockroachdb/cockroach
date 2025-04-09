@@ -757,7 +757,7 @@ func BenchmarkExtractValueAllocs(b *testing.B) {
 
 	// Run a benchmark and report allocations.
 	for n := 0; n < b.N; n++ {
-		if err := extractValue(h.GetName(), h, func(string, float64) {}); err != nil {
+		if err := extractValue(h.GetName(false /* useStaticLabels */), h, func(string, float64) {}); err != nil {
 			b.Error(err)
 		}
 	}

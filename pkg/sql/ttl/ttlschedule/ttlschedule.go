@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -222,7 +223,10 @@ func makeTTLJobDescription(
 ) string {
 	relationName := tn.FQString()
 	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
-	pkColNames := pkIndex.KeyColumnNames
+	pkColNames := make([]string, 0, len(pkIndex.KeyColumnNames))
+	for _, name := range pkIndex.KeyColumnNames {
+		pkColNames = append(pkColNames, lexbase.EscapeSQLIdent(name))
+	}
 	pkColDirs := pkIndex.KeyColumnDirections
 	rowLevelTTL := tableDesc.GetRowLevelTTL()
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()

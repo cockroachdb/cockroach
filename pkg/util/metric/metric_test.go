@@ -23,6 +23,7 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -967,4 +968,103 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 			h.RecordValue(int64(randutil.RandIntInRange(r, int(IOLatencyBuckets.min), int(IOLatencyBuckets.max))))
 		}
 	})
+}
+
+func TestMetadataGetLabels(t *testing.T) {
+	tests := []struct {
+		name            string
+		metadata        Metadata
+		useStaticLabels bool
+		wantLabels      []*prometheusgo.LabelPair
+	}{
+		{
+			name: "only regular labels",
+			metadata: Metadata{
+				Labels: []*LabelPair{
+					{Name: proto.String("regular1"), Value: proto.String("value1")},
+					{Name: proto.String("regular2"), Value: proto.String("value2")},
+				},
+			},
+			useStaticLabels: false,
+			wantLabels: []*prometheusgo.LabelPair{
+				{Name: proto.String("regular1"), Value: proto.String("value1")},
+				{Name: proto.String("regular2"), Value: proto.String("value2")},
+			},
+		},
+		{
+			name: "only static labels",
+			metadata: Metadata{
+				StaticLabels: []*LabelPair{
+					{Name: proto.String("static1"), Value: proto.String("value1")},
+					{Name: proto.String("static2"), Value: proto.String("value2")},
+				},
+			},
+			useStaticLabels: true,
+			wantLabels: []*prometheusgo.LabelPair{
+				{Name: proto.String("static1"), Value: proto.String("value1")},
+				{Name: proto.String("static2"), Value: proto.String("value2")},
+			},
+		},
+		{
+			name: "both regular and static labels",
+			metadata: Metadata{
+				Labels: []*LabelPair{
+					{Name: proto.String("regular1"), Value: proto.String("value1")},
+				},
+				StaticLabels: []*LabelPair{
+					{Name: proto.String("static1"), Value: proto.String("value1")},
+				},
+			},
+			useStaticLabels: true,
+			wantLabels: []*prometheusgo.LabelPair{
+				{Name: proto.String("static1"), Value: proto.String("value1")},
+				{Name: proto.String("regular1"), Value: proto.String("value1")},
+			},
+		},
+		{
+			name: "both regular and static labels but static disabled",
+			metadata: Metadata{
+				Labels: []*LabelPair{
+					{Name: proto.String("regular1"), Value: proto.String("value1")},
+				},
+				StaticLabels: []*LabelPair{
+					{Name: proto.String("static1"), Value: proto.String("value1")},
+				},
+			},
+			useStaticLabels: false,
+			wantLabels: []*prometheusgo.LabelPair{
+				{Name: proto.String("regular1"), Value: proto.String("value1")},
+			},
+		},
+		{
+			name:            "no labels",
+			metadata:        Metadata{},
+			useStaticLabels: false,
+			wantLabels:      []*prometheusgo.LabelPair{},
+		},
+		{
+			name:            "no labels with static enabled",
+			metadata:        Metadata{},
+			useStaticLabels: true,
+			wantLabels:      []*prometheusgo.LabelPair{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.metadata.GetLabels(tt.useStaticLabels)
+			if len(got) != len(tt.wantLabels) {
+				t.Errorf("GetLabels() returned %d labels, want %d", len(got), len(tt.wantLabels))
+				return
+			}
+			for i := range got {
+				if *got[i].Name != *tt.wantLabels[i].Name {
+					t.Errorf("label %d: got name %q, want %q", i, *got[i].Name, *tt.wantLabels[i].Name)
+				}
+				if *got[i].Value != *tt.wantLabels[i].Value {
+					t.Errorf("label %d: got value %q, want %q", i, *got[i].Value, *tt.wantLabels[i].Value)
+				}
+			}
+		})
+	}
 }

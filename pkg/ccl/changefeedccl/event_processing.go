@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -104,7 +105,14 @@ func newEventConsumer(
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		sourceData := enrichedSourceData{}
 		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
-			sourceData, err = newEnrichedSourceData(ctx, cfg, spec, sink.getConcreteType())
+			var schemaInfo map[descpb.ID]tableSchemaInfo
+			if inSet(changefeedbase.EnrichedPropertySource, encodingOpts.EnrichedProperties) {
+				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets)
+				if err != nil {
+					return nil, err
+				}
+			}
+			sourceData, err = newEnrichedSourceData(ctx, cfg, spec, sink.getConcreteType(), schemaInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -702,9 +710,9 @@ func (c *parallelEventConsumer) workerLoop(
 			return nil
 		case <-c.termCh:
 			c.mu.Lock()
-			//nolint:deferloop TODO(#137605)
-			defer c.mu.Unlock()
-			return c.mu.termErr
+			termErr := c.mu.termErr
+			c.mu.Unlock()
+			return termErr
 		case e := <-c.workerCh[id]:
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
 				return c.setWorkerError(err)

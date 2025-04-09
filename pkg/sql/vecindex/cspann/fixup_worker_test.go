@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSplitPartitionData(t *testing.T) {
+func TestOldSplitPartitionData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -132,7 +132,7 @@ func TestSplitPartitionData(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
 			tempVectors.AddSet(vectors)
-			leftSplit, rightSplit := splitPartitionData(
+			leftSplit, rightSplit := oldSplitPartitionData(
 				&workspace, quantizer, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 
 			validate(&leftSplit, tc.expectedLeft)

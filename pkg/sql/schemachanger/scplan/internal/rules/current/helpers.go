@@ -89,7 +89,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	}
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
-		*scpb.ColumnNotNull:
+		*scpb.ColumnNotNull, *scpb.TableSchemaLocked:
 		return true
 	}
 	return false
@@ -113,6 +113,11 @@ func isIndexColumn(e scpb.Element) bool {
 
 func isColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
+	return ok
+}
+
+func isTableSchemaLocked(e scpb.Element) bool {
+	_, ok := e.(*scpb.TableSchemaLocked)
 	return ok
 }
 
@@ -358,6 +363,14 @@ func isDescriptorParentReference(e scpb.Element) bool {
 func isOwner(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Owner:
+		return true
+	}
+	return false
+}
+
+func isSchemaLocked(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.TableSchemaLocked:
 		return true
 	}
 	return false

@@ -7,7 +7,7 @@ package state
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -71,7 +71,7 @@ func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 		deciders:    make(map[RangeID]*split.Decider),
 		suggestions: []RangeID{},
 		splitConfig: loadSplitConfig{
-			randSource: rand.New(rand.NewSource(settings.Seed)),
+			randSource: rand.New(rand.NewPCG(uint64(settings.Seed), 0)),
 			settings:   settings,
 		},
 	}

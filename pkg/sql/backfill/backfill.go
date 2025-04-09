@@ -296,8 +296,6 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	requestedCols = append(requestedCols, cb.added...)
 	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
-		ctx,
-		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
 		nil, /* uniqueWithTombstoneIndexes */
@@ -305,9 +303,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
-		&cb.alloc,
+		cb.evalCtx.SessionData(),
 		&cb.evalCtx.Settings.SV,
-		cb.evalCtx.SessionData().Internal,
 		cb.rowMetrics,
 	)
 	if err != nil {
@@ -405,7 +402,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		var pm row.PartialIndexUpdateHelper
 		var vh row.VectorIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, vh, nil, traceKV,
+			ctx, b, oldValues, updateValues, pm, vh, nil, false /* mustValidateOldPKValues */, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

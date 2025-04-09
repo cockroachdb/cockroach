@@ -144,51 +144,47 @@ func (ctx *jsonpathCtx) unwrapCurrentTargetAndEval(
 func (ctx *jsonpathCtx) executeAnyItem(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
 ) ([]json.JSON, error) {
-	childItems, err := json.AllPathsWithDepth(jsonValue, 1 /* depth */)
-	if err != nil {
-		return nil, err
+	if jsonValue.Len() == 0 {
+		return []json.JSON{}, nil
 	}
 	var agg []json.JSON
-	for _, item := range childItems {
-		// The case when this will happen is if jsonValue is an empty array or empty
-		// object, in which case we just skip the evaluation.
-		if item.Len() == 0 {
-			continue
-		}
-		if item.Len() != 1 {
-			return nil, errors.AssertionFailedf("unexpected path length")
-		}
-
-		var unwrappedItem json.JSON
-		switch item.Type() {
-		case json.ArrayJSONType:
-			unwrappedItem, err = item.FetchValIdx(0 /* idx */)
-			if err != nil {
-				return nil, err
-			}
-			if unwrappedItem == nil {
-				return nil, errors.AssertionFailedf("unwrapping json element")
-			}
-		case json.ObjectJSONType:
-			iter, _ := item.ObjectIter()
-			// Guaranteed to have one item.
-			ok := iter.Next()
-			if !ok {
-				return nil, errors.AssertionFailedf("unexpected empty json object")
-			}
-			unwrappedItem = iter.Value()
-		default:
-			panic(errors.AssertionFailedf("unexpected json type"))
-		}
+	processItem := func(item json.JSON) error {
 		if jsonPath == nil {
-			agg = append(agg, unwrappedItem)
-		} else {
-			evalResults, err := ctx.eval(jsonPath, unwrappedItem, unwrapNext)
+			agg = append(agg, item)
+			return nil
+		}
+		evalResults, err := ctx.eval(jsonPath, item, unwrapNext)
+		if err != nil {
+			return err
+		}
+		agg = append(agg, evalResults...)
+		return nil
+	}
+	// TODO(normanchenn): Consider creating some kind of unified iterator interface
+	// for json arrays and objects.
+	switch jsonValue.Type() {
+	case json.ArrayJSONType:
+		for i := 0; i < jsonValue.Len(); i++ {
+			item, err := jsonValue.FetchValIdx(i)
 			if err != nil {
 				return nil, err
 			}
-			agg = append(agg, evalResults...)
+			if item == nil {
+				return nil, errors.AssertionFailedf("fetching json array element at index %d", i)
+			}
+			if err = processItem(item); err != nil {
+				return nil, err
+			}
 		}
+	case json.ObjectJSONType:
+		iter, _ := jsonValue.ObjectIter()
+		for iter.Next() {
+			if err := processItem(iter.Value()); err != nil {
+				return nil, err
+			}
+		}
+	default:
+		panic(errors.AssertionFailedf("executeAnyItem called with type: %s", jsonValue.Type()))
 	}
 	return agg, nil
 }

@@ -32,8 +32,10 @@ vectorized: false
 │
 └── • render
     │
-    └── • index join
+    └── • lookup join
         │ table: t@t_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
         │
         └── • vector search
               table: t@t_v_idx
@@ -60,11 +62,12 @@ vectorized: false
         │ render k: k
         │ render v: v
         │
-        └── • index join
+        └── • lookup join (inner)
             │ columns: (k, v)
             │ estimated row count: 2 (missing stats)
             │ table: t@t_pkey
-            │ key columns: k
+            │ equality: (k) = (k)
+            │ equality cols are key
             │
             └── • vector search
                   columns: (k)
@@ -94,11 +97,12 @@ vectorized: false
         │ render k: k
         │ render v: v
         │
-        └── • index join
+        └── • lookup join (inner)
             │ columns: (k, v)
             │ estimated row count: 10 (missing stats)
             │ table: t@t_pkey
-            │ key columns: k
+            │ equality: (k) = (k)
+            │ equality cols are key
             │
             └── • vector search
                   columns: (k)
@@ -107,12 +111,11 @@ vectorized: false
                   target count: 5
                   query vector: '[1,2,3]'
 
-# NOTE: the vector-search rule doesn't yet handle prefix columns.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, a, b, c, v)
@@ -133,16 +136,60 @@ vectorized: true
         │ render c: c
         │ render v: v
         │
-        └── • filter
+        └── • lookup join (inner)
             │ columns: (x, y, a, b, c, v)
-            │ estimated row count: 1 (missing stats)
-            │ filter: (a = 1) AND (b = 2)
+            │ estimated row count: 2 (missing stats)
+            │ table: t_multi@t_multi_pkey
+            │ equality: (x, y) = (x, y)
+            │ equality cols are key
             │
-            └── • scan
-                  columns: (x, y, a, b, c, v)
-                  estimated row count: 1,000 (missing stats)
-                  table: t_multi@t_multi_pkey
-                  spans: FULL SCAN
+            └── • vector search
+                  columns: (x, y)
+                  estimated row count: 2 (missing stats)
+                  table: t_multi@t_multi_a_b_v_idx
+                  target count: 1
+                  prefix spans: /1/2-/1/3
+                  query vector: '[1,2,3]'
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE (a, b) IN ((1, 2), (3, 4), (5, 6)) ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+----
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (x, y, a, b, c, v)
+│
+└── • top-k
+    │ columns: (column11, x, y, a, b, c, v)
+    │ estimated row count: 1 (missing stats)
+    │ order: +column11
+    │ k: 1
+    │
+    └── • render
+        │ columns: (column11, x, y, a, b, c, v)
+        │ render column11: v <-> '[1,2,3]'
+        │ render x: x
+        │ render y: y
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render v: v
+        │
+        └── • lookup join (inner)
+            │ columns: (x, y, a, b, c, v)
+            │ estimated row count: 2 (missing stats)
+            │ table: t_multi@t_multi_pkey
+            │ equality: (x, y) = (x, y)
+            │ equality cols are key
+            │
+            └── • vector search
+                  columns: (x, y)
+                  estimated row count: 2 (missing stats)
+                  table: t_multi@t_multi_a_b_v_idx
+                  target count: 1
+                  prefix spans: /1/2-/1/3 /3/4-/3/5 /5/6-/5/7
+                  query vector: '[1,2,3]'
 
 # ==============================================================================
 # Vector Mutation Search Tests

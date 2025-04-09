@@ -36,6 +36,7 @@ var primaryKey4 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{4, 00}}
 var partitionKey1 = cspann.ChildKey{PartitionKey: 10}
 var partitionKey2 = cspann.ChildKey{PartitionKey: 20}
 var partitionKey3 = cspann.ChildKey{PartitionKey: 30}
+var partitionKey4 = cspann.ChildKey{PartitionKey: 40}
 
 var valueBytes1 = cspann.ValueBytes{1, 2}
 var valueBytes2 = cspann.ValueBytes{3, 4}
@@ -121,6 +122,9 @@ func (suite *StoreTestSuite) TestRunTransaction() {
 // rules as compared to other partitions.
 func (suite *StoreTestSuite) TestRootPartition() {
 	store := suite.makeStore(suite.quantizer)
+	if store.SupportsTry() {
+		return
+	}
 
 	// Test missing root partition.
 	suite.testEmptyOrMissingRoot(store, 0, "missing root partition")
@@ -200,6 +204,9 @@ func (suite *StoreTestSuite) TestRootPartition() {
 // TestNonRootPartition tests non-root partitions at interior and leaf levels.
 func (suite *StoreTestSuite) TestNonRootPartition() {
 	store := suite.makeStore(suite.quantizer)
+	if store.SupportsTry() {
+		return
+	}
 
 	// Construct non-root leaf partition and add/remove vectors.
 	suite.Run("test non-root leaf partition", func() {
@@ -276,80 +283,13 @@ func (suite *StoreTestSuite) TestNonRootPartition() {
 	}
 }
 
-// TestGetFullVectors tests the GetFullVectors method on the store, fetching
-// vectors by primary key and centroids by partition key.
-func (suite *StoreTestSuite) TestGetFullVectors() {
-	store := suite.makeStore(suite.quantizer)
-
-	doTest := func(treeID int) {
-		// Create partitions.
-		suite.addToRoot(store, treeID)
-		partitionKey := suite.insertLeafPartition(store, treeID)
-
-		tx := BeginTransaction(suite.ctx, suite.T(), store)
-		defer CommitTransaction(suite.ctx, suite.T(), store, tx)
-		treeKey := store.MakeTreeKey(suite.T(), treeID)
-
-		// Insert some full vectors into the test store.
-		key1 := store.InsertVector(suite.T(), treeID, vec1)
-		key2 := store.InsertVector(suite.T(), treeID, vec2)
-		key3 := store.InsertVector(suite.T(), treeID, vec3)
-
-		// Include primary keys, partition keys, and keys that cannot be found.
-		results := []cspann.VectorWithKey{
-			{Key: cspann.ChildKey{KeyBytes: key1}},
-			{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-			{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
-			{Key: cspann.ChildKey{KeyBytes: key2}},
-			{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-			{Key: cspann.ChildKey{PartitionKey: partitionKey}},
-			{Key: cspann.ChildKey{KeyBytes: key3}},
-		}
-		err := tx.GetFullVectors(suite.ctx, treeKey, results)
-		suite.NoError(err)
-		suite.Equal(vec1, results[0].Vector)
-		suite.Nil(results[1].Vector)
-		suite.Equal(vector.T{0, 0}, results[2].Vector)
-		suite.Equal(vec2, results[3].Vector)
-		suite.Nil(results[4].Vector)
-		suite.Equal(vector.T{4, 3}, results[5].Vector)
-		suite.Equal(vec3, results[6].Vector)
-
-		// Grab another set of vectors to ensure that saved state is properly reset.
-		results = []cspann.VectorWithKey{
-			{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-			{Key: cspann.ChildKey{KeyBytes: key3}},
-			{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-			{Key: cspann.ChildKey{KeyBytes: key2}},
-			{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-			{Key: cspann.ChildKey{KeyBytes: key1}},
-		}
-		err = tx.GetFullVectors(suite.ctx, treeKey, results)
-		suite.NoError(err)
-		suite.Nil(results[0].Vector)
-		suite.Equal(vec3, results[1].Vector)
-		suite.Nil(results[2].Vector)
-		suite.Equal(vec2, results[3].Vector)
-		suite.Nil(results[4].Vector)
-		suite.Equal(vec1, results[5].Vector)
-	}
-
-	suite.Run("default tree", func() {
-		doTest(0)
-	})
-
-	if store.AllowMultipleTrees() {
-		// Ensure that vectors are independent across trees.
-		suite.Run("different tree", func() {
-			doTest(1)
-		})
-	}
-}
-
 // TestSearchMultiplePartitions tests the store's SearchPartitions method across
 // more than one partition.
 func (suite *StoreTestSuite) TestSearchMultiplePartitions() {
 	store := suite.makeStore(suite.quantizer)
+	if store.SupportsTry() {
+		return
+	}
 
 	doTest := func(treeID int) {
 		// Create some partitions to search.
@@ -386,6 +326,322 @@ func (suite *StoreTestSuite) TestSearchMultiplePartitions() {
 
 	if store.AllowMultipleTrees() {
 		// Ensure that different tree is independent.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
+func (suite *StoreTestSuite) TestGetPartitionMetadata() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		var metadata cspann.PartitionMetadata
+		var err error
+		var partitionKey cspann.PartitionKey
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Root partition does not yet exist, expect synthesized metadata.
+			metadata, err = txn.GetPartitionMetadata(
+				suite.ctx, treeKey, cspann.RootKey, false /* forUpdate */)
+			suite.NoError(err)
+			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0},
+				cspann.MakeReadyDetails())
+
+			// Non-root partition does not yet exist, expect error.
+			_, err = txn.GetPartitionMetadata(
+				suite.ctx, treeKey, cspann.PartitionKey(99), false /* forUpdate */)
+			suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+			return nil
+		}))
+
+		// Create non-root partition with some vectors in it.
+		partitionKey, _ = suite.createTestPartition(store, treeKey)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Check metadata of new partition.
+			metadata, err = txn.GetPartitionMetadata(
+				suite.ctx, treeKey, partitionKey, true /* forUpdate */)
+			CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, vector.T{4, 3},
+				cspann.MakeReadyDetails())
+
+			return nil
+		}))
+
+		// Update the partition state to DrainingForSplit.
+		expected := metadata
+		metadata.StateDetails = cspann.MakeDrainingForSplitDetails(20, 30)
+		suite.NoError(store.TryUpdatePartitionMetadata(
+			suite.ctx, treeKey, partitionKey, metadata, expected))
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// If forUpdate = false, GetPartitionMetadata should not error.
+			metadata, err := txn.GetPartitionMetadata(
+				suite.ctx, treeKey, partitionKey, false /* forUpdate */)
+			suite.NoError(err)
+			CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, vector.T{4, 3},
+				cspann.MakeDrainingForSplitDetails(20, 30))
+
+			// If forUpdate = true, GetPartitionMetadata should error.
+			var errConditionFailed *cspann.ConditionFailedError
+			_, err = txn.GetPartitionMetadata(suite.ctx, treeKey, partitionKey, true /* forUpdate */)
+			suite.ErrorAs(err, &errConditionFailed)
+			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
+				vector.T{4, 3}, cspann.MakeDrainingForSplitDetails(20, 30))
+
+			return nil
+		}))
+		suite.NoError(err)
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
+func (suite *StoreTestSuite) TestAddToPartition() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Non-root partition does not exist, expect error.
+			err := txn.AddToPartition(suite.ctx, treeKey, cspann.PartitionKey(99), cspann.LeafLevel,
+				vec1, primaryKey1, valueBytes1)
+			suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+			// Root partition does not exist, expect it to be lazily created.
+			return txn.AddToPartition(suite.ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
+				vec1, primaryKey1, valueBytes1)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 1)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Add another vector to root partition.
+			return txn.AddToPartition(suite.ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
+				vec2, primaryKey2, valueBytes2)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 2)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Add a vector with a duplicate child key.
+			return txn.AddToPartition(suite.ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
+				vec3, primaryKey2, valueBytes3)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 2)
+
+		// Fetch back the root partition and validate it.
+		partition, err := store.TryGetPartition(suite.ctx, treeKey, cspann.RootKey)
+		suite.NoError(err)
+		CheckPartitionMetadata(suite.T(), *partition.Metadata(), cspann.LeafLevel,
+			vector.T{0, 0}, cspann.MakeReadyDetails())
+		suite.Equal([]cspann.ChildKey{primaryKey1, primaryKey2}, partition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{valueBytes1, valueBytes3}, partition.ValueBytes())
+
+		// Create non-root partition.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Add a vector to the non-root partition.
+			return txn.AddToPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
+				vec4, partitionKey4, valueBytes4)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, partitionKey, 4)
+
+		// Update the partition state to DrainingForMerge.
+		expected := *partition.Metadata()
+		metadata := expected
+		metadata.StateDetails = cspann.MakeDrainingForMergeDetails(20)
+		suite.NoError(store.TryUpdatePartitionMetadata(
+			suite.ctx, treeKey, partitionKey, metadata, expected))
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Try to add to partition, expect error due to its state.
+			var errConditionFailed *cspann.ConditionFailedError
+			err = txn.AddToPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
+				vec4, partitionKey4, valueBytes4)
+			suite.ErrorAs(err, &errConditionFailed)
+			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
+				vector.T{4, 3}, cspann.MakeDrainingForMergeDetails(20))
+
+			return nil
+		}))
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
+func (suite *StoreTestSuite) TestRemoveFromPartition() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Non-root partition does not exist, expect error.
+			err := txn.RemoveFromPartition(suite.ctx, treeKey, cspann.PartitionKey(99),
+				cspann.LeafLevel, primaryKey1)
+			suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+			// Root partition does not exist, expect remove to be no-op.
+			err = txn.RemoveFromPartition(suite.ctx, treeKey, cspann.RootKey,
+				cspann.LeafLevel, primaryKey1)
+			suite.NoError(err)
+
+			// Add vector to root partition.
+			err = txn.AddToPartition(suite.ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
+				vec1, primaryKey1, valueBytes1)
+			suite.NoError(err)
+
+			// Remove that vector.
+			return txn.RemoveFromPartition(suite.ctx, treeKey, cspann.RootKey,
+				cspann.LeafLevel, primaryKey1)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 0)
+
+		// Create non-root partition.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Remove vector from non-root partition.
+			return txn.RemoveFromPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
+				partitionKey2)
+		}))
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, partitionKey, 2)
+
+		// Update the partition state to DrainingForSplit.
+		expected := *partition.Metadata()
+		metadata := expected
+		metadata.StateDetails = cspann.MakeDrainingForSplitDetails(20, 30)
+		suite.NoError(store.TryUpdatePartitionMetadata(
+			suite.ctx, treeKey, partitionKey, metadata, expected))
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Try to remove from partition, expect error due to its state.
+			var errConditionFailed *cspann.ConditionFailedError
+			err := txn.RemoveFromPartition(suite.ctx, treeKey, partitionKey, cspann.SecondLevel,
+				partitionKey3)
+			suite.ErrorAs(err, &errConditionFailed)
+			CheckPartitionMetadata(suite.T(), errConditionFailed.Actual, cspann.SecondLevel,
+				vector.T{4, 3}, cspann.MakeDrainingForSplitDetails(20, 30))
+
+			return nil
+		}))
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
+// TestGetFullVectors tests the GetFullVectors method on the store, fetching
+// vectors by primary key and centroids by partition key.
+func (suite *StoreTestSuite) TestGetFullVectors() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		// Create partitions.
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+		metadata := cspann.PartitionMetadata{
+			Level:        cspann.SecondLevel,
+			Centroid:     vector.T{0, 0},
+			StateDetails: cspann.MakeSplittingDetails(20, 30),
+		}
+		suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, cspann.RootKey, metadata))
+		partitionKey, _ := suite.createTestPartition(store, treeKey)
+
+		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
+			// Insert some full vectors into the test store.
+			key1 := store.InsertVector(suite.T(), treeID, vec1)
+			key2 := store.InsertVector(suite.T(), treeID, vec2)
+			key3 := store.InsertVector(suite.T(), treeID, vec3)
+
+			// Include primary keys, partition keys, and keys that cannot be found.
+			results := []cspann.VectorWithKey{
+				{Key: cspann.ChildKey{KeyBytes: key1}},
+				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
+				{Key: cspann.ChildKey{KeyBytes: key2}},
+				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{PartitionKey: partitionKey}},
+				{Key: cspann.ChildKey{KeyBytes: key3}},
+			}
+			err := txn.GetFullVectors(suite.ctx, treeKey, results)
+			suite.NoError(err)
+			suite.Equal(vec1, results[0].Vector)
+			suite.Nil(results[1].Vector)
+			suite.Equal(vector.T{0, 0}, results[2].Vector)
+			suite.Equal(vec2, results[3].Vector)
+			suite.Nil(results[4].Vector)
+			suite.Equal(vector.T{4, 3}, results[5].Vector)
+			suite.Equal(vec3, results[6].Vector)
+
+			// Grab another set of vectors to ensure that saved state is properly reset.
+			results = []cspann.VectorWithKey{
+				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: key3}},
+				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: key2}},
+				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: key1}},
+			}
+			err = txn.GetFullVectors(suite.ctx, treeKey, results)
+			suite.NoError(err)
+			suite.Nil(results[0].Vector)
+			suite.Equal(vec3, results[1].Vector)
+			suite.Nil(results[2].Vector)
+			suite.Equal(vec2, results[3].Vector)
+			suite.Nil(results[4].Vector)
+			suite.Equal(vec1, results[5].Vector)
+
+			return nil
+		}))
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
 		suite.Run("different tree", func() {
 			doTest(1)
 		})
@@ -856,6 +1112,64 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 	}
 }
 
+func (suite *StoreTestSuite) TestTryClearPartition() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		// Partition does not yet exist.
+		_, err := store.TryClearPartition(suite.ctx, treeKey, cspann.PartitionKey(99),
+			cspann.PartitionMetadata{})
+		suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+		// Create partition with some vectors.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+
+		// Now clear should work.
+		expected := *partition.Metadata()
+		count, err := store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.NoError(err)
+		suite.Equal(3, count)
+
+		// Fetch back the partition and validate it.
+		partition, err = store.TryGetPartition(suite.ctx, treeKey, partitionKey)
+		suite.NoError(err)
+		suite.True(partition.Metadata().Equal(&expected))
+		suite.Equal(cspann.SecondLevel, partition.Level())
+		suite.Equal(vector.T{4, 3}, partition.Centroid())
+		suite.Equal([]cspann.ChildKey{}, partition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{}, partition.ValueBytes())
+
+		// Try to clear with mismatched expected metadata.
+		var errConditionFailed *cspann.ConditionFailedError
+		metadata := expected
+		metadata.StateDetails.State = cspann.DrainingForMergeState
+		_, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, metadata)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.True(errConditionFailed.Actual.Equal(&expected))
+
+		// Try again, this time with correct expected metadata.
+		count, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.NoError(err)
+		suite.Equal(0, count)
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
 func (suite *StoreTestSuite) runInTransaction(store TestStore, fn func(tx cspann.Txn)) {
 	suite.NoError(store.RunTransaction(suite.ctx, func(tx cspann.Txn) error {
 		fn(tx)
@@ -903,7 +1217,8 @@ func (suite *StoreTestSuite) testEmptyOrMissingRoot(store TestStore, treeID int,
 			metadata, err := tx.GetPartitionMetadata(
 				suite.ctx, treeKey, cspann.RootKey, false /* forUpdate */)
 			suite.NoError(err)
-			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0})
+			CheckPartitionMetadata(
+				suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0}, cspann.MakeReadyDetails())
 		})
 		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 0)
 	})
@@ -951,7 +1266,8 @@ func (suite *StoreTestSuite) addToRoot(store TestStore, treeID int) {
 		// Get partition metadata with forUpdate = true before updates.
 		metadata, err := tx.GetPartitionMetadata(suite.ctx, treeKey, cspann.RootKey, true /* forUpdate */)
 		suite.NoError(err)
-		CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0})
+		CheckPartitionMetadata(
+			suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0}, cspann.MakeReadyDetails())
 
 		// Add vectors to partition.
 		err = tx.AddToPartition(
@@ -960,7 +1276,8 @@ func (suite *StoreTestSuite) addToRoot(store TestStore, treeID int) {
 		err = tx.AddToPartition(
 			suite.ctx, treeKey, cspann.RootKey, metadata.Level, vec2, primaryKey2, valueBytes2)
 		suite.NoError(err)
-		CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0})
+		CheckPartitionMetadata(
+			suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0}, cspann.MakeReadyDetails())
 		err = tx.AddToPartition(
 			suite.ctx, treeKey, cspann.RootKey, metadata.Level, vec3, primaryKey3, valueBytes3)
 		suite.NoError(err)
@@ -1018,7 +1335,8 @@ func (suite *StoreTestSuite) testLeafPartition(
 			metadata, err := tx.GetPartitionMetadata(
 				suite.ctx, treeKey, partitionKey, true /* forUpdate */)
 			suite.NoError(err)
-			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, centroid)
+			CheckPartitionMetadata(
+				suite.T(), metadata, cspann.LeafLevel, centroid, cspann.MakeReadyDetails())
 
 			// Add duplicate and expect value to be overwritten. Centroid should not
 			// change.
@@ -1030,7 +1348,8 @@ func (suite *StoreTestSuite) testLeafPartition(
 			metadata, err = tx.GetPartitionMetadata(
 				suite.ctx, treeKey, partitionKey, false /* forUpdate */)
 			suite.NoError(err)
-			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, centroid)
+			CheckPartitionMetadata(
+				suite.T(), metadata, cspann.LeafLevel, centroid, cspann.MakeReadyDetails())
 
 			// Search partition.
 			searchSet := cspann.SearchSet{MaxResults: 2}
@@ -1062,7 +1381,8 @@ func (suite *StoreTestSuite) testLeafPartition(
 			metadata, err = tx.GetPartitionMetadata(
 				suite.ctx, treeKey, partitionKey, true /* forUpdate */)
 			suite.NoError(err)
-			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, centroid)
+			CheckPartitionMetadata(
+				suite.T(), metadata, cspann.LeafLevel, centroid, cspann.MakeReadyDetails())
 		})
 		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, partitionKey, 3)
 	})
@@ -1145,7 +1465,8 @@ func (suite *StoreTestSuite) setRootPartition(store TestStore, treeID int) {
 	// Check partition metadata.
 	metadata, err = tx.GetPartitionMetadata(suite.ctx, treeKey, cspann.RootKey, false /* forUpdate */)
 	suite.NoError(err)
-	CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, centroid)
+	CheckPartitionMetadata(
+		suite.T(), metadata, cspann.SecondLevel, centroid, cspann.MakeReadyDetails())
 
 	// Read back and verify the partition.
 	readRoot, err := tx.GetPartition(suite.ctx, treeKey, cspann.RootKey)

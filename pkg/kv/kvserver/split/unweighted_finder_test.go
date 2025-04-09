@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"reflect"
 	"testing"
 
@@ -27,8 +27,8 @@ func (r DFLargestRandSource) Float64() float64 {
 	return 0
 }
 
-// Intn returns the largest number possible in [0, n)
-func (r DFLargestRandSource) Intn(n int) int {
+// IntN returns the largest number possible in [0, n)
+func (r DFLargestRandSource) IntN(n int) int {
 	var result int
 	if n > 0 {
 		result = n - 1
@@ -162,7 +162,7 @@ func TestSplitFinderKey(t *testing.T) {
 		{multipleSpanReservoir, keys.SystemSQLCodec.TablePrefix(ReservoirKeyOffset + splitKeySampleSize/2)},
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	for i, test := range testCases {
 		finder := NewUnweightedFinder(timeutil.Now(), randSource)
 		finder.samples = test.reservoir
@@ -287,8 +287,8 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 			}
 		} else if i < 7 {
 			// Imbalance and too many contained counters.
-			deviationLeft := rand.Intn(5)
-			deviationRight := rand.Intn(5)
+			deviationLeft := rand.IntN(5)
+			deviationRight := rand.IntN(5)
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      25 + deviationLeft,
@@ -297,8 +297,8 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 			}
 		} else if i < 13 {
 			// Imbalance counters.
-			deviationLeft := rand.Intn(5)
-			deviationRight := rand.Intn(5)
+			deviationLeft := rand.IntN(5)
+			deviationRight := rand.IntN(5)
 			samples[idx] = sample{
 				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
 				left:      50 + deviationLeft,
@@ -318,7 +318,7 @@ func TestFinderNoSplitKeyCause(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	finder := NewUnweightedFinder(timeutil.Now(), randSource)
 	finder.samples = samples
 	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.noSplitKeyCause()
@@ -382,7 +382,7 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		}
 	}
 
-	randSource := rand.New(rand.NewSource(2022))
+	randSource := rand.New(rand.NewPCG(2022, 0))
 	for i, test := range []struct {
 		samples                     [splitKeySampleSize]sample
 		expectedPopularKey          roachpb.Key
@@ -473,7 +473,7 @@ func TestUnweightedFinderAccessDirection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			finder := NewUnweightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
+			finder := NewUnweightedFinder(timeutil.Now(), rand.New(rand.NewPCG(2022, 0)))
 			finder.samples = tc.samples
 			direction := finder.AccessDirection()
 			if direction != tc.expectedDirection {

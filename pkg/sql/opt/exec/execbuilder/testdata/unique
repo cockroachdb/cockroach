@@ -608,7 +608,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -620,15 +620,14 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
+│   │ execution time: 0µs
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -637,6 +636,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 size: 3 columns, 2 rows
 │
 ├── • constraint-check
@@ -645,11 +645,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right semi)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (a) = (column1)
@@ -661,9 +663,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -677,6 +676,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -686,11 +686,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (right semi)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ equality: (b, c) = (column2, column3)
@@ -702,9 +704,6 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
-            │     KV contention time: 0µs
-            │     KV lock wait time: 0µs
-            │     KV latch wait time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -718,6 +717,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
+                  execution time: 0µs
                   estimated row count: 2
                   label: buffer 1
 
@@ -733,7 +733,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 6 (48 B, 12 KVs, 6 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -745,15 +745,14 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
+│   │ execution time: 0µs
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -762,6 +761,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 size: 3 columns, 2 rows
 │
 ├── • constraint-check
@@ -770,11 +770,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right semi)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (c) = (column3)
@@ -786,9 +788,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -802,6 +801,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -811,11 +811,13 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │
 │       └── • hash join (right anti)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
 │           │ equality: (b, c) = (column2, column3)
 │           │
@@ -825,9 +827,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -841,6 +840,7 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 regions: <hidden>
 │                 actual row count: 2
+│                 execution time: 0µs
 │                 estimated row count: 2
 │                 label: buffer 1
 │
@@ -850,11 +850,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (right anti)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ equality: (a) = (column1)
             │
@@ -864,9 +866,6 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
-            │     KV contention time: 0µs
-            │     KV lock wait time: 0µs
-            │     KV latch wait time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -880,6 +879,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 2
+                  execution time: 0µs
                   estimated row count: 2
                   label: buffer 1
 
@@ -2626,7 +2626,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -2638,9 +2638,7 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
+│   │ execution time: 0µs
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │
@@ -2648,6 +2646,7 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 2
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -2658,9 +2657,6 @@ quality of service: regular
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 KV time: 0µs
-│                 KV contention time: 0µs
-│                 KV lock wait time: 0µs
-│                 KV latch wait time: 0µs
 │                 KV rows decoded: 2
 │                 KV pairs read: 4
 │                 KV bytes read: 16 B
@@ -2680,9 +2676,7 @@ quality of service: regular
 │       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
 │       │   │ actual row count: 0
-│       │   │ KV contention time: 0µs
-│       │   │ KV lock wait time: 0µs
-│       │   │ KV latch wait time: 0µs
+│       │   │ execution time: 0µs
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c
 │       │   │
@@ -2690,12 +2684,14 @@ quality of service: regular
 │       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 2
+│       │       │ execution time: 0µs
 │       │       │ label: buffer 1
 │       │       │
 │       │       └── • hash join
 │       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 2
+│       │           │ execution time: 0µs
 │       │           │ estimated max memory allocated: 0 B
 │       │           │ equality: (b, c) = (b, c)
 │       │           │
@@ -2705,9 +2701,6 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
-│       │           │     KV contention time: 0µs
-│       │           │     KV lock wait time: 0µs
-│       │           │     KV latch wait time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2721,6 +2714,7 @@ quality of service: regular
 │       │               │ sql nodes: <hidden>
 │       │               │ regions: <hidden>
 │       │               │ actual row count: 2
+│       │               │ execution time: 0µs
 │       │               │ estimated row count: 1
 │       │               │ filter: (b IS DISTINCT FROM b) OR (c IS DISTINCT FROM c_new)
 │       │               │
@@ -2728,6 +2722,7 @@ quality of service: regular
 │       │                     sql nodes: <hidden>
 │       │                     regions: <hidden>
 │       │                     actual row count: 2
+│       │                     execution time: 0µs
 │       │                     estimated row count: 2
 │       │                     label: buffer 1000000
 │       │
@@ -2737,11 +2732,13 @@ quality of service: regular
 │       │       │ sql nodes: <hidden>
 │       │       │ regions: <hidden>
 │       │       │ actual row count: 0
+│       │       │ execution time: 0µs
 │       │       │
 │       │       └── • hash join (right semi)
 │       │           │ sql nodes: <hidden>
 │       │           │ regions: <hidden>
 │       │           │ actual row count: 0
+│       │           │ execution time: 0µs
 │       │           │ estimated max memory allocated: 0 B
 │       │           │ estimated max sql temp disk usage: 0 B
 │       │           │ equality: (c) = (c_new)
@@ -2753,9 +2750,6 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
-│       │           │     KV contention time: 0µs
-│       │           │     KV lock wait time: 0µs
-│       │           │     KV latch wait time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2769,6 +2763,7 @@ quality of service: regular
 │       │                 sql nodes: <hidden>
 │       │                 regions: <hidden>
 │       │                 actual row count: 2
+│       │                 execution time: 0µs
 │       │                 label: buffer 1
 │       │
 │       └── • constraint-check
@@ -2777,11 +2772,13 @@ quality of service: regular
 │               │ sql nodes: <hidden>
 │               │ regions: <hidden>
 │               │ actual row count: 0
+│               │ execution time: 0µs
 │               │
 │               └── • hash join (right anti)
 │                   │ sql nodes: <hidden>
 │                   │ regions: <hidden>
 │                   │ actual row count: 0
+│                   │ execution time: 0µs
 │                   │ estimated max memory allocated: 0 B
 │                   │ equality: (b, c) = (b, c_new)
 │                   │
@@ -2791,9 +2788,6 @@ quality of service: regular
 │                   │     regions: <hidden>
 │                   │     actual row count: 2
 │                   │     KV time: 0µs
-│                   │     KV contention time: 0µs
-│                   │     KV lock wait time: 0µs
-│                   │     KV latch wait time: 0µs
 │                   │     KV rows decoded: 2
 │                   │     KV pairs read: 4
 │                   │     KV bytes read: 16 B
@@ -2807,12 +2801,14 @@ quality of service: regular
 │                       │ sql nodes: <hidden>
 │                       │ regions: <hidden>
 │                       │ actual row count: 2
+│                       │ execution time: 0µs
 │                       │ filter: (b IS NOT NULL) AND (c_new IS NOT NULL)
 │                       │
 │                       └── • scan buffer
 │                             sql nodes: <hidden>
 │                             regions: <hidden>
 │                             actual row count: 2
+│                             execution time: 0µs
 │                             label: buffer 1
 │
 └── • constraint-check
@@ -2821,11 +2817,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • hash join (semi)
             │ sql nodes: <hidden>
             │ regions: <hidden>
             │ actual row count: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated max sql temp disk usage: 0 B
             │ equality: (b, c_new) = (b, c)
@@ -2835,6 +2833,7 @@ quality of service: regular
             │     sql nodes: <hidden>
             │     regions: <hidden>
             │     actual row count: 2
+            │     execution time: 0µs
             │     label: buffer 1
             │
             └── • scan
@@ -2843,9 +2842,6 @@ quality of service: regular
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
-                  KV contention time: 0µs
-                  KV lock wait time: 0µs
-                  KV latch wait time: 0µs
                   KV rows decoded: 2
                   KV pairs read: 4
                   KV bytes read: 16 B

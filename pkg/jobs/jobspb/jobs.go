@@ -138,3 +138,17 @@ func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
 func (r RestoreDetails) OnlineImpl() bool {
 	return r.ExperimentalCopy || r.ExperimentalOnline
 }
+
+func (b *BackupEncryptionOptions) HasKey() bool {
+
+	if b.KMSInfo != nil {
+		return len(b.KMSInfo.EncryptedDataKey) > 0
+	}
+	// Used for encryption passphrases.
+	return len(b.Key) > 0
+}
+
+func (b *BackupEncryptionOptions) IsEncrypted() bool {
+	// For dumb reasons, there are two ways to represent no encryption.
+	return !(b == nil || b.Mode == EncryptionMode_None)
+}

@@ -85,7 +85,6 @@ func TestStore(t *testing.T) {
 		tbl++
 		tblName := fmt.Sprintf("t%d", tbl)
 
-		//runner.Exec(t, "DROP TABLE IF EXISTS t")
 		runner.Exec(t, "CREATE TABLE "+tblName+" (id INT PRIMARY KEY, prefix INT NOT NULL, v VECTOR(2))")
 
 		// TODO(andyk): Pre-insert the values that the common tests will insert

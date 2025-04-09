@@ -72,6 +72,8 @@ stabilize 1
   1->2 MsgVote Term:1 Log:1/2
   1->3 MsgVote Term:1 Log:1/2
   1->4 MsgVote Term:1 Log:1/2
+  OnSync:
+  1->1 MsgVoteResp Term:1 Log:0/0
   INFO 1 received MsgVoteResp from 1 at term 1
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 
@@ -95,17 +97,17 @@ stabilize 2 3 4
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   2->1 MsgVoteResp Term:1 Log:0/0
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   3->1 MsgVoteResp Term:1 Log:0/0
 > 4 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
-  Messages:
+  OnSync:
   4->1 MsgVoteResp Term:1 Log:0/0
 
 # Since node 3 withdrew its support, node 1 will not send a MsgFortifyLeader to
@@ -133,6 +135,9 @@ stabilize 1
   1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->4 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
 
 withdraw-support 4 1
 ----
@@ -159,7 +164,7 @@ stabilize
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:2
   Entries:
   1/3 EntryNormal ""
-  Messages:
+  OnSync:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   2->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 3 handling Ready
@@ -167,14 +172,14 @@ stabilize
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
   Entries:
   1/3 EntryNormal ""
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 4 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
   Entries:
   1/3 EntryNormal ""
-  Messages:
+  OnSync:
   4->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   4->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 receiving messages
@@ -203,7 +208,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:2
   Committed: (2,3]
-  Messages:
+  OnSync:
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
   Applying:
   1/3 EntryNormal ""
@@ -211,7 +216,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
   Committed: (2,3]
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
   Applying:
   1/3 EntryNormal ""
@@ -219,7 +224,7 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
   Committed: (2,3]
-  Messages:
+  OnSync:
   4->1 MsgAppResp Term:1 Log:0/3 Commit:3
   Applying:
   1/3 EntryNormal ""

@@ -101,7 +101,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_go_ldap_ldap_v3//:ldap",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_exp//rand",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "//pkg/util/log/eventpb",

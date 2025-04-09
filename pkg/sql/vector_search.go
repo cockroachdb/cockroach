@@ -24,7 +24,7 @@ type vectorSearchNode struct {
 type vectorSearchPlanningInfo struct {
 	table               catalog.TableDescriptor
 	index               catalog.Index
-	prefixKey           roachpb.Key
+	prefixKeys          []roachpb.Key
 	queryVector         tree.TypedExpr
 	targetNeighborCount uint64
 

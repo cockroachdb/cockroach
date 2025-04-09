@@ -98,6 +98,7 @@ kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes u
 kv.transaction.randomized_anchor_key.enabled	boolean	false	dictates whether a transactions anchor key is randomized or not	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
 kv.transaction.write_buffering.enabled	boolean	false	if enabled, transactional writes are buffered on the client	application
+kv.transaction.write_buffering.max_buffer_size	integer	4194304	if non-zero, defines that maximum size of the buffer that will be used to buffer transactional writes per-transaction	application
 kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
@@ -391,6 +392,7 @@ sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
 sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
 sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
+sql.vecindex.stalled_op.timeout	duration	100ms	amount of time before other vector index workers will assist with a stalled background fixup	application
 storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
 storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
@@ -407,5 +409,6 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	false	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
-ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.1-upgrading-to-1000025.2-step-004	set the active cluster version in the format '<major>.<minor>'	application
+ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
+ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
+version	version	1000025.1-upgrading-to-1000025.2-step-006	set the active cluster version in the format '<major>.<minor>'	application

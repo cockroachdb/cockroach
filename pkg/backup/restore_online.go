@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -50,6 +51,17 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	32,
 	settings.PositiveInt,
 )
+
+var onlineRestoreLayerLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_layer_limit",
+	"maximum number of layers to restore in an online restore operation",
+	10,
+	settings.PositiveInt,
+	settings.WithVisibility(settings.Reserved),
+)
+
+const linkCompleteKey = "link_complete"
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -411,7 +423,9 @@ func sendRemoteAddSSTable(
 // checkManifestsForOnlineCompat returns an error if the set of
 // manifests appear to be from a backup that we cannot currently
 // support for online restore.
-func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.BackupManifest) error {
+func checkManifestsForOnlineCompat(
+	ctx context.Context, settings *cluster.Settings, manifests []backuppb.BackupManifest,
+) error {
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
 	}
@@ -421,7 +435,7 @@ func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.Bac
 	}
 
 	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
-	const layerLimit = 3
+	layerLimit := int(onlineRestoreLayerLimit.Get(&settings.SV))
 	if len(manifests) > layerLimit {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: too many incremental layers %d (from backup) > %d (limit)", len(manifests), layerLimit)
 	}

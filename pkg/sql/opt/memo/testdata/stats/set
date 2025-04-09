@@ -255,7 +255,7 @@ intersect
  ├── columns: x:12(int!null) y:13(int) x:14(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
- ├── stats: [rows=2.000001, distinct(12-14)=2, null(12-14)=0]
+ ├── stats: [rows=2, distinct(12-14)=2, null(12-14)=0]
  ├── key: (14)
  ├── fd: ()-->(13), (14)-->(12,13), (12)==(14), (14)==(12)
  ├── project
@@ -270,17 +270,17 @@ intersect
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null) rowid:9(int!null)
-      ├── stats: [rows=2.000001, distinct(6,7,9)=2, null(6,7,9)=0]
+      ├── stats: [rows=2, distinct(6,7,9)=2, null(6,7,9)=0]
       ├── key: (9)
       ├── fd: ()-->(6), (9)-->(7)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null)
-           ├── stats: [rows=2.000001, distinct(6,7,9)=2, null(6,7,9)=0]
+           ├── stats: [rows=2, distinct(6,7,9)=2, null(6,7,9)=0]
            ├── key: (9)
            ├── fd: ()-->(6), (9)-->(7,8)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0, distinct(6,7,9)=2, null(6,7,9)=0]
+                ├── stats: [rows=2, distinct(6)=1, null(6)=0, distinct(6,7,9)=2, null(6,7,9)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -298,7 +298,7 @@ intersect-all
  ├── columns: x:12(int!null) y:13(int) x:14(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
  ├── right columns: z:7(int) b.x:6(int) rowid:9(int)
- ├── stats: [rows=2.000001]
+ ├── stats: [rows=2]
  ├── key: (14)
  ├── fd: ()-->(13), (12)==(14), (14)==(12)
  ├── project
@@ -313,17 +313,17 @@ intersect-all
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null) rowid:9(int!null)
-      ├── stats: [rows=2.000001]
+      ├── stats: [rows=2]
       ├── key: (9)
       ├── fd: ()-->(6), (9)-->(7)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null)
-           ├── stats: [rows=2.000001]
+           ├── stats: [rows=2]
            ├── key: (9)
            ├── fd: ()-->(6), (9)-->(7,8)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0]
+                ├── stats: [rows=2, distinct(6)=1, null(6)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -433,15 +433,15 @@ except
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null)
-      ├── stats: [rows=2.000001, distinct(6,7)=2, null(6,7)=0]
+      ├── stats: [rows=2, distinct(6,7)=2, null(6,7)=0]
       ├── fd: ()-->(6)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string)
-           ├── stats: [rows=2.000001, distinct(6,7)=2, null(6,7)=0]
+           ├── stats: [rows=2, distinct(6,7)=2, null(6,7)=0]
            ├── fd: ()-->(6)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0, distinct(6,7)=2, null(6,7)=0]
+                ├── stats: [rows=2, distinct(6)=1, null(6)=0, distinct(6,7)=2, null(6,7)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b
@@ -474,15 +474,15 @@ except-all
  │         └── fd: (1)-->(2-5)
  └── project
       ├── columns: b.x:6(int!null) z:7(int!null)
-      ├── stats: [rows=2.000001]
+      ├── stats: [rows=2]
       ├── fd: ()-->(6)
       └── project
            ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string)
-           ├── stats: [rows=2.000001]
+           ├── stats: [rows=2]
            ├── fd: ()-->(6)
            └── select
                 ├── columns: b.x:6(int!null) z:7(int!null) b.s:8(string) rowid:9(int!null) b.crdb_internal_mvcc_timestamp:10(decimal) b.tableoid:11(oid)
-                ├── stats: [rows=2.000001, distinct(6)=1, null(6)=0]
+                ├── stats: [rows=2, distinct(6)=1, null(6)=0]
                 ├── key: (9)
                 ├── fd: ()-->(6), (9)-->(7,8,10,11)
                 ├── scan b

@@ -135,8 +135,8 @@ func (c CounterWithMetric) Count() int64 {
 // different.
 
 // GetName implements metric.Iterable
-func (c CounterWithMetric) GetName() string {
-	return c.metric.GetName()
+func (c CounterWithMetric) GetName(useStaticLabels bool) string {
+	return c.metric.GetName(useStaticLabels)
 }
 
 // GetHelp implements metric.Iterable

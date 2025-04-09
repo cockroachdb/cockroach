@@ -839,7 +839,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
-		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+		ob.AddDistSQLNetworkStats(queryStats.DistSQLNetworkMessages, queryStats.DistSQLNetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
 		if len(queryStats.Regions) > 0 {
 			ob.AddRegionsStats(queryStats.Regions)
@@ -1060,6 +1060,10 @@ func (m execNodeTraceMetadata) annotateExplain(
 					nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
 					nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
 					nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
+					// If multiple physical plan stages correspond to a single
+					// operator, we want to aggregate the execution time across
+					// all of them.
+					nodeStats.ExecTime.MaybeAdd(stats.Exec.ExecTime)
 					nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
 					nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
 					if noMutations && !makeDeterministic {

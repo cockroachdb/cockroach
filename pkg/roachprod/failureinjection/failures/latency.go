@@ -80,6 +80,7 @@ func (f *NetworkLatency) Setup(ctx context.Context, l *logger.Logger, args Failu
 	if err != nil {
 		return err
 	}
+	l.Printf("Setting up root htb qdisc on interfaces: %s", interfaces)
 	cmd := failScriptEarlyCmd
 	for _, iface := range interfaces {
 		// Ignore the loopback interface since no CRDB traffic should go through it
@@ -89,7 +90,6 @@ func (f *NetworkLatency) Setup(ctx context.Context, l *logger.Logger, args Failu
 		}
 		cmd += fmt.Sprintf(setupQdiscsCmd, iface)
 	}
-	l.Printf("Setting up root htb qdisc with cmd: %s", cmd)
 	if err := f.Run(ctx, l, f.c.Nodes, cmd); err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 				}
 				cmd += fmt.Sprintf(addFilterCmd, iface, class, handle, latency.Delay, dest)
 			}
-			l.Printf("Adding artificial latency from nodes %d to node %d with cmd: %s", latency.Source, dest, cmd)
+			l.Printf("Adding artificial latency from nodes %d to node %d", latency.Source, dest)
 			if err := f.Run(ctx, l, latency.Source, cmd); err != nil {
 				return err
 			}
@@ -204,7 +204,7 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 	return nil
 }
 
-func (f *NetworkLatency) Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+func (f *NetworkLatency) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	latencies := args.(NetworkLatencyArgs).ArtificialLatencies
 	for _, latency := range latencies {
 		for _, dest := range latency.Destination {
@@ -215,7 +215,7 @@ func (f *NetworkLatency) Restore(ctx context.Context, l *logger.Logger, args Fai
 
 			class, ok := f.filterNameToClassMap[latency.String()]
 			if !ok {
-				return errors.New("failed trying to restore latency failure, ArtificialLatency rule was not found: %+v")
+				return errors.New("failed trying to recover latency failure, ArtificialLatency rule was not found: %+v")
 			}
 
 			cmd := failScriptEarlyCmd
@@ -266,7 +266,7 @@ func (f *NetworkLatency) WaitForFailureToPropagate(
 	return nil
 }
 
-func (f *NetworkLatency) WaitForFailureToRestore(
+func (f *NetworkLatency) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	// TODO(Darryl): Monitor cluster (e.g. for replica convergence) and block until it's stable.

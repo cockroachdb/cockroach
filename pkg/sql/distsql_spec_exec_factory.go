@@ -1452,7 +1452,7 @@ func (e *distSQLSpecExecFactory) ConstructVectorSearch(
 	table cat.Table,
 	index cat.Index,
 	outCols exec.TableColumnOrdinalSet,
-	prefixKey constraint.Key,
+	prefixConstraint *constraint.Constraint,
 	queryVector tree.TypedExpr,
 	targetNeighborCount uint64,
 ) (exec.Node, error) {
@@ -1461,17 +1461,17 @@ func (e *distSQLSpecExecFactory) ConstructVectorSearch(
 	cols := makeColList(table, outCols)
 	resultCols := colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
-	// Encode the prefix values as a roachpb.Key.
+	// Encode the prefix constraint as a list of roachpb.Keys.
 	var sb span.Builder
 	sb.Init(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, indexDesc)
-	encPrefixKey, _, err := sb.EncodeConstraintKey(prefixKey)
+	prefixKeys, err := sb.KeysFromVectorPrefixConstraint(e.ctx, prefixConstraint)
 	if err != nil {
 		return nil, err
 	}
 	planInfo := &vectorSearchPlanningInfo{
 		table:               tabDesc,
 		index:               indexDesc,
-		prefixKey:           encPrefixKey,
+		prefixKeys:          prefixKeys,
 		queryVector:         queryVector,
 		targetNeighborCount: targetNeighborCount,
 		cols:                cols,

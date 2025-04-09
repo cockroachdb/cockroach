@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // Raft log storage writes are carried out under raftMu which blocks all other
@@ -16,11 +17,6 @@ import (
 // reads from within RawNode when it only holds Replica.mu. However, RawNode
 // never attempts to read log indices that have pending writes. See also the
 // replicaRaftStorage comment for more details.
-//
-// TODO(#131063): there is one subtle exception - the log can be compacted
-// concurrently with reading from its "readable" prefix. Incorrect ordering of
-// raftMu/mu updates during log compactions can cause read attempts for deleted
-// indices. We should fix it.
 //
 // For performance reasons, the raft log storage state (such as the last index)
 // needs to be accessible under Replica.mu. When appending is done, the state
@@ -58,7 +54,7 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 // appendRaftMuLocked carries out a raft log append, and returns the new raft
 // log storage state.
 func (r *replicaLogStorage) appendRaftMuLocked(
-	ctx context.Context, app logstore.MsgStorageAppend, stats *logstore.AppendStats,
+	ctx context.Context, app raft.StorageAppend, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
 	state := r.stateRaftMuLocked()
 	cb := (*replicaSyncCallback)(r)
