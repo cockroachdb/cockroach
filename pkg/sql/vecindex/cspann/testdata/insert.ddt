@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------
 # Simple insert tests.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2
+new-index min-partition-size=1 max-partition-size=5 beam-size=2
 ----
 • 1 (0, 0)
 
@@ -47,25 +47,25 @@ vec7: (0, 0)
 vec8: (0, 4)
 vec9: (-2, 8)
 ----
-• 1 (7.25, 4.75)
+• 1 (0, 0)
 │
-├───• 2 (11, 6)
+├───• 2 (9, 6)
 │   │
+│   ├───• vec2 (5, 6)
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 4 (4.3333, 4)
+├───• 5 (0.3333, 2)
 │   │
-│   ├───• vec3 (4, 3)
-│   ├───• vec2 (5, 6)
-│   └───• vec4 (4, 3)
+│   ├───• vec7 (0, 0)
+│   ├───• vec8 (0, 4)
+│   └───• vec1 (1, 2)
 │
-└───• 5 (0.3333, 2)
+└───• 4 (2, 4.6667)
     │
-    ├───• vec1 (1, 2)
-    ├───• vec7 (0, 0)
-    ├───• vec8 (0, 4)
-    └───• vec9 (-2, 8)
+    ├───• vec9 (-2, 8)
+    ├───• vec3 (4, 3)
+    └───• vec4 (4, 3)
 
 # Overwrite vector with a new value that won't be found in the index, causing
 # duplicate child keys that point to the same vector (but with different
@@ -76,40 +76,37 @@ vec9: (-2, 8)
 insert
 vec2: (-5, -5)
 ----
-• 1 (7.25, 4.75)
+• 1 (0, 0)
 │
-├───• 2 (11, 6)
+├───• 2 (9, 6)
 │   │
+│   ├───• vec2 (-5, -5)
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 4 (4.3333, 4)
+├───• 5 (0.3333, 2)
 │   │
-│   ├───• vec3 (4, 3)
-│   ├───• vec2 (-5, -5)
-│   └───• vec4 (4, 3)
+│   ├───• vec7 (0, 0)
+│   ├───• vec8 (0, 4)
+│   ├───• vec1 (1, 2)
+│   └───• vec2 (-5, -5)
 │
-├───• 6 (-1, 6)
-│   │
-│   ├───• vec9 (-2, 8)
-│   └───• vec8 (0, 4)
-│
-└───• 7 (-1.3333, -1)
+└───• 4 (2, 4.6667)
     │
-    ├───• vec7 (0, 0)
-    ├───• vec1 (1, 2)
-    └───• vec2 (-5, -5)
+    ├───• vec9 (-2, 8)
+    ├───• vec3 (4, 3)
+    └───• vec4 (4, 3)
 
 search max-results=10 beam-size=8
 (-5, -5)
 ----
-vec2: 0 (centroid=5.43)
-vec7: 50 (centroid=1.67)
-vec1: 85 (centroid=3.8)
-vec8: 106 (centroid=2.24)
-vec3: 145 (centroid=1.05)
-vec4: 145 (centroid=1.05)
-vec9: 178 (centroid=2.24)
-vec6: 397 (centroid=5.83)
-vec5: 425 (centroid=5.83)
-10 leaf vectors, 14 vectors, 9 full vectors, 5 partitions
+vec2: 0 (centroid=8.8)
+vec7: 50 (centroid=2.03)
+vec1: 85 (centroid=0.67)
+vec8: 106 (centroid=2.03)
+vec3: 145 (centroid=2.6)
+vec4: 145 (centroid=2.6)
+vec9: 178 (centroid=5.21)
+vec6: 397 (centroid=7.07)
+vec5: 425 (centroid=5.1)
+10 leaf vectors, 13 vectors, 9 full vectors, 4 partitions

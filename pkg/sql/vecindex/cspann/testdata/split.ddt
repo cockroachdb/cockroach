@@ -13,41 +13,41 @@ vec3: (4, 3)
 vec4: (8, 11)
 vec5: (14, 1)
 ----
-• 1 (6.0833, 3.9167)
+• 1 (0, 0)
 │
-├───• 2 (2.5, 2.5)
+├───• 2 (7.5, 7.5)
 │   │
-│   ├───• vec1 (1, 2)
-│   └───• vec3 (4, 3)
+│   ├───• vec4 (8, 11)
+│   ├───• vec2 (7, 4)
+│   └───• vec5 (14, 1)
 │
-└───• 3 (9.6667, 5.3333)
+└───• 3 (2.5, 2.5)
     │
-    ├───• vec2 (7, 4)
-    ├───• vec4 (8, 11)
-    └───• vec5 (14, 1)
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
 
 # Trigger another split, this time of a child.
 insert
 vec6: (8, 6)
 vec7: (5, 8)
 ----
-• 1 (6.0833, 3.9167)
+• 1 (0, 0)
 │
-├───• 2 (2.5, 2.5)
+├───• 5 (6.5, 9.5)
 │   │
-│   ├───• vec1 (1, 2)
-│   └───• vec3 (4, 3)
+│   ├───• vec4 (8, 11)
+│   └───• vec7 (5, 8)
 │
-├───• 4 (9.6667, 3.6667)
+├───• 3 (2.5, 2.5)
 │   │
-│   ├───• vec2 (7, 4)
-│   ├───• vec6 (8, 6)
-│   └───• vec5 (14, 1)
+│   ├───• vec3 (4, 3)
+│   └───• vec1 (1, 2)
 │
-└───• 5 (6.5, 9.5)
+└───• 4 (9.6667, 3.6667)
     │
-    ├───• vec4 (8, 11)
-    └───• vec7 (5, 8)
+    ├───• vec6 (8, 6)
+    ├───• vec2 (7, 4)
+    └───• vec5 (14, 1)
 
 # Trigger another split that adds a level to the tree.
 insert
@@ -59,43 +59,43 @@ vec12: (4, 4)
 vec13: (3, 4)
 vec14: (3, 3)
 ----
-• 1 (5.125, 4.2639)
+• 1 (0, 0)
 │
-├───• 10 (2.1667, 1.9444)
+├───• 10 (2.1667, 1.6667)
 │   │
-│   ├───• 9 (3.3333, 4.3333)
+│   ├───• 13 (3, 4)
 │   │   │
 │   │   ├───• vec10 (3, 5)
-│   │   ├───• vec12 (4, 4)
-│   │   └───• vec13 (3, 4)
+│   │   ├───• vec13 (3, 4)
+│   │   └───• vec14 (3, 3)
 │   │
 │   ├───• 7 (-0.5, -0.5)
 │   │   │
-│   │   └───• vec8 (-2, -3)
-│   │
-│   ├───• 12 (2.6667, 2.6667)
-│   │   │
-│   │   ├───• vec14 (3, 3)
-│   │   ├───• vec3 (4, 3)
+│   │   ├───• vec8 (-2, -3)
 │   │   └───• vec1 (1, 2)
 │   │
-│   └───• 13 (3.5, 1.5)
+│   ├───• 8 (3.5, 1.5)
+│   │   │
+│   │   ├───• vec11 (3, 2)
+│   │   └───• vec9 (4, 1)
+│   │
+│   └───• 12 (4, 3.5)
 │       │
-│       ├───• vec9 (4, 1)
-│       └───• vec11 (3, 2)
+│       ├───• vec12 (4, 4)
+│       └───• vec3 (4, 3)
 │
 └───• 11 (8.0833, 6.5833)
     │
-    ├───• 4 (9.6667, 3.6667)
+    ├───• 5 (6.5, 9.5)
     │   │
-    │   ├───• vec2 (7, 4)
-    │   ├───• vec6 (8, 6)
-    │   └───• vec5 (14, 1)
+    │   ├───• vec4 (8, 11)
+    │   └───• vec7 (5, 8)
     │
-    └───• 5 (6.5, 9.5)
+    └───• 4 (9.6667, 3.6667)
         │
-        ├───• vec4 (8, 11)
-        └───• vec7 (5, 8)
+        ├───• vec6 (8, 6)
+        ├───• vec2 (7, 4)
+        └───• vec5 (14, 1)
 
 # Search for closest vectors with beam-size=1.
 search max-results=3 beam-size=1
@@ -110,12 +110,13 @@ search max-results=3 beam-size=3
 (4, 7)
 ----
 vec7: 2 (centroid=2.12)
-vec10: 5 (centroid=0.75)
-vec12: 9 (centroid=0.75)
-8 leaf vectors, 16 vectors, 6 full vectors, 6 partitions
+vec10: 5 (centroid=1)
+vec12: 9 (centroid=0.5)
+7 leaf vectors, 15 vectors, 4 full vectors, 6 partitions
 
 # ----------------------------------------------------------------------
 # Test linking nearby vectors from other partitions.
+# TODO(andyk): Need to implement this in new split fixup.
 # ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (-2, -2)
@@ -126,102 +127,117 @@ vec5: (5, 5)
 vec6: (6, 6)
 vec7: (5, 5)
 ----
-• 1 (2.5, 2.5)
+• 1 (0, 0)
 │
-├───• 2 (5, 5)
+├───• 5 (5.5, 5.5)
 │   │
-│   ├───• vec6 (6, 6)
 │   ├───• vec5 (5, 5)
-│   ├───• vec4 (4, 4)
+│   ├───• vec6 (6, 6)
 │   └───• vec7 (5, 5)
 │
-└───• 3 (0, 0)
+├───• 3 (-1, -1)
+│   │
+│   ├───• vec1 (-2, -2)
+│   └───• vec2 (0, 0)
+│
+└───• 4 (3, 3)
     │
     ├───• vec3 (2, 2)
-    ├───• vec2 (0, 0)
-    └───• vec1 (-2, -2)
+    └───• vec4 (4, 4)
 
-# Add vectors to partition 2 until it splits and then pulls in vec3 from
+# Add vectors to partition 4 until it splits and then pulls in vec3 from
 # partition 3.
+# TODO(andyk): This won't work until we implement linking vectors.
 insert
 vec8: (4, 3)
 vec9: (3, 4)
 ----
-• 1 (2.5, 2.5)
+• 1 (0, 0)
 │
-├───• 3 (0, 0)
+├───• 5 (5.5, 5.5)
 │   │
-│   ├───• vec3 (2, 2)
-│   ├───• vec2 (0, 0)
-│   └───• vec1 (-2, -2)
+│   ├───• vec5 (5, 5)
+│   ├───• vec6 (6, 6)
+│   └───• vec7 (5, 5)
 │
-├───• 4 (3.6667, 3.6667)
+├───• 3 (-1, -1)
 │   │
-│   ├───• vec9 (3, 4)
+│   ├───• vec1 (-2, -2)
+│   └───• vec2 (0, 0)
+│
+├───• 7 (3, 2.5)
+│   │
 │   ├───• vec8 (4, 3)
-│   └───• vec4 (4, 4)
+│   └───• vec3 (2, 2)
 │
-└───• 5 (5.3333, 5.3333)
+└───• 6 (3.5, 4)
     │
-    ├───• vec7 (5, 5)
-    ├───• vec5 (5, 5)
-    └───• vec6 (6, 6)
+    ├───• vec9 (3, 4)
+    └───• vec4 (4, 4)
 
 # ----------------------------------------------------------------------
 # Test moving vectors to other partitions during split.
+# TODO(andyk): Need to implement this in new split fixup.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2
-vec1: (0, 0)
-vec2: (-1, 1)
-vec3: (1, 1)
-vec4: (0, -2)
-vec5: (-1, -2)
-vec6: (1, -2)
-----
-• 1 (0, -0.6667)
-│
-├───• 2 (0, -2)
-│   │
-│   ├───• vec6 (1, -2)
-│   ├───• vec5 (-1, -2)
-│   └───• vec4 (0, -2)
-│
-└───• 3 (0, 0.6667)
-    │
-    ├───• vec3 (1, 1)
-    ├───• vec2 (-1, 1)
-    └───• vec1 (0, 0)
-
-# Add vectors to partition 3 until it splits, leaving vec1 further away from
+#ew-index min-partition-size=1 max-partition-size=4 beam-size=2
+#ec1: (0, 0)
+#ec2: (-1, 1)
+#ec3: (1, 1)
+#ec4: (0, -2)
+#ec5q, -2)
+#ec6q -2)
+#---q
+# 1 q)
+#
+#───q0, 1)
+#   q
+#   q vec3 (1, 1)
+#   q vec2 (-1, 1)
+#
+#───• 5 (0.5, -2)
+#   │
+#   ├───• vec4 (0, -2)
+#   └───• vec6 (1, -2)
+#
+#───• 4 (-0.5, -1)
+#   │
+#   ├───• vec1 (0, 0)
+#   └───• vec5 (-1, -2)
+#
+# Add vectors to partition 2 until it splits, leaving vec1 further away from
 # the new centroids than to the centroid of partition 2. Expect it to move to
 # partition 2.
-insert
-vec7: (-4, 4)
-vec8: (4, 4)
-----
-• 1 (0, -0.6667)
-│
-├───• 2 (0, -2)
-│   │
-│   ├───• vec6 (1, -2)
-│   ├───• vec5 (-1, -2)
-│   └───• vec4 (0, -2)
-│
-├───• 4 (-2.5, 2.5)
-│   │
-│   ├───• vec7 (-4, 4)
-│   └───• vec2 (-1, 1)
-│
-└───• 5 (1.6667, 1.6667)
-    │
-    ├───• vec1 (0, 0)
-    ├───• vec3 (1, 1)
-    └───• vec8 (4, 4)
+# TODO(andyk): This won't work until we implement moving vectors.
+#nsert
+#ec7: (-4, 4)
+#ec8: (4, 4)
+#---
+# 1 (0, 0)
+#
+#───• 7 (-2.5, 2.5)
+#   │
+#   ├───• vec7 (-4, 4)
+#   └───• vec2 (-1, 1)
+#
+#───• 5 (0.5, -2)
+#   │
+#   ├───• vec4 (0, -2)
+#   └───• vec6 (1, -2)
+#
+#───• 4 (-0.5, -1)
+#   │
+#   ├───• vec1 (0, 0)
+#   └───• vec5 (-1, -2)
+#
+#───• 6 (2.5, 2.5)
+#   │
+#   ├───• vec3 (1, 1)
+#   └───• vec8 (4, 4)
 
 # ----------------------------------------------------------------------
 # Test splits in the presence of dangling vectors.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2
+new-index min-partition-size=1 max-partition-size=4 beam-size=2 discard-fixups
 vec1: (0, -1)
 vec2: (3, 9)
 vec3: (-2, 8)
@@ -252,18 +268,21 @@ vec6: (1, 2)
 vec7: (5, 0)
 vec8: (2, 2)
 ----
-• 1 (1.5, 5.5)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2.5, 2.5)
+├───• 5 (4.5, 1.5)
+│   │
+│   ├───• vec7 (5, 0)
+│   └───• vec5 (4, 3)
+│
+└───• 4 (1.5, 2)
     │
     ├───• vec6 (1, 2)
-    ├───• vec5 (4, 3)
-    ├───• vec7 (5, 0)
     └───• vec8 (2, 2)
 
 # Again, this time at a lower level, with more dangling vectors.
@@ -272,42 +291,51 @@ vec5
 vec6
 vec7
 ----
-• 1 (1.5, 5.5)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2.5, 2.5)
+├───• 5 (4.5, 1.5)
+│   │
+│   ├───• vec7 (MISSING)
+│   └───• vec5 (MISSING)
+│
+└───• 4 (1.5, 2)
     │
     ├───• vec6 (MISSING)
-    ├───• vec5 (MISSING)
-    ├───• vec7 (MISSING)
     └───• vec8 (2, 2)
 
 insert
 vec9: (6, 1)
+vec10: (5, 3)
 ----
-• 1 (1.5, 5.5)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-├───• 4 (6, 1)
+├───• 7 (5, 3)
 │   │
-│   └───• vec9 (6, 1)
+│   └───• vec10 (5, 3)
 │
-└───• 5 (2, 2)
+├───• 4 (1.5, 2)
+│   │
+│   ├───• vec6 (MISSING)
+│   └───• vec8 (2, 2)
+│
+└───• 6 (6, 1)
     │
-    └───• vec8 (2, 2)
+    └───• vec9 (6, 1)
 
 # ----------------------------------------------------------------------
 # Test split of root partition with every vector dangling.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2
+new-index min-partition-size=1 max-partition-size=5 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
 vec3: (-2, 8)
@@ -336,18 +364,16 @@ vec4
 └───• vec4 (MISSING)
 
 # Trigger a split.
-# TODO(andyk): Consider cleaning up the dangling vectors while attempting to
-# split rather than waiting for a search to clean them up.
 insert
 vec5: (4, 3)
 ----
 • 1 (0, 0)
 │
-├───• vec1 (MISSING)
-├───• vec2 (MISSING)
-├───• vec3 (MISSING)
-├───• vec4 (MISSING)
-└───• vec5 (4, 3)
+├───• 2 (4, 3)
+│   │
+│   └───• vec5 (4, 3)
+│
+└───• 3 (4, 3)
 
 # ----------------------------------------------------------------------
 # Split of partition that's too small or not a child of the parent is a no-op.
@@ -359,130 +385,118 @@ vec3: (-2, 8)
 vec4: (4, 3)
 vec5: (2, 2)
 ----
-• 1 (1.25, 4.75)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2, 1)
+├───• 5 (0, -1)
+│   │
+│   └───• vec1 (0, -1)
+│
+└───• 4 (3, 2.5)
     │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    └───• vec5 (2, 2)
+    ├───• vec5 (2, 2)
+    └───• vec4 (4, 3)
 
-# Partition #3 is not a child of partition #2, so no-op.
-force-split partition-key=3 parent-partition-key=2
+# Partition #2 is not a child of partition #2, so no-op.
+force-split partition-key=2 parent-partition-key=4
 ----
-• 1 (1.25, 4.75)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2, 1)
+├───• 5 (0, -1)
+│   │
+│   └───• vec1 (0, -1)
+│
+└───• 4 (3, 2.5)
     │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    └───• vec5 (2, 2)
+    ├───• vec5 (2, 2)
+    └───• vec4 (4, 3)
 
 # Partition #2 is too small to split.
 force-split partition-key=2 parent-partition-key=1
 ----
-• 1 (1.25, 4.75)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2, 1)
+├───• 5 (0, -1)
+│   │
+│   └───• vec1 (0, -1)
+│
+└───• 4 (3, 2.5)
     │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    └───• vec5 (2, 2)
+    ├───• vec5 (2, 2)
+    └───• vec4 (4, 3)
 
 # Discard fixups to enable partition to grow larger than max-partition-size.
 insert discard-fixups
-vec6: (3, 2)
+vec6: (3, -2)
 vec7: (-1, 0)
 vec8: (-2, 2)
 vec9: (1, 1)
+vec10: (0, -3)
+vec11: (-5, -5)
 ----
-• 1 (1.25, 4.75)
+• 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
 │   │
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-└───• 3 (2, 1)
-    │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    ├───• vec5 (2, 2)
-    ├───• vec6 (3, 2)
-    ├───• vec7 (-1, 0)
-    ├───• vec8 (-2, 2)
-    └───• vec9 (1, 1)
-
-# After split, partition #4 is still greater than max-partition-size.
-force-split partition-key=3 parent-partition-key=1
-----
-• 1 (1.25, 4.75)
-│
-├───• 2 (0.5, 8.5)
-│   │
-│   ├───• vec3 (-2, 8)
-│   └───• vec2 (3, 9)
-│
-├───• 4 (-0.5, 0.5)
+├───• 5 (0, -1)
 │   │
 │   ├───• vec1 (0, -1)
+│   ├───• vec6 (3, -2)
+│   ├───• vec7 (-1, 0)
+│   ├───• vec8 (-2, 2)
+│   ├───• vec9 (1, 1)
+│   ├───• vec10 (0, -3)
+│   └───• vec11 (-5, -5)
+│
+└───• 4 (3, 2.5)
+    │
+    ├───• vec5 (2, 2)
+    └───• vec4 (4, 3)
+
+# After split, partition #6 is still greater than max-partition-size.
+force-split partition-key=5 parent-partition-key=1
+----
+• 1 (0, 0)
+│
+├───• 2 (0.5, 8.5)
+│   │
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
+│
+├───• 7 (-0.6667, 1)
+│   │
 │   ├───• vec9 (1, 1)
 │   ├───• vec8 (-2, 2)
 │   └───• vec7 (-1, 0)
 │
-└───• 5 (3, 2.3333)
-    │
-    ├───• vec6 (3, 2)
-    ├───• vec5 (2, 2)
-    └───• vec4 (4, 3)
-
-# Partition is too small to split.
-# TODO(andyk): Remove this test once new fixups are enabled by default.
-load-index min-partition-size=1 max-partition-size=3 beam-size=2 new-fixups
-• 1 (1.25, 4.75)
-│
-├───• 2 (0.5, 8.5)
+├───• 4 (3, 2.5)
 │   │
-│   ├───• vec3 (-2, 8)
-│   └───• vec2 (3, 9)
+│   ├───• vec5 (2, 2)
+│   └───• vec4 (4, 3)
 │
-└───• 3 (2, 1)
+└───• 6 (-0.5, -2.75)
     │
     ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    └───• vec5 (2, 2)
-----
-Loaded 5 vectors.
-
-force-split partition-key=2 parent-partition-key=1 new-fixups
-----
-• 1 (1.25, 4.75)
-│
-├───• 2 (0.5, 8.5)
-│   │
-│   ├───• vec3 (-2, 8)
-│   └───• vec2 (3, 9)
-│
-└───• 3 (2, 1)
-    │
-    ├───• vec1 (0, -1)
-    ├───• vec4 (4, 3)
-    └───• vec5 (2, 2)
+    ├───• vec6 (3, -2)
+    ├───• vec11 (-5, -5)
+    └───• vec10 (0, -3)
 
 # ----------------------------------------------------------------------
 # Split partitions with less than 2 vectors.
@@ -495,15 +509,16 @@ load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
     │
     ├───• 3 (5, 2)
     │   │
-    │   └───• vec1 (5, 2)
+        ├───• vec1 (6, -1)
+    │   └───• vec2 (5, 2)
     │
     └───• 4 (5, 6)
         │
-        ├───• vec2 (3, 5)
-        ├───• vec3 (6, 8)
-        └───• vec4 (6, 5)
+        ├───• vec3 (3, 5)
+        ├───• vec4 (6, 8)
+        └───• vec5 (6, 5)
 ----
-Loaded 4 vectors.
+Loaded 5 vectors.
 
 # Delete vectors from primary index, but not from secondary index. Leave
 # partition #3 with zero vectors and partition #4 with one vector.
@@ -511,6 +526,7 @@ delete not-found
 vec1
 vec2
 vec3
+vec4
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -518,13 +534,14 @@ vec3
     │
     ├───• 3 (5, 2)
     │   │
-    │   └───• vec1 (MISSING)
+    │   ├───• vec1 (MISSING)
+    │   └───• vec2 (MISSING)
     │
     └───• 4 (5, 6)
         │
-        ├───• vec2 (MISSING)
         ├───• vec3 (MISSING)
-        └───• vec4 (6, 5)
+        ├───• vec4 (MISSING)
+        └───• vec5 (6, 5)
 
 # Split partition with 0 vectors.
 force-split partition-key=3 parent-partition-key=2
@@ -533,15 +550,14 @@ force-split partition-key=3 parent-partition-key=2
 │
 └───• 2 (3.75, 6.9167)
     │
-    ├───• 3 (5, 2)
+    ├───• 6 (5, 2)
+    ├───• 4 (5, 6)
     │   │
-    │   └───• vec1 (MISSING)
+    │   ├───• vec3 (MISSING)
+    │   ├───• vec4 (MISSING)
+    │   └───• vec5 (6, 5)
     │
-    └───• 4 (5, 6)
-        │
-        ├───• vec2 (MISSING)
-        ├───• vec3 (MISSING)
-        └───• vec4 (6, 5)
+    └───• 5 (5, 2)
 
 # Split partition with 1 vector.
 force-split partition-key=4 parent-partition-key=2
@@ -550,11 +566,9 @@ force-split partition-key=4 parent-partition-key=2
 │
 └───• 2 (3.75, 6.9167)
     │
-    ├───• 3 (5, 2)
-    │   │
-    │   └───• vec1 (MISSING)
-    │
-    ├───• 6 (6, 5)
-    └───• 5 (6, 5)
+    ├───• 6 (5, 2)
+    ├───• 8 (6, 5)
+    ├───• 5 (5, 2)
+    └───• 7 (6, 5)
         │
-        └───• vec4 (6, 5)
+        └───• vec5 (6, 5)
