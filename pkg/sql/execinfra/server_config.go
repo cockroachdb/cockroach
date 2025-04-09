@@ -67,6 +67,8 @@ type ServerConfig struct {
 
 	// Locality is the locality of the node on which this Server is running.
 	Locality roachpb.Locality
+	// Locality aware address of this DistSQLServer instance.
+	LocalityAddresses []roachpb.LocalityAddress
 
 	// Codec is capable of encoding and decoding sql table keys.
 	Codec keys.SQLCodec
