@@ -26,19 +26,31 @@ type EngineMetrics struct {
 	// The subset of SELECTs that were executed by DistSQL with full or partial
 	// distribution.
 	DistSQLSelectDistributedCount *metric.Counter
-	SQLOptPlanCacheHits           *metric.Counter
-	SQLOptPlanCacheMisses         *metric.Counter
-	StatementFingerprintCount     *metric.UniqueCounter
+	DistSQLExecLatency            metric.IHistogram
+	DistSQLServiceLatency         metric.IHistogram
 
-	SQLExecLatencyDetail  *metric.HistogramVec
-	DistSQLExecLatency    metric.IHistogram
-	SQLExecLatency        metric.IHistogram
-	DistSQLServiceLatency metric.IHistogram
-	SQLServiceLatency     metric.IHistogram
-	SQLTxnLatency         metric.IHistogram
-	SQLTxnsOpen           *metric.Gauge
-	SQLActiveStatements   *metric.Gauge
-	SQLContendedTxns      *metric.Counter
+	SQLOptPlanCacheHits   *metric.Counter
+	SQLOptPlanCacheMisses *metric.Counter
+
+	StatementFingerprintCount *metric.UniqueCounter
+	SQLExecLatencyDetail      *metric.HistogramVec
+
+	SQLExecLatency metric.IHistogram
+	// Exec Latency of only non-AOST queries
+	SQLExecLatencyConsistent metric.IHistogram
+	// Exec Latency of only AOST queries
+	SQLExecLatencyHistorical metric.IHistogram
+
+	SQLServiceLatency metric.IHistogram
+	// Service Latency of only non-AOST queries
+	SQLServiceLatencyConsistent metric.IHistogram
+	// Service Latency of only AOST queries
+	SQLServiceLatencyHistorical metric.IHistogram
+
+	SQLTxnLatency       metric.IHistogram
+	SQLTxnsOpen         *metric.Gauge
+	SQLActiveStatements *metric.Gauge
+	SQLContendedTxns    *metric.Counter
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
@@ -319,6 +331,13 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 			}
 			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			if ex.state.isHistorical.Load() {
+				m.SQLExecLatencyHistorical.RecordValue(runLatRaw.Nanoseconds())
+				m.SQLServiceLatencyHistorical.RecordValue(svcLatRaw.Nanoseconds())
+			} else {
+				m.SQLExecLatencyConsistent.RecordValue(runLatRaw.Nanoseconds())
+				m.SQLServiceLatencyConsistent.RecordValue(svcLatRaw.Nanoseconds())
+			}
 		}
 	}
 }

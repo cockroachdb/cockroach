@@ -3599,6 +3599,8 @@ of ranges currently considered “hot” by the node(s).
 | page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 | tenant_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 | nodes | [string](#cockroach.server.serverpb.HotRangesRequest-string) | repeated |  | [reserved](#support-status) |
+| per_node_limit | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  | per_node_limit indicates the maximum number of hot ranges to return for each node. If left empty, the default is 128. | [reserved](#support-status) |
+| stats_only | [bool](#cockroach.server.serverpb.HotRangesRequest-bool) |  | stats_only indicates whether to return only the stats for the hot ranges, without pulling descriptor information. | [reserved](#support-status) |
 
 
 
