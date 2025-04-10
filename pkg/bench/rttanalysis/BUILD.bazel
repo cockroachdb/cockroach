@@ -47,6 +47,7 @@ go_test(
         "orm_queries_bench_test.go",
         "rtt_analysis_test.go",
         "system_bench_test.go",
+        "trigger_resolution_test.go",
         "truncate_bench_test.go",
         "udf_resolution_test.go",
         "validate_benchmark_data_test.go",
