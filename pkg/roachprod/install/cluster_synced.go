@@ -458,30 +458,33 @@ func (c *SyncedCluster) Stop(
 	// killProcesses indicates whether processed need to be stopped.
 	killProcesses := true
 
+	// Non system shared process virtual clusters don't get killed but are stopped via SQL.
+	// Figure out if the virtual cluster is one or not.
 	if virtualClusterLabel != "" {
 		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
-		if err != nil {
-			return err
-		}
+		if name != SystemInterfaceName {
+			services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+			if err != nil {
+				return err
+			}
 
-		if len(services) == 0 {
-			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
-		}
+			if len(services) == 0 {
+				return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+			}
 
-		virtualClusterName = name
-		if services[0].ServiceMode == ServiceModeShared {
-			// For shared process virtual clusters, we just stop the service
-			// via SQL.
-			killProcesses = false
-		} else {
-			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			virtualClusterName = name
+			if services[0].ServiceMode == ServiceModeShared {
+				// For shared process virtual clusters, we just stop the service
+				// via SQL.
+				killProcesses = false
+			} else {
+				virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			}
 		}
-
 	}
 
 	if killProcesses {
@@ -510,6 +513,45 @@ func (c *SyncedCluster) Stop(
 func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
 	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
 	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* gracePeriod */, "")
+}
+
+func (c *SyncedCluster) KillProcessAndWaitCmd(
+	node Node, sig int, cmdName, virtualClusterLabel, waitCmd string,
+) string {
+	var virtualClusterFilter string
+	if virtualClusterLabel != "" {
+		virtualClusterFilter = fmt.Sprintf(
+			"grep -E '%s' |",
+			envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", virtualClusterLabel),
+		)
+	}
+
+	logDir := c.LogDir(node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+
+	// NB: the awkward-looking `awk` invocation serves to avoid having the
+	// awk process match its own output from `ps`.
+	cmd := fmt.Sprintf(`
+mkdir -p %[1]s
+mkdir -p %[2]s
+echo ">>> roachprod %[1]s: $(date)" >> %[2]s/roachprod.log
+ps axeww -o pid -o command >> %[2]s/roachprod.log
+pids=$(ps axeww -o pid -o command | \
+  %[3]s \
+  sed 's/export ROACHPROD=//g' | \
+  awk '/%[4]s/ { print $1 }')
+if [ -n "${pids}" ]; then
+  kill -%[5]d ${pids}
+%[6]s
+fi`,
+		cmdName,                   // [1]
+		logDir,                    // [2]
+		virtualClusterFilter,      // [3]
+		c.roachprodEnvRegex(node), // [4]
+		sig,                       // [5]
+		waitCmd,                   // [6]
+	)
+
+	return cmd
 }
 
 // kill sends the signal sig to all nodes in the cluster using the kill command.
@@ -559,37 +601,7 @@ func (c *SyncedCluster) kill(
 				)
 			}
 
-			var virtualClusterFilter string
-			if virtualClusterLabel != "" {
-				virtualClusterFilter = fmt.Sprintf(
-					"grep -E '%s' |",
-					envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", virtualClusterLabel),
-				)
-			}
-
-			// NB: the awkward-looking `awk` invocation serves to avoid having the
-			// awk process match its own output from `ps`.
-			cmd := fmt.Sprintf(`
-mkdir -p %[1]s
-mkdir -p %[2]s
-echo ">>> roachprod %[1]s: $(date)" >> %[2]s/roachprod.log
-ps axeww -o pid -o command >> %[2]s/roachprod.log
-pids=$(ps axeww -o pid -o command | \
-  %[3]s \
-  sed 's/export ROACHPROD=//g' | \
-  awk '/%[4]s/ { print $1 }')
-if [ -n "${pids}" ]; then
-  kill -%[5]d ${pids}
-%[6]s
-fi`,
-				cmdName,                   // [1]
-				c.LogDir(node, "", 0),     // [2]
-				virtualClusterFilter,      // [3]
-				c.roachprodEnvRegex(node), // [4]
-				sig,                       // [5]
-				waitCmd,                   // [6]
-			)
-
+			cmd := c.KillProcessAndWaitCmd(node, sig, cmdName, virtualClusterLabel, waitCmd)
 			res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
 			if err != nil {
 				return res, err
