@@ -788,6 +788,22 @@ func (s *statusServer) redactGossipResponse(resp *gossip.InfoStatus) *gossip.Inf
 	return resp
 }
 
+// EngineStats returns statistical information of storage layer on the given node
+// which is crucial for diagnosing issues related to disk usage,compaction efficiency,
+// read/write amplification and other storage engine metrics critical for database
+// performance.
+func (t *statusServer) EngineStats(
+	ctx context.Context, req *serverpb.EngineStatsRequest,
+) (*serverpb.EngineStatsResponse, error) {
+	ctx = t.AnnotateCtx(ctx)
+
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return t.sqlServer.tenantConnect.EngineStats(ctx, req)
+}
+
 func (s *systemStatusServer) EngineStats(
 	ctx context.Context, req *serverpb.EngineStatsRequest,
 ) (*serverpb.EngineStatsResponse, error) {
