@@ -152,8 +152,7 @@ func (b *Benchmark) run() error {
 	// be written.
 	for _, metric := range b.Metrics {
 		if status[metric.Name] != NoChange {
-			marker := strings.ToUpper(status[metric.Name].String())
-			err := os.WriteFile(path.Join(suite.artifactsDir(New), b.sanitizedName()+"."+marker), nil, 0644)
+			err := os.WriteFile(path.Join(suite.artifactsDir(New), b.markerName(status[metric.Name])), nil, 0644)
 			if err != nil {
 				return err
 			}
