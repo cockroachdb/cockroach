@@ -259,6 +259,10 @@ type TestingKnobs struct {
 	// indexes.
 	IndexBackfillProgressReportInterval time.Duration
 
+	// VectorIndexBackfillTxnError is called during vector index entry backfill to
+	// simulate a transaction error.
+	VectorIndexBackfillTxnError func() error
+
 	// ForceDiskSpill forces any processors/operators that can fall back to disk
 	// to fall back to disk immediately.
 	//
