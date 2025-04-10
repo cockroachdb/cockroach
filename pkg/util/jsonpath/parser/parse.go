@@ -16,12 +16,12 @@ import (
 )
 
 func init() {
-	tree.ValidateJSONPath = func(jsonpath string) (string, error) {
+	tree.ValidateJSONPath = func(jsonpath string) (*jsonpath.Jsonpath, error) {
 		jp, err := Parse(jsonpath)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return jp.AST.String(), nil
+		return jp.AST, nil
 	}
 }
 

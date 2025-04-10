@@ -9,8 +9,5 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/sql/sem/tree",
-        "//pkg/util/json",
-    ],
+    deps = ["//pkg/util/json"],
 )
