@@ -127,7 +127,9 @@ func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.raftTermLocked(i)
+	ls := r.mu.internalRaftGroup.LogStorage()
+	term, err := ls.Term(uint64(i))
+	return kvpb.RaftTerm(term), err
 }
 
 // LastIndex implements the raft.LogStorage interface.
