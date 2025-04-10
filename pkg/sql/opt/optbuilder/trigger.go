@@ -240,7 +240,7 @@ func (mb *mutationBuilder) buildTriggerFunctionArgs(
 		f.ConstructConstVal(tgWhen, types.String),        // TG_WHEN
 		f.ConstructConstVal(tgLevel, types.String),       // TG_LEVEL
 		f.ConstructConstVal(tgOp, types.String),          // TG_OP
-		f.ConstructConstVal(tgRelID, types.Oid),          // TG_RELIID
+		f.ConstructConstVal(tgRelID, types.Oid),          // TG_RELID
 		f.ConstructConstVal(tgTableName, types.String),   // TG_RELNAME
 		f.ConstructConstVal(tgTableName, types.String),   // TG_TABLE_NAME
 		f.ConstructConstVal(tgTableSchema, types.String), // TG_TABLE_SCHEMA
@@ -703,7 +703,7 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 					f.ConstructConstVal(tgWhen, types.String),  // TG_WHEN
 					f.ConstructConstVal(tgLevel, types.String), // TG_LEVEL
 					tgOp,                                    // TG_OP
-					f.ConstructConstVal(tgRelID, types.Oid), // TG_RELIID
+					f.ConstructConstVal(tgRelID, types.Oid), // TG_RELID
 					f.ConstructConstVal(tgTableName, types.String),   // TG_RELNAME
 					f.ConstructConstVal(tgTableName, types.String),   // TG_TABLE_NAME
 					f.ConstructConstVal(tgTableSchema, types.String), // TG_TABLE_SCHEMA
