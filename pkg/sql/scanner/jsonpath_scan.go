@@ -23,7 +23,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		return
 	}
 
-	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
+	// TODO(#144258): We still need to handle $.Xc where X is any digit and c is any character.
 	switch ch {
 	case '$':
 		// Root path ($)
@@ -129,7 +129,7 @@ func isIdentMiddle(ch int) bool {
 
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
-	// TODO(normanchenn): Allow any case for specific identifiers (strict, lax, to)
+	// TODO(#144255): Allow any case for specific identifiers (strict, lax, to)
 	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }

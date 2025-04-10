@@ -358,7 +358,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			return false, expr
 		}
 	case *tree.DJsonpath:
-		// TODO(normanchenn): We currently do not have an encoding for jsonpath
+		// TODO(#22513): We currently do not have an encoding for jsonpath
 		// thus do not support it within distsql
 		v.err = newQueryNotSupportedErrorf("jsonpath %s cannot be executed with distsql", t)
 		return false, expr
