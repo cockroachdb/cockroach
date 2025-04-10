@@ -1540,3 +1540,23 @@ statement ok
 EXPLAIN (DDL) CREATE SCHEMA sc1
 
 subtest end
+
+
+subtest multiple_primary_key
+
+statement ok
+CREATE TABLE multiple_pk_attempt(n INT PRIMARY KEY, j INT)
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement error pgcode 42611 multiple primary keys for table \"multiple_pk_attempt\" are not allowed
+ALTER TABLE multiple_pk_attempt ADD PRIMARY KEY (j);
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+subtest end

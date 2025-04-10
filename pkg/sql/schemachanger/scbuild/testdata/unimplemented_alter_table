@@ -33,10 +33,6 @@ ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD PRIMARY KEY (l);
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo PARTITION BY NOTHING
 ----
 
