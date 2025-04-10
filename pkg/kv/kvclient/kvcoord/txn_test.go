@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -2080,5 +2082,63 @@ func TestTxnBufferedWritesRollbackToSavepointAllBuffered(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, actualA.ValueBytes(), value1)
 	})
+}
 
+// TestTxnBufferedWriteRetriesCorrectly tests that a stateful retry of a
+// transaction with buffered writes enabled does not encounter errors because of
+// state in the txnWriteBuffer.
+func TestTxnBufferedWriteRetriesCorrectly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// This filter will force a transaction retry.
+	errKey := roachpb.Key("inject_err")
+	var shouldInject atomic.Bool
+	reqFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if !shouldInject.Load() {
+			return nil
+		}
+
+		if g, ok := ba.GetArg(kvpb.Get); ok && g.(*kvpb.GetRequest).Key.Equal(errKey) {
+			txn := ba.Txn.Clone()
+			pErr := kvpb.NewReadWithinUncertaintyIntervalError(
+				txn.ReadTimestamp,
+				hlc.ClockTimestamp{},
+				txn,
+				txn.WriteTimestamp.Add(0, 1),
+				hlc.ClockTimestamp{})
+			return kvpb.NewErrorWithTxn(pErr, txn)
+		}
+		return nil
+	}
+
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: reqFilter,
+	})
+	defer s.Stop()
+
+	rng, _ := randutil.NewTestRand()
+
+	testutils.RunTrueAndFalse(t, "buffered_writes", func(t *testing.T, bwEnabled bool) {
+		testPrefix := fmt.Sprintf("test-bw-%v-", bwEnabled)
+		shouldInject.Swap(true)
+
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			defer func() { _ = shouldInject.Swap(false) }()
+
+			txn.SetBufferedWritesEnabled(bwEnabled)
+			key := fmt.Sprintf("%s-%s", testPrefix, randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
+			if err := txn.Put(ctx, roachpb.Key(key), []byte("values")); err != nil {
+				return err
+			}
+			_, err := txn.Get(ctx, errKey)
+			return err
+		})
+		require.NoError(t, err)
+		startKey := roachpb.Key(testPrefix)
+		keys, err := s.DB.Scan(ctx, startKey, startKey.PrefixEnd(), 0)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(keys))
+	})
 }
