@@ -16,7 +16,6 @@ import (
 
 var (
 	errUnimplemented = unimplemented.NewWithIssue(22513, "unimplemented")
-	errInternal      = errors.New("internal error")
 )
 
 type jsonpathCtx struct {
