@@ -5,6 +5,20 @@
 # contents of the bundles (this is done elsewhere), so the check here is simply
 # that the bundle can be collected.
 
+# Insert a diagnostics request that won't be completed and never expires.
+statement ok
+INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, requested_at)
+    VALUES (1, false, 'SELECT _, _ FROM _', now());
+
+# Speed up the polling goroutine.
+#
+# In combination with the incomplete request this is used to ensure that the
+# polling goroutine gracefully handles the mixed-version state too. We'll also
+# sleep for 1s in each state to ensure the polling loop has at least one chance
+# to run on each node.
+statement ok
+SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '100ms';
+
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY);
 
@@ -23,14 +37,23 @@ EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
 upgrade 1
 
 statement ok
+SELECT pg_sleep(1);
+
+statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
 
 upgrade 0
 
 statement ok
+SELECT pg_sleep(1);
+
+statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
 
 upgrade 2
+
+statement ok
+SELECT pg_sleep(1);
 
 statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
