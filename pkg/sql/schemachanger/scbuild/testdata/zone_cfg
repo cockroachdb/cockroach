@@ -46,10 +46,6 @@ ALTER TABLE defaultdb.foo_index_zone_cfg ADD COLUMN j INT
 - [[IndexColumn:{DescID: 105, ColumnID: 7, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 7, indexId: 1, kind: STORED, ordinalInKind: 5, tableId: 105}
 
-unimplemented
-ALTER TABLE defaultdb.foo_index_zone_cfg ADD PRIMARY KEY (i, n)
-----
-
 build
 ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
 ----
