@@ -17,9 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
-/* Vector indexes are encoded as follows:
+/* Vector indexes are encoded as shown below.
 
-Metadata KV key:
+NOTE: Key formats always are always suffixed by a Family ID byte of 0. This is
+necessary to include so that the key can be parsed by the KV range split code.
+That code uses the family ID to check that it doesn't split column families for
+the same row across ranges.
+
+Metadata KV Key:
   Metadata keys always sort before vector keys, since Family ID 0 always
   sorts before Level, which is >= 1.
   ┌────────────┬──────────────┬────────────┬───────────┐
@@ -29,11 +34,11 @@ Metadata KV Value:
   ┌─────┬─────┬───────┬───────┬──────┬─────────┬────────┐
   │Level│State│Target1│Target2│Source|Timestamp│Centroid|
   └─────┴─────┴───────┴───────┴──────┴─────────┴────────┘
-Vector KV key (interior, non-leaf partition):
+Vector KV Key (interior, non-leaf partition):
   ┌────────────┬──────────────┬────────────┬─────┬──────────────────┬───────────┐
   │Index Prefix│Prefix Columns│PartitionKey│Level│Child PartitionKey│Family ID 0│
   └────────────┴──────────────┴────────────┴─────┴──────────────────┴───────────┘
-Vector KV key (leaf partition):
+Vector KV Key (leaf partition):
   ┌────────────┬──────────────┬────────────┬─────┬──────────┬───────────┐
   │Index Prefix│Prefix Columns│PartitionKey│Level│PrimaryKey│Family ID 0│
   └────────────┴──────────────┴────────────┴─────┴──────────┴───────────┘
@@ -147,18 +152,17 @@ func (vik *DecodedVectorKey) Encode(appendTo []byte) []byte {
 }
 
 // EncodeVectorValue takes a quantized vector entry and any composite key data
-// and returns the byte slice encoding the value side of the vector index entry.
-// This value will still need to be further encoded as Bytes in the
-// valueside.Value
+// and returns the byte slice encoding the value of the vector index entry. This
+// value will still need to be further encoded as Bytes in valueside.Value.
 func EncodeVectorValue(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
-	// The value side is encoded as a concatenation of the vector data and the
+	// The value is encoded as a concatenation of the vector data and the
 	// composite data.
 	appendTo = append(appendTo, vectorData...)
 	return append(appendTo, compositeData...)
 }
 
 // EncodedVectorValueLen returns the number of bytes needed to encode the value
-// side of a vector index entry.
+// of a vector index entry.
 func EncodedVectorValueLen(vectorData []byte, compositeData []byte) int {
 	return len(vectorData) + len(compositeData)
 }
