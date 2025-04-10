@@ -1817,3 +1817,36 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
+
+// TestTxnWriteBufferClearsBufferOnEpochBump tests that the txnWriteBuffer
+// clears its buffer whenever the epoch is bumped.
+func TestTxnWriteBufferClearsBufferOnEpochBump(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	// Blindly write to some keys that should all be buffered.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, "valA", txn.Sequence)
+	putB := putArgs(keyB, "valB", txn.Sequence)
+	delC := delArgs(keyC, txn.Sequence)
+	ba.Add(putA, putB, delC)
+
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, numCalled, mockSender.NumCalled())
+
+	// Buffer should be cleared after epoch bump
+	twb.epochBumpedLocked()
+	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
+	require.Equal(t, 0, int(twb.bufferSize))
+}
