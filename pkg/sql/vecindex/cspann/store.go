@@ -50,18 +50,6 @@ type PartitionToSearch struct {
 // Store implementations must be thread-safe. There should typically be only one
 // Store instance in the process for each index.
 type Store interface {
-	// BeginTransaction creates a new transaction that can be used to read and
-	// write the store in a transactional context.
-	BeginTransaction(ctx context.Context) (Txn, error)
-
-	// CommitTransaction commits a transaction previously started by a call to
-	// Begin.
-	CommitTransaction(ctx context.Context, txn Txn) error
-
-	// AbortTransaction aborts a transaction previously started by a call to
-	// Begin.
-	AbortTransaction(ctx context.Context, txn Txn) error
-
 	// RunTransaction invokes the given function in the scope of a new
 	// transaction. If the function returns an error, the transaction is aborted,
 	// else it is committed.
