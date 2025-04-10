@@ -1535,14 +1535,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, conflictIdx pb.Index, match bool,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, conflictIdx, match)
 	return r.electionTracker.TallyVotes()
 }
 
@@ -2202,7 +2202,39 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
+		voterLastEntryID := entryID{term: m.LogTerm, index: m.RejectHint}
+		// Currently, m.RejectHint and m.LogTerm is populated only if the Vote is
+		// non-reject.
+		match := false
+		// Compute a conflictIndex which is a best guess on where the voter's log
+		// matches the leader's.
+		conflictIndex, conflictTerm := r.raftLog.findConflictByTerm(voterLastEntryID.index, voterLastEntryID.term)
+		// If the conflictTerm is 0, it means we can't find a best guess entry
+		// based on the voter's log. Conservatively set conflictIndex to the last
+		// index and term.
+		if conflictTerm == 0 {
+			conflictIndex = r.raftLog.lastIndex()
+		}
+
+		// If the voter voted for us through MsgVoteResp, it is guaranteed that
+		// this voter won't vote again this term or accept any other MsgApp for
+		// this term.
+		// (See section 5.2 & 5.4 of the Raft paper.)
+		//
+		// So we can know the voter's log shall stay the same until/if this candidate
+		// wins election.
+		// If the voter's lastEntryID matches the leader's lastEntryID, we set match
+		// to true and set conflictIndex.
+		// If this candidate becomes the leader, it can directly set this follower
+		// to StateReplicate and begin sending MsgApp from the match entryID.
+		if myVoteRespType == pb.MsgVoteResp && !m.Reject && r.raftLog.matchTerm(voterLastEntryID) {
+			match = true
+			conflictIndex = voterLastEntryID.index
+		}
+
+		// Record Vote and hint information. Collected hint information will be used
+		// if this candidate wins the election and becomes leader.
+		gr, rj, res := r.poll(m.From, m.Type, !m.Reject, pb.Index(conflictIndex), match)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 		switch res {
 		case quorum.VoteWon:
