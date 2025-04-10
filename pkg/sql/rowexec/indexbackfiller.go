@@ -182,9 +182,9 @@ func (ib *indexBackfiller) constructIndexEntries(
 }
 
 func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
-	ctx context.Context, indexEntry *rowenc.IndexEntry,
+	ctx context.Context, tmpEntry *rowenc.IndexEntry, indexEntry *rowenc.IndexEntry,
 ) (bool, error) {
-	indexID, keyBytes, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
 	if err != nil {
 		return false, err
 	}
@@ -194,14 +194,35 @@ func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
 		return false, nil
 	}
 
+	// Initialize the tmpEntry. This will store the input entry that we are encoding
+	// so that we can overwrite the indexEntry we were given with the output
+	// encoding. This allows us to preserve the initial template indexEntry across
+	// transaction retries.
+	if tmpEntry.Key == nil {
+		tmpEntry.Key = make(roachpb.Key, len(indexEntry.Key))
+		tmpEntry.Value.RawBytes = make([]byte, len(indexEntry.Value.RawBytes))
+	}
+	tmpEntry.Key = append(tmpEntry.Key[:0], indexEntry.Key...)
+	tmpEntry.Value.RawBytes = append(tmpEntry.Value.RawBytes[:0], indexEntry.Value.RawBytes...)
+	tmpEntry.Family = indexEntry.Family
+
 	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		entry, err := vih.ReEncodeVector(ctx, txn.KV(), keyBytes, indexEntry)
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), *tmpEntry, indexEntry)
 		if err != nil {
 			return err
 		}
 
+		if ib.flowCtx.Cfg.TestingKnobs.RunDuringReencodeVectorIndexEntry != nil {
+			err = ib.flowCtx.Cfg.TestingKnobs.RunDuringReencodeVectorIndexEntry(txn.KV())
+			if err != nil {
+				return err
+			}
+		}
+
 		b := txn.KV().NewBatch()
-		b.CPut(entry.Key, &entry.Value, nil)
+		// If the backfill job was interrupted and restarted, we may redo work, so allow
+		// that we may see duplicate keys here.
+		b.CPutAllowingIfNotExists(entry.Key, &entry.Value, entry.Value.TagAndDataBytes())
 		return txn.KV().Run(ctx, b)
 	})
 	if err != nil {
@@ -289,6 +310,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
 
+		var vectorInputEntry rowenc.IndexEntry
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
 				// If there is at least one vector index being written, we need to check to see
@@ -298,7 +320,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 				// TODO(mw5h): batch up multiple index entries into a single batch.
 				// As is, we insert a single vector per batch, which is very slow.
 				if len(ib.VectorIndexes) > 0 {
-					isVectorIndex, err := ib.maybeReencodeVectorIndexEntry(ctx, &indexEntry)
+					isVectorIndex, err := ib.maybeReencodeVectorIndexEntry(ctx, &vectorInputEntry, &indexEntry)
 					if err != nil {
 						return err
 					} else if isVectorIndex {
