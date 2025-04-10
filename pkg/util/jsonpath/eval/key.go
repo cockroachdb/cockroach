@@ -26,19 +26,14 @@ func (ctx *jsonpathCtx) evalKey(
 			return nil, err
 		}
 		if val == nil {
-			if ctx.strict {
-				return nil, maybeThrowError(ctx,
-					pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key)))
-			}
-			return nil, nil
+			return nil, maybeThrowError(ctx,
+				pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key)))
 		}
 		return []json.JSON{val}, nil
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(key, jsonValue, false /* unwrapNext */)
-	} else if ctx.strict {
-		return nil, maybeThrowError(ctx, errKeyAccessOnNonObject)
 	}
-	return nil, nil
+	return nil, maybeThrowError(ctx, errKeyAccessOnNonObject)
 }
 
 func (ctx *jsonpathCtx) evalAnyKey(
@@ -48,8 +43,6 @@ func (ctx *jsonpathCtx) evalAnyKey(
 		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
-	} else if ctx.strict {
-		return nil, maybeThrowError(ctx, errWildcardOnNonObject)
 	}
-	return nil, nil
+	return nil, maybeThrowError(ctx, errWildcardOnNonObject)
 }

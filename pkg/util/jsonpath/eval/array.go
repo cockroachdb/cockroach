@@ -27,14 +27,14 @@ func (ctx *jsonpathCtx) evalArrayWildcard(jsonValue json.JSON) ([]json.JSON, err
 	} else if !ctx.strict {
 		return []json.JSON{jsonValue}, nil
 	}
-	return nil, maybeThrowError(ctx, errWildcardOnNonArray)
+	return nil, errWildcardOnNonArray
 }
 
 func (ctx *jsonpathCtx) evalArrayList(
 	arrayList jsonpath.ArrayList, jsonValue json.JSON,
 ) ([]json.JSON, error) {
 	if ctx.strict && jsonValue.Type() != json.ArrayJSONType {
-		return nil, maybeThrowError(ctx, errIndexOnNonArray)
+		return nil, errIndexOnNonArray
 	}
 
 	length := jsonValue.Len()
@@ -71,7 +71,7 @@ func (ctx *jsonpathCtx) evalArrayList(
 		}
 
 		if ctx.strict && (from < 0 || from > to || to >= length) {
-			return nil, maybeThrowError(ctx, errIndexOutOfBounds)
+			return nil, errIndexOutOfBounds
 		}
 		for i := max(from, 0); i <= min(to, length-1); i++ {
 			v, err := jsonArrayValueAtIndex(ctx, jsonValue, i)
