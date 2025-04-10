@@ -606,23 +606,25 @@ func (tx *Txn) createRootPartition(
 	}
 	encoded := vecencoding.EncodeMetadataValue(metadata)
 
-	// Use CPutAllowingIfNotExists in order to handle the case where the same
-	// transaction inserts multiple vectors (e.g. multiple VALUES rows). In that
-	// case, the first row will trigger creation of the metadata record. However,
-	// subsequent inserts will not be able to "see" this record, since they will
-	// read at a lower sequence number than the metadata record was written.
-	// However, CPutAllowingIfNotExists will read at the higher sequence number
-	// and see that the record was already created.
+	// Use CPut in order to handle the case where the same transaction inserts
+	// multiple vectors (e.g. multiple VALUES rows). In that case, the first row
+	// will trigger creation of the metadata record. However, subsequent inserts
+	// will not be able to "see" this record, since they will read at a lower
+	// sequence number than the metadata record was written. However, CPut will
+	// read at the higher sequence number and see that the record was already
+	// created.
 	//
 	// On the other hand, if a different transaction wrote the record, it will
 	// have a higher timestamp, and that will trigger a WriteTooOld error.
 	// Transactions which lose that race need to be refreshed.
-	var roachval roachpb.Value
-	roachval.SetBytes(encoded)
-	b.CPutAllowingIfNotExists(metadataKey, &roachval, roachval.TagAndDataBytes())
+	b.CPut(metadataKey, encoded, nil /* expValue */)
 	if err := tx.kv.Run(ctx, b); err != nil {
-		// Lost the race to a different transaction.
-		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
+		// Lost the race to a different transaction, so return whatever the
+		// current metadata is.
+		metadata, err = extractMetadataFromError(err)
+		if err != nil {
+			return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
+		}
 	}
 	return metadata, nil
 }

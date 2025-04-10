@@ -305,3 +305,29 @@ func (s *Store) TryClearPartition(
 ) (count int, err error) {
 	return -1, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
 }
+
+// extractMetadataFromError returns the partition metadata extracted from the
+// input error, if it's a kvb.ConditionFailedError. Otherwise, it returns the
+// input error.
+func extractMetadataFromError(input error) (metadata cspann.PartitionMetadata, err error) {
+	var errConditionFailed *kvpb.ConditionFailedError
+	if errors.As(input, &errConditionFailed) {
+		if errConditionFailed.ActualValue == nil {
+			// Metadata record does not exist.
+			return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
+		}
+
+		encodedMetadata, err := errConditionFailed.ActualValue.GetBytes()
+		if err != nil {
+			return cspann.PartitionMetadata{}, errors.NewAssertionErrorWithWrappedErrf(err,
+				"partition metadata value should always be bytes")
+		}
+		actualMetadata, err := vecencoding.DecodeMetadataValue(encodedMetadata)
+		if err != nil {
+			return cspann.PartitionMetadata{}, errors.NewAssertionErrorWithWrappedErrf(err,
+				"cannot decode partition metadata: %v", encodedMetadata)
+		}
+		return actualMetadata, nil
+	}
+	return cspann.PartitionMetadata{}, input
+}

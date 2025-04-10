@@ -7,6 +7,7 @@ package vecstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -271,4 +274,37 @@ func TestQuantizeAndEncode(t *testing.T) {
 	require.NoError(t, err)
 	vs = codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
 	require.Equal(t, 1, vs.GetCount())
+}
+
+func TestExtractMetadataFromError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("not a ConditionFailedError", func(t *testing.T) {
+		err := errors.New("not a ConditionFailedError")
+		metadata, err2 := extractMetadataFromError(err)
+		require.Equal(t, err, err2)
+		require.Equal(t, cspann.PartitionMetadata{}, metadata)
+	})
+
+	t.Run("ConditionFailedError.Actual is nil", func(t *testing.T) {
+		err := &kvpb.ConditionFailedError{}
+		metadata, err2 := extractMetadataFromError(err)
+		require.Equal(t, cspann.ErrPartitionNotFound, err2)
+		require.Equal(t, cspann.PartitionMetadata{}, metadata)
+	})
+	t.Run("ConditionFailedError.Actual is not nil", func(t *testing.T) {
+		metadata1 := cspann.PartitionMetadata{
+			Level:        cspann.SecondLevel,
+			Centroid:     vector.T{4, 3},
+			StateDetails: cspann.MakeDrainingForSplitDetails(10, 20),
+		}
+		var encodedMetadata roachpb.Value
+		encodedMetadata.SetBytes(vecencoding.EncodeMetadataValue(metadata1))
+		err := &kvpb.ConditionFailedError{ActualValue: &encodedMetadata}
+		metadata2, err2 := extractMetadataFromError(err)
+		require.NoError(t, err2)
+		require.True(t, metadata1.Equal(&metadata2),
+			"metadata does not match\n%+v\n\n%+v", metadata1, metadata2)
+	})
 }
