@@ -6,7 +6,7 @@ echo
 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 1000025.1
 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
 0,0 /Local/RangeID/1/u/RangeLastReplicaGCTimestamp (0x01698975726c727400): 0.000000123,0
 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0,0
@@ -15,7 +15,7 @@ echo
 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): <empty>
 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 1000025.1
 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
 0,0 /Local/RangeID/2/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0.000000123,0
 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0,0
@@ -24,7 +24,7 @@ echo
 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): <empty>
 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 1000025.1
 0,0 /Local/RangeID/3/u/RaftHardState (0x01698b757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/3/u/RaftReplicaID (0x01698b757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/3/u/RaftReplicaID (0x01698b757266747200): replica_id:1 
 0,0 /Local/RangeID/3/u/RaftTruncatedState (0x01698b757266747400): index:10 term:5 
 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698b75726c727400): 0.000000123,0
 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0,0
@@ -33,7 +33,7 @@ echo
 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): <empty>
 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): 1000025.1
 0,0 /Local/RangeID/4/u/RaftHardState (0x01698c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/4/u/RaftReplicaID (0x01698c757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/4/u/RaftReplicaID (0x01698c757266747200): replica_id:1 
 0,0 /Local/RangeID/4/u/RaftTruncatedState (0x01698c757266747400): index:10 term:5 
 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0.000000123,0
 0,0 /Local/RangeID/5/r/RangeGCThreshold (0x01698d726c67632d00): 0,0
@@ -42,7 +42,7 @@ echo
 0,0 /Local/RangeID/5/r/RangeLease (0x01698d72726c6c2d00): <empty>
 0,0 /Local/RangeID/5/r/RangeVersion (0x01698d727276657200): 1000025.1
 0,0 /Local/RangeID/5/u/RaftHardState (0x01698d757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/5/u/RaftReplicaID (0x01698d757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/5/u/RaftReplicaID (0x01698d757266747200): replica_id:1 
 0,0 /Local/RangeID/5/u/RaftTruncatedState (0x01698d757266747400): index:10 term:5 
 0,0 /Local/RangeID/5/u/RangeLastReplicaGCTimestamp (0x01698d75726c727400): 0.000000123,0
 0,0 /Local/RangeID/6/r/RangeGCThreshold (0x01698e726c67632d00): 0,0
@@ -51,7 +51,7 @@ echo
 0,0 /Local/RangeID/6/r/RangeLease (0x01698e72726c6c2d00): <empty>
 0,0 /Local/RangeID/6/r/RangeVersion (0x01698e727276657200): 1000025.1
 0,0 /Local/RangeID/6/u/RaftHardState (0x01698e757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/6/u/RaftReplicaID (0x01698e757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/6/u/RaftReplicaID (0x01698e757266747200): replica_id:1 
 0,0 /Local/RangeID/6/u/RaftTruncatedState (0x01698e757266747400): index:10 term:5 
 0,0 /Local/RangeID/6/u/RangeLastReplicaGCTimestamp (0x01698e75726c727400): 0.000000123,0
 0,0 /Local/RangeID/7/r/RangeGCThreshold (0x01698f726c67632d00): 0,0
@@ -60,7 +60,7 @@ echo
 0,0 /Local/RangeID/7/r/RangeLease (0x01698f72726c6c2d00): <empty>
 0,0 /Local/RangeID/7/r/RangeVersion (0x01698f727276657200): 1000025.1
 0,0 /Local/RangeID/7/u/RaftHardState (0x01698f757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/7/u/RaftReplicaID (0x01698f757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/7/u/RaftReplicaID (0x01698f757266747200): replica_id:1 
 0,0 /Local/RangeID/7/u/RaftTruncatedState (0x01698f757266747400): index:10 term:5 
 0,0 /Local/RangeID/7/u/RangeLastReplicaGCTimestamp (0x01698f75726c727400): 0.000000123,0
 0,0 /Local/RangeID/8/r/RangeGCThreshold (0x016990726c67632d00): 0,0
@@ -69,7 +69,7 @@ echo
 0,0 /Local/RangeID/8/r/RangeLease (0x01699072726c6c2d00): <empty>
 0,0 /Local/RangeID/8/r/RangeVersion (0x016990727276657200): 1000025.1
 0,0 /Local/RangeID/8/u/RaftHardState (0x016990757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/8/u/RaftReplicaID (0x016990757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/8/u/RaftReplicaID (0x016990757266747200): replica_id:1 
 0,0 /Local/RangeID/8/u/RaftTruncatedState (0x016990757266747400): index:10 term:5 
 0,0 /Local/RangeID/8/u/RangeLastReplicaGCTimestamp (0x01699075726c727400): 0.000000123,0
 0,0 /Local/RangeID/9/r/RangeGCThreshold (0x016991726c67632d00): 0,0
@@ -78,7 +78,7 @@ echo
 0,0 /Local/RangeID/9/r/RangeLease (0x01699172726c6c2d00): <empty>
 0,0 /Local/RangeID/9/r/RangeVersion (0x016991727276657200): 1000025.1
 0,0 /Local/RangeID/9/u/RaftHardState (0x016991757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/9/u/RaftReplicaID (0x016991757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/9/u/RaftReplicaID (0x016991757266747200): replica_id:1 
 0,0 /Local/RangeID/9/u/RaftTruncatedState (0x016991757266747400): index:10 term:5 
 0,0 /Local/RangeID/9/u/RangeLastReplicaGCTimestamp (0x01699175726c727400): 0.000000123,0
 0,0 /Local/RangeID/10/r/RangeGCThreshold (0x016992726c67632d00): 0,0
@@ -87,7 +87,7 @@ echo
 0,0 /Local/RangeID/10/r/RangeLease (0x01699272726c6c2d00): <empty>
 0,0 /Local/RangeID/10/r/RangeVersion (0x016992727276657200): 1000025.1
 0,0 /Local/RangeID/10/u/RaftHardState (0x016992757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/10/u/RaftReplicaID (0x016992757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/10/u/RaftReplicaID (0x016992757266747200): replica_id:1 
 0,0 /Local/RangeID/10/u/RaftTruncatedState (0x016992757266747400): index:10 term:5 
 0,0 /Local/RangeID/10/u/RangeLastReplicaGCTimestamp (0x01699275726c727400): 0.000000123,0
 0,0 /Local/RangeID/11/r/RangeGCThreshold (0x016993726c67632d00): 0,0
@@ -96,7 +96,7 @@ echo
 0,0 /Local/RangeID/11/r/RangeLease (0x01699372726c6c2d00): <empty>
 0,0 /Local/RangeID/11/r/RangeVersion (0x016993727276657200): 1000025.1
 0,0 /Local/RangeID/11/u/RaftHardState (0x016993757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/11/u/RaftReplicaID (0x016993757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/11/u/RaftReplicaID (0x016993757266747200): replica_id:1 
 0,0 /Local/RangeID/11/u/RaftTruncatedState (0x016993757266747400): index:10 term:5 
 0,0 /Local/RangeID/11/u/RangeLastReplicaGCTimestamp (0x01699375726c727400): 0.000000123,0
 0,0 /Local/RangeID/12/r/RangeGCThreshold (0x016994726c67632d00): 0,0
@@ -105,7 +105,7 @@ echo
 0,0 /Local/RangeID/12/r/RangeLease (0x01699472726c6c2d00): <empty>
 0,0 /Local/RangeID/12/r/RangeVersion (0x016994727276657200): 1000025.1
 0,0 /Local/RangeID/12/u/RaftHardState (0x016994757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/12/u/RaftReplicaID (0x016994757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/12/u/RaftReplicaID (0x016994757266747200): replica_id:1 
 0,0 /Local/RangeID/12/u/RaftTruncatedState (0x016994757266747400): index:10 term:5 
 0,0 /Local/RangeID/12/u/RangeLastReplicaGCTimestamp (0x01699475726c727400): 0.000000123,0
 0,0 /Local/RangeID/13/r/RangeGCThreshold (0x016995726c67632d00): 0,0
@@ -114,7 +114,7 @@ echo
 0,0 /Local/RangeID/13/r/RangeLease (0x01699572726c6c2d00): <empty>
 0,0 /Local/RangeID/13/r/RangeVersion (0x016995727276657200): 1000025.1
 0,0 /Local/RangeID/13/u/RaftHardState (0x016995757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/13/u/RaftReplicaID (0x016995757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/13/u/RaftReplicaID (0x016995757266747200): replica_id:1 
 0,0 /Local/RangeID/13/u/RaftTruncatedState (0x016995757266747400): index:10 term:5 
 0,0 /Local/RangeID/13/u/RangeLastReplicaGCTimestamp (0x01699575726c727400): 0.000000123,0
 0,0 /Local/RangeID/14/r/RangeGCThreshold (0x016996726c67632d00): 0,0
@@ -123,7 +123,7 @@ echo
 0,0 /Local/RangeID/14/r/RangeLease (0x01699672726c6c2d00): <empty>
 0,0 /Local/RangeID/14/r/RangeVersion (0x016996727276657200): 1000025.1
 0,0 /Local/RangeID/14/u/RaftHardState (0x016996757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/14/u/RaftReplicaID (0x016996757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/14/u/RaftReplicaID (0x016996757266747200): replica_id:1 
 0,0 /Local/RangeID/14/u/RaftTruncatedState (0x016996757266747400): index:10 term:5 
 0,0 /Local/RangeID/14/u/RangeLastReplicaGCTimestamp (0x01699675726c727400): 0.000000123,0
 0,0 /Local/RangeID/15/r/RangeGCThreshold (0x016997726c67632d00): 0,0
@@ -132,7 +132,7 @@ echo
 0,0 /Local/RangeID/15/r/RangeLease (0x01699772726c6c2d00): <empty>
 0,0 /Local/RangeID/15/r/RangeVersion (0x016997727276657200): 1000025.1
 0,0 /Local/RangeID/15/u/RaftHardState (0x016997757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/15/u/RaftReplicaID (0x016997757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/15/u/RaftReplicaID (0x016997757266747200): replica_id:1 
 0,0 /Local/RangeID/15/u/RaftTruncatedState (0x016997757266747400): index:10 term:5 
 0,0 /Local/RangeID/15/u/RangeLastReplicaGCTimestamp (0x01699775726c727400): 0.000000123,0
 0,0 /Local/RangeID/16/r/RangeGCThreshold (0x016998726c67632d00): 0,0
@@ -141,7 +141,7 @@ echo
 0,0 /Local/RangeID/16/r/RangeLease (0x01699872726c6c2d00): <empty>
 0,0 /Local/RangeID/16/r/RangeVersion (0x016998727276657200): 1000025.1
 0,0 /Local/RangeID/16/u/RaftHardState (0x016998757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/16/u/RaftReplicaID (0x016998757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/16/u/RaftReplicaID (0x016998757266747200): replica_id:1 
 0,0 /Local/RangeID/16/u/RaftTruncatedState (0x016998757266747400): index:10 term:5 
 0,0 /Local/RangeID/16/u/RangeLastReplicaGCTimestamp (0x01699875726c727400): 0.000000123,0
 0,0 /Local/RangeID/17/r/RangeGCThreshold (0x016999726c67632d00): 0,0
@@ -150,7 +150,7 @@ echo
 0,0 /Local/RangeID/17/r/RangeLease (0x01699972726c6c2d00): <empty>
 0,0 /Local/RangeID/17/r/RangeVersion (0x016999727276657200): 1000025.1
 0,0 /Local/RangeID/17/u/RaftHardState (0x016999757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/17/u/RaftReplicaID (0x016999757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/17/u/RaftReplicaID (0x016999757266747200): replica_id:1 
 0,0 /Local/RangeID/17/u/RaftTruncatedState (0x016999757266747400): index:10 term:5 
 0,0 /Local/RangeID/17/u/RangeLastReplicaGCTimestamp (0x01699975726c727400): 0.000000123,0
 0,0 /Local/RangeID/18/r/RangeGCThreshold (0x01699a726c67632d00): 0,0
@@ -159,7 +159,7 @@ echo
 0,0 /Local/RangeID/18/r/RangeLease (0x01699a72726c6c2d00): <empty>
 0,0 /Local/RangeID/18/r/RangeVersion (0x01699a727276657200): 1000025.1
 0,0 /Local/RangeID/18/u/RaftHardState (0x01699a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/18/u/RaftReplicaID (0x01699a757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/18/u/RaftReplicaID (0x01699a757266747200): replica_id:1 
 0,0 /Local/RangeID/18/u/RaftTruncatedState (0x01699a757266747400): index:10 term:5 
 0,0 /Local/RangeID/18/u/RangeLastReplicaGCTimestamp (0x01699a75726c727400): 0.000000123,0
 0,0 /Local/RangeID/19/r/RangeGCThreshold (0x01699b726c67632d00): 0,0
@@ -168,7 +168,7 @@ echo
 0,0 /Local/RangeID/19/r/RangeLease (0x01699b72726c6c2d00): <empty>
 0,0 /Local/RangeID/19/r/RangeVersion (0x01699b727276657200): 1000025.1
 0,0 /Local/RangeID/19/u/RaftHardState (0x01699b757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/19/u/RaftReplicaID (0x01699b757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/19/u/RaftReplicaID (0x01699b757266747200): replica_id:1 
 0,0 /Local/RangeID/19/u/RaftTruncatedState (0x01699b757266747400): index:10 term:5 
 0,0 /Local/RangeID/19/u/RangeLastReplicaGCTimestamp (0x01699b75726c727400): 0.000000123,0
 0,0 /Local/RangeID/20/r/RangeGCThreshold (0x01699c726c67632d00): 0,0
@@ -177,7 +177,7 @@ echo
 0,0 /Local/RangeID/20/r/RangeLease (0x01699c72726c6c2d00): <empty>
 0,0 /Local/RangeID/20/r/RangeVersion (0x01699c727276657200): 1000025.1
 0,0 /Local/RangeID/20/u/RaftHardState (0x01699c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/20/u/RaftReplicaID (0x01699c757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/20/u/RaftReplicaID (0x01699c757266747200): replica_id:1 
 0,0 /Local/RangeID/20/u/RaftTruncatedState (0x01699c757266747400): index:10 term:5 
 0,0 /Local/RangeID/20/u/RangeLastReplicaGCTimestamp (0x01699c75726c727400): 0.000000123,0
 0,0 /Local/RangeID/21/r/RangeGCThreshold (0x01699d726c67632d00): 0,0
@@ -186,7 +186,7 @@ echo
 0,0 /Local/RangeID/21/r/RangeLease (0x01699d72726c6c2d00): <empty>
 0,0 /Local/RangeID/21/r/RangeVersion (0x01699d727276657200): 1000025.1
 0,0 /Local/RangeID/21/u/RaftHardState (0x01699d757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/21/u/RaftReplicaID (0x01699d757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/21/u/RaftReplicaID (0x01699d757266747200): replica_id:1 
 0,0 /Local/RangeID/21/u/RaftTruncatedState (0x01699d757266747400): index:10 term:5 
 0,0 /Local/RangeID/21/u/RangeLastReplicaGCTimestamp (0x01699d75726c727400): 0.000000123,0
 0,0 /Local/RangeID/22/r/RangeGCThreshold (0x01699e726c67632d00): 0,0
@@ -195,7 +195,7 @@ echo
 0,0 /Local/RangeID/22/r/RangeLease (0x01699e72726c6c2d00): <empty>
 0,0 /Local/RangeID/22/r/RangeVersion (0x01699e727276657200): 1000025.1
 0,0 /Local/RangeID/22/u/RaftHardState (0x01699e757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/22/u/RaftReplicaID (0x01699e757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/22/u/RaftReplicaID (0x01699e757266747200): replica_id:1 
 0,0 /Local/RangeID/22/u/RaftTruncatedState (0x01699e757266747400): index:10 term:5 
 0,0 /Local/RangeID/22/u/RangeLastReplicaGCTimestamp (0x01699e75726c727400): 0.000000123,0
 0,0 /Local/RangeID/23/r/RangeGCThreshold (0x01699f726c67632d00): 0,0
@@ -204,7 +204,7 @@ echo
 0,0 /Local/RangeID/23/r/RangeLease (0x01699f72726c6c2d00): <empty>
 0,0 /Local/RangeID/23/r/RangeVersion (0x01699f727276657200): 1000025.1
 0,0 /Local/RangeID/23/u/RaftHardState (0x01699f757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/23/u/RaftReplicaID (0x01699f757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/23/u/RaftReplicaID (0x01699f757266747200): replica_id:1 
 0,0 /Local/RangeID/23/u/RaftTruncatedState (0x01699f757266747400): index:10 term:5 
 0,0 /Local/RangeID/23/u/RangeLastReplicaGCTimestamp (0x01699f75726c727400): 0.000000123,0
 0,0 /Local/RangeID/24/r/RangeGCThreshold (0x0169a0726c67632d00): 0,0
@@ -213,7 +213,7 @@ echo
 0,0 /Local/RangeID/24/r/RangeLease (0x0169a072726c6c2d00): <empty>
 0,0 /Local/RangeID/24/r/RangeVersion (0x0169a0727276657200): 1000025.1
 0,0 /Local/RangeID/24/u/RaftHardState (0x0169a0757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/24/u/RaftReplicaID (0x0169a0757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/24/u/RaftReplicaID (0x0169a0757266747200): replica_id:1 
 0,0 /Local/RangeID/24/u/RaftTruncatedState (0x0169a0757266747400): index:10 term:5 
 0,0 /Local/RangeID/24/u/RangeLastReplicaGCTimestamp (0x0169a075726c727400): 0.000000123,0
 0,0 /Local/RangeID/25/r/RangeGCThreshold (0x0169a1726c67632d00): 0,0
@@ -222,7 +222,7 @@ echo
 0,0 /Local/RangeID/25/r/RangeLease (0x0169a172726c6c2d00): <empty>
 0,0 /Local/RangeID/25/r/RangeVersion (0x0169a1727276657200): 1000025.1
 0,0 /Local/RangeID/25/u/RaftHardState (0x0169a1757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/25/u/RaftReplicaID (0x0169a1757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/25/u/RaftReplicaID (0x0169a1757266747200): replica_id:1 
 0,0 /Local/RangeID/25/u/RaftTruncatedState (0x0169a1757266747400): index:10 term:5 
 0,0 /Local/RangeID/25/u/RangeLastReplicaGCTimestamp (0x0169a175726c727400): 0.000000123,0
 0,0 /Local/RangeID/26/r/RangeGCThreshold (0x0169a2726c67632d00): 0,0
@@ -231,7 +231,7 @@ echo
 0,0 /Local/RangeID/26/r/RangeLease (0x0169a272726c6c2d00): <empty>
 0,0 /Local/RangeID/26/r/RangeVersion (0x0169a2727276657200): 1000025.1
 0,0 /Local/RangeID/26/u/RaftHardState (0x0169a2757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/26/u/RaftReplicaID (0x0169a2757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/26/u/RaftReplicaID (0x0169a2757266747200): replica_id:1 
 0,0 /Local/RangeID/26/u/RaftTruncatedState (0x0169a2757266747400): index:10 term:5 
 0,0 /Local/RangeID/26/u/RangeLastReplicaGCTimestamp (0x0169a275726c727400): 0.000000123,0
 0,0 /Local/RangeID/27/r/RangeGCThreshold (0x0169a3726c67632d00): 0,0
@@ -240,7 +240,7 @@ echo
 0,0 /Local/RangeID/27/r/RangeLease (0x0169a372726c6c2d00): <empty>
 0,0 /Local/RangeID/27/r/RangeVersion (0x0169a3727276657200): 1000025.1
 0,0 /Local/RangeID/27/u/RaftHardState (0x0169a3757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/27/u/RaftReplicaID (0x0169a3757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/27/u/RaftReplicaID (0x0169a3757266747200): replica_id:1 
 0,0 /Local/RangeID/27/u/RaftTruncatedState (0x0169a3757266747400): index:10 term:5 
 0,0 /Local/RangeID/27/u/RangeLastReplicaGCTimestamp (0x0169a375726c727400): 0.000000123,0
 0,0 /Local/RangeID/28/r/RangeGCThreshold (0x0169a4726c67632d00): 0,0
@@ -249,7 +249,7 @@ echo
 0,0 /Local/RangeID/28/r/RangeLease (0x0169a472726c6c2d00): <empty>
 0,0 /Local/RangeID/28/r/RangeVersion (0x0169a4727276657200): 1000025.1
 0,0 /Local/RangeID/28/u/RaftHardState (0x0169a4757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/28/u/RaftReplicaID (0x0169a4757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/28/u/RaftReplicaID (0x0169a4757266747200): replica_id:1 
 0,0 /Local/RangeID/28/u/RaftTruncatedState (0x0169a4757266747400): index:10 term:5 
 0,0 /Local/RangeID/28/u/RangeLastReplicaGCTimestamp (0x0169a475726c727400): 0.000000123,0
 0,0 /Local/RangeID/29/r/RangeGCThreshold (0x0169a5726c67632d00): 0,0
@@ -258,7 +258,7 @@ echo
 0,0 /Local/RangeID/29/r/RangeLease (0x0169a572726c6c2d00): <empty>
 0,0 /Local/RangeID/29/r/RangeVersion (0x0169a5727276657200): 1000025.1
 0,0 /Local/RangeID/29/u/RaftHardState (0x0169a5757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/29/u/RaftReplicaID (0x0169a5757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/29/u/RaftReplicaID (0x0169a5757266747200): replica_id:1 
 0,0 /Local/RangeID/29/u/RaftTruncatedState (0x0169a5757266747400): index:10 term:5 
 0,0 /Local/RangeID/29/u/RangeLastReplicaGCTimestamp (0x0169a575726c727400): 0.000000123,0
 0,0 /Local/RangeID/30/r/RangeGCThreshold (0x0169a6726c67632d00): 0,0
@@ -267,7 +267,7 @@ echo
 0,0 /Local/RangeID/30/r/RangeLease (0x0169a672726c6c2d00): <empty>
 0,0 /Local/RangeID/30/r/RangeVersion (0x0169a6727276657200): 1000025.1
 0,0 /Local/RangeID/30/u/RaftHardState (0x0169a6757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/30/u/RaftReplicaID (0x0169a6757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/30/u/RaftReplicaID (0x0169a6757266747200): replica_id:1 
 0,0 /Local/RangeID/30/u/RaftTruncatedState (0x0169a6757266747400): index:10 term:5 
 0,0 /Local/RangeID/30/u/RangeLastReplicaGCTimestamp (0x0169a675726c727400): 0.000000123,0
 0,0 /Local/RangeID/31/r/RangeGCThreshold (0x0169a7726c67632d00): 0,0
@@ -276,7 +276,7 @@ echo
 0,0 /Local/RangeID/31/r/RangeLease (0x0169a772726c6c2d00): <empty>
 0,0 /Local/RangeID/31/r/RangeVersion (0x0169a7727276657200): 1000025.1
 0,0 /Local/RangeID/31/u/RaftHardState (0x0169a7757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/31/u/RaftReplicaID (0x0169a7757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/31/u/RaftReplicaID (0x0169a7757266747200): replica_id:1 
 0,0 /Local/RangeID/31/u/RaftTruncatedState (0x0169a7757266747400): index:10 term:5 
 0,0 /Local/RangeID/31/u/RangeLastReplicaGCTimestamp (0x0169a775726c727400): 0.000000123,0
 0,0 /Local/RangeID/32/r/RangeGCThreshold (0x0169a8726c67632d00): 0,0
@@ -285,7 +285,7 @@ echo
 0,0 /Local/RangeID/32/r/RangeLease (0x0169a872726c6c2d00): <empty>
 0,0 /Local/RangeID/32/r/RangeVersion (0x0169a8727276657200): 1000025.1
 0,0 /Local/RangeID/32/u/RaftHardState (0x0169a8757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/32/u/RaftReplicaID (0x0169a8757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/32/u/RaftReplicaID (0x0169a8757266747200): replica_id:1 
 0,0 /Local/RangeID/32/u/RaftTruncatedState (0x0169a8757266747400): index:10 term:5 
 0,0 /Local/RangeID/32/u/RangeLastReplicaGCTimestamp (0x0169a875726c727400): 0.000000123,0
 0,0 /Local/RangeID/33/r/RangeGCThreshold (0x0169a9726c67632d00): 0,0
@@ -294,7 +294,7 @@ echo
 0,0 /Local/RangeID/33/r/RangeLease (0x0169a972726c6c2d00): <empty>
 0,0 /Local/RangeID/33/r/RangeVersion (0x0169a9727276657200): 1000025.1
 0,0 /Local/RangeID/33/u/RaftHardState (0x0169a9757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/33/u/RaftReplicaID (0x0169a9757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/33/u/RaftReplicaID (0x0169a9757266747200): replica_id:1 
 0,0 /Local/RangeID/33/u/RaftTruncatedState (0x0169a9757266747400): index:10 term:5 
 0,0 /Local/RangeID/33/u/RangeLastReplicaGCTimestamp (0x0169a975726c727400): 0.000000123,0
 0,0 /Local/RangeID/34/r/RangeGCThreshold (0x0169aa726c67632d00): 0,0
@@ -303,7 +303,7 @@ echo
 0,0 /Local/RangeID/34/r/RangeLease (0x0169aa72726c6c2d00): <empty>
 0,0 /Local/RangeID/34/r/RangeVersion (0x0169aa727276657200): 1000025.1
 0,0 /Local/RangeID/34/u/RaftHardState (0x0169aa757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/34/u/RaftReplicaID (0x0169aa757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/34/u/RaftReplicaID (0x0169aa757266747200): replica_id:1 
 0,0 /Local/RangeID/34/u/RaftTruncatedState (0x0169aa757266747400): index:10 term:5 
 0,0 /Local/RangeID/34/u/RangeLastReplicaGCTimestamp (0x0169aa75726c727400): 0.000000123,0
 0,0 /Local/RangeID/35/r/RangeGCThreshold (0x0169ab726c67632d00): 0,0
@@ -312,7 +312,7 @@ echo
 0,0 /Local/RangeID/35/r/RangeLease (0x0169ab72726c6c2d00): <empty>
 0,0 /Local/RangeID/35/r/RangeVersion (0x0169ab727276657200): 1000025.1
 0,0 /Local/RangeID/35/u/RaftHardState (0x0169ab757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/35/u/RaftReplicaID (0x0169ab757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/35/u/RaftReplicaID (0x0169ab757266747200): replica_id:1 
 0,0 /Local/RangeID/35/u/RaftTruncatedState (0x0169ab757266747400): index:10 term:5 
 0,0 /Local/RangeID/35/u/RangeLastReplicaGCTimestamp (0x0169ab75726c727400): 0.000000123,0
 0,0 /Local/RangeID/36/r/RangeGCThreshold (0x0169ac726c67632d00): 0,0
@@ -321,7 +321,7 @@ echo
 0,0 /Local/RangeID/36/r/RangeLease (0x0169ac72726c6c2d00): <empty>
 0,0 /Local/RangeID/36/r/RangeVersion (0x0169ac727276657200): 1000025.1
 0,0 /Local/RangeID/36/u/RaftHardState (0x0169ac757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/36/u/RaftReplicaID (0x0169ac757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/36/u/RaftReplicaID (0x0169ac757266747200): replica_id:1 
 0,0 /Local/RangeID/36/u/RaftTruncatedState (0x0169ac757266747400): index:10 term:5 
 0,0 /Local/RangeID/36/u/RangeLastReplicaGCTimestamp (0x0169ac75726c727400): 0.000000123,0
 0,0 /Local/RangeID/37/r/RangeGCThreshold (0x0169ad726c67632d00): 0,0
@@ -330,7 +330,7 @@ echo
 0,0 /Local/RangeID/37/r/RangeLease (0x0169ad72726c6c2d00): <empty>
 0,0 /Local/RangeID/37/r/RangeVersion (0x0169ad727276657200): 1000025.1
 0,0 /Local/RangeID/37/u/RaftHardState (0x0169ad757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/37/u/RaftReplicaID (0x0169ad757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/37/u/RaftReplicaID (0x0169ad757266747200): replica_id:1 
 0,0 /Local/RangeID/37/u/RaftTruncatedState (0x0169ad757266747400): index:10 term:5 
 0,0 /Local/RangeID/37/u/RangeLastReplicaGCTimestamp (0x0169ad75726c727400): 0.000000123,0
 0,0 /Local/RangeID/38/r/RangeGCThreshold (0x0169ae726c67632d00): 0,0
@@ -339,7 +339,7 @@ echo
 0,0 /Local/RangeID/38/r/RangeLease (0x0169ae72726c6c2d00): <empty>
 0,0 /Local/RangeID/38/r/RangeVersion (0x0169ae727276657200): 1000025.1
 0,0 /Local/RangeID/38/u/RaftHardState (0x0169ae757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/38/u/RaftReplicaID (0x0169ae757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/38/u/RaftReplicaID (0x0169ae757266747200): replica_id:1 
 0,0 /Local/RangeID/38/u/RaftTruncatedState (0x0169ae757266747400): index:10 term:5 
 0,0 /Local/RangeID/38/u/RangeLastReplicaGCTimestamp (0x0169ae75726c727400): 0.000000123,0
 0,0 /Local/RangeID/39/r/RangeGCThreshold (0x0169af726c67632d00): 0,0
@@ -348,7 +348,7 @@ echo
 0,0 /Local/RangeID/39/r/RangeLease (0x0169af72726c6c2d00): <empty>
 0,0 /Local/RangeID/39/r/RangeVersion (0x0169af727276657200): 1000025.1
 0,0 /Local/RangeID/39/u/RaftHardState (0x0169af757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/39/u/RaftReplicaID (0x0169af757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/39/u/RaftReplicaID (0x0169af757266747200): replica_id:1 
 0,0 /Local/RangeID/39/u/RaftTruncatedState (0x0169af757266747400): index:10 term:5 
 0,0 /Local/RangeID/39/u/RangeLastReplicaGCTimestamp (0x0169af75726c727400): 0.000000123,0
 0,0 /Local/RangeID/40/r/RangeGCThreshold (0x0169b0726c67632d00): 0,0
@@ -357,7 +357,7 @@ echo
 0,0 /Local/RangeID/40/r/RangeLease (0x0169b072726c6c2d00): <empty>
 0,0 /Local/RangeID/40/r/RangeVersion (0x0169b0727276657200): 1000025.1
 0,0 /Local/RangeID/40/u/RaftHardState (0x0169b0757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/40/u/RaftReplicaID (0x0169b0757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/40/u/RaftReplicaID (0x0169b0757266747200): replica_id:1 
 0,0 /Local/RangeID/40/u/RaftTruncatedState (0x0169b0757266747400): index:10 term:5 
 0,0 /Local/RangeID/40/u/RangeLastReplicaGCTimestamp (0x0169b075726c727400): 0.000000123,0
 0,0 /Local/RangeID/41/r/RangeGCThreshold (0x0169b1726c67632d00): 0,0
@@ -366,7 +366,7 @@ echo
 0,0 /Local/RangeID/41/r/RangeLease (0x0169b172726c6c2d00): <empty>
 0,0 /Local/RangeID/41/r/RangeVersion (0x0169b1727276657200): 1000025.1
 0,0 /Local/RangeID/41/u/RaftHardState (0x0169b1757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/41/u/RaftReplicaID (0x0169b1757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/41/u/RaftReplicaID (0x0169b1757266747200): replica_id:1 
 0,0 /Local/RangeID/41/u/RaftTruncatedState (0x0169b1757266747400): index:10 term:5 
 0,0 /Local/RangeID/41/u/RangeLastReplicaGCTimestamp (0x0169b175726c727400): 0.000000123,0
 0,0 /Local/RangeID/42/r/RangeGCThreshold (0x0169b2726c67632d00): 0,0
@@ -375,7 +375,7 @@ echo
 0,0 /Local/RangeID/42/r/RangeLease (0x0169b272726c6c2d00): <empty>
 0,0 /Local/RangeID/42/r/RangeVersion (0x0169b2727276657200): 1000025.1
 0,0 /Local/RangeID/42/u/RaftHardState (0x0169b2757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/42/u/RaftReplicaID (0x0169b2757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/42/u/RaftReplicaID (0x0169b2757266747200): replica_id:1 
 0,0 /Local/RangeID/42/u/RaftTruncatedState (0x0169b2757266747400): index:10 term:5 
 0,0 /Local/RangeID/42/u/RangeLastReplicaGCTimestamp (0x0169b275726c727400): 0.000000123,0
 0,0 /Local/RangeID/43/r/RangeGCThreshold (0x0169b3726c67632d00): 0,0
@@ -384,7 +384,7 @@ echo
 0,0 /Local/RangeID/43/r/RangeLease (0x0169b372726c6c2d00): <empty>
 0,0 /Local/RangeID/43/r/RangeVersion (0x0169b3727276657200): 1000025.1
 0,0 /Local/RangeID/43/u/RaftHardState (0x0169b3757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/43/u/RaftReplicaID (0x0169b3757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/43/u/RaftReplicaID (0x0169b3757266747200): replica_id:1 
 0,0 /Local/RangeID/43/u/RaftTruncatedState (0x0169b3757266747400): index:10 term:5 
 0,0 /Local/RangeID/43/u/RangeLastReplicaGCTimestamp (0x0169b375726c727400): 0.000000123,0
 0,0 /Local/RangeID/44/r/RangeGCThreshold (0x0169b4726c67632d00): 0,0
@@ -393,7 +393,7 @@ echo
 0,0 /Local/RangeID/44/r/RangeLease (0x0169b472726c6c2d00): <empty>
 0,0 /Local/RangeID/44/r/RangeVersion (0x0169b4727276657200): 1000025.1
 0,0 /Local/RangeID/44/u/RaftHardState (0x0169b4757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/44/u/RaftReplicaID (0x0169b4757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/44/u/RaftReplicaID (0x0169b4757266747200): replica_id:1 
 0,0 /Local/RangeID/44/u/RaftTruncatedState (0x0169b4757266747400): index:10 term:5 
 0,0 /Local/RangeID/44/u/RangeLastReplicaGCTimestamp (0x0169b475726c727400): 0.000000123,0
 0,0 /Local/RangeID/45/r/RangeGCThreshold (0x0169b5726c67632d00): 0,0
@@ -402,7 +402,7 @@ echo
 0,0 /Local/RangeID/45/r/RangeLease (0x0169b572726c6c2d00): <empty>
 0,0 /Local/RangeID/45/r/RangeVersion (0x0169b5727276657200): 1000025.1
 0,0 /Local/RangeID/45/u/RaftHardState (0x0169b5757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/45/u/RaftReplicaID (0x0169b5757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/45/u/RaftReplicaID (0x0169b5757266747200): replica_id:1 
 0,0 /Local/RangeID/45/u/RaftTruncatedState (0x0169b5757266747400): index:10 term:5 
 0,0 /Local/RangeID/45/u/RangeLastReplicaGCTimestamp (0x0169b575726c727400): 0.000000123,0
 0,0 /Local/RangeID/46/r/RangeGCThreshold (0x0169b6726c67632d00): 0,0
@@ -411,7 +411,7 @@ echo
 0,0 /Local/RangeID/46/r/RangeLease (0x0169b672726c6c2d00): <empty>
 0,0 /Local/RangeID/46/r/RangeVersion (0x0169b6727276657200): 1000025.1
 0,0 /Local/RangeID/46/u/RaftHardState (0x0169b6757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/46/u/RaftReplicaID (0x0169b6757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/46/u/RaftReplicaID (0x0169b6757266747200): replica_id:1 
 0,0 /Local/RangeID/46/u/RaftTruncatedState (0x0169b6757266747400): index:10 term:5 
 0,0 /Local/RangeID/46/u/RangeLastReplicaGCTimestamp (0x0169b675726c727400): 0.000000123,0
 0,0 /Local/RangeID/47/r/RangeGCThreshold (0x0169b7726c67632d00): 0,0
@@ -420,7 +420,7 @@ echo
 0,0 /Local/RangeID/47/r/RangeLease (0x0169b772726c6c2d00): <empty>
 0,0 /Local/RangeID/47/r/RangeVersion (0x0169b7727276657200): 1000025.1
 0,0 /Local/RangeID/47/u/RaftHardState (0x0169b7757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/47/u/RaftReplicaID (0x0169b7757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/47/u/RaftReplicaID (0x0169b7757266747200): replica_id:1 
 0,0 /Local/RangeID/47/u/RaftTruncatedState (0x0169b7757266747400): index:10 term:5 
 0,0 /Local/RangeID/47/u/RangeLastReplicaGCTimestamp (0x0169b775726c727400): 0.000000123,0
 0,0 /Local/RangeID/48/r/RangeGCThreshold (0x0169b8726c67632d00): 0,0
@@ -429,7 +429,7 @@ echo
 0,0 /Local/RangeID/48/r/RangeLease (0x0169b872726c6c2d00): <empty>
 0,0 /Local/RangeID/48/r/RangeVersion (0x0169b8727276657200): 1000025.1
 0,0 /Local/RangeID/48/u/RaftHardState (0x0169b8757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/48/u/RaftReplicaID (0x0169b8757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/48/u/RaftReplicaID (0x0169b8757266747200): replica_id:1 
 0,0 /Local/RangeID/48/u/RaftTruncatedState (0x0169b8757266747400): index:10 term:5 
 0,0 /Local/RangeID/48/u/RangeLastReplicaGCTimestamp (0x0169b875726c727400): 0.000000123,0
 0,0 /Local/RangeID/49/r/RangeGCThreshold (0x0169b9726c67632d00): 0,0
@@ -438,7 +438,7 @@ echo
 0,0 /Local/RangeID/49/r/RangeLease (0x0169b972726c6c2d00): <empty>
 0,0 /Local/RangeID/49/r/RangeVersion (0x0169b9727276657200): 1000025.1
 0,0 /Local/RangeID/49/u/RaftHardState (0x0169b9757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/49/u/RaftReplicaID (0x0169b9757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/49/u/RaftReplicaID (0x0169b9757266747200): replica_id:1 
 0,0 /Local/RangeID/49/u/RaftTruncatedState (0x0169b9757266747400): index:10 term:5 
 0,0 /Local/RangeID/49/u/RangeLastReplicaGCTimestamp (0x0169b975726c727400): 0.000000123,0
 0,0 /Local/RangeID/50/r/RangeGCThreshold (0x0169ba726c67632d00): 0,0
@@ -447,7 +447,7 @@ echo
 0,0 /Local/RangeID/50/r/RangeLease (0x0169ba72726c6c2d00): <empty>
 0,0 /Local/RangeID/50/r/RangeVersion (0x0169ba727276657200): 1000025.1
 0,0 /Local/RangeID/50/u/RaftHardState (0x0169ba757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/50/u/RaftReplicaID (0x0169ba757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/50/u/RaftReplicaID (0x0169ba757266747200): replica_id:1 
 0,0 /Local/RangeID/50/u/RaftTruncatedState (0x0169ba757266747400): index:10 term:5 
 0,0 /Local/RangeID/50/u/RangeLastReplicaGCTimestamp (0x0169ba75726c727400): 0.000000123,0
 0,0 /Local/RangeID/51/r/RangeGCThreshold (0x0169bb726c67632d00): 0,0
@@ -456,7 +456,7 @@ echo
 0,0 /Local/RangeID/51/r/RangeLease (0x0169bb72726c6c2d00): <empty>
 0,0 /Local/RangeID/51/r/RangeVersion (0x0169bb727276657200): 1000025.1
 0,0 /Local/RangeID/51/u/RaftHardState (0x0169bb757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/51/u/RaftReplicaID (0x0169bb757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/51/u/RaftReplicaID (0x0169bb757266747200): replica_id:1 
 0,0 /Local/RangeID/51/u/RaftTruncatedState (0x0169bb757266747400): index:10 term:5 
 0,0 /Local/RangeID/51/u/RangeLastReplicaGCTimestamp (0x0169bb75726c727400): 0.000000123,0
 0,0 /Local/RangeID/52/r/RangeGCThreshold (0x0169bc726c67632d00): 0,0
@@ -465,7 +465,7 @@ echo
 0,0 /Local/RangeID/52/r/RangeLease (0x0169bc72726c6c2d00): <empty>
 0,0 /Local/RangeID/52/r/RangeVersion (0x0169bc727276657200): 1000025.1
 0,0 /Local/RangeID/52/u/RaftHardState (0x0169bc757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/52/u/RaftReplicaID (0x0169bc757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/52/u/RaftReplicaID (0x0169bc757266747200): replica_id:1 
 0,0 /Local/RangeID/52/u/RaftTruncatedState (0x0169bc757266747400): index:10 term:5 
 0,0 /Local/RangeID/52/u/RangeLastReplicaGCTimestamp (0x0169bc75726c727400): 0.000000123,0
 0,0 /Local/RangeID/53/r/RangeGCThreshold (0x0169bd726c67632d00): 0,0
@@ -474,7 +474,7 @@ echo
 0,0 /Local/RangeID/53/r/RangeLease (0x0169bd72726c6c2d00): <empty>
 0,0 /Local/RangeID/53/r/RangeVersion (0x0169bd727276657200): 1000025.1
 0,0 /Local/RangeID/53/u/RaftHardState (0x0169bd757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/53/u/RaftReplicaID (0x0169bd757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/53/u/RaftReplicaID (0x0169bd757266747200): replica_id:1 
 0,0 /Local/RangeID/53/u/RaftTruncatedState (0x0169bd757266747400): index:10 term:5 
 0,0 /Local/RangeID/53/u/RangeLastReplicaGCTimestamp (0x0169bd75726c727400): 0.000000123,0
 0,0 /Local/RangeID/54/r/RangeGCThreshold (0x0169be726c67632d00): 0,0
@@ -483,7 +483,7 @@ echo
 0,0 /Local/RangeID/54/r/RangeLease (0x0169be72726c6c2d00): <empty>
 0,0 /Local/RangeID/54/r/RangeVersion (0x0169be727276657200): 1000025.1
 0,0 /Local/RangeID/54/u/RaftHardState (0x0169be757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/54/u/RaftReplicaID (0x0169be757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/54/u/RaftReplicaID (0x0169be757266747200): replica_id:1 
 0,0 /Local/RangeID/54/u/RaftTruncatedState (0x0169be757266747400): index:10 term:5 
 0,0 /Local/RangeID/54/u/RangeLastReplicaGCTimestamp (0x0169be75726c727400): 0.000000123,0
 0,0 /Local/RangeID/55/r/RangeGCThreshold (0x0169bf726c67632d00): 0,0
@@ -492,7 +492,7 @@ echo
 0,0 /Local/RangeID/55/r/RangeLease (0x0169bf72726c6c2d00): <empty>
 0,0 /Local/RangeID/55/r/RangeVersion (0x0169bf727276657200): 1000025.1
 0,0 /Local/RangeID/55/u/RaftHardState (0x0169bf757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/55/u/RaftReplicaID (0x0169bf757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/55/u/RaftReplicaID (0x0169bf757266747200): replica_id:1 
 0,0 /Local/RangeID/55/u/RaftTruncatedState (0x0169bf757266747400): index:10 term:5 
 0,0 /Local/RangeID/55/u/RangeLastReplicaGCTimestamp (0x0169bf75726c727400): 0.000000123,0
 0,0 /Local/RangeID/56/r/RangeGCThreshold (0x0169c0726c67632d00): 0,0
@@ -501,7 +501,7 @@ echo
 0,0 /Local/RangeID/56/r/RangeLease (0x0169c072726c6c2d00): <empty>
 0,0 /Local/RangeID/56/r/RangeVersion (0x0169c0727276657200): 1000025.1
 0,0 /Local/RangeID/56/u/RaftHardState (0x0169c0757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/56/u/RaftReplicaID (0x0169c0757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/56/u/RaftReplicaID (0x0169c0757266747200): replica_id:1 
 0,0 /Local/RangeID/56/u/RaftTruncatedState (0x0169c0757266747400): index:10 term:5 
 0,0 /Local/RangeID/56/u/RangeLastReplicaGCTimestamp (0x0169c075726c727400): 0.000000123,0
 0,0 /Local/RangeID/57/r/RangeGCThreshold (0x0169c1726c67632d00): 0,0
@@ -510,7 +510,7 @@ echo
 0,0 /Local/RangeID/57/r/RangeLease (0x0169c172726c6c2d00): <empty>
 0,0 /Local/RangeID/57/r/RangeVersion (0x0169c1727276657200): 1000025.1
 0,0 /Local/RangeID/57/u/RaftHardState (0x0169c1757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/57/u/RaftReplicaID (0x0169c1757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/57/u/RaftReplicaID (0x0169c1757266747200): replica_id:1 
 0,0 /Local/RangeID/57/u/RaftTruncatedState (0x0169c1757266747400): index:10 term:5 
 0,0 /Local/RangeID/57/u/RangeLastReplicaGCTimestamp (0x0169c175726c727400): 0.000000123,0
 0,0 /Local/RangeID/58/r/RangeGCThreshold (0x0169c2726c67632d00): 0,0
@@ -519,7 +519,7 @@ echo
 0,0 /Local/RangeID/58/r/RangeLease (0x0169c272726c6c2d00): <empty>
 0,0 /Local/RangeID/58/r/RangeVersion (0x0169c2727276657200): 1000025.1
 0,0 /Local/RangeID/58/u/RaftHardState (0x0169c2757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/58/u/RaftReplicaID (0x0169c2757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/58/u/RaftReplicaID (0x0169c2757266747200): replica_id:1 
 0,0 /Local/RangeID/58/u/RaftTruncatedState (0x0169c2757266747400): index:10 term:5 
 0,0 /Local/RangeID/58/u/RangeLastReplicaGCTimestamp (0x0169c275726c727400): 0.000000123,0
 0,0 /Local/RangeID/59/r/RangeGCThreshold (0x0169c3726c67632d00): 0,0
@@ -528,7 +528,7 @@ echo
 0,0 /Local/RangeID/59/r/RangeLease (0x0169c372726c6c2d00): <empty>
 0,0 /Local/RangeID/59/r/RangeVersion (0x0169c3727276657200): 1000025.1
 0,0 /Local/RangeID/59/u/RaftHardState (0x0169c3757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/59/u/RaftReplicaID (0x0169c3757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/59/u/RaftReplicaID (0x0169c3757266747200): replica_id:1 
 0,0 /Local/RangeID/59/u/RaftTruncatedState (0x0169c3757266747400): index:10 term:5 
 0,0 /Local/RangeID/59/u/RangeLastReplicaGCTimestamp (0x0169c375726c727400): 0.000000123,0
 0,0 /Local/RangeID/60/r/RangeGCThreshold (0x0169c4726c67632d00): 0,0
@@ -537,7 +537,7 @@ echo
 0,0 /Local/RangeID/60/r/RangeLease (0x0169c472726c6c2d00): <empty>
 0,0 /Local/RangeID/60/r/RangeVersion (0x0169c4727276657200): 1000025.1
 0,0 /Local/RangeID/60/u/RaftHardState (0x0169c4757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/60/u/RaftReplicaID (0x0169c4757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/60/u/RaftReplicaID (0x0169c4757266747200): replica_id:1 
 0,0 /Local/RangeID/60/u/RaftTruncatedState (0x0169c4757266747400): index:10 term:5 
 0,0 /Local/RangeID/60/u/RangeLastReplicaGCTimestamp (0x0169c475726c727400): 0.000000123,0
 0,0 /Local/RangeID/61/r/RangeGCThreshold (0x0169c5726c67632d00): 0,0
@@ -546,7 +546,7 @@ echo
 0,0 /Local/RangeID/61/r/RangeLease (0x0169c572726c6c2d00): <empty>
 0,0 /Local/RangeID/61/r/RangeVersion (0x0169c5727276657200): 1000025.1
 0,0 /Local/RangeID/61/u/RaftHardState (0x0169c5757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/61/u/RaftReplicaID (0x0169c5757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/61/u/RaftReplicaID (0x0169c5757266747200): replica_id:1 
 0,0 /Local/RangeID/61/u/RaftTruncatedState (0x0169c5757266747400): index:10 term:5 
 0,0 /Local/RangeID/61/u/RangeLastReplicaGCTimestamp (0x0169c575726c727400): 0.000000123,0
 0,0 /Local/RangeID/62/r/RangeGCThreshold (0x0169c6726c67632d00): 0,0
@@ -555,7 +555,7 @@ echo
 0,0 /Local/RangeID/62/r/RangeLease (0x0169c672726c6c2d00): <empty>
 0,0 /Local/RangeID/62/r/RangeVersion (0x0169c6727276657200): 1000025.1
 0,0 /Local/RangeID/62/u/RaftHardState (0x0169c6757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/62/u/RaftReplicaID (0x0169c6757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/62/u/RaftReplicaID (0x0169c6757266747200): replica_id:1 
 0,0 /Local/RangeID/62/u/RaftTruncatedState (0x0169c6757266747400): index:10 term:5 
 0,0 /Local/RangeID/62/u/RangeLastReplicaGCTimestamp (0x0169c675726c727400): 0.000000123,0
 0,0 /Local/RangeID/63/r/RangeGCThreshold (0x0169c7726c67632d00): 0,0
@@ -564,7 +564,7 @@ echo
 0,0 /Local/RangeID/63/r/RangeLease (0x0169c772726c6c2d00): <empty>
 0,0 /Local/RangeID/63/r/RangeVersion (0x0169c7727276657200): 1000025.1
 0,0 /Local/RangeID/63/u/RaftHardState (0x0169c7757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/63/u/RaftReplicaID (0x0169c7757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/63/u/RaftReplicaID (0x0169c7757266747200): replica_id:1 
 0,0 /Local/RangeID/63/u/RaftTruncatedState (0x0169c7757266747400): index:10 term:5 
 0,0 /Local/RangeID/63/u/RangeLastReplicaGCTimestamp (0x0169c775726c727400): 0.000000123,0
 0,0 /Local/RangeID/64/r/RangeGCThreshold (0x0169c8726c67632d00): 0,0
@@ -573,7 +573,7 @@ echo
 0,0 /Local/RangeID/64/r/RangeLease (0x0169c872726c6c2d00): <empty>
 0,0 /Local/RangeID/64/r/RangeVersion (0x0169c8727276657200): 1000025.1
 0,0 /Local/RangeID/64/u/RaftHardState (0x0169c8757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/64/u/RaftReplicaID (0x0169c8757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/64/u/RaftReplicaID (0x0169c8757266747200): replica_id:1 
 0,0 /Local/RangeID/64/u/RaftTruncatedState (0x0169c8757266747400): index:10 term:5 
 0,0 /Local/RangeID/64/u/RangeLastReplicaGCTimestamp (0x0169c875726c727400): 0.000000123,0
 0,0 /Local/RangeID/65/r/RangeGCThreshold (0x0169c9726c67632d00): 0,0
@@ -582,7 +582,7 @@ echo
 0,0 /Local/RangeID/65/r/RangeLease (0x0169c972726c6c2d00): <empty>
 0,0 /Local/RangeID/65/r/RangeVersion (0x0169c9727276657200): 1000025.1
 0,0 /Local/RangeID/65/u/RaftHardState (0x0169c9757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/65/u/RaftReplicaID (0x0169c9757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/65/u/RaftReplicaID (0x0169c9757266747200): replica_id:1 
 0,0 /Local/RangeID/65/u/RaftTruncatedState (0x0169c9757266747400): index:10 term:5 
 0,0 /Local/RangeID/65/u/RangeLastReplicaGCTimestamp (0x0169c975726c727400): 0.000000123,0
 0,0 /Local/RangeID/66/r/RangeGCThreshold (0x0169ca726c67632d00): 0,0
@@ -591,7 +591,7 @@ echo
 0,0 /Local/RangeID/66/r/RangeLease (0x0169ca72726c6c2d00): <empty>
 0,0 /Local/RangeID/66/r/RangeVersion (0x0169ca727276657200): 1000025.1
 0,0 /Local/RangeID/66/u/RaftHardState (0x0169ca757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/66/u/RaftReplicaID (0x0169ca757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/66/u/RaftReplicaID (0x0169ca757266747200): replica_id:1 
 0,0 /Local/RangeID/66/u/RaftTruncatedState (0x0169ca757266747400): index:10 term:5 
 0,0 /Local/RangeID/66/u/RangeLastReplicaGCTimestamp (0x0169ca75726c727400): 0.000000123,0
 0,0 /Local/RangeID/67/r/RangeGCThreshold (0x0169cb726c67632d00): 0,0
@@ -600,7 +600,7 @@ echo
 0,0 /Local/RangeID/67/r/RangeLease (0x0169cb72726c6c2d00): <empty>
 0,0 /Local/RangeID/67/r/RangeVersion (0x0169cb727276657200): 1000025.1
 0,0 /Local/RangeID/67/u/RaftHardState (0x0169cb757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/67/u/RaftReplicaID (0x0169cb757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/67/u/RaftReplicaID (0x0169cb757266747200): replica_id:1 
 0,0 /Local/RangeID/67/u/RaftTruncatedState (0x0169cb757266747400): index:10 term:5 
 0,0 /Local/RangeID/67/u/RangeLastReplicaGCTimestamp (0x0169cb75726c727400): 0.000000123,0
 0,0 /Local/RangeID/68/r/RangeGCThreshold (0x0169cc726c67632d00): 0,0
@@ -609,7 +609,7 @@ echo
 0,0 /Local/RangeID/68/r/RangeLease (0x0169cc72726c6c2d00): <empty>
 0,0 /Local/RangeID/68/r/RangeVersion (0x0169cc727276657200): 1000025.1
 0,0 /Local/RangeID/68/u/RaftHardState (0x0169cc757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/68/u/RaftReplicaID (0x0169cc757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/68/u/RaftReplicaID (0x0169cc757266747200): replica_id:1 
 0,0 /Local/RangeID/68/u/RaftTruncatedState (0x0169cc757266747400): index:10 term:5 
 0,0 /Local/RangeID/68/u/RangeLastReplicaGCTimestamp (0x0169cc75726c727400): 0.000000123,0
 0,0 /Local/RangeID/69/r/RangeGCThreshold (0x0169cd726c67632d00): 0,0
@@ -618,7 +618,7 @@ echo
 0,0 /Local/RangeID/69/r/RangeLease (0x0169cd72726c6c2d00): <empty>
 0,0 /Local/RangeID/69/r/RangeVersion (0x0169cd727276657200): 1000025.1
 0,0 /Local/RangeID/69/u/RaftHardState (0x0169cd757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/69/u/RaftReplicaID (0x0169cd757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/69/u/RaftReplicaID (0x0169cd757266747200): replica_id:1 
 0,0 /Local/RangeID/69/u/RaftTruncatedState (0x0169cd757266747400): index:10 term:5 
 0,0 /Local/RangeID/69/u/RangeLastReplicaGCTimestamp (0x0169cd75726c727400): 0.000000123,0
 0,0 /Local/RangeID/70/r/RangeGCThreshold (0x0169ce726c67632d00): 0,0
@@ -627,7 +627,7 @@ echo
 0,0 /Local/RangeID/70/r/RangeLease (0x0169ce72726c6c2d00): <empty>
 0,0 /Local/RangeID/70/r/RangeVersion (0x0169ce727276657200): 1000025.1
 0,0 /Local/RangeID/70/u/RaftHardState (0x0169ce757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/70/u/RaftReplicaID (0x0169ce757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/70/u/RaftReplicaID (0x0169ce757266747200): replica_id:1 
 0,0 /Local/RangeID/70/u/RaftTruncatedState (0x0169ce757266747400): index:10 term:5 
 0,0 /Local/RangeID/70/u/RangeLastReplicaGCTimestamp (0x0169ce75726c727400): 0.000000123,0
 0,0 /Local/RangeID/71/r/RangeGCThreshold (0x0169cf726c67632d00): 0,0
@@ -636,7 +636,7 @@ echo
 0,0 /Local/RangeID/71/r/RangeLease (0x0169cf72726c6c2d00): <empty>
 0,0 /Local/RangeID/71/r/RangeVersion (0x0169cf727276657200): 1000025.1
 0,0 /Local/RangeID/71/u/RaftHardState (0x0169cf757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/71/u/RaftReplicaID (0x0169cf757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/71/u/RaftReplicaID (0x0169cf757266747200): replica_id:1 
 0,0 /Local/RangeID/71/u/RaftTruncatedState (0x0169cf757266747400): index:10 term:5 
 0,0 /Local/RangeID/71/u/RangeLastReplicaGCTimestamp (0x0169cf75726c727400): 0.000000123,0
 0,0 /Local/RangeID/72/r/RangeGCThreshold (0x0169d0726c67632d00): 0,0
@@ -645,7 +645,7 @@ echo
 0,0 /Local/RangeID/72/r/RangeLease (0x0169d072726c6c2d00): <empty>
 0,0 /Local/RangeID/72/r/RangeVersion (0x0169d0727276657200): 1000025.1
 0,0 /Local/RangeID/72/u/RaftHardState (0x0169d0757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/72/u/RaftReplicaID (0x0169d0757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/72/u/RaftReplicaID (0x0169d0757266747200): replica_id:1 
 0,0 /Local/RangeID/72/u/RaftTruncatedState (0x0169d0757266747400): index:10 term:5 
 0,0 /Local/RangeID/72/u/RangeLastReplicaGCTimestamp (0x0169d075726c727400): 0.000000123,0
 0,0 /Local/RangeID/73/r/RangeGCThreshold (0x0169d1726c67632d00): 0,0
@@ -654,7 +654,7 @@ echo
 0,0 /Local/RangeID/73/r/RangeLease (0x0169d172726c6c2d00): <empty>
 0,0 /Local/RangeID/73/r/RangeVersion (0x0169d1727276657200): 1000025.1
 0,0 /Local/RangeID/73/u/RaftHardState (0x0169d1757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/73/u/RaftReplicaID (0x0169d1757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/73/u/RaftReplicaID (0x0169d1757266747200): replica_id:1 
 0,0 /Local/RangeID/73/u/RaftTruncatedState (0x0169d1757266747400): index:10 term:5 
 0,0 /Local/RangeID/73/u/RangeLastReplicaGCTimestamp (0x0169d175726c727400): 0.000000123,0
 0,0 /Local/RangeID/74/r/RangeGCThreshold (0x0169d2726c67632d00): 0,0
@@ -663,7 +663,7 @@ echo
 0,0 /Local/RangeID/74/r/RangeLease (0x0169d272726c6c2d00): <empty>
 0,0 /Local/RangeID/74/r/RangeVersion (0x0169d2727276657200): 1000025.1
 0,0 /Local/RangeID/74/u/RaftHardState (0x0169d2757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
-0,0 /Local/RangeID/74/u/RaftReplicaID (0x0169d2757266747200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+0,0 /Local/RangeID/74/u/RaftReplicaID (0x0169d2757266747200): replica_id:1 
 0,0 /Local/RangeID/74/u/RaftTruncatedState (0x0169d2757266747400): index:10 term:5 
 0,0 /Local/RangeID/74/u/RangeLastReplicaGCTimestamp (0x0169d275726c727400): 0.000000123,0
 0.000000123,0 /Local/Range/Min/RangeDescriptor (0x016b1200017264736300000000000000007b09): [/Min, /System/NodeLiveness)
