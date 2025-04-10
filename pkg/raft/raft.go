@@ -1071,9 +1071,6 @@ func (r *raft) reset(term uint64) {
 			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner:   pr.IsLearner,
 		}
-		if id == r.id {
-			pr.Match = r.raftLog.lastIndex()
-		}
 	})
 
 	r.pendingConfIndex = 0
