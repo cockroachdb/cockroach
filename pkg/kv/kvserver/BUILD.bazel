@@ -377,6 +377,7 @@ go_test(
         "split_trigger_helper_test.go",
         "stats_test.go",
         "store_gossip_test.go",
+        "store_init_test.go",
         "store_pool_test.go",
         "store_raft_test.go",
         "store_rangefeed_test.go",
