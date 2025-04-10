@@ -207,8 +207,27 @@ func (s *Store) Dims() int {
 	return s.dims
 }
 
-// BeginTransactionBegin implements the Store interface.
-func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
+// RunTransaction implements the Store interface.
+func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
+	var txn cspann.Txn
+	txn, err = s.beginTransaction()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			err = s.commitTransaction(txn)
+		}
+		if err != nil {
+			err = errors.CombineErrors(err, s.abortTransaction(txn))
+		}
+	}()
+
+	return fn(txn)
+}
+
+// beginTransaction starts a new memstore transaction.
+func (s *Store) beginTransaction() (cspann.Txn, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,8 +239,8 @@ func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
 	return &elem.Value.activeTxn, nil
 }
 
-// CommitTransaction implements the Store interface.
-func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
+// commitTransaction commits a running memstore transaction.
+func (s *Store) commitTransaction(txn cspann.Txn) error {
 	// Release any exclusive partition locks held by the transaction.
 	tx := txn.(*memTxn)
 	for i := range tx.ownedLocks {
@@ -259,34 +278,15 @@ func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
 	return nil
 }
 
-// AbortTransaction implements the Store interface.
-func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
+// abortTransaction implements the Store interface.
+func (s *Store) abortTransaction(txn cspann.Txn) error {
 	tx := txn.(*memTxn)
 	if tx.updated {
 		// Abort is only trivially supported by the in-memory store.
 		panic(errors.AssertionFailedf(
 			"in-memory transaction cannot be aborted because state has already been updated"))
 	}
-	return s.CommitTransaction(ctx, txn)
-}
-
-// RunTransaction implements the Store interface.
-func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
-	var txn cspann.Txn
-	txn, err = s.BeginTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = s.CommitTransaction(ctx, txn)
-		}
-		if err != nil {
-			err = errors.CombineErrors(err, s.AbortTransaction(ctx, txn))
-		}
-	}()
-
-	return fn(txn)
+	return s.commitTransaction(txn)
 }
 
 // MakePartitionKey implements the Store interface.
