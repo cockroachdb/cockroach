@@ -1712,3 +1712,108 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
+
+// TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
+// flushes on the next batch after it is disabled if it buffered any writes.
+func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA := roachpb.Key("a")
+
+	// Write to keyA.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, "val1", txn.Sequence)
+	ba.Add(putA)
+
+	numCalledBefore := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// The request shouldn't make it past the txnWriteBuffer as there's only one
+	// Put, which should be buffered.
+	require.Equal(t, numCalledBefore, mockSender.NumCalled())
+
+	// Even though the txnWriteBuffer did not send any Put requests to the KV
+	// layer above, the responses should still be populated.
+	require.Len(t, br.Responses, 1)
+	require.Equal(t, br.Responses[0].GetInner(), &kvpb.PutResponse{})
+
+	// Verify the write was buffered correctly.
+	expBufferedWrites := []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("val1", 1)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Disable write buffering.
+	twb.setEnabled(false)
+
+	// Delete keyA at a higher sequence number.
+	txn.Sequence++
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	delA := delArgs(keyA, txn.Sequence)
+	ba.Add(delA)
+
+	numCalledBefore = mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// The buffer should be flushed and disabled.
+	require.False(t, twb.enabled)
+	require.False(t, twb.flushOnNextBatch)
+
+	// Both Put and Del should make it to the server in a single bath.
+	require.Equal(t, numCalledBefore+1, mockSender.NumCalled())
+
+	// Even though we flushed the Put, it shouldn't make it back to the response.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[0].GetInner())
+
+	// Ensure the buffer is empty at this point.
+	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
+
+	// Subsequent batches should not be buffered.
+	txn.Sequence++
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA = putArgs(keyA, "val2", txn.Sequence)
+	ba.Add(putA)
+
+	numCalledBefore = mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Ensure the buffer is still empty and the batch made it to the server.
+	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
+	require.Equal(t, numCalledBefore+1, mockSender.NumCalled())
+
+	// Commit the transaction. We flushed the buffer already, and no subsequent
+	// writes were buffered, so the buffer should be empty. As such, no write
+	// requests should be added to the batch.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
