@@ -69,7 +69,7 @@ func (rt ReplicaIDAndType) String() string {
 // subsumesChange returns true if rit subsumes prev and next. prev is the state
 // before the proposed change and next is the state after the proposed change.
 // rit is the current observed state.
-func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
+func (rit *ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 	if rit.ReplicaID == noReplicaID && next.ReplicaID == noReplicaID {
 		// Removal has happened.
 		return true
