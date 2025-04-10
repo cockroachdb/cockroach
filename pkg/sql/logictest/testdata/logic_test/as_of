@@ -133,6 +133,10 @@ SET TRANSACTION AS OF system time '-1s'
 statement ok
 ROLLBACK
 
+skipif config local-mixed-24.3 local-mixed-25.1
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
@@ -144,6 +148,27 @@ SET TRANSACTION AS OF system time '-1s'
 
 statement ok
 ROLLBACK
+
+skipif config local-mixed-24.3 local-mixed-25.1
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+INSERT INTO t VALUES(1)
+
+skipif config local-mixed-24.3 local-mixed-25.1
+statement error cannot set fixed timestamp, .* already performed reads
+SET TRANSACTION AS OF system time '-1s'
+
+statement ok
+ROLLBACK
+
+skipif config local-mixed-24.3 local-mixed-25.1
+statement ok
+RESET kv_transaction_buffered_writes_enabled;
 
 # Verify that an expression that requires normalization does not result in an
 # internal error.
