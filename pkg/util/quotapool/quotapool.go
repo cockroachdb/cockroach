@@ -275,7 +275,6 @@ func (qp *AbstractPool) Acquire(ctx context.Context, r Request) (err error) {
 	for {
 		select {
 		case <-slowTimerC:
-			slowTimer.MarkRead()
 			slowTimerC = nil
 			//nolint:deferloop (this happens at most once).
 			defer qp.onSlowAcquisition(ctx, qp.name, r, start)()
@@ -295,7 +294,6 @@ func (qp *AbstractPool) Acquire(ctx context.Context, r Request) (err error) {
 			// receive on qp.done and signaling them would work against that.
 			return qp.closeErr // always non-nil when qp.done is closed
 		case <-tryAgainTimerC:
-			tryAgainTimer.MarkRead()
 			if fulfilled := tryAcquire(); fulfilled {
 				return nil
 			}

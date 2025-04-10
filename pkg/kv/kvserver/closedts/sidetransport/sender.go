@@ -257,7 +257,6 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				}
 				select {
 				case <-timer.C:
-					timer.Read = true
 					s.publish(ctx)
 				case <-confCh:
 					// Loop around to use the updated timer.

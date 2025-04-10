@@ -302,7 +302,6 @@ func waitForRebalance(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-statsTimer.C:
-			statsTimer.Read = true
 			stats, err := allocatorStats(db)
 			if err != nil {
 				return err

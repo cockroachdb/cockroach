@@ -174,8 +174,6 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
-			// Let's not reset the timer until we get our response.
-			timer.Read = true
 			future, _ = c.sf.DoChan(ctx,
 				refreshKey,
 				singleflight.DoOpts{
@@ -184,17 +182,13 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 				},
 				c.doSingleFlightUpdate,
 			)
-		case <-settingChanged:
-			if timer.Read { // we're currently fetching
-				continue
+
+			select {
+			case <-future.C():
+			case <-c.stopper.ShouldQuiesce():
+				return
 			}
-			interval := protectedts.PollInterval.Get(&c.settings.SV)
-			// NB: It's okay if nextUpdate is a negative duration; timer.Reset will
-			// treat a negative duration as zero and send a notification immediately.
-			nextUpdate := interval - timeutil.Since(lastReset)
-			timer.Reset(nextUpdate)
-			lastReset = timeutil.Now()
-		case <-future.C():
+
 			res := future.WaitForResult(ctx)
 			if res.Err != nil {
 				if ctx.Err() == nil {
@@ -204,6 +198,15 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 			future.Reset()
 			timer.Reset(protectedts.PollInterval.Get(&c.settings.SV))
 			lastReset = timeutil.Now()
+
+		case <-settingChanged:
+			interval := protectedts.PollInterval.Get(&c.settings.SV)
+			// NB: It's okay if nextUpdate is a negative duration; timer.Reset will
+			// treat a negative duration as zero and send a notification immediately.
+			nextUpdate := interval - timeutil.Since(lastReset)
+			timer.Reset(nextUpdate)
+			lastReset = timeutil.Now()
+
 		case <-c.stopper.ShouldQuiesce():
 			return
 		}
