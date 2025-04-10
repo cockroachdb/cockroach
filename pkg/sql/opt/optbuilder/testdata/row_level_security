@@ -538,7 +538,6 @@ DROP POLICY p_update on t1;
 ----
 
 # Verify an upsert operation.
-# TODO(141998): There is more work needed to enforce the proper policies for upsert.
 
 exec-ddl
 CREATE TABLE t1_explicit_pk (C1 INT NOT NULL PRIMARY KEY, C2 TEXT, C3 DATE);
@@ -560,19 +559,44 @@ build
 UPSERT INTO t1_explicit_pk VALUES (1, 'first', '2010-08-08');
 ----
 upsert t1_explicit_pk
+ ├── arbiter indexes: t1_explicit_pk_pkey
  ├── columns: <none>
- ├── upsert-mapping:
+ ├── canary column: c1:9
+ ├── fetch columns: c1:9 c2:10 c3:11
+ ├── insert-mapping:
  │    ├── column1:6 => c1:1
  │    ├── column2:7 => c2:2
  │    └── column3:8 => c3:3
- ├── check columns: rls:9
+ ├── update-mapping:
+ │    ├── column2:7 => c2:2
+ │    └── column3:8 => c3:3
+ ├── check columns: rls:15
  └── project
-      ├── columns: rls:9!null column1:6!null column2:7!null column3:8!null
-      ├── values
-      │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    └── (1, 'first', '2010-08-08')
+      ├── columns: rls:15!null column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13 upsert_c1:14
+      ├── project
+      │    ├── columns: upsert_c1:14 column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null c1:9 c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    └── (1, 'first', '2010-08-08')
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column3:8]
+      │    │    │              └── column3:8
+      │    │    ├── scan t1_explicit_pk
+      │    │    │    ├── columns: c1:9!null c2:10 c3:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:6 = c1:9
+      │    └── projections
+      │         └── CASE WHEN c1:9 IS NULL THEN column1:6 ELSE c1:9 END [as=upsert_c1:14]
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:9]
+           └── (((c1:9 IS NULL) OR (false AND false)) AND ((c1:9 IS NULL) OR (false AND (column3:8 >= '2000-01-01')))) AND ((NOT (c1:9 IS NULL)) OR ((column3:8 != '2023-05-02') AND false)) [as=rls:15]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT DO NOTHING;
@@ -606,7 +630,7 @@ insert t1_explicit_pk
       │         └── first-agg [as=column3:8]
       │              └── column3:8
       └── projections
-           └── column3:8 != '2023-05-02' [as=rls:14]
+           └── (column3:8 != '2023-05-02') AND false [as=rls:14]
 
 build
 INSERT INTO t1_explicit_pk VALUES (2, 'second', '2008-11-19') ON CONFLICT (c1) DO UPDATE SET c2 = 'updated';
@@ -654,7 +678,7 @@ upsert t1_explicit_pk
       │         ├── CASE WHEN c1:9 IS NULL THEN column2:7 ELSE c2_new:14 END [as=upsert_c2:16]
       │         └── CASE WHEN c1:9 IS NULL THEN column3:8 ELSE c3:11 END [as=upsert_c3:17]
       └── projections
-           └── upsert_c3:17 != '2023-05-02' [as=rls:18]
+           └── (((c1:9 IS NULL) OR (false AND false)) AND ((c1:9 IS NULL) OR (false AND (upsert_c3:17 >= '2000-01-01')))) AND ((NOT (c1:9 IS NULL)) OR ((upsert_c3:17 != '2023-05-02') AND false)) [as=rls:18]
 
 exec-ddl
 DROP POLICY p_insert ON t1_explicit_pk;

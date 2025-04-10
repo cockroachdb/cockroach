@@ -864,7 +864,9 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 // is true, check columns that do not reference mutation columns are not added
 // to checkColIDs, which allows pruning normalization rules to remove the
 // unnecessary projected column.
-func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
+func (mb *mutationBuilder) addCheckConstraintCols(
+	isUpdate bool, policyCmdScope cat.PolicyCommandScope,
+) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -873,6 +875,9 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			check := mb.tab.Check(i)
+
+			referencedCols := &opt.ColSet{}
+			var scopeCol *scopeColumn
 
 			// For tables with RLS enabled, we create a synthetic check constraint
 			// to enforce the policies. Since this check varies based on the role
@@ -883,38 +888,28 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 					panic(errors.AssertionFailedf("a table should only have one RLS constraint"))
 				}
 				seenRLSConstraint = true
-				chkBuilder := optRLSConstraintBuilder{
-					tab:      mb.tab,
-					md:       mb.md,
-					tabMeta:  mb.md.TableMeta(mb.tabID),
-					oc:       mb.b.catalog,
-					user:     mb.b.checkPrivilegeUser,
-					isUpdate: isUpdate,
-				}
-				check = chkBuilder.Build(mb.b.ctx)
-			}
 
-			expr, err := parser.ParseExpr(check.Constraint())
-			if err != nil {
-				panic(err)
-			}
-
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-
-			// Use an anonymous name because the column cannot be referenced
-			// in other expressions.
-			colName := scopeColName("")
-			if check.IsRLSConstraint() {
-				colName = colName.WithMetadataName("rls")
+				var rlsScalar opt.ScalarExpr
+				rlsScalar, check = mb.buildRLSCheckScalar(policyCmdScope, mb.outScope, referencedCols)
+				colName := scopeColName("").WithMetadataName("rls")
+				scopeCol = mb.b.synthesizeColumn(projectionsScope, colName, rlsScalar.DataType(), nil /* expr */, rlsScalar)
 			} else {
-				colName = colName.WithMetadataName(fmt.Sprintf("check%d", i+1))
-			}
-			scopeCol := projectionsScope.addColumn(colName, texpr)
+				expr, err := parser.ParseExpr(check.Constraint())
+				if err != nil {
+					panic(err)
+				}
 
-			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
-			// and instead use the constraints stored in the table metadata.
-			referencedCols := &opt.ColSet{}
-			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
+				texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := scopeColName("").WithMetadataName(fmt.Sprintf("check%d", i+1))
+				scopeCol = projectionsScope.addColumn(colName, texpr)
+
+				// TODO(ridwanmsharif): Maybe we can avoid building constraints here
+				// and instead use the constraints stored in the table metadata.
+				mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
+			}
 
 			// For non-UPDATE mutations, track the synthesized check columns in
 			// checkColIDs. For UPDATE mutations, track the check columns in two
@@ -970,6 +965,66 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// buildRLSCheckScalar returns a scalar to use to enforce the policies on write.
+func (mb *mutationBuilder) buildRLSCheckScalar(
+	cmdScope cat.PolicyCommandScope, exprScope *scope, referencedCols *opt.ColSet,
+) (opt.ScalarExpr, *rlsCheckConstraint) {
+	// UPSERT is complex because the applied policies depend on whether a conflict
+	// occurred. This function ends up being called recursively to build different
+	// parts of the scalar expression.
+	if cmdScope == cat.PolicyScopeUpsert {
+		conflictScanScalar, check := mb.buildRLSCheckScalar(
+			cat.PolicyScopeUpsertConflictScan, mb.fetchScope, referencedCols)
+		conflictUpdateScalar, updateCheck := mb.buildRLSCheckScalar(
+			cat.PolicyScopeUpdate, mb.outScope, referencedCols)
+		noConflictScalar, insertCheck := mb.buildRLSCheckScalar(
+			cat.PolicyScopeInsertWithSelect, mb.outScope, referencedCols)
+
+		// Combine all three constraints into a single expression. This allows us to
+		// correctly expose the involved columns to the caller.
+		check.mergeConstraint(updateCheck)
+		check.mergeConstraint(insertCheck)
+
+		isNotConflict := mb.b.factory.ConstructIs(
+			mb.b.factory.ConstructVariable(mb.canaryColID),
+			memo.NullSingleton,
+		)
+		isConflict := mb.b.factory.ConstructNot(isNotConflict)
+		return mb.b.factory.ConstructAnd(
+			mb.b.factory.ConstructAnd(
+				mb.b.factory.ConstructOr(
+					isNotConflict,
+					conflictScanScalar,
+				),
+				mb.b.factory.ConstructOr(
+					isNotConflict,
+					conflictUpdateScalar,
+				),
+			),
+			mb.b.factory.ConstructOr(
+				isConflict,
+				noConflictScalar,
+			),
+		), check
+	}
+
+	chkBuilder := optRLSConstraintBuilder{
+		tab:                mb.tab,
+		md:                 mb.md,
+		tabMeta:            mb.md.TableMeta(mb.tabID),
+		oc:                 mb.b.catalog,
+		user:               mb.b.checkPrivilegeUser,
+		policyCommandScope: cmdScope,
+	}
+	check := chkBuilder.Build(mb.b.ctx)
+	expr, err := parser.ParseExpr(check.Constraint())
+	if err != nil {
+		panic(err)
+	}
+	texpr := exprScope.resolveAndRequireType(expr, types.Bool)
+	return mb.b.buildScalar(texpr, mb.outScope, nil, nil, referencedCols), check
 }
 
 // getColumnFamilySet gets the set of column families represented in colOrdinals.
