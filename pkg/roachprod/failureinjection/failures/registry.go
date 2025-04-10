@@ -34,6 +34,7 @@ func (r *FailureRegistry) Register() {
 	registerIPTablesPartitionFailure(r)
 	registerNetworkLatencyFailure(r)
 	registerNoopFailure(r)
+	registerNodeKillFailure(r)
 }
 
 func (r *FailureRegistry) add(
