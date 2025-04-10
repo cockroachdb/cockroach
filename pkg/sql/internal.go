@@ -962,6 +962,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.DisablePlanGists {
 		sd.DisablePlanGists = true
 	}
+	if o.BufferedWritesEnabled != nil {
+		sd.BufferedWritesEnabled = *o.BufferedWritesEnabled
+	}
 
 	if o.MultiOverride != "" {
 		overrides := strings.Split(o.MultiOverride, ",")
