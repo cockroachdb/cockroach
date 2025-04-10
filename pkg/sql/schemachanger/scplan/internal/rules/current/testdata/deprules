@@ -3676,6 +3676,22 @@ deprules
     - $function-parent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($function-name, $function-name-Target, $function-name-Node)
     - joinTargetNode($function-parent, $function-parent-Target, $function-parent-Node)
+- name: handle default column expression swaps
+  from: old-column-expression-Node
+  kind: Precedence
+  to: new-column-expression-Node
+  query:
+    - $old-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $new-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $old-column-expression[Type] = $same-type
+    - $new-column-expression[Type] = $same-type
+    - joinOnColumnID($old-column-expression, $new-column-expression, $table-id, $col-id)
+    - $old-column-expression-Target[TargetStatus] = ABSENT
+    - $old-column-expression-Node[CurrentStatus] = ABSENT
+    - $new-column-expression-Target[TargetStatus] = PUBLIC
+    - $new-column-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-column-expression, $old-column-expression-Target, $old-column-expression-Node)
+    - joinTargetNode($new-column-expression, $new-column-expression-Target, $new-column-expression-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence
@@ -8581,6 +8597,22 @@ deprules
     - $function-parent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($function-name, $function-name-Target, $function-name-Node)
     - joinTargetNode($function-parent, $function-parent-Target, $function-parent-Node)
+- name: handle default column expression swaps
+  from: old-column-expression-Node
+  kind: Precedence
+  to: new-column-expression-Node
+  query:
+    - $old-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $new-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $old-column-expression[Type] = $same-type
+    - $new-column-expression[Type] = $same-type
+    - joinOnColumnID($old-column-expression, $new-column-expression, $table-id, $col-id)
+    - $old-column-expression-Target[TargetStatus] = ABSENT
+    - $old-column-expression-Node[CurrentStatus] = ABSENT
+    - $new-column-expression-Target[TargetStatus] = PUBLIC
+    - $new-column-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-column-expression, $old-column-expression-Target, $old-column-expression-Node)
+    - joinTargetNode($new-column-expression, $new-column-expression-Target, $new-column-expression-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence
