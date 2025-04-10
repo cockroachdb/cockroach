@@ -1428,3 +1428,127 @@ SELECT jsonb_path_query('[1]', '$[-2147483648]');
 # MinInt32 - 1
 statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
 SELECT jsonb_path_query('[1]', '$[-2147483649]');
+
+query T
+SELECT jsonb_path_query('[1, 2]', '$.size()');
+----
+2
+
+query T
+SELECT jsonb_path_query('[]', '$.size()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '$.size()');
+----
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('{}', 'strict $.size()');
+
+query T rowsort
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+----
+1
+1
+1
+1
+0
+1
+3
+1
+1
+
+statement error pgcode 22039 pq: jsonpath item method .size\(\) can only be applied to an array
+SELECT jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+
+query T rowsort
+SELECT jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2 - 1 to $.size() - 2]');
+----
+{"a": 13}
+{"b": 14}
+"ccc"
+
+query T
+SELECT jsonb_path_query('{}', '$.type()');
+----
+"object"
+
+query T
+SELECT jsonb_path_query('[]', '$.type()');
+----
+"array"
+
+query T
+SELECT jsonb_path_query('"hello"', '$.type()');
+----
+"string"
+
+query T
+SELECT jsonb_path_query('0', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('0.1', '$.type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('true', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('false', '$.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', '$.type()');
+----
+"null"
+
+query T
+SELECT jsonb_path_query('null', '"123".type()');
+----
+"string"
+
+query T
+SELECT jsonb_path_query('null', '(123).type()');
+----
+"number"
+
+query T
+SELECT jsonb_path_query('null', 'true.type()');
+----
+"boolean"
+
+query T
+SELECT jsonb_path_query('null', 'null.type()');
+----
+"null"
+
+query T rowsort
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+----
+"null"
+"number"
+"boolean"
+"string"
+"array"
+"object"
+
+query T
+SELECT jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+----
+"array"
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+
+query T
+SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+----
+3
