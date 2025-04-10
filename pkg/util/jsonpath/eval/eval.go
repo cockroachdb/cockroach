@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
-	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/errors"
 )
 
@@ -135,12 +134,7 @@ func JsonpathMatch(
 func jsonpathQuery(
 	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) ([]json.JSON, error) {
-	parsedPath, err := parser.Parse(string(path))
-	if err != nil {
-		return []json.JSON{}, err
-	}
-	expr := parsedPath.AST
-
+	expr := path.Jsonpath
 	ctx := &jsonpathCtx{
 		root:                 target.JSON,
 		vars:                 vars.JSON,
@@ -148,7 +142,6 @@ func jsonpathQuery(
 		silent:               bool(silent),
 		innermostArrayLength: -1,
 	}
-
 	return ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
 }
 
