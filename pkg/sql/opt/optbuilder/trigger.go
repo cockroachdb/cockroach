@@ -220,11 +220,13 @@ func (mb *mutationBuilder) buildTriggerFunctionArgs(
 	tgOp := tree.NewDString(eventType.String())
 	tgRelID := tree.NewDOid(oid.Oid(mb.tab.ID()))
 	tgTableName := tree.NewDString(string(mb.tab.Name()))
-	fqName, err := mb.b.catalog.FullyQualifiedName(mb.b.ctx, mb.tab)
+	schema, err := mb.b.catalog.ResolveSchemaByID(
+		mb.b.ctx, cat.Flags{}, cat.StableID(mb.tab.GetSchemaID()),
+	)
 	if err != nil {
 		panic(err)
 	}
-	tgTableSchema := tree.NewDString(fqName.Schema())
+	tgTableSchema := tree.NewDString(schema.Name().Schema())
 	tgNumArgs := tree.NewDInt(tree.DInt(len(trigger.FuncArgs())))
 	tgArgV := tree.NewDArray(types.String)
 	for _, arg := range trigger.FuncArgs() {

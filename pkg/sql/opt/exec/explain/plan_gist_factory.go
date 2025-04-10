@@ -650,6 +650,11 @@ func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0
 }
 
+// GetSchemaID is part of the cat.Table interface.
+func (u *unknownTable) GetSchemaID() descpb.ID {
+	return 0
+}
+
 // IsHypothetical is part of the cat.Table interface.
 func (u *unknownTable) IsHypothetical() bool {
 	return false
