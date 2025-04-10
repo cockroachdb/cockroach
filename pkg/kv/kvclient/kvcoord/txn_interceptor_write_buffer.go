@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -151,7 +152,17 @@ type txnWriteBuffer struct {
 	// that have been aborted by a conflicting transaction. As read-your-own-write
 	// semantics are upheld by the client, not the server, for transactions that
 	// use buffered writes, we can skip the AbortSpan check on the server.
+	//
+	// We currently track this via two state variables: `enabled` and `flushed`.
+	// Writes are only buffered if enabled && !flushed.
+	//
+	// `enabled` tracks whether buffering has been enabled/disabled externally via
+	// txn.SetBufferedWritesEnabled or because we are operating on a leaf
+	// transaction.
 	enabled bool
+	//
+	// `flushed` tracks whether the buffer has been previously flushed.
+	flushed bool
 
 	// flushOnNextBatch, if set, indicates that write buffering has just been
 	// disabled, and the interceptor should flush any buffered writes when it
@@ -188,7 +199,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
-	if !twb.enabled {
+	if !twb.shouldBuffer() {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
 
@@ -202,6 +213,7 @@ func (twb *txnWriteBuffer) SendLocked(
 	}
 
 	if _, ok := ba.GetArg(kvpb.DeleteRange); ok {
+		log.VEventf(ctx, 2, "DeleteRangeRequest forcing flush of write buffer")
 		// DeleteRange requests can delete an arbitrary number of keys over a
 		// given keyspan. We won't know the exact scope of the delete until
 		// we've scanned the keyspan, which must happen on the server. We've got
@@ -231,8 +243,13 @@ func (twb *txnWriteBuffer) SendLocked(
 	// Check if buffering writes from the supplied batch will run us over
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
-	if twb.estimateSize(ba)+twb.bufferSize > bufferedWritesMaxBufferSize.Get(&twb.st.SV) {
+	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	bufSize := twb.estimateSize(ba) + twb.bufferSize
+	if bufSize > maxSize {
 		// TODO(arul): add some metrics for this case.
+		log.VEventf(ctx, 2, "flushing buffer because buffer size (%s) exceeds max size (%s)",
+			humanizeutil.IBytes(bufSize),
+			humanizeutil.IBytes(maxSize))
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
@@ -325,12 +342,17 @@ func (twb *txnWriteBuffer) adjustError(
 				if ts[0].stripped {
 					numStripped++
 				} else {
-					// TODO(arul): If the error index points to a request that we've
-					// transformed, returning this back to the client is weird -- the
-					// client doesn't know we're making transformations. We should
-					// probably just log a warning and clear out the error index for such
-					// cases.
-					log.Fatal(ctx, "unhandled")
+					// This is a transformed request (for example a LockingGet that was
+					// sent instead of a Del). In this case, the error might be a bit
+					// confusing to the client since the request that had an error isn't
+					// exactly the request the user sent.
+					//
+					// For now, we handle this by logging and removing the error index.
+					if baIdx == pErr.Index.Index {
+						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+						pErr.Index = nil
+						return pErr
+					}
 				}
 				ts = ts[1:]
 				continue
@@ -444,7 +466,14 @@ func (twb *txnWriteBuffer) importLeafFinalState(context.Context, *roachpb.LeafTx
 }
 
 // epochBumpedLocked implements the txnInterceptor interface.
-func (twb *txnWriteBuffer) epochBumpedLocked() {}
+func (twb *txnWriteBuffer) epochBumpedLocked() {
+	twb.resetBuffer()
+}
+
+func (twb *txnWriteBuffer) resetBuffer() {
+	twb.buffer.Reset()
+	twb.bufferSize = 0
+}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) createSavepointLocked(context.Context, *savepoint) {}
@@ -1132,34 +1161,28 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	defer func() {
 		assertTrue(twb.buffer.Len() == 0, "buffer should be empty after flush")
 		assertTrue(twb.bufferSize == 0, "buffer size should be 0 after flush")
+		assertTrue(twb.flushed, "flushed should be true after flush")
 	}()
+
+	// Once we've flushed the buffer, we disable write buffering going forward. We
+	// do this even if the buffer is empty since once we've called this function,
+	// our buffer no longer represents all of the writes in the transaction.
+	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
+	twb.flushed = true
 
 	numBuffered := twb.buffer.Len()
 	if numBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
-	// Once we've flushed the buffer, we disable write buffering going forward.
-	twb.enabled = false
-
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
-	// First, collect the requests we'll need to flush.
-	toFlushBufferedWrites := make([]bufferedWrite, 0, twb.buffer.Len())
-
+	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		toFlushBufferedWrites = append(toFlushBufferedWrites, *it.Cur())
+		reqs = append(reqs, it.Cur().toRequest())
 	}
-
-	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
-
-	// Next, remove the buffered writes from the buffer and collect them into
-	// requests.
-	for _, bw := range toFlushBufferedWrites {
-		reqs = append(reqs, bw.toRequest())
-		twb.removeFromBuffer(&bw)
-	}
+	twb.resetBuffer()
 
 	// Layers below us expect that writes inside a batch are in sequence number
 	// order but the iterator above returns data in key order. Here we re-sort it
@@ -1192,6 +1215,12 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 // locally.
 func (twb *txnWriteBuffer) hasBufferedWrites() bool {
 	return twb.buffer.Len() > 0
+}
+
+// shouldBuffer returns true if SendLocked() should attempt to buffer parts of
+// the batch.
+func (twb *txnWriteBuffer) shouldBuffer() bool {
+	return twb.enabled && !twb.flushed
 }
 
 // testingBufferedWritesAsSlice returns all buffered writes, in key order, as a
