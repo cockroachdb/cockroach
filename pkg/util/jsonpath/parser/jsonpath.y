@@ -21,6 +21,7 @@ func setErr(jsonpathlex jsonpathLexer, err error) int {
   return 1
 }
 
+// TODO(normanchenn): link meta-issue to unimplemented errors.
 func unimplemented(jsonpathlex jsonpathLexer, feature string) int {
   jsonpathlex.(*lexer).Unimplemented(feature)
   return 1
@@ -437,7 +438,6 @@ predicate:
   }
 | expr LIKE_REGEX STRING FLAG STRING
   {
-    // TODO(normanchenn): implement regex flags.
     return unimplemented(jsonpathlex, "regex with flags")
   }
 ;

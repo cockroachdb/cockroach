@@ -582,7 +582,7 @@ func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
 
 const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// TODO(normanchenn): Add support for more complex jsonpath queries.
+// TODO(#22513): Add support for more complex jsonpath queries.
 func randJsonpath(rng *rand.Rand) string {
 	var parts []string
 	depth := 1 + rng.Intn(20)

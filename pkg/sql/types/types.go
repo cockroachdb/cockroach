@@ -590,7 +590,7 @@ var (
 		TimeTZ,
 		Jsonb,
 		VarBit,
-		// TODO(normanchenn): consider including jsonpath here.
+		// TODO(#22513): consider including jsonpath here.
 	}
 
 	Any = &T{InternalType: InternalType{
