@@ -175,9 +175,9 @@ stabilize
 > 2 handling Ready
   Ready:
   OnSync:
-  2->1 MsgPreVoteResp Term:2 Log:0/0
+  2->1 MsgPreVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 > 1 receiving messages
-  2->1 MsgPreVoteResp Term:2 Log:0/0
+  2->1 MsgPreVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
   INFO 1 received MsgPreVoteResp from 2 at term 1
   INFO 1 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 1 became candidate at term 2
@@ -201,9 +201,9 @@ stabilize
   Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  2->1 MsgVoteResp Term:2 Log:0/0
+  2->1 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
 > 1 receiving messages
-  2->1 MsgVoteResp Term:2 Log:0/0
+  2->1 MsgVoteResp Term:2 Log:1/0 RejectIndex:11 RejectTerm:1
   INFO 1 received MsgVoteResp from 2 at term 2
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 2
