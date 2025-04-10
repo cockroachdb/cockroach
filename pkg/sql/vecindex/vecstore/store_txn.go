@@ -304,22 +304,48 @@ func (tx *Txn) DeletePartition(
 func (tx *Txn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
-	// TODO(mw5h): Add to an existing batch instead of starting a new one.
-	b := tx.kv.NewBatch()
-
 	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	if forUpdate {
-		// By acquiring a shared lock on metadata key, we prevent splits/merges of
-		// this partition from conflicting with the add operation.
-		b.GetForShare(metadataKey, tx.lockDurability)
-	} else {
-		b.Get(metadataKey)
-	}
 
-	// Run the batch and get the partition metadata from results.
-	if err := tx.kv.Run(ctx, b); err != nil {
-		return cspann.PartitionMetadata{},
-			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+	// By acquiring a shared lock on metadata key, we prevent splits/merges of
+	// this partition from conflicting with the add operation.
+	b, err := func() (b *kv.Batch, err error) {
+		// TODO(mw5h): Add to an existing batch instead of starting a new one.
+		b = tx.kv.NewBatch()
+
+		if tx.kv.Sender().GetSteppingMode(ctx) == kv.SteppingEnabled {
+			// When there are multiple inserts within the same SQL statement, the
+			// first insert will trigger creation of the metadata record. However,
+			// subsequent inserts will not be able to "see" this record, since they
+			// will read at a lower sequence number than the metadata record was
+			// written. Handle this issue by temporarily stepping the read sequence
+			// number so the latest metadata can be read.
+			prevSeqNum := tx.kv.GetReadSeqNum()
+			if err = tx.kv.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+				return nil, err
+			}
+			defer func() {
+				// Restore the original sequence number.
+				if readErr := tx.kv.SetReadSeqNum(prevSeqNum); err != nil {
+					err = errors.CombineErrors(err, readErr)
+				}
+			}()
+		}
+
+		if forUpdate {
+			b.GetForShare(metadataKey, tx.lockDurability)
+		} else {
+			b.Get(metadataKey)
+		}
+
+		// Run the batch.
+		if err := tx.kv.Run(ctx, b); err != nil {
+			return nil, errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+		}
+
+		return b, nil
+	}()
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
 	}
 
 	// If we're preparing to update the root partition, then lazily create its
@@ -591,10 +617,10 @@ func (tx *Txn) GetFullVectors(
 }
 
 // createRootPartition uses the KV CPut operation to create metadata for the
-// root partition, and then returns that metadata.
-//
-// NOTE: CPut always "sees" the latest write of the metadata record, even if the
-// timestamp of that write is higher than this transaction's.
+// root partition, and then returns that metadata. If another transaction races
+// and creates the root partition at a higher timestamp, createRootPartition
+// returns a WriteTooOld error, which will trigger a refresh of this transaction
+// at the higher timestamp.
 func (tx *Txn) createRootPartition(
 	ctx context.Context, metadataKey roachpb.Key,
 ) (cspann.PartitionMetadata, error) {
@@ -606,22 +632,11 @@ func (tx *Txn) createRootPartition(
 	}
 	encoded := vecencoding.EncodeMetadataValue(metadata)
 
-	// Use CPutAllowingIfNotExists in order to handle the case where the same
-	// transaction inserts multiple vectors (e.g. multiple VALUES rows). In that
-	// case, the first row will trigger creation of the metadata record. However,
-	// subsequent inserts will not be able to "see" this record, since they will
-	// read at a lower sequence number than the metadata record was written.
-	// However, CPutAllowingIfNotExists will read at the higher sequence number
-	// and see that the record was already created.
-	//
-	// On the other hand, if a different transaction wrote the record, it will
-	// have a higher timestamp, and that will trigger a WriteTooOld error.
-	// Transactions which lose that race need to be refreshed.
-	var roachval roachpb.Value
-	roachval.SetBytes(encoded)
-	b.CPutAllowingIfNotExists(metadataKey, &roachval, roachval.TagAndDataBytes())
+	// Use CPut to detect the case where another transaction is racing to create
+	// the root partition. CPut always "sees" the latest version of the metadata
+	// record.
+	b.CPut(metadataKey, encoded, nil /* expValue */)
 	if err := tx.kv.Run(ctx, b); err != nil {
-		// Lost the race to a different transaction.
 		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
 	}
 	return metadata, nil
