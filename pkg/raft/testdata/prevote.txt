@@ -197,19 +197,19 @@ stabilize
 > 1 handling Ready
   Ready:
   OnSync:
-  1->2 MsgPreVoteResp Term:2 Log:0/0
+  1->2 MsgPreVoteResp Term:2 Log:1/0 Hint:1/12
 > 3 handling Ready
   Ready:
   OnSync:
-  3->2 MsgPreVoteResp Term:2 Log:0/0
+  3->2 MsgPreVoteResp Term:2 Log:1/0 Hint:1/12
 > 2 receiving messages
-  1->2 MsgPreVoteResp Term:2 Log:0/0
+  1->2 MsgPreVoteResp Term:2 Log:1/0 Hint:1/12
   INFO 2 received MsgPreVoteResp from 1 at term 1
   INFO 2 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 2 became candidate at term 2
   INFO 2 [logterm: 1, index: 12] sent MsgVote request to 1 at term 2
   INFO 2 [logterm: 1, index: 12] sent MsgVote request to 3 at term 2
-  3->2 MsgPreVoteResp Term:2 Log:0/0
+  3->2 MsgPreVoteResp Term:2 Log:1/0 Hint:1/12
 > 2 handling Ready
   Ready:
   State:StateCandidate
@@ -238,18 +238,18 @@ stabilize
   State:StateFollower
   HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   OnSync:
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0 Hint:1/12
 > 3 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   OnSync:
-  3->2 MsgVoteResp Term:2 Log:0/0
+  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/12
 > 2 receiving messages
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0 Hint:1/12
   INFO 2 received MsgVoteResp from 1 at term 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
-  3->2 MsgVoteResp Term:2 Log:0/0
+  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/12
 > 2 handling Ready
   Ready:
   State:StateLeader

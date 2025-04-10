@@ -163,12 +163,12 @@ stabilize 2
 > 2 handling Ready
   Ready:
   OnSync:
-  2->3 MsgPreVoteResp Term:2 Log:0/0
+  2->3 MsgPreVoteResp Term:2 Log:1/0 Hint:1/11
 
 stabilize 3
 ----
 > 3 receiving messages
-  2->3 MsgPreVoteResp Term:2 Log:0/0
+  2->3 MsgPreVoteResp Term:2 Log:1/0 Hint:1/11
   INFO 3 received MsgPreVoteResp from 2 at term 1
   INFO 3 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 3 became candidate at term 2
