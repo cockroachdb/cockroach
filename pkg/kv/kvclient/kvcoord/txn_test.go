@@ -2046,3 +2046,39 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 		}
 	})
 }
+
+// TestTxnBufferedWritesRollbackToSavepointAllBuffered is a regression
+// test for a bug encountered during development where the sequence
+// number of a savepoint was not correctly advanced when all writes in
+// a transaction had been buffered.
+func TestTxnBufferedWritesRollbackToSavepointAllBuffered(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	ctx := context.Background()
+	value1 := []byte("value1")
+	testutils.RunTrueAndFalse(t, "buffered_write", func(t *testing.T, bufferedWritesEnabled bool) {
+		keyA := []byte(fmt.Sprintf("keyA-%v", bufferedWritesEnabled))
+
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetBufferedWritesEnabled(bufferedWritesEnabled)
+			// Should not be rolled back because the savepoint is
+			// created after it.
+			if err := txn.Put(ctx, keyA, value1); err != nil {
+				return err
+			}
+			sp, err := txn.CreateSavepoint(ctx)
+			if err != nil {
+				return err
+			}
+			return txn.RollbackToSavepoint(ctx, sp)
+		})
+		require.NoError(t, err)
+		actualA, err := s.DB.Get(ctx, keyA)
+		require.NoError(t, err)
+		require.Equal(t, actualA.ValueBytes(), value1)
+	})
+
+}
