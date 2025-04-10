@@ -179,9 +179,6 @@ func TestStore(t *testing.T) {
 				return
 			}
 
-			// Step so that we can see the new root partition.
-			require.NoError(t, tx.(*Txn).kv.Step(ctx, true /* allowReadTimestampStep */))
-
 			// Run GetPartitionMetadata again, to ensure that it succeeds, as a
 			// way of simulating multiple vectors being inserted in the same
 			// SQL statement.
