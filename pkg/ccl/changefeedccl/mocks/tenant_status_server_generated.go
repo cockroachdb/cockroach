@@ -52,6 +52,21 @@ func (mr *MockTenantStatusServerMockRecorder) DownloadSpan(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadSpan", reflect.TypeOf((*MockTenantStatusServer)(nil).DownloadSpan), arg0, arg1)
 }
 
+// EngineStats mocks base method.
+func (m *MockTenantStatusServer) EngineStats(arg0 context.Context, arg1 *serverpb.EngineStatsRequest) (*serverpb.EngineStatsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EngineStats", arg0, arg1)
+	ret0, _ := ret[0].(*serverpb.EngineStatsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EngineStats indicates an expected call of EngineStats.
+func (mr *MockTenantStatusServerMockRecorder) EngineStats(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EngineStats", reflect.TypeOf((*MockTenantStatusServer)(nil).EngineStats), arg0, arg1)
+}
+
 // Gossip mocks base method.
 func (m *MockTenantStatusServer) Gossip(arg0 context.Context, arg1 *serverpb.GossipRequest) (*gossip.InfoStatus, error) {
 	m.ctrl.T.Helper()
