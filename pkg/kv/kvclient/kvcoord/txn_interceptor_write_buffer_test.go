@@ -1851,3 +1851,139 @@ func TestTxnWriteBufferClearsBufferOnEpochBump(t *testing.T) {
 	require.Equal(t, 0, int(twb.bufferSize))
 	require.Equal(t, numCalled, mockSender.NumCalled())
 }
+
+// TestTxnWriteBufferBatchRequestValidation verifies that the txnWriteBuffer
+// rejects requests that it doesn't know how to support.
+func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	type testCase struct {
+		name string
+		ba   func() *kvpb.BatchRequest
+	}
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA, keyC := roachpb.Key("a"), roachpb.Key("c")
+
+	tests := []testCase{
+		{
+			name: "batch with OriginTimestamp",
+			ba: func() *kvpb.BatchRequest {
+				header := kvpb.Header{
+					Txn: &txn,
+					WriteOptions: &kvpb.WriteOptions{
+						OriginTimestamp: hlc.Timestamp{WallTime: 1},
+					},
+				}
+				return &kvpb.BatchRequest{Header: header}
+			},
+		},
+		{
+			name: "batch with OriginID",
+			ba: func() *kvpb.BatchRequest {
+				header := kvpb.Header{
+					Txn: &txn,
+					WriteOptions: &kvpb.WriteOptions{
+						OriginID: 1,
+					},
+				}
+				return &kvpb.BatchRequest{Header: header}
+			},
+		},
+		{
+			name: "batch with InitPut",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				b.Add(&kvpb.InitPutRequest{
+					RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+					Value:         roachpb.Value{},
+				})
+				return b
+			},
+		},
+		{
+			name: "batch with Increment",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				b.Add(&kvpb.IncrementRequest{
+					RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+				})
+				return b
+			},
+		},
+		{
+			name: "batch with ReturnRawMVCCValues Scan",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.ScanRequest{
+					ReturnRawMVCCValues: true,
+					RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				}
+				b.Add(r)
+				return b
+			},
+		},
+		{
+			name: "batch with ReturnRawMVCCValues ReverseScan",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.ReverseScanRequest{
+					ReturnRawMVCCValues: true,
+					RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				}
+				b.Add(r)
+				return b
+			},
+		},
+		{
+			name: "batch with ReturnRawMVCCValues Get",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.GetRequest{
+					ReturnRawMVCCValues: true,
+					RequestHeader:       kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+				}
+				b.Add(r)
+				return b
+			},
+		},
+		{
+			name: "batch with COL_BATCH_RESPONSE Scan",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.ScanRequest{
+					ScanFormat:    kvpb.COL_BATCH_RESPONSE,
+					RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				}
+				b.Add(r)
+				return b
+			},
+		},
+		{
+			name: "batch with COL_BATCH_RESPONSE ReverseScan",
+			ba: func() *kvpb.BatchRequest {
+				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+				r := &kvpb.ReverseScanRequest{
+					ScanFormat:    kvpb.COL_BATCH_RESPONSE,
+					RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				}
+				b.Add(r)
+				return b
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			numCalledBefore := mockSender.NumCalled()
+			_, pErr := twb.SendLocked(ctx, tc.ba())
+			require.NotNil(t, pErr)
+			require.Equal(t, numCalledBefore, mockSender.NumCalled())
+
+		})
+	}
+}
