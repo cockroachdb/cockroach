@@ -184,7 +184,7 @@ func (ib *indexBackfiller) constructIndexEntries(
 func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
 	ctx context.Context, indexEntry *rowenc.IndexEntry,
 ) (bool, error) {
-	indexID, keyBytes, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
 	if err != nil {
 		return false, err
 	}
@@ -194,14 +194,17 @@ func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
 		return false, nil
 	}
 
+	vih.SetInputEntry(indexEntry)
 	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		entry, err := vih.ReEncodeVector(ctx, txn.KV(), keyBytes, indexEntry)
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), indexEntry)
 		if err != nil {
 			return err
 		}
 
 		b := txn.KV().NewBatch()
-		b.CPut(entry.Key, &entry.Value, nil)
+		// If the backfill job was interrupted and restarted, we may redo work, so allow
+		// that we may see duplicate keys here.
+		b.CPutAllowingIfNotExists(entry.Key, &entry.Value, entry.Value.TagAndDataBytes())
 		return txn.KV().Run(ctx, b)
 	})
 	if err != nil {

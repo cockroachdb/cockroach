@@ -478,6 +478,18 @@ type VectorIndexHelper struct {
 	vecIndex *cspann.Index
 	// indexPrefix are the prefix bytes for this index (/Tenant/Table/Index).
 	indexPrefix []byte
+
+	inputEntry rowenc.IndexEntry
+}
+
+func (vih *VectorIndexHelper) SetInputEntry(entry *rowenc.IndexEntry) {
+	if vih.inputEntry.Key == nil {
+		vih.inputEntry.Key = make([]byte, len(entry.Key))
+	}
+	vih.inputEntry.Key = vih.inputEntry.Key[:0]
+	vih.inputEntry.Key = append(vih.inputEntry.Key, entry.Key...)
+	vih.inputEntry.Value.SetTagAndData(entry.Value.TagAndDataBytes())
+	vih.inputEntry.Family = entry.Family
 }
 
 // ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
@@ -487,15 +499,17 @@ type VectorIndexHelper struct {
 // re-encoded to get the properly quantized vector with the new partition's
 // centroid.
 func (vih *VectorIndexHelper) ReEncodeVector(
-	ctx context.Context, txn *kv.Txn, keyBytes []byte, entry *rowenc.IndexEntry,
+	ctx context.Context, txn *kv.Txn, outputEntry *rowenc.IndexEntry,
 ) (*rowenc.IndexEntry, error) {
+	keyBytes := vih.inputEntry.Key[len(vih.indexPrefix):]
+
 	key, err := vecencoding.DecodeKey(keyBytes, vih.numPrefixCols)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 
 	// Decode vector and suffix bytes from the entry value.
-	valueBytes, err := entry.Value.GetBytes()
+	valueBytes, err := vih.inputEntry.Value.GetBytes()
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
@@ -517,16 +531,17 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 		panic("expected encoded vector to be of type DBytes")
 	}
 
-	entry.Key = entry.Key[:0]
-	entry.Key = append(entry.Key, vih.indexPrefix...)
-	entry.Key = key.Encode(entry.Key)
+	outputEntry.Key = outputEntry.Key[:0]
+	outputEntry.Key = append(outputEntry.Key, vih.indexPrefix...)
+	outputEntry.Key = key.Encode(outputEntry.Key)
+
 	entryValueLen := vecencoding.EncodedVectorIndexValueLen(quantizedVector.UnsafeBytes(), suffix)
-	buf := entry.Value.AllocBytes(entryValueLen)[:0]
+	buf := outputEntry.Value.AllocBytes(entryValueLen)[:0]
 	vecencoding.EncodeVectorIndexValue(buf, quantizedVector.UnsafeBytes(), suffix)
 
-	// entry.Family is left unchanged from the entry we received, originally encoded by rowenc.EncodeSecondaryIndexes()
+	outputEntry.Family = vih.inputEntry.Family
 
-	return entry, nil
+	return outputEntry, nil
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
