@@ -1047,8 +1047,11 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[*] ? (@ > +2)');
 3
 4
 
-statement error pgcode 42601 pq: LAST is allowed only in array subscripts
-SELECT jsonb_path_query('{}', 'last');
+statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
+SELECT jsonb_path_query('{}', 'last'::JSONPATH);
+
+statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "@" as type jsonpath: @ is not allowed in root expressions
+SELECT jsonb_path_query('{}', '@'::JSONPATH);
 
 query T
 SELECT jsonb_path_query('[1, 2, 3, 4]', '$[last]');
