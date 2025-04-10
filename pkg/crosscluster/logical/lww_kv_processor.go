@@ -224,6 +224,7 @@ func (p *kvRowProcessor) processOneRow(
 	refreshCount int,
 ) error {
 	if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetBufferedWritesEnabled(false)
 		b := makeKVBatch(useLowPriority.Get(&p.cfg.Settings.SV), txn)
 
 		if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
