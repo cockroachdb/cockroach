@@ -1363,7 +1363,7 @@ func (z *ZoneConfig) toSpanConfig() (roachpb.SpanConfig, error) {
 			return roachpb.SpanConfig{}, err
 		}
 	}
-	if len(z.VoterConstraints) != 0 {
+	if len(z.VoterConstraints) != 0 || z.NullVoterConstraintsIsEmpty {
 		sc.VoterConstraints, err = toSpanConfigConstraintsConjunction(z.VoterConstraints)
 		if err != nil {
 			return roachpb.SpanConfig{}, err
