@@ -35,19 +35,19 @@ import (
 // to SendLocked will return the default successful response.
 type mockLockedSender struct {
 	mockFn func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
-	// numCalled is the number of times the mock function has been called.
+	// numCalled is the number of times SendLocked function has been called.
 	numCalled int
 }
 
 func (m *mockLockedSender) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	m.numCalled++
 	if m.mockFn == nil {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		return br, nil
 	}
-	m.numCalled++
 	return m.mockFn(ba)
 }
 
@@ -58,7 +58,7 @@ func (m *mockLockedSender) MockSend(
 	m.mockFn = fn
 }
 
-// NumCalled returns the number of times the mock function has been called.
+// NumCalled returns the number of times the SendLocked function has been called.
 func (m *mockLockedSender) NumCalled() int {
 	return m.numCalled
 }
