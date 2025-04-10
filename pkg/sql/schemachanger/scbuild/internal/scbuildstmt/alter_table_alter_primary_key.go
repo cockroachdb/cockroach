@@ -447,12 +447,17 @@ func fallBackIfRegionalByRowTable(b BuildCtx, t tree.NodeFormatter, tableID cati
 	}
 }
 
+// mustRetrieveCurrentPrimaryIndexElement retrieves the current primary index,
+// which must be public.
 func mustRetrieveCurrentPrimaryIndexElement(
 	b BuildCtx, tableID catid.DescID,
 ) (res *scpb.PrimaryIndex) {
 	scpb.ForEachPrimaryIndex(b.QueryByID(tableID), func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.PrimaryIndex,
 	) {
+		// TODO(fqazi): We don't support DROP CONSTRAINT PRIMARY KEY, but those
+		// will need to be handled by the callers of this function in the future,
+		// for txn support.
 		if current == scpb.Status_PUBLIC {
 			res = e
 		}
