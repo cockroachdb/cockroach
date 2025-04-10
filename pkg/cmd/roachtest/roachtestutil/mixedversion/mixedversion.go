@@ -1069,6 +1069,20 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
+		// If the predecessor same series as the minimum supported version,
+		// we need to check that it isn't the only possible upgrade where
+		// user steps can run. If it is, don't allow a skip upgrade or else
+		// we will generate a plan with zero upgrades that are able to run user hooks.
+		if pred.Series() == t.options.minimumSupportedVersion.Series() {
+			maxTestUpgrades, err := release.MajorReleasesBetween(&t.options.minimumSupportedVersion.Version, &currentVersion.Version)
+			if err != nil {
+				return nil, err
+			}
+			if maxTestUpgrades == 1 {
+				return []*clusterupgrade.Version{pred}, nil
+			}
+		}
+
 		predPred, err := t.options.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion, t.options.minimumBootstrapVersion)
 		if err != nil {
 			return nil, err
@@ -1594,8 +1608,9 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 
 	currentVersion := clusterupgrade.CurrentVersion()
 	msv := test.options.minimumSupportedVersion
-	// The minimum supported version should be strictly less than the current version
-	validVersion := currentVersion.AtLeast(msv) && !currentVersion.Equal(msv)
+	// The current version should be at least one release series newer from
+	// the minimum supported version.
+	validVersion := currentVersion.CompareSeries(msv.Version) == 1
 
 	if !validVersion {
 		fail(
