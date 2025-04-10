@@ -39,9 +39,10 @@ type PolicyRefresher struct {
 	// when there is a leaseholder change or when there is a span config change.
 	refreshNotificationCh chan struct{}
 
-	// getNodeLatencies returns a map of node IDs to their measured latencies
-	// from the current node. Replicas use this information to determine
-	// appropriate closed timestamp policies.
+	// getNodeLatencies returns a map of node IDs to their observed round-trip
+	// latencies from the current node. Replicas use this information to determine
+	// appropriate closed timestamp policies. See rpc.RemoteClockMonitor for more
+	// details.
 	getNodeLatencies func() map[roachpb.NodeID]time.Duration
 
 	// latencyCache caches the latency information from getNodeLatencies. This
