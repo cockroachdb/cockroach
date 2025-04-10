@@ -154,7 +154,7 @@ type PartitionStateDetails struct {
 func MakeReadyDetails() PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     ReadyState,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -165,7 +165,7 @@ func MakeSplittingDetails(target1, target2 PartitionKey) PartitionStateDetails {
 		State:     SplittingState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -176,7 +176,7 @@ func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDe
 		State:     DrainingForSplitState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -186,7 +186,7 @@ func MakeDrainingForMergeDetails(target PartitionKey) PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     DrainingForMergeState,
 		Target1:   target,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -196,7 +196,7 @@ func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     UpdatingState,
 		Source:    source,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -208,7 +208,7 @@ func MakeAddingLevelDetails(target1, target2 PartitionKey) PartitionStateDetails
 		State:     AddingLevelState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
