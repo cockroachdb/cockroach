@@ -38,7 +38,7 @@ import (
 // TODO(pav-kv): consolidate all flow control state changes here. Much of the
 // transitions in raft.go logically belong here.
 type Progress struct {
-	// Match is the index up to which the follower's log is known to match the
+	// Match is the index up to which the peer's log is known to durably match the
 	// leader's.
 	Match uint64
 	// Next is the log index of the next entry to send to this follower. All
