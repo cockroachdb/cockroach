@@ -199,8 +199,10 @@ func (s *Store) EstimatePartitionCount(
 	b.Header.ReadConsistency = s.minConsistency
 
 	// Count the number of rows in the partition after the metadata row.
-	metadataKey := s.encodePartitionKey(treeKey, partitionKey)
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
+	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
+	startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+	b.Scan(startKey, endKey)
 
 	// Execute the batch and count the rows in the response.
 	if err := s.db.KV().Run(ctx, b); err != nil {
@@ -302,18 +304,4 @@ func (s *Store) TryClearPartition(
 	expected cspann.PartitionMetadata,
 ) (count int, err error) {
 	return -1, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
-}
-
-// encodePartitionKey takes a partition key and creates a KV key to read that
-// partition's metadata. Vector data can be read by scanning from the metadata
-// to the next partition's metadata.
-func (s *Store) encodePartitionKey(
-	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) roachpb.Key {
-	capacity := len(s.prefix) + len(treeKey) + vecencoding.EncodedPartitionKeyLen(partitionKey)
-	keyBuffer := make(roachpb.Key, 0, capacity)
-	keyBuffer = append(keyBuffer, s.prefix...)
-	keyBuffer = append(keyBuffer, treeKey...)
-	keyBuffer = vecencoding.EncodePartitionKey(keyBuffer, partitionKey)
-	return keyBuffer
 }
