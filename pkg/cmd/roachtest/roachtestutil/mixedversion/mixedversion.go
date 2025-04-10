@@ -974,6 +974,24 @@ func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
+		// If the predecessor same series as the minimum supported version,
+		// we need to check that it isn't the only possible upgrade where
+		// user steps can run. If it is, don't allow a skip upgrade or else
+		// we will generate a plan with zero upgrades that are able to run user hooks.
+		//
+		// Much of the mixed version framework assumes that there is at least one upgrade
+		// that can run user hooks. We just disable skip version upgrades in this case since
+		// it doesn't make sense to allow a test plan with no user hooks run.
+		if pred.Series() == t.options.minimumSupportedVersion.Series() {
+			maxTestUpgrades, err := release.MajorReleasesBetween(&t.options.minimumSupportedVersion.Version, &currentVersion.Version)
+			if err != nil {
+				return nil, err
+			}
+			if maxTestUpgrades == 1 {
+				return []*clusterupgrade.Version{pred}, nil
+			}
+		}
+
 		predPred, err := t.options.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion, t.options.minimumBootstrapVersion)
 		if err != nil {
 			return nil, err
