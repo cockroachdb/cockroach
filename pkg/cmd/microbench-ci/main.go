@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -102,8 +101,7 @@ func (s *Suite) binURL(revision Revision, benchmark *Benchmark) string {
 func (s *Suite) hasMarkerFile(revision Revision, benchmark *Benchmark) bool {
 	artifactsDir := s.artifactsDir(revision)
 	for _, status := range []Status{Regressed, Improved} {
-		marker := strings.ToUpper(status.String())
-		markerFile := path.Join(artifactsDir, benchmark.sanitizedName()+"."+marker)
+		markerFile := path.Join(artifactsDir, benchmark.markerName(status))
 		_, err := os.Stat(markerFile)
 		if err == nil {
 			return true
