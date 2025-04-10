@@ -2391,6 +2391,11 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 
+	// hack from pav-kv, might need another PR for this change.
+	if ci := r.raftLog.committed; a.prev.index < ci && ci <= a.lastIndex() {
+		// TODO: there should be a safety check that term(ci) == a.termAt(ci).
+		a.LogSlice = a.forward(ci)
+	}
 	if a.prev.index < r.raftLog.committed {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
 			Commit: r.raftLog.committed})
