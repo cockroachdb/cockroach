@@ -17,7 +17,7 @@ fi
 
 
 bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test \
-    --config crosslinux --jobs 300 --remote_download_minimal \
+    --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
     --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) \
     $EXTRA_PARAMS
