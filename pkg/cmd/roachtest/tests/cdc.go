@@ -143,7 +143,7 @@ func (ct *cdcTester) startStatsCollection() func() {
 			startTime,
 			endTime,
 			[]clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg},
-			func(stats map[string]clusterstats.StatSummary) (string, float64) {
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 				// TODO(jayant): update this metric to be more accurate.
 				// It may be worth plugging in real latency values from the latency
 				// verifier here in the future for more accuracy. However, it may not be
@@ -151,7 +151,14 @@ func (ct *cdcTester) startStatsCollection() func() {
 				// up as roachtest failures, we don't need to make them very apparent in
 				// roachperf. Note that other roachperf stats, such as the aggregate stats
 				// above, will be accurate.
-				return "Total Run Time (mins)", endTime.Sub(startTime).Minutes()
+				duration := endTime.Sub(startTime).Minutes()
+				return &roachtestutil.AggregatedMetric{
+					Name:             "Total Run Time (mins)",
+					Value:            roachtestutil.MetricPoint(duration),
+					Unit:             "minutes",
+					IsHigherBetter:   false,
+					AdditionalLabels: nil,
+				}
 			},
 		)
 		if err != nil {

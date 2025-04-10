@@ -120,11 +120,25 @@ func registerAllocator(r registry.Registry) {
 				// up-replication began, until the last rebalance action taken.
 				// The up replication time, is the time taken to up-replicate
 				// alone, not considering post up-replication rebalancing.
-				func(stats map[string]clusterstats.StatSummary) (string, float64) {
-					return "t-balance(s)", endTime.Sub(startTime).Seconds() - allocatorStableSeconds
+				func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+					balanceTime := endTime.Sub(startTime).Seconds() - allocatorStableSeconds
+					return &roachtestutil.AggregatedMetric{
+						Name:             "t-balance(s)",
+						Value:            roachtestutil.MetricPoint(balanceTime),
+						Unit:             "seconds",
+						IsHigherBetter:   false,
+						AdditionalLabels: nil,
+					}
 				},
-				func(stats map[string]clusterstats.StatSummary) (string, float64) {
-					return "t-uprepl(s)", replicateTime.Sub(startTime).Seconds()
+				func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+					upReplTime := replicateTime.Sub(startTime).Seconds()
+					return &roachtestutil.AggregatedMetric{
+						Name:             "t-uprepl(s)",
+						Value:            roachtestutil.MetricPoint(upReplTime),
+						Unit:             "seconds",
+						IsHigherBetter:   false,
+						AdditionalLabels: nil,
+					}
 				},
 			)
 			return err
