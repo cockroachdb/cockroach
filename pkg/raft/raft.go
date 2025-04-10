@@ -1038,7 +1038,7 @@ func (r *raft) maybeCommit() bool {
 	return true
 }
 
-func (r *raft) reset(term uint64) {
+func (r *raft) reset(term uint64, specialVisit func(id pb.PeerID, pr *tracker.Progress)) {
 	if r.Term != term {
 		// NB: There are state transitions where reset may be called on a follower
 		// that supports a fortified leader. One example is when a follower is
@@ -1063,15 +1063,22 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.electionTracker.ResetVotes()
-	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
-		*pr = tracker.Progress{
-			Match:       0,
-			MatchCommit: 0,
-			Next:        r.raftLog.lastIndex() + 1,
-			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
-			IsLearner:   pr.IsLearner,
-		}
-	})
+	if specialVisit != nil {
+		r.trk.Visit(specialVisit)
+	} else {
+		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+			*pr = tracker.Progress{
+				Match:       0,
+				MatchCommit: 0,
+				Next:        r.raftLog.lastIndex() + 1,
+				Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+				IsLearner:   pr.IsLearner,
+			}
+			if id == r.id {
+				pr.Match = r.raftLog.lastIndex()
+			}
+		})
+	}
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -1280,7 +1287,7 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 		r.bcastDeFortify()
 	}
 
-	r.reset(term)
+	r.reset(term, nil)
 	r.setLead(lead)
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 	r.logger.Debugf("%x reset election elapsed to %d", r.id, r.electionElapsed)
@@ -1295,7 +1302,8 @@ func (r *raft) becomeCandidate() {
 	// we're already fortified.
 	assertTrue(!r.supportingFortifiedLeader(), "shouldn't become a candidate if we're supporting a fortified leader")
 	r.step = stepCandidate
-	r.reset(r.Term + 1)
+	r.reset(r.Term+1, nil)
+
 	r.tick = r.tickElection
 	r.setVote(r.id)
 	r.state = pb.StateCandidate
@@ -1329,7 +1337,7 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term)
+	r.reset(r.Term, nil)
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
