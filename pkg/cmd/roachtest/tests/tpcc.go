@@ -163,7 +163,7 @@ func getMaxWarehousesAboveEfficiency(
 	aggregatedMetrics = append(aggregatedMetrics, &roachtestutil.AggregatedMetric{
 		Name:           fmt.Sprintf("%s_max_warehouse", testName),
 		Value:          roachtestutil.MetricPoint(maxEfficientWarehouse),
-		Unit:           "",
+		Unit:           "warehouses",
 		IsHigherBetter: true,
 		// labels added here override any labels imported from the stats file.
 		// since we don't want to specify a warehouse label for this metric, we pass an empty label.
