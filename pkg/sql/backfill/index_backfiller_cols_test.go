@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,8 @@ type (
 // to ensure that it properly classifies columns needed for evaluation in an
 // index backfill.
 func TestIndexBackfillerColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	asIndexSlice := func(in indexes) (out []catalog.Index) {
 		for _, idx := range in {
 			out = append(out, idx)
@@ -368,6 +371,7 @@ func TestIndexBackfillerColumns(t *testing.T) {
 // TestInitIndexesAllowList tests that initIndexes works correctly with
 // "allowList" to populate the "added" field of the index backfiller.
 func TestInitIndexesAllowList(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	desc := &tabledesc.Mutable{}
 	desc.TableDescriptor = descpb.TableDescriptor{
 		Mutations: []descpb.DescriptorMutation{
