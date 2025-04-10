@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -312,13 +312,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			}
 			return strings.Join(pairs, ", "), nil
 		}
-		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
+		print.DebugSprintMVCCKeyValueDecoders = append(print.DebugSprintMVCCKeyValueDecoders, fn)
 	}
 	printer := printKey
 	rangeKeyPrinter := printRangeKey
 	if debugCtx.values {
-		printer = kvserver.PrintMVCCKeyValue
-		rangeKeyPrinter = kvserver.PrintMVCCRangeKeyValue
+		printer = print.PrintMVCCKeyValue
+		rangeKeyPrinter = print.PrintMVCCRangeKeyValue
 	}
 
 	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
@@ -509,7 +509,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 					if err != nil {
 						return err
 					}
-					kvserver.PrintEngineKeyValue(key, v)
+					print.PrintEngineKeyValue(key, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
@@ -522,7 +522,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 						return err
 					}
 					for _, v := range iter.EngineRangeKeys() {
-						kvserver.PrintEngineRangeKeyValue(bounds, v)
+						print.PrintEngineRangeKeyValue(bounds, v)
 						results++
 						if results == debugCtx.maxResults {
 							return iterutil.StopIteration()
@@ -553,7 +553,7 @@ func loadRangeDescriptor(
 			// We only want values, not MVCCMetadata.
 			return nil
 		}
-		if err := kvserver.IsRangeDescriptorKey(kv.Key); err != nil {
+		if err := print.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
 			return nil //nolint:returnerrcheck
@@ -609,10 +609,10 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
+			if print.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
 			}
-			kvserver.PrintMVCCKeyValue(kv)
+			print.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -693,7 +693,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			//   is already a roachpb.Key, so make a half-assed attempt to support both.
 			if !isTS {
 				if k, ok := storage.DecodeEngineKey(bs[0]); ok {
-					kvserver.PrintEngineKeyValue(k, bs[1])
+					print.PrintEngineKeyValue(k, bs[1])
 					return nil
 				}
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
@@ -705,7 +705,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 		}
 
-		kvserver.PrintMVCCKeyValue(storage.MVCCKeyValue{
+		print.PrintMVCCKeyValue(storage.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -787,7 +787,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			kvserver.PrintMVCCKeyValue(kv)
+			print.PrintMVCCKeyValue(kv)
 			return nil
 		})
 }
@@ -1381,7 +1381,7 @@ func (m mvccValueFormatter) Format(f fmt.State, c rune) {
 		errors.FormatError(m.err, f, c)
 		return
 	}
-	fmt.Fprint(f, kvserver.SprintMVCCKeyValue(m.kv, false /* printKey */))
+	fmt.Fprint(f, print.SprintMVCCKeyValue(m.kv, false /* printKey */))
 }
 
 // lockValueFormatter is a fmt.Formatter for lock values.
@@ -1391,7 +1391,7 @@ type lockValueFormatter struct {
 
 // Format implements the fmt.Formatter interface.
 func (m lockValueFormatter) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, kvserver.SprintIntent(m.value))
+	fmt.Fprint(f, print.SprintIntent(m.value))
 }
 
 // pebbleToolFS is the vfs.FS that the pebble tool should use.
