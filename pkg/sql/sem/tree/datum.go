@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -95,7 +96,7 @@ var (
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
 
 	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
-	ValidateJSONPath func(string) (string, error)
+	ValidateJSONPath func(string) (*jsonpath.Jsonpath, error)
 
 	// EmptyDJSON is an empty JSON object.
 	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
@@ -3877,18 +3878,11 @@ func (d *DBox2D) Size() uintptr {
 }
 
 // DJsonpath is the Datum representation of the Jsonpath type.
-type DJsonpath string
+type DJsonpath jsonpath.Jsonpath
 
-func NewDJsonpath(d string) *DJsonpath {
+func NewDJsonpath(d jsonpath.Jsonpath) *DJsonpath {
 	jsonpath := DJsonpath(d)
 	return &jsonpath
-}
-
-// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
-// the contract is that callers must not to mutate the bytes but there is
-// nothing stopping that from happening.
-func (d *DJsonpath) UnsafeBytes() []byte {
-	return encoding.UnsafeConvertStringToBytes(string(*d))
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -3907,15 +3901,7 @@ func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
-	dParsed, err := ValidateJSONPath(string(*d))
-	if err != nil {
-		return 0, err
-	}
-	vParsed, err := ValidateJSONPath(string(*v))
-	if err != nil {
-		return 0, err
-	}
-	return strings.Compare(dParsed, vParsed), nil
+	return strings.Compare(d.String(), v.String()), nil
 }
 
 // Prev implements the Datum interface.
@@ -3953,16 +3939,17 @@ func (*DJsonpath) AmbiguousFormat() bool { return true }
 
 // Size implements the Datum interface.
 func (d *DJsonpath) Size() uintptr {
-	return unsafe.Sizeof(*d) + uintptr(len(*d))
+	// TODO(#22513): add size method for JSONPath
+	return unsafe.Sizeof(*d)
 }
 
 // Format implements the NodeFormatter interface.
 func (d *DJsonpath) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
-		buf.WriteString(string(*d))
+		buf.WriteString(jsonpath.Jsonpath(*d).String())
 	} else {
-		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+		lexbase.EncodeSQLStringWithFlags(buf, jsonpath.Jsonpath(*d).String(), f.EncodeFlags())
 	}
 }
 
@@ -3971,7 +3958,7 @@ func ParseDJsonpath(s string) (Datum, error) {
 	if err != nil {
 		return nil, MakeParseError(s, types.Jsonpath, err)
 	}
-	return NewDJsonpath(jp), nil
+	return NewDJsonpath(*jp), nil
 }
 
 // AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and
@@ -4119,7 +4106,7 @@ func AsJSON(
 	case *DJSON:
 		return t.JSON, nil
 	case *DJsonpath:
-		return json.FromString(string(*t)), nil
+		return json.FromString(t.String()), nil
 	case *DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
@@ -6235,7 +6222,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
-	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath("")), variableSize},
+	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
