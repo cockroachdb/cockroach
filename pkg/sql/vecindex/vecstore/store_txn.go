@@ -107,7 +107,7 @@ func (sc *storeCodec) encodeVector(w *workspace.T, v vector.T, centroid vector.T
 func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx int) ([]byte, error) {
 	switch t := vs.(type) {
 	case *quantize.UnQuantizedVectorSet:
-		return vecencoding.EncodeUnquantizedVector(
+		return vecencoding.EncodeUnquantizerVector(
 			[]byte{}, t.CentroidDistances[idx], t.Vectors.At(idx))
 	case *quantize.RaBitQuantizedVectorSet:
 		return vecencoding.EncodeRaBitQVector(
@@ -185,11 +185,11 @@ func (tx *Txn) decodePartition(
 	}
 	tx.tmpValueBytes = tx.tmpValueBytes[:len(vectorEntries)]
 
-	// Vector entries add the encoded partition level to the metadata key.
-	metaKeyLen := calculateMetaKeyLen(tx.store, treeKey, partitionKey)
-	metaKeyLen += vecencoding.EncodedPartitionLevelLen(metadata.Level)
+	// Determine the length of the prefix of vector data records.
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+	prefixLen := vecencoding.EncodedPrefixVectorKeyLen(metadataKey, metadata.Level)
 	for i, entry := range vectorEntries {
-		childKey, err := vecencoding.DecodeChildKey(entry.Key[metaKeyLen:], metadata.Level)
+		childKey, err := vecencoding.DecodeChildKey(entry.Key[prefixLen:], metadata.Level)
 		if err != nil {
 			return nil, err
 		}
@@ -215,10 +215,11 @@ func (tx *Txn) GetPartition(
 
 	// GetPartition is used by fixup to split and merge partitions, so we want to
 	// block concurrent writes.
-	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	metadataKey = slices.Clip(metadataKey)
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+	startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
 	b.GetForUpdate(metadataKey, tx.lockDurability)
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
+	b.Scan(startKey, endKey)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
 		return nil, err
@@ -244,23 +245,19 @@ func (tx *Txn) insertPartition(
 ) error {
 	b := tx.kv.NewBatch()
 
-	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	metadataKey = slices.Clip(metadataKey)
-	meta, err := vecencoding.EncodePartitionMetadata(partition.Level(), partition.QuantizedSet().GetCentroid())
-	if err != nil {
-		return err
-	}
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+	meta := vecencoding.EncodeMetadataValue(*partition.Metadata())
 	b.Put(metadataKey, meta)
 
-	// Cap the key so that any append allocates a new slice.
-	key := vecencoding.EncodePartitionLevel(metadataKey, partition.Level())
-	key = slices.Clip(key)
+	// Cap the key so that appends allocate a new slice.
+	vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, partition.Level())
+	vectorKey = slices.Clip(vectorKey)
 	codec := tx.getCodecForPartitionKey(partitionKey)
 	childKeys := partition.ChildKeys()
 	valueBytes := partition.ValueBytes()
 	for i := 0; i < partition.QuantizedSet().GetCount(); i++ {
 		// The child key gets appended to 'key' here.
-		k := vecencoding.EncodeChildKey(key, childKeys[i])
+		k := vecencoding.EncodeChildKey(vectorKey, childKeys[i])
 		encodedValue, err := codec.encodeVectorFromSet(partition.QuantizedSet(), i)
 		if err != nil {
 			return err
@@ -296,10 +293,10 @@ func (tx *Txn) DeletePartition(
 ) error {
 	b := tx.kv.NewBatch()
 
-	startKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	endKey := startKey.PrefixEnd()
-
-	b.DelRange(startKey, endKey, false /* returnKeys */)
+	// Delete the metadata record and all vector records in the partition.
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+	b.DelRange(metadataKey, endKey, false /* returnKeys */)
 	return tx.kv.Run(ctx, b)
 }
 
@@ -310,10 +307,7 @@ func (tx *Txn) GetPartitionMetadata(
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
-	// Cap the metadata key so that any append allocates a new slice.
-	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	metadataKey = slices.Clip(metadataKey)
-
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
 	if forUpdate {
 		// By acquiring a shared lock on metadata key, we prevent splits/merges of
 		// this partition from conflicting with the add operation.
@@ -350,11 +344,8 @@ func (tx *Txn) AddToPartition(
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
-	// Cap the metadata key so that any append allocates a new slice.
-	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	metadataKey = slices.Clip(metadataKey)
-
 	// Get partition metadata, needed to quantize the vector.
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
 	b.Get(metadataKey)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
@@ -365,7 +356,7 @@ func (tx *Txn) AddToPartition(
 		return err
 	}
 
-	entryKey := vecencoding.EncodePartitionLevel(metadataKey, level)
+	entryKey := vecencoding.EncodePrefixVectorKey(metadataKey, level)
 	entryKey = vecencoding.EncodeChildKey(entryKey, childKey)
 
 	// Quantize the vector and add it to the partition with a Put command.
@@ -395,11 +386,8 @@ func (tx *Txn) RemoveFromPartition(
 ) error {
 	b := tx.kv.NewBatch()
 
-	// Cap the metadata key so that the append allocates a new slice for the child
-	// key.
-	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
-	metadataKey = slices.Clip(metadataKey)
-	entryKey := vecencoding.EncodePartitionLevel(metadataKey, level)
+	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+	entryKey := vecencoding.EncodePrefixVectorKey(metadataKey, level)
 	entryKey = vecencoding.EncodeChildKey(entryKey, childKey)
 	b.Del(entryKey)
 	if err := tx.kv.Run(ctx, b); err != nil {
@@ -421,16 +409,17 @@ func (tx *Txn) SearchPartitions(
 	b := tx.kv.NewBatch()
 
 	for i := range toSearch {
-		// Cap the metadata key so that any append allocates a new slice.
-		metadataKey := tx.store.encodePartitionKey(treeKey, toSearch[i].Key)
-		metadataKey = slices.Clip(metadataKey)
+		metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, toSearch[i].Key)
 		b.Get(metadataKey)
 		if toSearch[i].ExcludeLeafVectors {
 			// Skip past vectors at the leaf level.
-			startKey := vecencoding.EncodePartitionLevel(metadataKey, cspann.SecondLevel)
-			b.Scan(startKey, metadataKey.PrefixEnd())
+			startKey := vecencoding.EncodePrefixVectorKey(metadataKey, cspann.SecondLevel)
+			endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+			b.Scan(startKey, endKey)
 		} else {
-			b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
+			startKey := vecencoding.EncodeStartVectorKey(metadataKey)
+			endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+			b.Scan(startKey, endKey)
 		}
 	}
 
@@ -546,7 +535,7 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 			numPKLookups++
 			continue
 		}
-		metadataKey := tx.store.encodePartitionKey(treeKey, ref.Key.PartitionKey)
+		metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, ref.Key.PartitionKey)
 		if b == nil {
 			b = tx.kv.NewBatch()
 		}
@@ -576,10 +565,11 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 			refs[idx].Vector = tx.store.emptyVec
 		} else {
 			// Get the centroid from the partition metadata.
-			_, refs[idx].Vector, err = vecencoding.DecodePartitionMetadata(result.Rows[0].ValueBytes())
+			metadata, err := vecencoding.DecodeMetadataValue(result.Rows[0].ValueBytes())
 			if err != nil {
 				return 0, err
 			}
+			refs[idx].Vector = metadata.Centroid
 		}
 		idx++
 	}
@@ -614,10 +604,7 @@ func (tx *Txn) createRootPartition(
 		Centroid:     tx.store.emptyVec,
 		StateDetails: cspann.MakeReadyDetails(),
 	}
-	encoded, err := vecencoding.EncodePartitionMetadata(metadata.Level, metadata.Centroid)
-	if err != nil {
-		return cspann.PartitionMetadata{}, err
-	}
+	encoded := vecencoding.EncodeMetadataValue(metadata)
 
 	// Use CPutAllowingIfNotExists in order to handle the case where the same
 	// transaction inserts multiple vectors (e.g. multiple VALUES rows). In that
@@ -678,22 +665,5 @@ func (tx *Txn) getMetadataFromKVResult(
 		return metadata, nil
 	}
 
-	level, centroid, err := vecencoding.DecodePartitionMetadata(value)
-	if err != nil {
-		return cspann.PartitionMetadata{}, err
-	}
-
-	// Return the metadata.
-	return cspann.PartitionMetadata{
-		Level:        level,
-		Centroid:     centroid,
-		StateDetails: cspann.MakeReadyDetails(),
-	}, nil
-}
-
-// calculateMetaKeyLen returns the length of the metadata partition key.
-func calculateMetaKeyLen(
-	store *Store, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) int {
-	return len(store.prefix) + len(treeKey) + vecencoding.EncodedPartitionKeyLen(partitionKey)
+	return vecencoding.DecodeMetadataValue(value)
 }

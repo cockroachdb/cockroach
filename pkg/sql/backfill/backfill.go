@@ -489,7 +489,7 @@ type VectorIndexHelper struct {
 func (vih *VectorIndexHelper) ReEncodeVector(
 	ctx context.Context, txn *kv.Txn, keyBytes []byte, entry *rowenc.IndexEntry,
 ) (*rowenc.IndexEntry, error) {
-	key, err := vecencoding.DecodeKey(keyBytes, vih.numPrefixCols)
+	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
@@ -520,9 +520,9 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	entry.Key = entry.Key[:0]
 	entry.Key = append(entry.Key, vih.indexPrefix...)
 	entry.Key = key.Encode(entry.Key)
-	entryValueLen := vecencoding.EncodedVectorIndexValueLen(quantizedVector.UnsafeBytes(), suffix)
+	entryValueLen := vecencoding.EncodedVectorValueLen(quantizedVector.UnsafeBytes(), suffix)
 	buf := entry.Value.AllocBytes(entryValueLen)[:0]
-	vecencoding.EncodeVectorIndexValue(buf, quantizedVector.UnsafeBytes(), suffix)
+	vecencoding.EncodeVectorValue(buf, quantizedVector.UnsafeBytes(), suffix)
 
 	// entry.Family is left unchanged from the entry we received, originally encoded by rowenc.EncodeSecondaryIndexes()
 
