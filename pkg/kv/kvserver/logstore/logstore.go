@@ -205,20 +205,10 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.End = crtime.NowMono()
 	}
 
-	if hs := m.HardState; !raft.IsEmptyHardState(hs) {
-		// NB: Note that without additional safeguards, it's incorrect to write
-		// the HardState before appending m.Entries. When catching up, a follower
-		// will receive Entries that are immediately Committed in the same
-		// Ready. If we persist the HardState but happen to lose the Entries,
-		// assertions can be tripped.
-		//
-		// We have both in the same batch, so there's no problem. If that ever
-		// changes, we must write and sync the Entries before the HardState.
-		if err := s.StateLoader.SetHardState(ctx, batch, hs); err != nil {
-			const expl = "during setHardState"
-			return RaftState{}, errors.Wrap(err, expl)
-		}
+	if err := storeHardState(ctx, batch, s.StateLoader, m.HardState); err != nil {
+		return RaftState{}, err
 	}
+
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
 	//
@@ -374,6 +364,26 @@ var logAppendPool = sync.Pool{
 			enginepb.MVCCStats
 		})
 	},
+}
+
+func storeHardState(
+	ctx context.Context, w storage.Writer, sl StateLoader, hs raftpb.HardState,
+) error {
+	if raft.IsEmptyHardState(hs) {
+		return nil
+	}
+	// NB: Note that without additional safeguards, it's incorrect to write the
+	// HardState before appending m.Entries. When catching up, a follower will
+	// receive Entries that are immediately Committed in the same Ready. If we
+	// persist the HardState but happen to lose the Entries, assertions can be
+	// tripped.
+	//
+	// We have both in the same batch, so there's no problem. If that ever
+	// changes, we must write and sync the Entries before the HardState.
+	if err := sl.SetHardState(ctx, w, hs); err != nil {
+		return errors.Wrap(err, "during SetHardState")
+	}
+	return nil
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
