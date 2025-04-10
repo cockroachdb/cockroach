@@ -699,3 +699,45 @@ func TestHandleOnFinishedTraceSpan(t *testing.T) {
 		defer hdl.Activate(ctx).Release(ctx)
 	}(ctx, hdl)
 }
+
+// TestHandleWithoutActivateOrRelease demonstrates that acquiring a Handle
+// without releasing it blocks the stopper on drain, meaning that such mistakes
+// are likely to be caught quickly.
+func TestHandleWithoutActivateOrRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "activate", func(t *testing.T, activate bool) {
+		s := stop.NewStopper()
+		defer s.Stop(ctx)
+
+		ctx, hdl, err := s.GetHandle(ctx, stop.TaskOpts{})
+		require.NoError(t, err)
+
+		relCh := make(chan stop.ActiveHandle, 1)
+		go func() {
+			if activate {
+				relCh <- hdl.Activate(ctx)
+				// Oops, forgot release!
+			} // otherwise, forgot Activate too
+		}()
+
+		stopCh := make(chan struct{})
+		go func() {
+			s.Quiesce(ctx)
+			close(stopCh)
+		}()
+		select {
+		case <-time.After(time.Millisecond):
+			// Expected: we acquired a handle, but never released it.
+		case <-stopCh:
+			t.Fatal("stopper unexpectedly quiesced")
+		}
+		// Release the handle, allowing the deferred Stop to work.
+		if !activate {
+			hdl.Activate(ctx).Release(ctx)
+		} else {
+			(<-relCh).Release(ctx)
+		}
+	})
+}
