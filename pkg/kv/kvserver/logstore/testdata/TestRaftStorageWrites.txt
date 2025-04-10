@@ -1,0 +1,31 @@
+echo
+----
+>> init
+State:{LastIndex:100 LastTerm:20 ByteSize:0} RaftTruncatedState:{Index:100 Term:20}
+>> append (100,103]
+Put: 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): term:21 vote:3 commit:100 lead:3 lead_epoch:5 
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:101 (0x0169f67b757266746c000000000000006500): Term:20 Index:101 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:102 (0x0169f67b757266746c000000000000006600): Term:21 Index:102 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c000000000000006700): Term:21 Index:103 Type:EntryNormal : EMPTY
+State:{LastIndex:103 LastTerm:21 ByteSize:129} RaftTruncatedState:{Index:100 Term:20}
+>> append (101,102] with overlap
+Put: 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): term:22 vote:0 commit:100 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:102 (0x0169f67b757266746c000000000000006600): Term:22 Index:102 Type:EntryNormal : EMPTY
+Delete (Sized at 43): 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c000000000000006700): 
+State:{LastIndex:102 LastTerm:22 ByteSize:86} RaftTruncatedState:{Index:100 Term:20}
+>> append (102,105]
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c000000000000006700): Term:22 Index:103 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): Term:22 Index:104 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): Term:22 Index:105 Type:EntryNormal : EMPTY
+State:{LastIndex:105 LastTerm:22 ByteSize:215} RaftTruncatedState:{Index:100 Term:20}
+>> truncate at 103
+Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:101 (0x0169f67b757266746c000000000000006500): 
+Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:102 (0x0169f67b757266746c000000000000006600): 
+Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:103 (0x0169f67b757266746c000000000000006700): 
+Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:103 term:22 
+State:{LastIndex:105 LastTerm:22 ByteSize:86} RaftTruncatedState:{Index:103 Term:22}
+>> truncate all
+Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:104 (0x0169f67b757266746c000000000000006800): 
+Delete: 0,0 /Local/RangeID/123/u/RaftLog/logIndex:105 (0x0169f67b757266746c000000000000006900): 
+Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:105 term:22 
+State:{LastIndex:105 LastTerm:22 ByteSize:0} RaftTruncatedState:{Index:105 Term:22}
