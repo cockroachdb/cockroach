@@ -135,6 +135,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/kv/kvserver/print",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/multitenant/mtinfopb",
