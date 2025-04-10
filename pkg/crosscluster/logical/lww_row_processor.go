@@ -388,8 +388,9 @@ func (srp *sqlRowProcessor) GetLastRow() cdcevent.Row {
 }
 
 var (
-	forceGenericPlan = sessiondatapb.PlanCacheModeForceGeneric
-	ieOverrideBase   = sessiondata.InternalExecutorOverride{
+	bufferedWritesEnabled = false
+	forceGenericPlan      = sessiondatapb.PlanCacheModeForceGeneric
+	ieOverrideBase        = sessiondata.InternalExecutorOverride{
 		// The OriginIDForLogicalDataReplication session variable will bind the
 		// origin ID 1 to each per-statement batch request header sent by the
 		// internal executor. This metadata will be plumbed to the MVCCValueHeader
@@ -412,8 +413,9 @@ var (
 		GrowStackSize: true,
 		// We don't get any benefits from generating plan gists for internal
 		// queries, so we disable them.
-		DisablePlanGists: true,
-		QualityOfService: &sessiondatapb.BulkLowQoS,
+		DisablePlanGists:      true,
+		QualityOfService:      &sessiondatapb.BulkLowQoS,
+		BufferedWritesEnabled: &bufferedWritesEnabled,
 	}
 )
 
