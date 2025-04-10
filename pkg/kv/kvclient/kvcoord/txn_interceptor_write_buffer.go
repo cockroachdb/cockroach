@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -45,8 +46,8 @@ var bufferedWritesMaxBufferSize = settings.RegisterIntSetting(
 
 // txnWriteBuffer is a txnInterceptor that buffers transactional writes until
 // commit time. Moreover, it also decomposes read-write KV operations (e.g.
-// CPuts, InitPuts) into separate (locking) read and write operations, buffering
-// the latter until commit time.
+// CPuts) into separate (locking) read and write operations, buffering the
+// latter until commit time.
 //
 // Buffering writes until commit time has four main benefits:
 //
@@ -236,7 +237,16 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
-	transformedBa, ts := twb.applyTransformations(ctx, ba)
+	if err := twb.validateBatch(ba); err != nil {
+		// We could choose to twb.flushBufferAndSendBatch
+		// here. For now, we return an error.
+		return nil, kvpb.NewError(err)
+	}
+
+	transformedBa, ts, pErr := twb.applyTransformations(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
 
 	if len(transformedBa.Requests) == 0 {
 		// Lower layers (the DistSender and the KVServer) do not expect/handle empty
@@ -259,6 +269,80 @@ func (twb *txnWriteBuffer) SendLocked(
 	}
 
 	return twb.mergeResponseWithTransformations(ctx, ts, br)
+}
+
+// validateBatch returns an error if the batch is unsupported
+// by the txnWriteBuffer.
+func (twb *txnWriteBuffer) validateBatch(ba *kvpb.BatchRequest) error {
+	if ba.WriteOptions != nil {
+		// OriginTimestamp and OriginID are currently only used by Logical Data
+		// Replication (LDR). These options are unsupported at the moment as we
+		// don't store the inbound batch options in the buffer.
+		if ba.WriteOptions.OriginTimestamp.IsSet() {
+			return errors.AssertionFailedf("transaction write buffer does not support batches with OriginTimestamp set")
+		}
+		if ba.WriteOptions.OriginID != 0 {
+			return errors.AssertionFailedf("transaction write buffer does not support batches with OriginID set")
+		}
+	}
+	return twb.validateRequests(ba)
+}
+
+// validateRequests returns an error if any of the requests in the batch
+// are unsupported by the txnWriteBuffer.
+func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch t := req.(type) {
+		case *kvpb.ConditionalPutRequest:
+			// Our client side ConditionalPutRequest evaluation does not know how to
+			// handle the origin timestamp setting. Doing so would require sending a
+			// GetRequest with RawMVCCValues set and parsing the MVCCValueHeader.
+			if t.OriginTimestamp.IsSet() {
+				return unsupportedOptionError(t.Method(), "OriginTimestamp")
+			}
+		case *kvpb.PutRequest:
+		case *kvpb.DeleteRequest:
+		case *kvpb.GetRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+			}
+		case *kvpb.ScanRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+			}
+			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
+			}
+		case *kvpb.ReverseScanRequest:
+			// ReturnRawMVCCValues is unsupported because we don't know how to serve
+			// such reads from the write buffer currently.
+			if t.ReturnRawMVCCValues {
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+			}
+			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
+			}
+		default:
+			// All other requests are unsupported. Note that we assume EndTxn and
+			// DeleteRange requests were handled explicitly before this method was
+			// called.
+			return unsupportedMethodError(t.Method())
+		}
+	}
+	return nil
+}
+
+func unsupportedMethodError(m kvpb.Method) error {
+	return errors.AssertionFailedf("transaction write buffer does not support %s requests", m)
+}
+
+func unsupportedOptionError(m kvpb.Method, option string) error {
+	return errors.AssertionFailedf("transaction write buffer does not support %s requests with %s", m, option)
 }
 
 // estimateSize returns a conservative estimate by which the buffer will grow in
@@ -510,7 +594,7 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // TODO(arul): Augment this comment as these expand.
 func (twb *txnWriteBuffer) applyTransformations(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchRequest, transformations) {
+) (*kvpb.BatchRequest, transformations, *kvpb.Error) {
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
 	// baRemote.Requests to the correct size by counting the number of Puts/Dels
@@ -670,9 +754,6 @@ func (twb *txnWriteBuffer) applyTransformations(
 				// We've constructed a response that we'll stitch together with the
 				// result on the response path; eschew sending the request to the KV
 				// layer.
-				//
-				// TODO(arul): if the ReturnRawMVCCValues flag is set, we'll need to
-				// flush the buffer.
 				continue
 			}
 			// Wasn't served locally; send the request to the KV layer.
@@ -707,10 +788,10 @@ func (twb *txnWriteBuffer) applyTransformations(
 			baRemote.Requests = append(baRemote.Requests, ru)
 
 		default:
-			baRemote.Requests = append(baRemote.Requests, ru)
+			return nil, nil, kvpb.NewError(unsupportedMethodError(t.Method()))
 		}
 	}
-	return baRemote, ts
+	return baRemote, ts, nil
 }
 
 // seekItemForSpan returns a bufferedWrite appropriate for use with a
@@ -1074,9 +1155,7 @@ func (t transformation) toResp(
 		ru.MustSetInner(reverseScanResp)
 
 	default:
-		// This is only possible once we start decomposing read-write requests into
-		// separate bits.
-		panic("unimplemented")
+		return ru, kvpb.NewError(unsupportedMethodError(req.Method()))
 	}
 
 	return ru, nil
@@ -1696,7 +1775,7 @@ func (m *respMerger) toReverseScanResp(
 
 // assertTrue panics with a message if the supplied condition isn't true.
 func assertTrue(cond bool, msg string) {
-	if !cond {
+	if !cond && buildutil.CrdbTestBuild {
 		panic(msg)
 	}
 }
