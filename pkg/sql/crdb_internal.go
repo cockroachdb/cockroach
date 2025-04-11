@@ -8265,6 +8265,9 @@ func genClusterLocksGenerator(
 		var locks []roachpb.LockStateInfo
 		var resumeSpan *roachpb.Span
 
+		// Ensure that write buffering is disabled since we don't handle
+		// QueryLocksRequest in the txnWriteBuffer right now.
+		p.Txn().SetBufferedWritesEnabled(false)
 		fetchLocks := func(key, endKey roachpb.Key) error {
 			b := p.Txn().NewBatch()
 			queryLocksRequest := &kvpb.QueryLocksRequest{

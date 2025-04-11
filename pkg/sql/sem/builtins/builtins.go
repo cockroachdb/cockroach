@@ -6078,6 +6078,9 @@ SELECT
 					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 						"cannot use crdb_internal.lease_holder in this context")
 				}
+				// Ensure that write buffering is disabled since we don't handle
+				// LeaseInfoRequest in the txnWriteBuffer right now.
+				evalCtx.Txn.SetBufferedWritesEnabled(false)
 				key := []byte(tree.MustBeDBytes(args[0]))
 				b := evalCtx.Txn.NewBatch()
 				b.AddRawRequest(&kvpb.LeaseInfoRequest{
