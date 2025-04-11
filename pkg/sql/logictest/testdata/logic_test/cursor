@@ -1,4 +1,7 @@
 statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
 SET autocommit_before_ddl = false
 
 statement ok

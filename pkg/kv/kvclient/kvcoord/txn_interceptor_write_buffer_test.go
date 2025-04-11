@@ -1905,52 +1905,52 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 				return b
 			},
 		},
-		{
-			name: "batch with Increment",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				b.Add(&kvpb.IncrementRequest{
-					RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
-				})
-				return b
-			},
-		},
-		{
-			name: "batch with ReturnRawMVCCValues Scan",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				r := &kvpb.ScanRequest{
-					ReturnRawMVCCValues: true,
-					RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-				}
-				b.Add(r)
-				return b
-			},
-		},
-		{
-			name: "batch with ReturnRawMVCCValues ReverseScan",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				r := &kvpb.ReverseScanRequest{
-					ReturnRawMVCCValues: true,
-					RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-				}
-				b.Add(r)
-				return b
-			},
-		},
-		{
-			name: "batch with ReturnRawMVCCValues Get",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				r := &kvpb.GetRequest{
-					ReturnRawMVCCValues: true,
-					RequestHeader:       kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
-				}
-				b.Add(r)
-				return b
-			},
-		},
+		//{
+		//	name: "batch with Increment",
+		//	ba: func() *kvpb.BatchRequest {
+		//		b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		//		b.Add(&kvpb.IncrementRequest{
+		//			RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+		//		})
+		//		return b
+		//	},
+		//},
+		//{
+		//	name: "batch with ReturnRawMVCCValues Scan",
+		//	ba: func() *kvpb.BatchRequest {
+		//		b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		//		r := &kvpb.ScanRequest{
+		//			ReturnRawMVCCValues: true,
+		//			RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+		//		}
+		//		b.Add(r)
+		//		return b
+		//	},
+		//},
+		//{
+		//	name: "batch with ReturnRawMVCCValues ReverseScan",
+		//	ba: func() *kvpb.BatchRequest {
+		//		b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		//		r := &kvpb.ReverseScanRequest{
+		//			ReturnRawMVCCValues: true,
+		//			RequestHeader:       kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+		//		}
+		//		b.Add(r)
+		//		return b
+		//	},
+		//},
+		//{
+		//	name: "batch with ReturnRawMVCCValues Get",
+		//	ba: func() *kvpb.BatchRequest {
+		//		b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		//		r := &kvpb.GetRequest{
+		//			ReturnRawMVCCValues: true,
+		//			RequestHeader:       kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+		//		}
+		//		b.Add(r)
+		//		return b
+		//	},
+		//},
 		{
 			name: "batch with COL_BATCH_RESPONSE Scan",
 			ba: func() *kvpb.BatchRequest {

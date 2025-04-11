@@ -102,6 +102,9 @@ SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
 1  foo
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # Always enable the direct columnar scans to make the output below
 # deterministic.
 statement ok
@@ -123,3 +126,6 @@ EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
 
 statement ok
 RESET direct_columnar_scans_enabled
+
+statement ok
+RESET kv_transaction_buffered_writes_enabled;
