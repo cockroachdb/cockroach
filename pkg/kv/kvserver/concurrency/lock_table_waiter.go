@@ -303,7 +303,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// to its state for the entire delay, it should push. It may be the case
 			// that the transaction is part of a dependency cycle or that the lock
 			// holder's coordinator node has crashed.
-			timer.Read = true
 			timerC = nil
 			if w.onPushTimer != nil {
 				w.onPushTimer()

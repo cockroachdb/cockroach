@@ -370,7 +370,6 @@ func waitForLeasePreferences(
 		case <-maxWaitC:
 			return ret, errors.Errorf("timed out before lease preferences satisfied")
 		case <-checkTimer.C:
-			checkTimer.Read = true
 			violating, lessPreferred := preferenceMetrics(ctx)
 			now := timeutil.Now()
 			sinceStart := now.Sub(start)
