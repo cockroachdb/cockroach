@@ -1,0 +1,19 @@
+# This test documents the outputs of a MultiSSTWriter
+# that does not see any inputs.
+echo
+----
+>> finishing sst
+>> writeBytes=4760 sstSize=4623 dataSize=126
+>> sst0:
+rangedel: /Local/RangeID/100/{r""-s""}
+rangekeydel: /Local/RangeID/100/{r""-s""}
+>> sst1:
+rangedel: /Local/Range{"d"-/Max}
+rangekeydel: /Local/Range{"d"-/Max}
+>> sst2:
+rangedel: /Local/Lock/Local/Range{"d"-/Max}
+rangekeydel: /Local/Lock/Local/Range{"d"-/Max}
+>> sst3:
+rangedel: /Local/Lock{"d"-/Max}
+rangekeydel: /Local/Lock{"d"-/Max}
+>> sst4:
