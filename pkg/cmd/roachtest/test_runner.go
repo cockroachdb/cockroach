@@ -109,6 +109,16 @@ var (
 		)
 	}
 
+	// liveMigrationError indicates that a test failed and also experienced
+	// a live migration. These errors are directed to Test Eng instead of owning teams.
+	liveMigrationError = func(liveMigrationVMs string) error {
+		return registry.ErrorWithOwner(
+			registry.OwnerTestEng, fmt.Errorf("liveMigrationError VMs: %s", liveMigrationVMs),
+			registry.WithTitleOverride("live_migration_error"),
+			registry.InfraFlake,
+		)
+	}
+
 	prng, _ = randutil.NewLockedPseudoRand()
 
 	runID string
@@ -1219,6 +1229,12 @@ func (r *testRunner) runTest(
 					t.resetFailures()
 					t.Error(vmHostError(hostErrorVMNames))
 				}
+				liveMigrationVMNames := getLiveMigrationVMNames(c, l)
+				if liveMigrationVMNames != "" {
+					failureMsg = fmt.Sprintf("VMs had live migrations during the test run: %s\n\n**Other Failures:**\n%s", liveMigrationVMNames, failureMsg)
+					t.resetFailures()
+					t.Error(liveMigrationError(hostErrorVMNames))
+				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 				params := getTestParameters(t, github.cluster, github.vmCreateOpts)
@@ -1499,6 +1515,18 @@ func getHostErrorVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) 
 	}
 
 	return getVMNames(hostErrorVMs)
+}
+
+// getLiveMigrationVMNames returns a comma separated list of VMs that
+// experienced a live migration over the duration of the test.
+func getLiveMigrationVMNames(c *clusterImpl, l *logger.Logger) string {
+	liveMigrationVMs, err := c.GetLiveMigrationVMs(l)
+	if err != nil {
+		l.Printf("failed to check live migrations:\n%+v", err)
+		return ""
+	}
+
+	return strings.Join(liveMigrationVMs, ", ")
 }
 
 // The assertions here are executed after each test, and may result in a test failure. Test authors

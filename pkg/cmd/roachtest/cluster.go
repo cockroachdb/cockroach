@@ -3352,6 +3352,33 @@ func (c *clusterImpl) GetHostErrorVMs(ctx context.Context, l *logger.Logger) ([]
 	return allHostErrorVMs, nil
 }
 
+func (c *clusterImpl) GetLiveMigrationVMs(l *logger.Logger) ([]string, error) {
+	if c.IsLocal() {
+		return nil, nil
+	}
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return nil, err
+	}
+
+	var liveMigrationVMs struct {
+		syncutil.Mutex
+		names []string
+	}
+	clusterErr := vm.FanOut(cachedCluster.VMs, func(p vm.Provider, vms vm.List) error {
+		names, err := p.GetLiveMigrationVMs(l, vms, cachedCluster.CreatedAt)
+		if err != nil {
+			return err
+		}
+		liveMigrationVMs.Lock()
+		defer liveMigrationVMs.Unlock()
+		liveMigrationVMs.names = append(liveMigrationVMs.names, names...)
+		return nil
+	})
+
+	return liveMigrationVMs.names, clusterErr
+}
+
 // RegisterClusterHook registers a hook to be run at a certain point as defined
 // by option.ClusterHookType. This exposes a way for test writers to run code
 // in between certain steps normally orchestrated by the framework, e.g. running
