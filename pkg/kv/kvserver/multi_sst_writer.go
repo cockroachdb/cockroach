@@ -112,11 +112,16 @@ func newMultiSSTWriter(
 }
 
 func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
+	wb := msstw.currSST.EstimatedSize()
 	for i := range key.Keys {
 		if err := msstw.currSST.PutInternalRangeKey(key.Start, key.End, key.Keys[i]); err != nil {
 			panic(fmt.Sprintf("failed to put range key in sst: %s", err))
 		}
 	}
+	// NB: this update is often zero in practice since currSST also has an
+	// internal fragmenter and EstimatedSize doesn't try to estimate for the keys
+	// buffered.
+	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - wb)
 }
 
 func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
@@ -384,15 +389,12 @@ func (msstw *multiSSTWriter) PutInternalRangeKey(
 	if err := msstw.rolloverSST(ctx, decodedStart, decodedEnd); err != nil {
 		return err
 	}
-	prevWriteBytes := msstw.currSST.EstimatedSize()
 
 	msstw.rangeKeyFrag.Add(rangekey.Span{
 		Start: start,
 		End:   end,
 		Keys:  []rangekey.Key{key},
 	})
-
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
 }
 
