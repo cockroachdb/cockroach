@@ -1453,6 +1453,29 @@ func verifyLogsWithEmittedBytesAndMessages(
 	})
 }
 
+// Checks to see that a closing changefeed continuous telemetry event is emitted
+func verifyClosingContinousTelemetryEvent(
+	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
+		if len(emittedBytesLogs) == 0 {
+			return errors.New("no logs found")
+		}
+		for _, msg := range emittedBytesLogs {
+			t.Logf("read message %v", msg)
+			if msg.JobId != int64(jobID) {
+				continue
+			}
+			require.Equal(t, interval, msg.LoggingInterval)
+			if msg.Closing {
+				return nil
+			}
+		}
+		return errors.New("cannot find closing event")
+	})
+}
+
 func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
 	var matchingEntries []eventpb.CreateChangefeed
 

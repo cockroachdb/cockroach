@@ -134,6 +134,9 @@ func wrapMetricsRecorderWithTelemetry(
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
 	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	if knobs.IncNumPeriodicTelemetryLogger != nil {
+		knobs.IncNumPeriodicTelemetryLogger()
+	}
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}
