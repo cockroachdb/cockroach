@@ -121,7 +121,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			d.deleteSpans(params, b, spans)
 			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
 			if err := params.p.txn.Run(ctx, b); err != nil {
-				return row.ConvertBatchError(ctx, d.desc, b)
+				return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 			}
 
 			spans = spans[:0]
@@ -144,7 +144,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		d.deleteSpans(params, b, spans)
 		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
-			return row.ConvertBatchError(ctx, d.desc, b)
+			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
 		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err

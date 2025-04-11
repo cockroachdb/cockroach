@@ -68,7 +68,9 @@ type batchedPlanNode interface {
 }
 
 var _ batchedPlanNode = &deleteNode{}
+var _ batchedPlanNode = &deleteSwapNode{}
 var _ batchedPlanNode = &updateNode{}
+var _ batchedPlanNode = &updateSwapNode{}
 
 // serializeNode serializes the results of a batchedPlanNode into a
 // plain planNode interface. In other words, it wraps around
