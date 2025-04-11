@@ -9,8 +9,13 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/testutils/serverutils/regionlatency",
         "//pkg/testutils/testcluster",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
