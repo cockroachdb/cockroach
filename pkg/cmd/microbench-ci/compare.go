@@ -86,18 +86,6 @@ func (c *CompareResult) status(metricName string) Status {
 	return status
 }
 
-// top returns the top status of all metrics in the comparison.
-func (c *CompareResult) top() Status {
-	topStatus := NoChange
-	for metric := range c.MetricMap {
-		status := c.status(metric)
-		if status > topStatus {
-			topStatus = status
-		}
-	}
-	return topStatus
-}
-
 // compare compares the metrics of a benchmark between two revisions. Only the
 // specified last number of lines of the benchmark logs are considered. If lines
 // is 0, it considers the entire logs.
@@ -153,7 +141,10 @@ func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 		if err != nil {
 			return nil, err
 		}
-		if compareResult.top() != NoChange {
+
+		// If the benchmark has a marker file (regressed or improved), compare
+		// all the runs instead of just the last one.
+		if suite.hasMarkerFile(New, &benchmark) {
 			compareResult, err = benchmark.compare(0)
 			if err != nil {
 				return nil, err

@@ -98,6 +98,18 @@ func (s *Suite) binURL(revision Revision, benchmark *Benchmark) string {
 		Bucket, s.revisionSHA(revision), benchmark.binaryName())
 }
 
+func (s *Suite) hasMarkerFile(revision Revision, benchmark *Benchmark) bool {
+	artifactsDir := s.artifactsDir(revision)
+	for _, status := range []Status{Regressed, Improved} {
+		markerFile := path.Join(artifactsDir, benchmark.markerName(status))
+		_, err := os.Stat(markerFile)
+		if err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func makeRunCommand() *cobra.Command {
 	cmdFunc := func(cmd *cobra.Command, commandLine []string) error {
 		if err := config.loadSuite(); err != nil {
