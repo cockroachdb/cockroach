@@ -8886,6 +8886,18 @@ func TestFlushJitter(t *testing.T) {
 			expectedFlushDuration: 100 * time.Millisecond,
 			expectedErr:           false,
 		},
+		{
+			flushFrequency:        1,
+			jitter:                0.1,
+			expectedFlushDuration: 1,
+			expectedErr:           false,
+		},
+		{
+			flushFrequency:        10,
+			jitter:                0.01,
+			expectedFlushDuration: 10,
+			expectedErr:           false,
+		},
 		// Enable Jitter.
 		{
 			flushFrequency:        -1,
