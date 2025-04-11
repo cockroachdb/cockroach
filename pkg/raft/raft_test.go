@@ -5009,7 +5009,7 @@ func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 		configFunc(cfg)
 	}
 	sm := newRaft(cfg)
-	sm.reset(terms[len(terms)-1])
+	sm.reset(terms[len(terms)-1], nil)
 	return sm
 }
 
@@ -5024,7 +5024,7 @@ func votedWithConfig(configFunc func(*Config), vote pb.PeerID, term uint64) *raf
 		configFunc(cfg)
 	}
 	sm := newRaft(cfg)
-	sm.reset(term)
+	sm.reset(term, nil)
 	return sm
 }
 
@@ -5267,7 +5267,7 @@ func newNetworkWithConfigAndLivenessFabric(
 				}
 				v.trk.TestingSetProgress(peerAddrs[i], pr)
 			}
-			v.reset(v.Term)
+			v.reset(v.Term, nil)
 			npeers[id] = v
 		case *blackHole:
 			npeers[id] = v
