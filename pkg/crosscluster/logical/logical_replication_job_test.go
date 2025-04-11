@@ -2449,16 +2449,20 @@ func TestMismatchColIDs(t *testing.T) {
 	sqlB.Exec(t, "ALTER TABLE foo DROP COLUMN bar")
 	sqlB.Exec(t, "INSERT INTO foo VALUES (4, 'world')")
 
-	// LDR immediate mode creation should fail because of mismatched column IDs.
+	// When using the kv writer, LDR immediate mode creation should fail because of mismatched column IDs.
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
 	sqlA.ExpectErr(t,
 		"destination table foo column baz has ID 3, but the source table foo has ID 4",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String())
 
-	// LDR validated mode creation should succeed because the SQL writer supports mismatched column IDs.
 	var jobID jobspb.JobID
 	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'validated'", dbBURL.String()).Scan(&jobID)
-
 	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, sqlA, jobID)
+
+	sqlA.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer")
+	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String()).Scan(&jobID)
+	now = s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, sqlA, jobID)
 }
 

@@ -218,7 +218,7 @@ func checkSrcDstColsMatch(
 		}
 
 		if requireKvWriterCompatible && srcCol.ID != dstCol.ID {
-			return errors.Newf("destination table %s column %s has ID %d, but the source table %s has ID %d",
+			return errors.Newf("destination table %s column %s has ID %d, but the source table %s has ID %d. To circumvent this check, unset logical_replication.consumer.immediate_mode_writer from 'legacy-kv'",
 				dst.Name, dstCol.Name, dstCol.ID, src.Name, srcCol.ID,
 			)
 		}
