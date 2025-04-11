@@ -305,6 +305,14 @@ accessor_expr:
   {
     $$.val = []jsonpath.Path{$1.path()}
   }
+| '(' expr ')' accessor_op
+  {
+    $$.val = []jsonpath.Path{$2.path(), $4.path()}
+  }
+| '(' predicate ')' accessor_op
+  {
+    $$.val = []jsonpath.Path{$2.path(), $4.path()}
+  }
 | accessor_expr accessor_op
   {
     $$.val = append($1.pathArr(), $2.path())
