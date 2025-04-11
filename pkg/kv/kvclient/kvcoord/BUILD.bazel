@@ -48,6 +48,7 @@ go_library(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
