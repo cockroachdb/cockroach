@@ -118,9 +118,10 @@ func (o *OverrideStorePool) GetStoreList(
 	defer o.sp.DetailsMu.Unlock()
 
 	var storeIDs roachpb.StoreIDSlice
-	for storeID := range o.sp.DetailsMu.StoreDetails {
+	o.sp.DetailsMu.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetail) bool {
 		storeIDs = append(storeIDs, storeID)
-	}
+		return true
+	})
 	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 

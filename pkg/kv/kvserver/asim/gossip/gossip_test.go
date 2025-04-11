@@ -7,6 +7,7 @@ package gossip
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +28,7 @@ func TestGossip(t *testing.T) {
 	for _, rng := range s.Ranges() {
 		s.TransferLease(rng.RangeID(), 1)
 	}
-	details := map[state.StoreID]*map[roachpb.StoreID]*storepool.StoreDetail{}
+	details := map[state.StoreID]*syncutil.Map[roachpb.StoreID, storepool.StoreDetail]{}
 
 	for _, store := range s.Stores() {
 		// Cast the storepool to a concrete storepool type in order to mutate
@@ -35,8 +37,8 @@ func TestGossip(t *testing.T) {
 		details[store.StoreID()] = &sp.DetailsMu.StoreDetails
 	}
 
-	assertStorePool := func(f func(prev, cur *map[roachpb.StoreID]*storepool.StoreDetail)) {
-		var prev *map[roachpb.StoreID]*storepool.StoreDetail
+	assertStorePool := func(f func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail])) {
+		var prev *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]
 		for _, cur := range details {
 			if prev != nil {
 				f(prev, cur)
@@ -45,13 +47,61 @@ func TestGossip(t *testing.T) {
 		}
 	}
 
-	assertEmptyFn := func(prev, cur *map[roachpb.StoreID]*storepool.StoreDetail) {
-		require.Len(t, *prev, 0)
-		require.Len(t, *cur, 0)
+	assertEmptyFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]) {
+		prevCount, curCount := 0, 0
+		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+			prevCount++
+			return true
+		})
+		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+			curCount++
+			return true
+		})
+		require.Equal(t, 0, prevCount)
+		require.Equal(t, 0, curCount)
 	}
 
-	assertSameFn := func(prev, cur *map[roachpb.StoreID]*storepool.StoreDetail) {
-		require.Equal(t, *prev, *cur)
+	assertSameFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]) {
+		var prevResults []struct {
+			StoreID roachpb.StoreID
+			Detail  *storepool.StoreDetail
+		}
+		var curResults []struct {
+			StoreID roachpb.StoreID
+			Detail  *storepool.StoreDetail
+		}
+
+		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+			prevResults = append(prevResults, struct {
+				StoreID roachpb.StoreID
+				Detail  *storepool.StoreDetail
+			}{
+				StoreID: key,
+				Detail:  value,
+			})
+			return true
+		})
+
+		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+			curResults = append(curResults, struct {
+				StoreID roachpb.StoreID
+				Detail  *storepool.StoreDetail
+			}{
+				StoreID: key,
+				Detail:  value,
+			})
+			return true
+		})
+
+		// Sort the results by StoreID to ensure that the order is the same.
+		sort.Slice(prevResults, func(i, j int) bool {
+			return prevResults[i].StoreID < prevResults[j].StoreID
+		})
+		sort.Slice(curResults, func(i, j int) bool {
+			return curResults[i].StoreID < curResults[j].StoreID
+		})
+
+		require.Equal(t, prevResults, curResults)
 	}
 
 	gossip := NewGossip(s, settings)
@@ -109,11 +159,18 @@ func TestGossip(t *testing.T) {
 	assertStorePool(assertSameFn)
 	// Assert that the lease counts are as expected after transferring all of
 	// the leases to s2.
-	require.Equal(t, int32(0), (*details[1])[1].Desc.Capacity.LeaseCount)
+	val, ok := (*details[1]).Load(1)
+	require.True(t, ok)
+	require.Equal(t, int32(0), val.Desc.Capacity.LeaseCount)
 	// Depending on the capacity delta threshold, s2 may not have gossiped
 	// exactly when it reached 100 leases, as it earlier gossiped at 90+ leases,
 	// so 100 may be < lastGossip * capacityDeltaThreshold, not triggering
 	// gossip. Assert that the lease count gossiped is at least 90.
-	require.Greater(t, (*details[1])[2].Desc.Capacity.LeaseCount, int32(90))
-	require.Equal(t, int32(0), (*details[1])[3].Desc.Capacity.LeaseCount)
+	val, ok = (*details[1]).Load(2)
+	require.True(t, ok)
+	require.Greater(t, val.Desc.Capacity.LeaseCount, int32(90))
+
+	val, ok = (*details[1]).Load(3)
+	require.True(t, ok)
+	require.Equal(t, int32(0), val.Desc.Capacity.LeaseCount)
 }
