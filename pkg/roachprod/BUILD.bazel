@@ -29,6 +29,7 @@ go_library(
         "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/flagstub",
         "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
         "//pkg/roachprod/vm/local",
         "//pkg/server/debug/replay",
         "//pkg/util/ctxgroup",
