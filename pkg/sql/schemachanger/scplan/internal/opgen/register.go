@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,6 +30,16 @@ func notImplementedForPublicObjects(e scpb.Element) *scop.NotImplementedForPubli
 	return &scop.NotImplementedForPublicObjects{
 		ElementType: reflect.ValueOf(e).Type().Elem().String(),
 		DescID:      screl.GetDescID(e),
+	}
+}
+
+func notImplementedForPublicTriggers(
+	e scpb.Element, triggerID catid.TriggerID,
+) *scop.NotImplementedForPublicObjects {
+	return &scop.NotImplementedForPublicObjects{
+		ElementType: reflect.ValueOf(e).Type().Elem().String(),
+		DescID:      screl.GetDescID(e),
+		TriggerID:   triggerID,
 	}
 }
 

@@ -11,6 +11,8 @@ EXPLAIN (DDL) DROP POLICY "policy 2" on t1;
 Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t1)}
  │         ├── 6 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT Policy:{DescID: 104 (t1), PolicyID: 2}
  │         │    ├── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
@@ -18,34 +20,50 @@ Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
  │         │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "user2", PolicyID: 2}
  │         │    ├── PUBLIC → ABSENT PolicyWithCheckExpr:{DescID: 104 (t1), Expr: true, PolicyID: 2}
  │         │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 104 (t1), PolicyID: 2}
- │         └── 5 Mutation operations
+ │         └── 6 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── SetPolicyName {"Name":"crdb_internal_po...","PolicyID":2,"TableID":104}
  │              ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user1","TableID":104}}
  │              ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user2","TableID":104}}
  │              ├── SetPolicyWithCheckExpression {"PolicyID":2,"TableID":104}
  │              └── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 6 elements transitioning toward ABSENT
-      │    │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 2}
-      │    │    ├── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
-      │    │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "user1", PolicyID: 2}
-      │    │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "user2", PolicyID: 2}
-      │    │    ├── ABSENT → PUBLIC PolicyWithCheckExpr:{DescID: 104 (t1), Expr: true, PolicyID: 2}
-      │    │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 104 (t1), PolicyID: 2}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 6 elements transitioning toward ABSENT
-           │    ├── PUBLIC → ABSENT Policy:{DescID: 104 (t1), PolicyID: 2}
-           │    ├── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
-           │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "user1", PolicyID: 2}
-           │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "user2", PolicyID: 2}
-           │    ├── PUBLIC → ABSENT PolicyWithCheckExpr:{DescID: 104 (t1), Expr: true, PolicyID: 2}
-           │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 104 (t1), PolicyID: 2}
-           └── 5 Mutation operations
-                ├── SetPolicyName {"Name":"crdb_internal_po...","PolicyID":2,"TableID":104}
-                ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user1","TableID":104}}
-                ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user2","TableID":104}}
-                ├── SetPolicyWithCheckExpression {"PolicyID":2,"TableID":104}
-                └── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
+ │    │    ├── 6 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT → PUBLIC Policy:{DescID: 104 (t1), PolicyID: 2}
+ │    │    │    ├── ABSENT → PUBLIC PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
+ │    │    │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "user1", PolicyID: 2}
+ │    │    │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 104 (t1), Name: "user2", PolicyID: 2}
+ │    │    │    ├── ABSENT → PUBLIC PolicyWithCheckExpr:{DescID: 104 (t1), Expr: true, PolicyID: 2}
+ │    │    │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 104 (t1), PolicyID: 2}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t1)}
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT Policy:{DescID: 104 (t1), PolicyID: 2}
+ │         │    ├── PUBLIC → ABSENT PolicyName:{DescID: 104 (t1), Name: "policy 2", PolicyID: 2}
+ │         │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "user1", PolicyID: 2}
+ │         │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 104 (t1), Name: "user2", PolicyID: 2}
+ │         │    ├── PUBLIC → ABSENT PolicyWithCheckExpr:{DescID: 104 (t1), Expr: true, PolicyID: 2}
+ │         │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 104 (t1), PolicyID: 2}
+ │         └── 8 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── SetPolicyName {"Name":"crdb_internal_po...","PolicyID":2,"TableID":104}
+ │              ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user1","TableID":104}}
+ │              ├── RemovePolicyRole {"Role":{"PolicyID":2,"RoleName":"user2","TableID":104}}
+ │              ├── SetPolicyWithCheckExpression {"PolicyID":2,"TableID":104}
+ │              ├── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

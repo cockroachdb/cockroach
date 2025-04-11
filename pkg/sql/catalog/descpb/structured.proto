@@ -1369,7 +1369,12 @@ message TableDescriptor {
   // When forced is set the table's RLS policies are enforced even on the table owner.
   optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
 
-  // Next ID: 70
+  // schema_locked_job_id is the job ID for a schema change that had to unset the
+  // schema_locked field via the legacy schema changer. This descriptor cannot
+  // be modified until this job completes.
+  optional int64 schema_locked_job_id = 70 [(gogoproto.nullable) = false, (gogoproto.customname) = "SchemaLockedJobID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Next ID: 71
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

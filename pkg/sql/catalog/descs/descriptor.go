@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -223,7 +224,25 @@ func getDescriptorsByID(
 		if err := filterDescriptor(desc, flags); err != nil {
 			return err
 		}
+
+		// The legacy schema changer will set SchemaLockedJobID before starting a
+		// schema change job that will propagate the first descriptor update.
+		// The first descriptor state is directly persisted in the job, so we cannot
+		// have any one modify this descriptor but the job. So, the descriptor
+		// collection  will never let any one other than the job itself check out this
+		// descriptor in a mutable state. Everyone else will hit into a retryable
+		// error waiting for this job ID to complete.
+		if flags.isMutable {
+			if td, ok := desc.(catalog.MutableTableDescriptor); ok {
+				if td.TableDesc().SchemaLockedJobID != 0 &&
+					td.TableDesc().SchemaLockedJobID != tc.schemaLockedJobID &&
+					tc.uncommitted.uncommitted.GetByID(td.GetID()) == nil {
+					return scerrors.ConcurrentSchemaChangeError(td)
+				}
+			}
+		}
 	}
+
 	return nil
 }
 

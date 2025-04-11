@@ -19,7 +19,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 41 MutationType ops
+## StatementPhase stage 1 of 1 with 42 MutationType ops
 delete object namespace entry {100 101 t} -> 105
 upsert descriptor #104
    function:
@@ -45,6 +45,7 @@ upsert descriptor #105
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  state: DROP
      unexposedParentSchemaId: 101
   -  version: "1"
@@ -54,7 +55,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 44 MutationType ops
+## PreCommitPhase stage 2 of 2 with 45 MutationType ops
 delete object namespace entry {100 101 t} -> 105
 upsert descriptor #104
    function:
@@ -102,6 +103,7 @@ upsert descriptor #105
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  state: DROP
      unexposedParentSchemaId: 101
   -  version: "1"

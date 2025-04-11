@@ -5,4 +5,4 @@ CREATE TABLE t (i INT PRIMARY KEY, j CHAR(10) NOT NULL);
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(15);
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE CHAR(15);
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

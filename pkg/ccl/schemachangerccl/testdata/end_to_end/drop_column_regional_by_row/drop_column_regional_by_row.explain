@@ -22,12 +22,13 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 3}
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
  │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v-)}
- │         └── 10 Mutation operations
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │         └── 11 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":3}}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":2,"TableID":108}
@@ -35,7 +36,9 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":108}}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"TableID":108}
- │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Ordinal":1,"TableID":108}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Ordinal":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              └── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 5 elements transitioning toward PUBLIC
@@ -49,6 +52,8 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 3}
  │    │    │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT           → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
  │    │    ├── 2 elements transitioning toward ABSENT
  │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
  │    │    │    └── ABSENT           → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v-)}
@@ -66,12 +71,13 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 3}
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
  │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v-)}
- │         └── 14 Mutation operations
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │         └── 15 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":3}}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":108}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":108}}
@@ -82,6 +88,8 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Ordinal":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
@@ -133,7 +141,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":108}
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
       │    │    ├── VALIDATED             → PUBLIC           PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey-)}
       │    │    └── ABSENT                → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_pkey", IndexID: 2 (table_regional_by_row_pkey+)}
@@ -157,7 +165,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 1 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 1 (table_regional_by_row_pkey-)}
@@ -170,18 +178,25 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_ABSENT
-           │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
-           │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 2 (v-), TypeName: "STRING"}
-           │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
-           │    └── PUBLIC      → ABSENT           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey-)}
-           └── 6 Mutation operations
-                ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+      ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+      │    │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v-)}
+      │    │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 2 (v-), TypeName: "STRING"}
+      │    │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
+      │    │    └── PUBLIC      → ABSENT           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 1 (table_regional_by_row_pkey-)}
+      │    └── 6 Mutation operations
+      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 4 of 4 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

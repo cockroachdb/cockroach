@@ -34,4 +34,4 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
  ├── validate UNIQUE constraint backed by index t_a_idx+ in relation t
- └── execute 4 system table mutations transactions
+ └── execute 5 system table mutations transactions

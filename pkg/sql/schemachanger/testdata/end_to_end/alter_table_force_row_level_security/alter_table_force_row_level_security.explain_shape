@@ -7,4 +7,4 @@ ALTER TABLE roaches FORCE ROW LEVEL SECURITY;
 EXPLAIN (DDL, SHAPE) ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› NO FORCE ROW LEVEL SECURITY;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

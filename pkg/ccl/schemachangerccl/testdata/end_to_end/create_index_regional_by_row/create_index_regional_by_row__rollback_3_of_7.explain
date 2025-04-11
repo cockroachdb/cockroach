@@ -11,7 +11,7 @@ EXPLAIN (DDL) rollback at post-commit stage 3 of 7;
 ----
 Schema change plan for rolling back CREATE INDEX rbr_idx ON multiregion_db.public.table_regional_by_row (v) PARTITION BY crdb_region) ();
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 12 elements transitioning toward ABSENT
       │    │    ├── BACKFILL_ONLY    → ABSENT      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx-), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC           → ABSENT      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx-)}
@@ -38,14 +38,21 @@ Schema change plan for rolling back CREATE INDEX rbr_idx ON multiregion_db.publi
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 3 elements transitioning toward ABSENT
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx-)}
-           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (table_regional_by_row_pkey)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
-           └── 5 Mutation operations
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":108}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx-)}
+      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (table_regional_by_row_pkey)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
+      │    └── 5 Mutation operations
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

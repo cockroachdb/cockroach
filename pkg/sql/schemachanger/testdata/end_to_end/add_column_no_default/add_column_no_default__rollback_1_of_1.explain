@@ -8,15 +8,22 @@ EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
 ----
 Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8;
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (j-)}
-           │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j-)}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-), TypeName: "INT8"}
-           │    └── PUBLIC      → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
-           └── 5 Mutation operations
-                ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (j-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-), TypeName: "INT8"}
+      │    │    └── PUBLIC      → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
+      │    └── 5 Mutation operations
+      │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

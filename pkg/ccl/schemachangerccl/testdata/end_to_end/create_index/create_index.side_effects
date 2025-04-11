@@ -23,7 +23,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -107,7 +107,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -116,7 +118,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -234,7 +236,9 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -341,42 +345,14 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 upsert descriptor #104
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": id
-  -        "2": name
-  -        "3": money
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "1": t_pkey
-  -        "2": idx
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
-  -        statement: CREATE INDEX idx ON defaultdb.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
-  -        statementTag: CREATE INDEX
+           statement: CREATE INDEX idx ON defaultdb.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
+           statementTag: CREATE INDEX
   -    revertible: true
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
      formatVersion: 3
      id: 104
@@ -494,12 +470,59 @@ persist all catalog changes to storage
 adding table for stats refresh: 104
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx ON defaultdb.public.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+notified job registry to adopt jobs: [2]
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": id
+  -        "2": name
+  -        "3": money
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
+  -        statement: CREATE INDEX idx ON defaultdb.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
+  -        statementTag: CREATE INDEX
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #10
-notified job registry to adopt jobs: [2]
+commit transaction #11
 # end PostCommitPhase

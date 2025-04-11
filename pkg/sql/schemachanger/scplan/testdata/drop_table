@@ -432,18 +432,23 @@ StatementPhase stage 1 of 1 with 141 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
+      TriggerID: 1
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -1136,18 +1141,23 @@ PreCommitPhase stage 2 of 2 with 152 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
+      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
+      TriggerID: 1
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
