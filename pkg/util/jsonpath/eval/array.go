@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -18,6 +20,7 @@ var (
 	errIndexOnNonArray        = pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath array accessor can only be applied to an array")
 	errIndexOutOfBounds       = pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is out of bounds")
 	errIndexNotSingleNumValue = pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is not a single numeric value")
+	errInvalidSubscript       = pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is out of integer range")
 )
 
 func (ctx *jsonpathCtx) evalArrayWildcard(jsonValue json.JSON) ([]json.JSON, error) {
@@ -110,11 +113,9 @@ func (ctx *jsonpathCtx) resolveArrayIndex(
 	if len(evalResults) != 1 || evalResults[0].Type() != json.NumberJSONType {
 		return -1, errIndexNotSingleNumValue
 	}
-	// TODO(normanchenn): Postgres returns an error if the index is outside int32
-	// range. (ex. `select jsonb_path_query('[1]', 'lax $[10000000000000000]');
 	i, err := asInt(evalResults[0])
 	if err != nil {
-		return -1, errIndexNotSingleNumValue
+		return -1, err
 	}
 	return i, nil
 }
@@ -122,11 +123,15 @@ func (ctx *jsonpathCtx) resolveArrayIndex(
 func asInt(j json.JSON) (int, error) {
 	d, ok := j.AsDecimal()
 	if !ok {
-		return 0, errInternal
+		return 0, errIndexNotSingleNumValue
 	}
 	i64, err := d.Int64()
 	if err != nil {
-		return 0, err
+		return 0, errIndexNotSingleNumValue
+	}
+	// Postgres returns an error if the index is outside int32 range.
+	if i64 < math.MinInt32 || i64 > math.MaxInt32 {
+		return 0, errInvalidSubscript
 	}
 	return int(i64), nil
 }

@@ -1406,3 +1406,25 @@ query T
 SELECT jsonb_path_query('{"a": {"b": [{"c": 1}, {"c": 2}]}}', '($.a.b[1]).c');
 ----
 2
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', 'lax $[10000000000000000]');
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', 'lax $[-10000000000000000]');
+
+# MaxInt32
+query empty
+SELECT jsonb_path_query('[1]', '$[2147483647]');
+
+# MaxInt32 + 1
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', '$[2147483648]');
+
+# MinInt32
+query empty
+SELECT jsonb_path_query('[1]', '$[-2147483648]');
+
+# MinInt32 - 1
+statement error pgcode 22033 pq: jsonpath array subscript is out of integer range
+SELECT jsonb_path_query('[1]', '$[-2147483649]');

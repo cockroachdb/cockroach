@@ -18,7 +18,6 @@ import (
 
 var (
 	errUnimplemented         = unimplemented.NewWithIssue(22513, "unimplemented")
-	errInternal              = errors.New("internal error")
 	errSingleBooleanRequired = pgerror.Newf(pgcode.SingletonSQLJSONItemRequired, "single boolean result is expected")
 )
 
