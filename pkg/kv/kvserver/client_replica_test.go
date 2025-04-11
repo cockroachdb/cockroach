@@ -6238,11 +6238,11 @@ func BenchmarkIbrahim(b *testing.B) {
 					if i == 1 {
 						continue
 					}
-					store.StorePool().DetailsMu.Lock()
 					detail := store.StorePool().GetStoreDetailLocked(roachpb.StoreID(i))
+					detail.Lock()
 					detail.LastUpdatedTime.AddDuration(100 * time.Millisecond)
 					time.Sleep(100 * time.Millisecond)
-					store.StorePool().DetailsMu.Unlock()
+					detail.Unlock()
 				}
 			}
 		}

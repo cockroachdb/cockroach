@@ -114,9 +114,6 @@ func (o *OverrideStorePool) DecommissioningReplicas(
 func (o *OverrideStorePool) GetStoreList(
 	filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	var storeIDs roachpb.StoreIDSlice
 	o.sp.DetailsMu.StoreDetailsMu.Range(func(storeID roachpb.StoreID, _ *StoreDetailMu) bool {
 		storeIDs = append(storeIDs, storeID)
@@ -129,8 +126,6 @@ func (o *OverrideStorePool) GetStoreList(
 func (o *OverrideStorePool) GetStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
 	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
@@ -138,9 +133,6 @@ func (o *OverrideStorePool) GetStoreListFromIDs(
 func (o *OverrideStorePool) GetStoreListForTargets(
 	candidates []roachpb.ReplicationTarget, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
 	for _, tgt := range candidates {
 		storeIDs = append(storeIDs, tgt.StoreID)

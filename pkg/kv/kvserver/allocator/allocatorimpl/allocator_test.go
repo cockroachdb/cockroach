@@ -480,59 +480,68 @@ func mockStorePool(
 	decommissionedStoreIDs []roachpb.StoreID,
 	suspectedStoreIDs []roachpb.StoreID,
 ) {
-	storePool.DetailsMu.Lock()
-	defer storePool.DetailsMu.Unlock()
-
 	liveNodeSet := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
 	for _, storeID := range aliveStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 	for _, storeID := range unavailableStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_UNAVAILABLE
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 	for _, storeID := range deadStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DEAD
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 	for _, storeID := range decommissioningStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 	for _, storeID := range decommissionedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONED
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 
 	for _, storeID := range suspectedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
 		detail := storePool.GetStoreDetailLocked(storeID)
+		detail.Lock()
 		detail.LastUnavailable = storePool.Clock().Now()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
+		detail.Unlock()
 	}
 
 	// Set the node liveness function using the set we constructed.
@@ -1379,16 +1388,45 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	}
 
 	// Initialize 8 stores: where store 6 is the target for rebalancing.
-	sp.DetailsMu.Lock()
-	sp.GetStoreDetailLocked(1).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(2).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(3).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(4).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(5).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(6).Desc.Capacity = ranges(0)
-	sp.GetStoreDetailLocked(7).Desc.Capacity = ranges(100)
-	sp.GetStoreDetailLocked(8).Desc.Capacity = ranges(100)
-	sp.DetailsMu.Unlock()
+	sd := sp.GetStoreDetailLocked(1)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(2)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(3)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(4)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(5)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(6)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(0)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(7)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
+
+	sd = sp.GetStoreDetailLocked(8)
+	sd.Lock()
+	sd.Desc.Capacity = ranges(100)
+	sd.Unlock()
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
