@@ -8,6 +8,8 @@ package livenesspb
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -159,6 +161,29 @@ type IsLiveMapEntry struct {
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
 type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
 
+type NodeConnectionStatus struct {
+	nodeDialer *nodedialer.Dialer
+	nodeID     roachpb.NodeID
+	connected  *bool
+}
+
+func NewNodeConnectionStatus(nodeID roachpb.NodeID, nodeDialer *nodedialer.Dialer, connected *bool) *NodeConnectionStatus {
+	ncs := &NodeConnectionStatus{
+		nodeDialer: nodeDialer,
+		nodeID:     nodeID,
+		connected:  connected,
+	}
+	return ncs
+}
+
+func (ncs *NodeConnectionStatus) isConnected() bool {
+	if ncs.connected == nil {
+		connected := ncs.nodeDialer == nil || ncs.nodeDialer.ConnHealth(ncs.nodeID, rpc.SystemClass) == nil
+		ncs.connected = &connected
+	}
+	return *ncs.connected
+}
+
 // NodeVitality should be used any place other than epoch leases where it is
 // necessary to determine if a node is currently alive and what its health is.
 // Aliveness and deadness are concepts that refer to our best guess of the
@@ -174,7 +199,7 @@ type NodeVitality struct {
 	// membership is whether the node is active or in a state of decommissioning.
 	membership MembershipStatus
 	// connected is whether we are currently directly connect to this node.
-	connected bool
+	nodeConnectionStatus *NodeConnectionStatus
 
 	// When the record is created. Records are not held for long, but they should
 	// always give consistent results when asked.
@@ -285,7 +310,7 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 			return nv.isAliveAndConnected()
 		}
 	case NetworkMap:
-		return nv.connected
+		return nv.nodeConnectionStatus.isConnected()
 	case LossOfQuorum:
 		return nv.isAlive()
 	case ReplicaGCQueue:
@@ -315,7 +340,7 @@ func (nv NodeVitality) isAvailableNotDraining() bool {
 }
 
 func (nv NodeVitality) isAliveAndConnected() bool {
-	return nv.isAvailableNotDraining() && nv.connected
+	return nv.isAvailableNotDraining() && nv.nodeConnectionStatus.isConnected()
 }
 
 // isAliveEpoch is used for epoch leases. It is similar to isAlive, but doesn't
@@ -535,7 +560,7 @@ func (l Liveness) CreateNodeVitality(
 	now hlc.Timestamp,
 	descUpdateTime hlc.Timestamp,
 	descUnavailableTime hlc.Timestamp,
-	connected bool,
+	connectionStatus *NodeConnectionStatus,
 	timeUntilNodeDead time.Duration,
 	timeAfterNodeSuspect time.Duration,
 ) NodeVitality {
@@ -546,7 +571,7 @@ func (l Liveness) CreateNodeVitality(
 		nodeID:               l.NodeID,
 		draining:             l.Draining,
 		membership:           l.Membership,
-		connected:            connected,
+		nodeConnectionStatus: connectionStatus,
 		now:                  now,
 		descUpdateTime:       descUpdateTime,
 		descUnavailableTime:  descUnavailableTime,
