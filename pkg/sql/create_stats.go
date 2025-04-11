@@ -160,13 +160,18 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			// (To handle race conditions we check this again after the job starts,
 			// but this check is used to prevent creating a large number of jobs that
 			// immediately fail).
-			if err := checkRunningJobsInTxn(ctx, jobspb.InvalidJobID, txn); err != nil {
+			if err := checkRunningJobsInTxn(
+				ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
+			); err != nil {
 				return err
 			}
 			// Don't start auto partial stats jobs if there is another auto partial
 			// stats job running on the same table.
 			if n.Name == jobspb.AutoPartialStatsName {
-				if err := checkRunningAutoPartialJobsInTxn(ctx, jobspb.InvalidJobID, txn, n.p.ExecCfg().JobRegistry, details.Table.ID); err != nil {
+				if err := checkRunningAutoPartialJobsInTxn(
+					ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
+					n.p.ExecCfg().JobRegistry, details.Table.ID,
+				); err != nil {
 					return err
 				}
 			}
@@ -881,11 +886,15 @@ func checkRunningJobs(
 		jobID = job.ID()
 	}
 	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if err = checkRunningJobsInTxn(ctx, jobID, txn); err != nil {
+		if err = checkRunningJobsInTxn(
+			ctx, p.ExtendedEvalContext().Settings, jobID, txn,
+		); err != nil {
 			return err
 		}
 		if autoPartial {
-			return checkRunningAutoPartialJobsInTxn(ctx, jobID, txn, jobRegistry, tableID)
+			return checkRunningAutoPartialJobsInTxn(
+				ctx, p.ExtendedEvalContext().Settings, jobID, txn, jobRegistry, tableID,
+			)
 		}
 		return nil
 	})
@@ -896,9 +905,11 @@ func checkRunningJobs(
 // that started earlier than this one. If there are, checkRunningJobsInTxn
 // returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxn just
 // checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn) error {
-	exists, err := jobs.RunningJobExists(ctx, jobID, txn,
-		jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
+func checkRunningJobsInTxn(
+	ctx context.Context, cs *cluster.Settings, jobID jobspb.JobID, txn isql.Txn,
+) error {
+	exists, err := jobs.RunningJobExists(
+		ctx, cs, jobID, txn, jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
 	)
 	if err != nil {
 		return err
@@ -919,13 +930,14 @@ func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn
 // AutoCreatePartialStats jobs for the same table.
 func checkRunningAutoPartialJobsInTxn(
 	ctx context.Context,
+	cs *cluster.Settings,
 	jobID jobspb.JobID,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	tableID descpb.ID,
 ) error {
-	autoPartialStatJobIDs, err := jobs.RunningJobs(ctx, jobID, txn,
-		jobspb.TypeAutoCreatePartialStats,
+	autoPartialStatJobIDs, err := jobs.RunningJobs(
+		ctx, cs, jobID, txn, jobspb.TypeAutoCreatePartialStats,
 	)
 	if err != nil {
 		return err
