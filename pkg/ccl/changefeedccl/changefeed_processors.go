@@ -711,10 +711,11 @@ func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (tim
 	if j < 0 || d < 0 {
 		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
 	}
-	if j == 0 || d == 0 {
+	maxJitter := int64(j * float64(d))
+	if maxJitter == 0 {
 		return s.Now().Add(d), nil
 	}
-	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
+	nextFlush := d + time.Duration(rand.Int63n(maxJitter))
 	return s.Now().Add(nextFlush), nil
 }
 

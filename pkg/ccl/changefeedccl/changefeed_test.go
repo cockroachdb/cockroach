@@ -8911,6 +8911,20 @@ func TestFlushJitter(t *testing.T) {
 			expectedFlushDuration: 100 * time.Millisecond,
 			expectedErr:           false,
 		},
+		// Expect actual jitter to be 0 since flushFrequency * jitter < 1.
+		{
+			flushFrequency:        1,
+			jitter:                0.1,
+			expectedFlushDuration: 1,
+			expectedErr:           false,
+		},
+		// Expect actual jitter to be 0 since flushFrequency * jitter < 1.
+		{
+			flushFrequency:        10,
+			jitter:                0.01,
+			expectedFlushDuration: 10,
+			expectedErr:           false,
+		},
 	} {
 		t.Run(fmt.Sprintf("flushfrequency=%sjitter=%f", tc.flushFrequency, tc.jitter), func(t *testing.T) {
 			for i := 0; i < numIters; i++ {
