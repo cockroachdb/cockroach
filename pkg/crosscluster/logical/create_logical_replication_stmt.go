@@ -323,10 +323,11 @@ func createLogicalReplicationStreamPlanHook(
 				ReverseStreamCommand:      reverseStreamCmd,
 				ParentID:                  int64(options.ParentID),
 				Command:                   stmt.String(),
+				SkipSchemaCheck:           options.SkipSchemaCheck(),
 			},
 			Progress: progress,
 		}
-		if err := doLDRPlan(ctx, p.User(), p.ExecCfg(), jr, spec.ExternalCatalog, resolvedDestObjects, options.SkipSchemaCheck()); err != nil {
+		if err := doLDRPlan(ctx, p.User(), p.ExecCfg(), jr, spec.ExternalCatalog, resolvedDestObjects); err != nil {
 			return err
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
@@ -430,7 +431,6 @@ func doLDRPlan(
 	jr jobs.Record,
 	srcExternalCatalog externalpb.ExternalCatalog,
 	resolvedDestObjects ResolvedDestObjects,
-	skipSchemaCheck bool,
 ) error {
 	details := jr.Details.(jobspb.LogicalReplicationDetails)
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
@@ -475,16 +475,21 @@ func doLDRPlan(
 				return errors.AssertionFailedf("srcTableDescs and dstTableDescs should have the same length")
 			}
 		}
+
+		writer, err := getWriterType(ctx, details.Mode, execCfg.Settings)
+		if err != nil {
+			return err
+		}
+
 		for i := range srcExternalCatalog.Tables {
 			destTableDesc := dstTableDescs[i]
-			mayUseKVWriter := false
 			if details.Mode != jobspb.LogicalReplicationDetails_Validated {
 				if len(destTableDesc.OutboundForeignKeys()) > 0 || len(destTableDesc.InboundForeignKeys()) > 0 {
 					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are only supported with MODE = 'validated'")
 				}
-				mayUseKVWriter = true
 			}
-			err := tabledesc.CheckLogicalReplicationCompatibility(&srcExternalCatalog.Tables[i], destTableDesc.TableDesc(), skipSchemaCheck || details.CreateTable, mayUseKVWriter)
+
+			err := tabledesc.CheckLogicalReplicationCompatibility(&srcExternalCatalog.Tables[i], destTableDesc.TableDesc(), details.SkipSchemaCheck || details.CreateTable, writer == writerTypeLegacyKV)
 			if err != nil {
 				return err
 			}
