@@ -344,6 +344,7 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
 				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
 			}
+		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
 		default:
 			// All other requests are unsupported. Note that we assume EndTxn and
 			// DeleteRange requests were handled explicitly before this method was
@@ -816,6 +817,11 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// the request to the KV layer.
 			baRemote.Requests = append(baRemote.Requests, ru)
 
+		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
+			// These requests don't interact with buffered writes, so we simply
+			// let them through.
+			baRemote.Requests = append(baRemote.Requests, ru)
+
 		default:
 			return nil, nil, kvpb.NewError(unsupportedMethodError(t.Method()))
 		}
@@ -1182,6 +1188,10 @@ func (t transformation) toResp(
 			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
 		ru.MustSetInner(reverseScanResp)
+
+	case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
+		// These requests don't interact with buffered writes, so we simply
+		// let the response through unchanged.
 
 	default:
 		return ru, kvpb.NewError(unsupportedMethodError(req.Method()))
