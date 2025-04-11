@@ -1201,3 +1201,268 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 		})
 	}
 }
+
+// TestRefreshPolicyWithDampening tests the RefreshPolicy method of
+// replica.RefreshPolicy works expectedly with different dampening fractions.
+func TestRefreshPolicyWithDampening(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range and enable global reads.
+	scratchKey := tc.ScratchRange(t)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, repl)
+	repl.SetSpanConfig(roachpb.SpanConfig{GlobalReads: true}, roachpb.Span{Key: scratchKey})
+
+	testCases := []struct {
+		name                string
+		dampeningFraction   float64
+		initialLatencies    map[roachpb.NodeID]time.Duration
+		updatedLatencies    map[roachpb.NodeID]time.Duration
+		expectedInitial     ctpb.RangeClosedTimestampPolicy
+		expectedAfterUpdate ctpb.RangeClosedTimestampPolicy
+		desc                string
+	}{
+		{
+			name:              "transition from no latency info",
+			dampeningFraction: 0.2,
+			initialLatencies:  nil,
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "transition to no latency info",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+			},
+			updatedLatencies:    nil,
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+		},
+		{
+			name:              "latency increases but below the lower bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 42ms is above 40ms but below the 40+20ms*0.2=44ms boundary.
+				tc.Target(0).NodeID: 42 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency increases and above the lower bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 44ms is above the 40+20ms*0.2=44ms boundary.
+				tc.Target(0).NodeID: 44 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "latency increases to next bucket and below its upper bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 30 is above 20ms+20*0.2=24ms but below the 40-20*0.2=36ms threshold.
+				tc.Target(0).NodeID: 30 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency increases to next bucket and above its upper bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 38 is above the 40-20*0.2=36ms threshold.
+				tc.Target(0).NodeID: 30 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency drops to previous bucket but above the upper bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 18ms is below 20ms but above the 20ms-20ms*0.2=16ms boundary.
+				tc.Target(0).NodeID: 18 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "latency drops to previous bucketand below the upper bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 14ms is below 20ms and below the 20ms-20ms*0.2=16ms boundary.
+				tc.Target(0).NodeID: 14 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "latency drops to previous bucket but above its lower bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 10ms is below the 20ms*0.8=16ms boundary but above the 20ms*0.2=4ms threshold.
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "latency drops to previous bucket and below its lower bound threshold",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 20 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 10ms is below the 20ms*0.8=16ms boundary and below the 20ms*0.2=4ms threshold.
+				tc.Target(0).NodeID: 2 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
+		},
+		{
+			name:              "boundary case at 300ms",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 280 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 300ms is below the 300ms+20ms*0.2=304ms boundary.
+				tc.Target(0).NodeID: 300 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+		},
+		{
+			name:              "boundary case at 320ms",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 280 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				// 320ms is above the 300ms+20ms*0.2=304ms boundary.
+				tc.Target(0).NodeID: 320 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS,
+		},
+		{
+			name:              "jump to higher bucket case at 600ms",
+			dampeningFraction: 0.2,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 280 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 600 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS,
+		},
+
+		// Zero Dampening Cases (Most Sensitive)
+		{
+			name:              "zero dampening - tiny increase",
+			dampeningFraction: 0.0,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 39 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 40 * time.Millisecond, // Tiny increase
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+		},
+		{
+			name:              "zero dampening - tiny decrease",
+			dampeningFraction: 0.0,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 40 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 39 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		// 100% Dampening Cases (Most Conservative)
+		{
+			name:              "full dampening - significant increase",
+			dampeningFraction: 1.0,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 39 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 59 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+		},
+		{
+			name:              "full dampening - multi-bucket jump",
+			dampeningFraction: 1.0,
+			initialLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 39 * time.Millisecond,
+			},
+			updatedLatencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 60 * time.Millisecond,
+			},
+			expectedInitial:     ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS,
+			expectedAfterUpdate: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Override dampening fraction based on the test case.
+			closedts.PolicySwitchWhenLatencyExceedsBucketFraction.Override(
+				ctx, &store.ClusterSettings().SV, tc.dampeningFraction)
+
+			// Override the closed timestamp policy to the initial policy.
+			repl.SetCachedClosedTimestampPolicyForTesting(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)
+
+			// First refresh with initial latencies.
+			repl.RefreshPolicy(tc.initialLatencies)
+			actualInitial := repl.GetCachedClosedTimestampPolicyForTesting()
+			require.Equal(t, tc.expectedInitial, actualInitial,
+				"initial policy mismatch: %s", tc.desc)
+
+			// Then refresh with updated latencies.
+			repl.RefreshPolicy(tc.updatedLatencies)
+			actualAfterUpdate := repl.GetCachedClosedTimestampPolicyForTesting()
+			require.Equal(t, tc.expectedAfterUpdate, actualAfterUpdate,
+				"updated policy mismatch: %s", tc.desc)
+		})
+	}
+}
