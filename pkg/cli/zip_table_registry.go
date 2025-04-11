@@ -307,7 +307,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"is_virtual",
 			"is_temporary",
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
-			"crdb_internal.hide_sql_constants(alter_statements) as alter_statements",
+			"crdb_internal.hide_sql_constants(fk_statements) as fk_statements",
 			"crdb_internal.hide_sql_constants(create_nofks) as create_nofks",
 			"crdb_internal.redact(create_redactable) as create_redactable",
 		},

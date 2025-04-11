@@ -3960,7 +3960,7 @@ CREATE TABLE crdb_internal.create_statements (
   state                         STRING NOT NULL,
   create_nofks                  STRING NOT NULL,
   rls_statements                STRING[] NOT NULL,
-  alter_statements              STRING[] NOT NULL,
+  fk_statements                 STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   create_redactable             STRING NOT NULL,
   has_partitions                BOOL NOT NULL,
