@@ -148,29 +148,24 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	}
 	details := record.Details.(jobspb.CreateStatsDetails)
 
-	if n.Name != jobspb.AutoStatsName && n.Name != jobspb.AutoPartialStatsName {
+	if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
+		// Don't start the job if there is already a CREATE STATISTICS job running.
+		// (To handle race conditions we check this again after the job starts,
+		// but this check is used to prevent creating a large number of jobs that
+		// immediately fail).
+		if err := checkRunningJobs(
+			ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
+			details.Table.ID,
+		); err != nil {
+			return err
+		}
+	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
-			// Don't start the job if there is already a CREATE STATISTICS job running.
-			// (To handle race conditions we check this again after the job starts,
-			// but this check is used to prevent creating a large number of jobs that
-			// immediately fail).
-			if err := checkRunningJobsInTxn(ctx, jobspb.InvalidJobID, txn); err != nil {
-				return err
-			}
-			// Don't start auto partial stats jobs if there is another auto partial
-			// stats job running on the same table.
-			if n.Name == jobspb.AutoPartialStatsName {
-				if err := checkRunningAutoPartialJobsInTxn(ctx, jobspb.InvalidJobID, txn, n.p.ExecCfg().JobRegistry, details.Table.ID); err != nil {
-					return err
-				}
-			}
-		}
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if job != nil {
