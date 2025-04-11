@@ -484,7 +484,6 @@ func mockStorePool(
 	defer storePool.DetailsMu.Unlock()
 
 	liveNodeSet := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
-	storePool.DetailsMu.StoreDetails = map[roachpb.StoreID]*storepool.StoreDetail{}
 	for _, storeID := range aliveStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
 		detail := storePool.GetStoreDetailLocked(storeID)
