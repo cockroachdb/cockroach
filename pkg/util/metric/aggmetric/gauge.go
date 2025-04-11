@@ -155,6 +155,17 @@ func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
 	child.UpdateFn(f)
 }
 
+// GetChild returns the gauge for a set of given label values
+// if it exists. If the labels specified are incorrect, or if
+// the child doesn't exist, it returns a nil value.
+func (g *AggGauge) GetChild(labelVals ...string) *Gauge {
+	child, ok := g.get(labelVals...)
+	if !ok {
+		return nil
+	}
+	return child.(*Gauge)
+}
+
 func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
 	if len(g.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
