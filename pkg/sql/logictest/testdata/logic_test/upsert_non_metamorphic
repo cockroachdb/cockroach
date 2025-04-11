@@ -1,5 +1,8 @@
 # LogicTest: !metamorphic-batch-sizes
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # Regression test for UPSERT batching logic not respecting footprint-based
 # limiting (#102472).
 statement ok
