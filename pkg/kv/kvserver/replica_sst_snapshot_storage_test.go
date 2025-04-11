@@ -306,8 +306,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 
 	var buf redact.StringBuilder
 	logSize := func(buf io.Writer) {
-		_, _ = fmt.Fprintf(buf, ">> writeBytes=%d sstSize=%d dataSize=%d\n", msstw.writeBytes, msstw.sstSize,
-			msstw.dataSize)
+		_, _ = fmt.Fprintf(buf, ">> sstSize=%d dataSize=%d\n", msstw.sstSize, msstw.dataSize)
 	}
 
 	var putSpans []roachpb.Span
