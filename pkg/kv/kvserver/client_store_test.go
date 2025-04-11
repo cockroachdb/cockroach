@@ -247,11 +247,11 @@ func BenchmarkStorePoolReadsWithConcurrentUpdates(b *testing.B) {
 					}
 					// Note that we have to lock the whole store pool just to update one
 					// store detail.
-					store.StorePool().DetailsMu.Lock()
-					detail := store.StorePool().GetStoreDetailLocked(roachpb.StoreID(i))
+					detail := store.StorePool().GetStoreDetail(roachpb.StoreID(i))
+					detail.Lock()
 					detail.LastUpdatedTime = detail.LastUpdatedTime.AddDuration(100 * time.Millisecond)
 					time.Sleep(100 * time.Millisecond)
-					store.StorePool().DetailsMu.Unlock()
+					detail.Unlock()
 				}
 			}
 		}

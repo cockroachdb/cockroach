@@ -468,7 +468,7 @@ func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
 	// Draining nodes will generally not be rebalanced to (see the filtering that
-	// happens in getStoreListFromIDsLocked()), but in case they are, they should
+	// happens in getStoreListFromIDs()), but in case they are, they should
 	// reject the incoming rebalancing snapshots.
 	if s.IsDraining() {
 		switch t := header.SenderQueueName; t {

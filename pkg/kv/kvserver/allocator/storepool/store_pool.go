@@ -62,7 +62,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLive
 // StoreDetail groups together store-relevant details.
 // Note: When adding new fields to StoreDetail, make sure to add them in
 // StoreDetail.Copy() method as well.
-type StoreDetail struct {
+type StoreDetailMu struct {
 	syncutil.RWMutex
 	Desc *roachpb.StoreDescriptor
 	// ThrottledUntil is when a throttled store can be considered available again
@@ -121,13 +121,13 @@ func (ss storeStatus) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (ss storeStatus) SafeValue() {}
 
-// Copy returns a deep copy of the StoreDetail.
-func (sd *StoreDetail) Copy() *StoreDetail {
+// Copy returns a deep copy of the StoreDetailMu.
+func (sd *StoreDetailMu) Copy() *StoreDetailMu {
 	sd.RLock()
 	defer sd.RUnlock()
 
-	// Create a new StoreDetail with all fields copied
-	detailCopy := &StoreDetail{
+	// Create a new StoreDetailMu with all fields copied
+	detailCopy := &StoreDetailMu{
 		ThrottledUntil:   sd.ThrottledUntil,
 		throttledBecause: sd.throttledBecause,
 		LastUpdatedTime:  sd.LastUpdatedTime,
@@ -142,12 +142,14 @@ func (sd *StoreDetail) Copy() *StoreDetail {
 	return detailCopy
 }
 
-func (sd *StoreDetail) status(
+func (sd *StoreDetailMu) status(
 	now hlc.Timestamp,
 	deadThreshold time.Duration,
 	nl NodeLivenessFunc,
 	suspectDuration time.Duration,
 ) storeStatus {
+	sd.Lock()
+	defer sd.Unlock()
 	// During normal operation, we expect the state transitions for stores to look like the following:
 	//
 	//      +-----------------------+
@@ -359,10 +361,11 @@ type StorePool struct {
 	// nodeLocalities map is used in the critical code path of Replica.Send()
 	// and we'd rather not block that on something less important accessing
 	// storeDetails.
+	// Note that StoreDetails uses a mutex per detail, so we don't need to lock
+	// the whole map for every detail access.
 	// NB: Exported for use in tests and allocator simulator.
-	DetailsMu struct {
-		syncutil.RWMutex
-		StoreDetails syncutil.Map[roachpb.StoreID, StoreDetail]
+	Details struct {
+		StoreDetails syncutil.Map[roachpb.StoreID, StoreDetailMu]
 	}
 	localitiesMu struct {
 		syncutil.RWMutex
@@ -426,10 +429,8 @@ func (sp *StorePool) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
 	ids := make(roachpb.StoreIDSlice, sp.getStoreDetailsCount())
-	sp.DetailsMu.StoreDetails.Range(func(id roachpb.StoreID, _ *StoreDetail) bool {
+	sp.Details.StoreDetails.Range(func(id roachpb.StoreID, _ *StoreDetailMu) bool {
 		ids = append(ids, id)
 		return true
 	})
@@ -441,7 +442,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 
 	for _, id := range ids {
-		detail, ok := sp.DetailsMu.StoreDetails.Load(id)
+		detail, ok := sp.Details.StoreDetails.Load(id)
 		if !ok {
 			// If the store detail got deleted while we were iterating, skip it.
 			continue
@@ -451,6 +452,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
 		if status != storeStatusAvailable {
 			buf.Printf(" (status=%s)", status)
 		}
+		detail.RLock()
 		if detail.Desc != nil {
 			buf.Printf(": range-count=%d fraction-used=%.2f",
 				detail.Desc.Capacity.RangeCount,
@@ -461,6 +463,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
 				detail.ThrottledUntil.GoTime().Sub(now.GoTime())))
 		}
 		buf.SafeRune('\n')
+		detail.RUnlock()
 	}
 	return buf.RedactableString()
 }
@@ -489,14 +492,14 @@ func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor) {
 
 	now := sp.clock.Now()
 
-	sp.DetailsMu.Lock()
-	detail := sp.GetStoreDetailLocked(storeID)
+	detail := sp.GetStoreDetail(storeID)
+	detail.Lock()
 	if detail.Desc != nil {
 		oldCapacity = detail.Desc.Capacity
 	}
 	detail.Desc = &storeDesc
 	detail.LastUpdatedTime = now
-	sp.DetailsMu.Unlock()
+	detail.Unlock()
 
 	sp.localitiesMu.Lock()
 	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
@@ -515,9 +518,9 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 	rangeUsageInfo allocator.RangeUsageInfo,
 	changeType roachpb.ReplicaChangeType,
 ) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-	detail := *sp.GetStoreDetailLocked(storeID)
+	detail := sp.GetStoreDetail(storeID)
+	detail.Lock()
+	defer detail.Unlock()
 	if detail.Desc == nil {
 		// We don't have this store yet (this is normal when we're
 		// starting up and don't have full information from the gossip
@@ -558,7 +561,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 	default:
 		return
 	}
-	sp.DetailsMu.StoreDetails.Store(storeID, &detail)
+	sp.Details.StoreDetails.Store(storeID, detail)
 }
 
 // UpdateLocalStoreAfterRelocate is used to update the local copy of the
@@ -580,30 +583,31 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 	leaseTarget := voterTargets[0]
 	sp.UpdateLocalStoresAfterLeaseTransfer(localStore, leaseTarget.StoreID, rangeUsageInfo)
 
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
 	// Only apply the raft cpu delta on rebalance. This estimate assumes that
 	// the raft cpu usage is approximately equal across replicas for a range.
 	// TODO(kvoli): Separate into LH vs Replica, similar to the comment on
 	// range_usage_info.
 	updateTargets := func(targets []roachpb.ReplicationTarget) {
 		for _, target := range targets {
-			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail.Desc != nil {
+			if toDetail := sp.GetStoreDetail(target.StoreID); toDetail.Desc != nil {
+				toDetail.Lock()
 				toDetail.Desc.Capacity.RangeCount++
 				if toDetail.Desc.Capacity.CPUPerSecond >= 0 {
 					toDetail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
 				}
+				toDetail.Unlock()
 			}
 		}
 	}
 	updatePrevious := func(previous []roachpb.ReplicaDescriptor) {
 		for _, old := range previous {
-			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail.Desc != nil {
+			if toDetail := sp.GetStoreDetail(old.StoreID); toDetail.Desc != nil {
+				toDetail.Lock()
 				toDetail.Desc.Capacity.RangeCount--
 				// When CPU attribution is unsupported, the store will set the
 				// CPUPerSecond of its store capacity to be -1.
 				if toDetail.Desc.Capacity.CPUPerSecond < 0 {
+					toDetail.Unlock()
 					continue
 				}
 				if toDetail.Desc.Capacity.CPUPerSecond <= rangeUsageInfo.RaftCPUNanosPerSecond {
@@ -611,6 +615,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 				} else {
 					toDetail.Desc.Capacity.CPUPerSecond -= rangeUsageInfo.RaftCPUNanosPerSecond
 				}
+				toDetail.Unlock()
 			}
 		}
 	}
@@ -626,10 +631,9 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	from roachpb.StoreID, to roachpb.StoreID, rangeUsageInfo allocator.RangeUsageInfo,
 ) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
-	fromDetail := *sp.GetStoreDetailLocked(from)
+	fromDetail := sp.GetStoreDetail(from)
+	fromDetail.Lock()
+	defer fromDetail.Unlock()
 	if fromDetail.Desc != nil {
 		fromDetail.Desc.Capacity.LeaseCount--
 		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeUsageInfo.QueriesPerSecond {
@@ -651,10 +655,12 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 			}
 		}
 
-		sp.DetailsMu.StoreDetails.Store(from, &fromDetail)
+		sp.Details.StoreDetails.Store(from, fromDetail)
 	}
 
-	toDetail := *sp.GetStoreDetailLocked(to)
+	toDetail := sp.GetStoreDetail(to)
+	toDetail.Lock()
+	defer toDetail.Unlock()
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
 		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
@@ -663,23 +669,23 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 		if toDetail.Desc.Capacity.CPUPerSecond >= 0 {
 			toDetail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RequestCPUNanosPerSecond
 		}
-		sp.DetailsMu.StoreDetails.Store(to, &toDetail)
+		sp.Details.StoreDetails.Store(to, toDetail)
 	}
 }
 
-// newStoreDetail makes a new StoreDetail struct.
-func newStoreDetail() *StoreDetail {
-	return &StoreDetail{}
+// newStoreDetail makes a new StoreDetailMu struct.
+func newStoreDetail() *StoreDetailMu {
+	return &StoreDetailMu{}
 }
 
 // GetStores returns information on all the stores with descriptor in the pool.
 // Stores without descriptor (a node that didn't come up yet after a cluster
 // restart) will not be part of the returned set.
 func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
 	stores := make(map[roachpb.StoreID]roachpb.StoreDescriptor, sp.getStoreDetailsCount())
-	sp.DetailsMu.StoreDetails.Range(func(_ roachpb.StoreID, s *StoreDetail) bool {
+	sp.Details.StoreDetails.Range(func(_ roachpb.StoreID, s *StoreDetailMu) bool {
+		s.RLock()
+		defer s.RUnlock()
 		if s.Desc != nil {
 			stores[s.Desc.StoreID] = *s.Desc
 		}
@@ -688,11 +694,9 @@ func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
 	return stores
 }
 
-// GetStoreDetailLocked returns the store detail for the given storeID. The
-// lock must be held *in write mode* even though this looks like a read-only
-// method. The store detail returned is a mutable reference.
-func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail {
-	detail, ok := sp.DetailsMu.StoreDetails.Load(storeID)
+// GetStoreDetail returns the store detail for the given storeID.
+func (sp *StorePool) GetStoreDetail(storeID roachpb.StoreID) *StoreDetailMu {
+	detail, ok := sp.Details.StoreDetails.Load(storeID)
 	if !ok {
 		// We don't have this store yet (this is normal when we're
 		// starting up and don't have full information from the gossip
@@ -701,7 +705,7 @@ func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail 
 		// time passes without updates from gossip.
 		detail = newStoreDetail()
 		detail.LastUpdatedTime = sp.startTime
-		sp.DetailsMu.StoreDetails.Store(storeID, detail)
+		sp.Details.StoreDetails.Store(storeID, detail)
 	}
 	return detail
 }
@@ -709,13 +713,16 @@ func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail 
 // GetStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
-
-	if detail, ok := sp.DetailsMu.StoreDetails.Load(storeID); ok && detail.Desc != nil {
-		return *detail.Desc, true
+	detail, ok := sp.Details.StoreDetails.Load(storeID)
+	if !ok {
+		return roachpb.StoreDescriptor{}, false
 	}
-	return roachpb.StoreDescriptor{}, false
+	detail.RLock()
+	defer detail.RUnlock()
+	if detail.Desc == nil {
+		return roachpb.StoreDescriptor{}, false
+	}
+	return *detail.Desc, true
 }
 
 // DecommissioningReplicas filters out replicas on decommissioning node/store
@@ -731,9 +738,6 @@ func (sp *StorePool) DecommissioningReplicas(
 func (sp *StorePool) decommissioningReplicasWithLiveness(
 	repls []roachpb.ReplicaDescriptor, nl NodeLivenessFunc,
 ) (decommissioningReplicas []roachpb.ReplicaDescriptor) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
 	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now()
@@ -741,7 +745,7 @@ func (sp *StorePool) decommissioningReplicasWithLiveness(
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
-		detail := sp.GetStoreDetailLocked(repl.StoreID)
+		detail := sp.GetStoreDetail(repl.StoreID)
 		switch detail.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect) {
 		case storeStatusDecommissioning:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
@@ -771,13 +775,12 @@ func (sp *StorePool) IsDeterministic() bool {
 // not found in the store pool or the status is unknown. If the store is not dead,
 // it returns the time to death.
 func (sp *StorePool) IsDead(storeID roachpb.StoreID) (bool, time.Duration, error) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
-	sd, ok := sp.DetailsMu.StoreDetails.Load(storeID)
+	sd, ok := sp.Details.StoreDetails.Load(storeID)
 	if !ok {
 		return false, 0, errors.Errorf("store %d was not found", storeID)
 	}
+	sd.RLock()
+	defer sd.RUnlock()
 	// NB: We use clock.Now() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now()
@@ -847,10 +850,7 @@ func (sp *StorePool) IsStoreHealthy(storeID roachpb.StoreID) bool {
 func (sp *StorePool) storeStatus(
 	storeID roachpb.StoreID, nl NodeLivenessFunc,
 ) (storeStatus, error) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
-	sd, ok := sp.DetailsMu.StoreDetails.Load(storeID)
+	sd, ok := sp.Details.StoreDetails.Load(storeID)
 	if !ok {
 		return storeStatusUnknown, errors.Errorf("store %d was not found", storeID)
 	}
@@ -887,15 +887,12 @@ func (sp *StorePool) LiveAndDeadReplicas(
 func (sp *StorePool) liveAndDeadReplicasWithLiveness(
 	repls []roachpb.ReplicaDescriptor, nl NodeLivenessFunc, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
 	now := sp.clock.Now()
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
-		detail := sp.GetStoreDetailLocked(repl.StoreID)
+		detail := sp.GetStoreDetail(repl.StoreID)
 		// Mark replica as dead if store is dead.
 		status := detail.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect)
 		switch status {
@@ -944,7 +941,7 @@ func (sp *StorePool) capacityChanged(storeID roachpb.StoreID, prev, cur roachpb.
 // StorePool.
 func (sp *StorePool) getStoreDetailsCount() int {
 	count := 0
-	sp.DetailsMu.StoreDetails.Range(func(_ roachpb.StoreID, _ *StoreDetail) bool {
+	sp.Details.StoreDetails.Range(func(_ roachpb.StoreID, _ *StoreDetailMu) bool {
 		count++
 		return true
 	})
@@ -1144,15 +1141,12 @@ type ThrottledStoreReasons []string
 // alive stores and a list of throttled stores with a reason for why they're
 // throttled.
 func (sp *StorePool) GetStoreList(filter StoreFilter) (StoreList, int, ThrottledStoreReasons) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
 	storeIDs := make(roachpb.StoreIDSlice, 0, sp.getStoreDetailsCount())
-	sp.DetailsMu.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetail) bool {
+	sp.Details.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetailMu) bool {
 		storeIDs = append(storeIDs, storeID)
 		return true
 	})
-	return sp.getStoreListFromIDsLocked(storeIDs, sp.NodeLivenessFn, filter)
+	return sp.getStoreListFromIDs(storeIDs, sp.NodeLivenessFn, filter)
 }
 
 // GetStoreListFromIDs is the same function as GetStoreList but only returns stores
@@ -1160,9 +1154,7 @@ func (sp *StorePool) GetStoreList(filter StoreFilter) (StoreList, int, Throttled
 func (sp *StorePool) GetStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-	return sp.getStoreListFromIDsLocked(storeIDs, sp.NodeLivenessFn, filter)
+	return sp.getStoreListFromIDs(storeIDs, sp.NodeLivenessFn, filter)
 }
 
 // GetStoreListForTargets is the same as GetStoreList, but only returns stores
@@ -1171,20 +1163,17 @@ func (sp *StorePool) GetStoreListFromIDs(
 func (sp *StorePool) GetStoreListForTargets(
 	candidates []roachpb.ReplicationTarget, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-
 	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
 	for _, tgt := range candidates {
 		storeIDs = append(storeIDs, tgt.StoreID)
 	}
 
-	return sp.getStoreListFromIDsLocked(storeIDs, sp.NodeLivenessFn, filter)
+	return sp.getStoreListFromIDs(storeIDs, sp.NodeLivenessFn, filter)
 }
 
-// getStoreListFromIDsRLocked is the same function as GetStoreList but requires
-// that the detailsMU read lock is held.
-func (sp *StorePool) getStoreListFromIDsLocked(
+// getStoreListFromIDs is the same as GetStoreListFromIDs, but takes a
+// NodeLivenessFunc as an argument.
+func (sp *StorePool) getStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, nl NodeLivenessFunc, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
 	if sp.deterministic {
@@ -1202,7 +1191,7 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {
-		detail, ok := sp.DetailsMu.StoreDetails.Load(storeID)
+		detail, ok := sp.Details.StoreDetails.Load(storeID)
 		if !ok {
 			// Do nothing; this store is not in the StorePool.
 			continue
@@ -1210,20 +1199,26 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 		switch s := detail.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
+			detail.RLock()
 			throttled = append(throttled, detail.throttledBecause)
 			if filter != StoreFilterThrottled {
 				storeDescriptors = append(storeDescriptors, *detail.Desc)
 			}
+			detail.RUnlock()
 		case storeStatusAvailable:
 			aliveStoreCount++
+			detail.RLock()
 			storeDescriptors = append(storeDescriptors, *detail.Desc)
+			detail.RUnlock()
 		case storeStatusDraining:
 			throttled = append(throttled, fmt.Sprintf("s%d: draining", storeID))
 		case storeStatusSuspect:
 			aliveStoreCount++
 			throttled = append(throttled, fmt.Sprintf("s%d: suspect", storeID))
 			if filter != StoreFilterThrottled && filter != StoreFilterSuspect {
+				detail.RLock()
 				storeDescriptors = append(storeDescriptors, *detail.Desc)
+				detail.RUnlock()
 			}
 		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
 			// Do nothing; this store cannot be used.
@@ -1250,9 +1245,9 @@ const (
 // has elapsed. Declined being true indicates that the remote store explicitly
 // declined a snapshot.
 func (sp *StorePool) Throttle(reason ThrottleReason, why string, storeID roachpb.StoreID) {
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
-	detail := sp.GetStoreDetailLocked(storeID)
+	detail := sp.GetStoreDetail(storeID)
+	detail.Lock()
+	defer detail.Unlock()
 	detail.throttledBecause = why
 
 	// If a snapshot is declined, we mark the store detail as having been declined
