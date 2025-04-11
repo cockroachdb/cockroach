@@ -54,12 +54,14 @@ type multiSSTWriter struct {
 	// Once the sstable writer reaches this size, it will be finalized and a new
 	// sstable will be created.
 	maxSSTSize int64
-	// rangeKeyFrag is used to fragment range keys across the mvcc key spans.
-	// For each SST, it's initialized with a range key del for the entire span,
-	// but the incoming stream of data may also contain new range keys. The
-	// fragmenter is emits these range keys into the SST at finalization
-	// time.
+	// rangeKeyFrag is used to fragment range keys across the SSTs. For each SST
+	// (with the exception of the MVCC SST), it's initialized with a range key del
+	// for the entire span, but the incoming stream of data may also contain new
+	// range keys. As the start key of these incoming range keys increases, the
+	// fragmenter emits fragmented range keys into the produced SST.
 	rangeKeyFrag rangekey.Fragmenter
+	// rangeDelFrag is like rangeKeyFrag, but for range deletions (i.e. operations
+	// that simply clear out all keys in a span).
 	rangeDelFrag rangedel.Fragmenter
 }
 
