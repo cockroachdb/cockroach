@@ -213,6 +213,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 
 	s.Count += other.Count
 	s.FailureCount += other.FailureCount
+	s.GenericCount += other.GenericCount
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats
