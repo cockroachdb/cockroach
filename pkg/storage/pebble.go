@@ -2133,6 +2133,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V24_3: pebble.FormatColumnarBlocks,
+	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
