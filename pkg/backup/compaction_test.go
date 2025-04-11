@@ -7,6 +7,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -73,7 +74,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 	t.Run("basic operations insert, update, and delete", func(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
-			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "DROP TABLE IF EXISTS foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		start := getTime(t)
@@ -82,7 +83,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/1'").Scan(&backupPath)
 
 		// Run twice to test compaction on top of compaction.
-		for range 2 {
+		for i := range 2 {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
 			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
 			db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
@@ -94,7 +95,9 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 				fmt.Sprintf(incBackupAostCmd, 1, end),
 			)
 			waitForSuccessfulJob(t, tc, startCompaction(1, backupPath, start, end))
-			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end)
+			validateCompactedBackupForTables(
+				t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end, 2+i,
+			)
 			start = end
 		}
 
@@ -139,7 +142,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t, db,
 			[]string{"foo", "bar", "baz"},
 			"'nodelocal://1/backup/2'",
-			start, end,
+			start, end, 2,
 		)
 
 		db.Exec(t, "DROP TABLE bar")
@@ -222,7 +225,9 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/4'").Scan(&backupPath)
 		waitForSuccessfulJob(t, tc, startCompaction(4, backupPath, start, end))
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end)
+		validateCompactedBackupForTables(
+			t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end, 4,
+		)
 	})
 
 	t.Run("table-level backups", func(t *testing.T) {
@@ -251,7 +256,9 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/5'").Scan(&backupPath)
 		waitForSuccessfulJob(t, tc, startCompaction(5, backupPath, start, end))
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end)
+		validateCompactedBackupForTables(
+			t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end, 2,
+		)
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
@@ -303,7 +310,7 @@ crdb_internal.json_to_pb(
 		}
 		waitForSuccessfulJob(t, tc, jobID)
 		validateCompactedBackupForTablesWithOpts(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, opts,
+			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, 2, opts,
 		)
 	})
 
@@ -329,7 +336,9 @@ crdb_internal.json_to_pb(
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		waitForSuccessfulJob(t, tc, jobID)
-		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/7'", start, end)
+		validateCompactedBackupForTables(
+			t, db, []string{"foo"}, "'nodelocal://1/backup/7'", start, end, 2,
+		)
 
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
@@ -367,7 +376,7 @@ crdb_internal.json_to_pb(
 		)).Scan(&jobID)
 		waitForSuccessfulJob(t, tc, jobID)
 		validateCompactedBackupForTablesWithOpts(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, opts,
+			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, 2, opts,
 		)
 	})
 
@@ -488,7 +497,7 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	var jobID jobspb.JobID
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
-	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end)
+	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end, 2)
 }
 
 func TestScheduledBackupCompaction(t *testing.T) {
@@ -760,24 +769,35 @@ func TestCompactionCheckpointing(t *testing.T) {
 	require.Greater(t, int(manifestNumFiles.Load()), 0, "expected non-zero number of files in manifest")
 
 	waitForSuccessfulJob(t, tc, jobID)
-	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end)
+	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end, 2)
 }
 
-// Start and end are unix epoch in nanoseconds.
+// validateCompactedBackupForTables is a wrapper around
+// validateCompactedBackupForTablesWithOpts that passes in no options.
 func validateCompactedBackupForTables(
-	t *testing.T, db *sqlutils.SQLRunner, tables []string, collectionURIs string, start, end int64,
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	tables []string,
+	collectionURIs string,
+	start, end int64,
+	numBackups int,
 ) {
 	t.Helper()
-	validateCompactedBackupForTablesWithOpts(t, db, tables, collectionURIs, start, end, "")
+	validateCompactedBackupForTablesWithOpts(t, db, tables, collectionURIs, start, end, numBackups, "")
 }
 
-// Start and end are unix epoch in nanoseconds.
+// validateCompactedBackupForTablesWithOpts validates that a compacted backup
+// with the specified start and end time (in nanoseconds) exists and restores
+// from that backup. It checks that the tables specified have the same contents
+// before and after the restore. It also checks that the restore process used
+// the number of backups specified in numBackups.
 func validateCompactedBackupForTablesWithOpts(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
 	tables []string,
 	collectionURIs string,
 	start, end int64,
+	numBackups int,
 	opts string,
 ) {
 	t.Helper()
@@ -792,11 +812,27 @@ func validateCompactedBackupForTablesWithOpts(
 	if opts != "" {
 		restoreQuery += " WITH " + opts
 	}
-	db.Exec(t, restoreQuery)
+	row := db.QueryRow(t, restoreQuery)
+	var restoreJobID jobspb.JobID
+	var discard *any
+	row.Scan(&restoreJobID, &discard, &discard, &discard)
 	for table, originalRows := range rows {
 		restoredRows := db.QueryStr(t, "SELECT * FROM "+table)
 		require.Equal(t, originalRows, restoredRows, "table %s", table)
 	}
+	// Check that the number of backups used in the restore is correct.
+	var detailsStr string
+	db.QueryRow(t, `SELECT crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		value
+	)::JSONB->>'restore' 
+	FROM system.job_info 
+	WHERE job_id = $1
+	AND info_key = 'legacy_payload';
+	`, restoreJobID).Scan(&detailsStr)
+	var details jobspb.RestoreDetails
+	require.NoError(t, json.Unmarshal([]byte(detailsStr), &details))
+	require.Equal(t, numBackups, len(details.URIs))
 }
 
 // ensureBackupExists ensures that a backup exists that spans the given start and end times.
