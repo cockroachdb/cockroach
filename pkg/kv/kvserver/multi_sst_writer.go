@@ -167,18 +167,18 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	// for it.
 	if !msstw.currSpanIsMVCCSpan() {
 		sp := msstw.currentSpan()
-		startKey := storage.EngineKey{Key: sp.Key}
-		endKey := storage.EngineKey{Key: sp.EndKey}
-		{
-			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-			s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
-			msstw.rangeKeyFrag.Add(s)
-		}
-		{
-			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete)
-			s := rangedel.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangedel.Key{{Trailer: trailer}}}
-			msstw.rangeDelFrag.Add(s)
-		}
+		startKey := storage.EngineKey{Key: sp.Key}.Encode()
+		endKey := storage.EngineKey{Key: sp.EndKey}.Encode()
+		msstw.rangeKeyFrag.Add(rangekey.Span{
+			Start: startKey, End: endKey, Keys: []rangekey.Key{{
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete),
+			}}},
+		)
+		msstw.rangeDelFrag.Add(rangedel.Span{
+			Start: startKey, End: endKey, Keys: []rangedel.Key{{
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete),
+			}}},
+		)
 	}
 	return nil
 }
