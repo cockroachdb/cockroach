@@ -6,46 +6,112 @@
 package vecencoding
 
 import (
+	"encoding/binary"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
-/* Vector indexes are encoded as follows:
+/* Vector indexes are encoded as shown below.
 
-Interior (non-leaf) partition KV key:
-  ┌────────────┬──────────────┬───────────┬─────┬─────────────────┐
-  │Index Prefix│Prefix Columns│PartitionID│Level│Child PartitionID│
-  └────────────┴──────────────┴───────────┴─────┴─────────────────┘
-Leaf partition KV key:
-  ┌────────────┬──────────────┬───────────┬─────┬───────────┬────────────────────┐
-  │Index Prefix│Prefix Columns│PartitionID│Level│Primary Key│Sentinel Family ID 0│
-  └────────────┴──────────────┴───────────┴─────┴───────────┴────────────────────┘
-Value:
+NOTE: Key formats always are always suffixed by a Family ID byte of 0. This is
+necessary to include so that the key can be parsed by the KV range split code.
+That code uses the family ID to check that it doesn't split column families for
+the same row across ranges.
+
+Metadata KV Key:
+  Metadata keys always sort before vector keys, since Family ID 0 always
+  sorts before Level, which is >= 1.
+  ┌────────────┬──────────────┬────────────┬───────────┐
+  │Index Prefix│Prefix Columns│PartitionKey│Family ID 0│
+  └────────────┴──────────────┴────────────┴───────────┘
+Metadata KV Value:
+  ┌─────┬─────┬───────┬───────┬──────┬─────────┬────────┐
+  │Level│State│Target1│Target2│Source|Timestamp│Centroid|
+  └─────┴─────┴───────┴───────┴──────┴─────────┴────────┘
+Vector KV Key (interior, non-leaf partition):
+  ┌────────────┬──────────────┬────────────┬─────┬──────────────────┬───────────┐
+  │Index Prefix│Prefix Columns│PartitionKey│Level│Child PartitionKey│Family ID 0│
+  └────────────┴──────────────┴────────────┴─────┴──────────────────┴───────────┘
+Vector KV Key (leaf partition):
+  ┌────────────┬──────────────┬────────────┬─────┬──────────┬───────────┐
+  │Index Prefix│Prefix Columns│PartitionKey│Level│PrimaryKey│Family ID 0│
+  └────────────┴──────────────┴────────────┴─────┴──────────┴───────────┘
+Vector KV Value:
   ┌────────────────────────┬────────────────────────┐
   │Quantized+Encoded Vector│Composite+Stored Columns│
   └────────────────────────┴────────────────────────┘
 */
 
-// VectorIndexKey is a deconstructed key value, as described above, minus the
+// EncodeMetadataKey constructs the KV key for the metadata record in a
+// partition. All vector keys in the partition sort after it.
+func EncodeMetadataKey(
+	indexPrefix []byte, encodedPrefixCols []byte, partitionKey cspann.PartitionKey,
+) roachpb.Key {
+	capacity := len(indexPrefix) + len(encodedPrefixCols) + EncodedPartitionKeyLen(partitionKey) + 1
+	keyBuffer := make([]byte, 0, capacity)
+	keyBuffer = append(keyBuffer, indexPrefix...)
+	keyBuffer = append(keyBuffer, encodedPrefixCols...)
+	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
+	return keys.MakeFamilyKey(keyBuffer, 0)
+}
+
+// EncodeStartVectorKey constructs the KV key that precedes all the KV keys for
+// vector data records in the partition.
+func EncodeStartVectorKey(metadataKey roachpb.Key) roachpb.Key {
+	// The last byte of the metadata key is the Family ID field (always 0). Vector
+	// keys have a Level field instead. Since level values are always > 0,
+	// increment the last byte to get the starting value.
+	keyBuffer := slices.Clone(metadataKey)
+	keyBuffer[len(keyBuffer)-1]++
+	return keyBuffer
+}
+
+// EncodeEndVectorKey constructs the KV key that succeeds all the KV keys for
+// vector data records in the partition.
+func EncodeEndVectorKey(metadataKey roachpb.Key) roachpb.Key {
+	// Chop the last byte, which is the family ID.
+	n := len(metadataKey) - 1
+	return metadataKey[:n:n].PrefixEnd()
+}
+
+// EncodePrefixVectorKey constructs the prefix that is shared by all KV keys for
+// vector data records in the partition.
+func EncodePrefixVectorKey(metadataKey roachpb.Key, level cspann.Level) roachpb.Key {
+	// Chop the last byte, which is the family ID.
+	n := len(metadataKey) - 1
+	return EncodePartitionLevel(metadataKey[:n:n], level)
+}
+
+// EncodedPrefixVectorKeyLen returns the number of bytes needed to encode the
+// prefix for vector data records in the partition.
+func EncodedPrefixVectorKeyLen(metadataKey roachpb.Key, level cspann.Level) int {
+	return len(metadataKey) - 1 + EncodedPartitionLevelLen(level)
+}
+
+// DecodedVectorKey is a deconstructed key value, as described above, minus the
 // index prefix. Any suffix bytes (child partition, primary key) are left in the
 // Suffix value.
-type VectorIndexKey struct {
-	Prefix       cspann.TreeKey
+type DecodedVectorKey struct {
+	Prefix       []byte
 	PartitionKey cspann.PartitionKey
 	Level        cspann.Level
 	Suffix       []byte
 }
 
-// DecodeKey takes an encoded key value, minus the /Tenant/Table/Index prefix,
+// DecodeVectorKey takes an encoded key value, minus the /Tenant/Table/Index prefix,
 // and extracts the vector index specific portions of it in an VectorIndexKey
 // struct.
-func DecodeKey(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKey, err error) {
+func DecodeVectorKey(
+	keyBytes []byte, numPrefixColumns int,
+) (vecIndexKey DecodedVectorKey, err error) {
 	prefixLen := 0
-	for i := 0; i < numPrefixColumns; i++ {
+	for range numPrefixColumns {
 		columnWidth, err := encoding.PeekLength(keyBytes[prefixLen:])
 		if err != nil {
 			return vecIndexKey, err
@@ -76,40 +142,54 @@ func DecodeKey(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKe
 	return vecIndexKey, nil
 }
 
-// Encode takes a VectorIndexKey and turns it back into encoded bytes that can be
+// Encode takes a VectorKey and turns it back into encoded bytes that can be
 // appended to the index's prefix to form a key value.
-func (vik *VectorIndexKey) Encode(appendTo []byte) []byte {
+func (vik *DecodedVectorKey) Encode(appendTo []byte) []byte {
 	appendTo = append(appendTo, vik.Prefix...)
 	appendTo = EncodePartitionKey(appendTo, vik.PartitionKey)
 	appendTo = EncodePartitionLevel(appendTo, vik.Level)
 	return append(appendTo, vik.Suffix...)
 }
 
-// EncodedVectorIndexValueLen returns the number of bytes needed to encode the
-// value side of a vector index entry.
-func EncodedVectorIndexValueLen(vectorData []byte, compositeData []byte) int {
-	return len(vectorData) + len(compositeData)
-}
-
-// EncodeVectorIndexValue takes a quantized vector entry and any composite key
-// data and returns the byte slice encoding the value side of the vector index
-// entry. This value will still need to be further encoded as Bytes in the
-// valueside.Value
-func EncodeVectorIndexValue(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
-	// The value side is encoded as a concatenation of the vector data and the
+// EncodeVectorValue takes a quantized vector entry and any composite key data
+// and returns the byte slice encoding the value of the vector index entry. This
+// value will still need to be further encoded as Bytes in valueside.Value.
+func EncodeVectorValue(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
+	// The value is encoded as a concatenation of the vector data and the
 	// composite data.
 	appendTo = append(appendTo, vectorData...)
 	return append(appendTo, compositeData...)
 }
 
-// EncodePartitionMetadata encodes the metadata for a partition.
-func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
-	// The encoding consists of 8 bytes for the level, and a 4-byte length,
-	// followed by 4 bytes for each dimension in the vector.
-	encMetadataSize := 8 + (4 * (len(centroid) + 1))
+// EncodedVectorValueLen returns the number of bytes needed to encode the value
+// of a vector index entry.
+func EncodedVectorValueLen(vectorData []byte, compositeData []byte) int {
+	return len(vectorData) + len(compositeData)
+}
+
+// EncodeMetadataValue encodes the metadata KV value for a partition.
+func EncodeMetadataValue(metadata cspann.PartitionMetadata) []byte {
+	// The encoding consists of:
+	// - 4 bytes for the level
+	// - 4 bytes for the state
+	// - 8 bytes for first target partition key (0 if InvalidKey)
+	// - 8 bytes for second target partition key (0 if InvalidKey)
+	// - 8 bytes for source partition key (0 if InvalidKey)
+	// - 0-20 bytes for timestamp (variable encoding)
+	// - 4 bytes count of dimensions
+	// - 4 bytes for each dimension in the vector
+	encMetadataSize := 4 + 8 + 8 + 8 + binary.MaxVarintLen64*2 + 4 + 4*len(metadata.Centroid)
 	buf := make([]byte, 0, encMetadataSize)
-	buf = encoding.EncodeUint32Ascending(buf, uint32(level))
-	return vector.Encode(buf, centroid)
+	buf = encoding.EncodeUint32Ascending(buf, uint32(metadata.Level))
+	buf = encoding.EncodeUint32Ascending(buf, uint32(metadata.StateDetails.State))
+	buf = encoding.EncodeUint64Ascending(buf, uint64(metadata.StateDetails.Target1))
+	buf = encoding.EncodeUint64Ascending(buf, uint64(metadata.StateDetails.Target2))
+	buf = encoding.EncodeUint64Ascending(buf, uint64(metadata.StateDetails.Source))
+	buf = encoding.EncodeUntaggedTimeValue(buf, metadata.StateDetails.Timestamp)
+
+	// vector.Encode never returns a non-nil error, so suppress return value.
+	buf, _ = vector.Encode(buf, metadata.Centroid)
+	return buf
 }
 
 // EncodeRaBitQVector encodes a RaBitQ vector into the given byte slice.
@@ -125,8 +205,9 @@ func EncodeRaBitQVector(
 	return appendTo
 }
 
-// EncodeUnquantizedVector encodes a full vector into the given byte slice.
-func EncodeUnquantizedVector(
+// EncodeUnquantizerVector encodes an Unquantizer vector and centroid distance
+// into the given byte slice.
+func EncodeUnquantizerVector(
 	appendTo []byte, centroidDistance float32, v vector.T,
 ) ([]byte, error) {
 	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDistance)
@@ -167,19 +248,47 @@ func EncodeChildKey(appendTo []byte, key cspann.ChildKey) []byte {
 	return EncodePartitionKey(appendTo, key.PartitionKey)
 }
 
-// DecodePartitionMetadata decodes the metadata for a partition.
-func DecodePartitionMetadata(
-	encMetadata []byte,
-) (level cspann.Level, centroid vector.T, err error) {
+// DecodeMetadataValue decodes the metadata KV value for a partition.
+func DecodeMetadataValue(encMetadata []byte) (metadata cspann.PartitionMetadata, err error) {
 	encMetadata, decodedLevel, err := encoding.DecodeUint32Ascending(encMetadata)
 	if err != nil {
-		return 0, nil, err
+		return cspann.PartitionMetadata{}, err
 	}
-	_, centroid, err = vector.Decode(encMetadata)
+	encMetadata, decodedState, err := encoding.DecodeUint32Ascending(encMetadata)
 	if err != nil {
-		return 0, nil, err
+		return cspann.PartitionMetadata{}, err
 	}
-	return cspann.Level(decodedLevel), centroid, nil
+	encMetadata, decodedTarget1, err := encoding.DecodeUint64Ascending(encMetadata)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	encMetadata, decodedTarget2, err := encoding.DecodeUint64Ascending(encMetadata)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	encMetadata, decodedSource, err := encoding.DecodeUint64Ascending(encMetadata)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	encMetadata, decodedTime, err := encoding.DecodeUntaggedTimeValue(encMetadata)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	_, centroid, err := vector.Decode(encMetadata)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	return cspann.PartitionMetadata{
+		Level:    cspann.Level(decodedLevel),
+		Centroid: centroid,
+		StateDetails: cspann.PartitionStateDetails{
+			State:     cspann.PartitionState(decodedState),
+			Target1:   cspann.PartitionKey(decodedTarget1),
+			Target2:   cspann.PartitionKey(decodedTarget2),
+			Source:    cspann.PartitionKey(decodedSource),
+			Timestamp: decodedTime,
+		},
+	}, nil
 }
 
 // DecodeRaBitQVectorToSet decodes a RaBitQ vector entry into the given
@@ -204,7 +313,7 @@ func DecodeRaBitQVectorToSet(
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
 	vectorSet.DotProducts = append(vectorSet.DotProducts, dotProduct)
 	vectorSet.Codes.Data = slices.Grow(vectorSet.Codes.Data, vectorSet.Codes.Width)
-	for i := 0; i < vectorSet.Codes.Width; i++ {
+	for range vectorSet.Codes.Width {
 		var codeWord uint64
 		encVector, codeWord, err = encoding.DecodeUint64Ascending(encVector)
 		if err != nil {
@@ -216,9 +325,10 @@ func DecodeRaBitQVectorToSet(
 	return encVector, nil
 }
 
-// DecodeUnquantizedVectorToSet decodes a full vector entry into the given
-// UnQuantizedVectorSet. The vector set must have been initialized with the
-// correct number of dimensions. It returns the remainder of the input buffer.
+// DecodeUnquantizedVectorToSet decodes an Unquantizer vector entry into the
+// given UnQuantizedVectorSet. The vector set must have been initialized with
+// the correct number of dimensions. It returns the remainder of the input
+// buffer.
 func DecodeUnquantizedVectorToSet(
 	encVector []byte, vectorSet *quantize.UnQuantizedVectorSet,
 ) ([]byte, error) {

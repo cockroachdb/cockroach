@@ -1,0 +1,37 @@
+# This test adds a few interesting inputs to a MultiSSTWriter.
+# See TestMultiSSTWriterInitSST for details.
+echo
+----
+>> rangekeyset [/Local/RangeID/100/r/AbortSpan/"00000000-0000-0000-0000-000000000000"-/Local/RangeID/100/r/AbortSpan/"6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+>> writeBytes=97 sstSize=0 dataSize=0
+>> rangekeyset [/Local/Range"d"/RangeDescriptor-/Local/Range"f"/RangeDescriptor)
+>> writeBytes=1090 sstSize=1128 dataSize=371
+>> rangekeyset ["e"-"f")
+>> writeBytes=4140 sstSize=4140 dataSize=581
+>> finishing sst
+>> writeBytes=5140 sstSize=5092 dataSize=585
+>> sst0:
+rangedel: /Local/RangeID/100/r{""-/AbortSpan/"00000000-0000-0000-0000-000000000000"}
+rangedel: /Local/RangeID/100/r/AbortSpan/"{00000000-0000-0000-0000-000000000000"-6ba7b810-9dad-11d1-80b4-00c04fd430c8"}
+rangedel: /Local/RangeID/100/{r/AbortSpan/"6ba7b810-9dad-11d1-80b4-00c04fd430c8"-s""}
+rangekeydel: /Local/RangeID/100/r{""-/AbortSpan/"00000000-0000-0000-0000-000000000000"}
+rangekeyset: /Local/RangeID/100/r/AbortSpan/"{00000000-0000-0000-0000-000000000000"-6ba7b810-9dad-11d1-80b4-00c04fd430c8"} -> /<empty>
+rangekeydel: /Local/RangeID/100/r/AbortSpan/"{00000000-0000-0000-0000-000000000000"-6ba7b810-9dad-11d1-80b4-00c04fd430c8"}
+rangekeydel: /Local/RangeID/100/{r/AbortSpan/"6ba7b810-9dad-11d1-80b4-00c04fd430c8"-s""}
+>> sst1:
+rangedel: /Local/Range"d"{-/RangeDescriptor}
+rangedel: /Local/Range"{d"/RangeDescriptor-f"/RangeDescriptor}
+rangedel: /Local/Range{"f"/RangeDescriptor-/Max}
+rangekeydel: /Local/Range"d"{-/RangeDescriptor}
+rangekeyset: /Local/Range"{d"/RangeDescriptor-f"/RangeDescriptor} -> /<empty>
+rangekeydel: /Local/Range"{d"/RangeDescriptor-f"/RangeDescriptor}
+rangekeydel: /Local/Range{"f"/RangeDescriptor-/Max}
+>> sst2:
+rangedel: /Local/Lock/Local/Range{"d"-/Max}
+rangekeydel: /Local/Lock/Local/Range{"d"-/Max}
+>> sst3:
+rangedel: /Local/Lock{"d"-/Max}
+rangekeydel: /Local/Lock{"d"-/Max}
+>> sst4:
+rangedel: {e-f}
+rangekeyset: {e-f} -> /<empty>
