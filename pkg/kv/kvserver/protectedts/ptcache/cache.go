@@ -168,15 +168,13 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 	defer timer.Stop()
 	timer.Reset(0) // Read immediately upon startup
 	var lastReset time.Time
-	var future singleflight.Future
 	// TODO(ajwerner): consider resetting the timer when the state is updated
 	// due to a call to Refresh.
 	for {
 		select {
 		case <-timer.C:
-			// Let's not reset the timer until we get our response.
 			timer.Read = true
-			future, _ = c.sf.DoChan(ctx,
+			future, _ := c.sf.DoChan(ctx,
 				refreshKey,
 				singleflight.DoOpts{
 					Stop:               c.stopper,
@@ -184,26 +182,27 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 				},
 				c.doSingleFlightUpdate,
 			)
-		case <-settingChanged:
-			if timer.Read { // we're currently fetching
-				continue
+
+			select {
+			case <-future.C():
+			case <-c.stopper.ShouldQuiesce():
+				return
 			}
+			res := future.WaitForResult(ctx)
+			if res.Err != nil && ctx.Err() != nil {
+				log.Errorf(ctx, "failed to refresh protected timestamps: %v", res.Err)
+			}
+			timer.Reset(protectedts.PollInterval.Get(&c.settings.SV))
+			lastReset = timeutil.Now()
+
+		case <-settingChanged:
 			interval := protectedts.PollInterval.Get(&c.settings.SV)
 			// NB: It's okay if nextUpdate is a negative duration; timer.Reset will
 			// treat a negative duration as zero and send a notification immediately.
 			nextUpdate := interval - timeutil.Since(lastReset)
 			timer.Reset(nextUpdate)
 			lastReset = timeutil.Now()
-		case <-future.C():
-			res := future.WaitForResult(ctx)
-			if res.Err != nil {
-				if ctx.Err() == nil {
-					log.Errorf(ctx, "failed to refresh protected timestamps: %v", res.Err)
-				}
-			}
-			future.Reset()
-			timer.Reset(protectedts.PollInterval.Get(&c.settings.SV))
-			lastReset = timeutil.Now()
+
 		case <-c.stopper.ShouldQuiesce():
 			return
 		}
