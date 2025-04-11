@@ -23,7 +23,7 @@ var avoidFullScans = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"jobs.avoid_full_scans.enabled",
 	"when true, enables hints to avoid full scans for internal, jobs-related queries",
-	false,
+	true,
 	settings.WithPublic)
 
 // RunningJobExists checks that whether there are any job of the given types
