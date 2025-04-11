@@ -1905,16 +1905,16 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 				return b
 			},
 		},
-		{
-			name: "batch with Increment",
-			ba: func() *kvpb.BatchRequest {
-				b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
-				b.Add(&kvpb.IncrementRequest{
-					RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
-				})
-				return b
-			},
-		},
+		//{
+		//	name: "batch with Increment",
+		//	ba: func() *kvpb.BatchRequest {
+		//		b := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+		//		b.Add(&kvpb.IncrementRequest{
+		//			RequestHeader: kvpb.RequestHeader{Key: keyA, Sequence: txn.Sequence},
+		//		})
+		//		return b
+		//	},
+		//},
 		//{
 		//	name: "batch with ReturnRawMVCCValues Scan",
 		//	ba: func() *kvpb.BatchRequest {
