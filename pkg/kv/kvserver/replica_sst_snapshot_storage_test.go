@@ -302,6 +302,8 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	var buf redact.StringBuilder
 
+	_, _ = fmt.Fprintf(&buf, "writeBytes=%d sstSize=%d dataSize=%d\n", msstw.writeBytes, msstw.sstSize, msstw.dataSize)
+
 	for i := range fileNames {
 		name := fmt.Sprintf("sst%d", i)
 		require.NoError(t, storageutils.ReportSSTEntries(&buf, name, actualSSTs[i]))
