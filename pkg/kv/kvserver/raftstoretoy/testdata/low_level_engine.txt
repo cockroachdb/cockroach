@@ -1,0 +1,72 @@
+ll-eng
+put lost lost
+----
+"lost" -> "lost"♱
+
+ll-eng
+crash
+----
+ok
+
+ll-eng sync=true
+put k1 v1
+put k2 v2
+----
+"k1" -> "v1"⚐
+"k2" -> "v2"⚐
+
+ll-eng
+get k1
+get k2
+get k3
+----
+k1: v1
+k2: v2
+k3: ∅
+
+ll-eng
+crash
+----
+"k1" -> "v1"
+"k2" -> "v2"
+
+ll-eng
+put k1 v1b
+put k3 v3
+----
+"k1" -> "v1b"♱ "v1"
+"k2" -> "v2"
+"k3" -> "v3"♱
+
+ll-eng
+flush
+----
+"k1" -> "v1b"
+"k2" -> "v2"
+"k3" -> "v3"
+
+ll-eng
+del k1
+----
+"k1" -> "∅"♱ "v1b"
+"k2" -> "v2"
+"k3" -> "v3"
+
+ll-eng sync=true
+----
+"k1" -> "∅"⚐ "v1b"
+"k2" -> "v2"
+"k3" -> "v3"
+
+ll-eng
+del k2
+del k3
+----
+"k1" -> "∅"⚐ "v1b"
+"k2" -> "∅"♱ "v2"
+"k3" -> "∅"♱ "v3"
+
+ll-eng
+flush
+----
+ok
