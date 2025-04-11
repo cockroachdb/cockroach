@@ -597,6 +597,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.Discard,
 		payload.Mode,
 		payload.MetricsLabel,
+		writer,
 	)
 	if err != nil {
 		return nil, nil, info, err
