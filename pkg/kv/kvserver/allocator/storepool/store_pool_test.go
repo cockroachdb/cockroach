@@ -58,7 +58,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 
 	sp.DetailsMu.RLock()
-	if _, ok := sp.DetailsMu.StoreDetails.Load(2); ok {
+	if _, ok := sp.DetailsMu.StoreDetailsMu.Load(2); ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
 	sp.DetailsMu.RUnlock()
@@ -66,7 +66,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg.GossipStores(uniqueStore, t)
 
 	sp.DetailsMu.RLock()
-	if _, ok := sp.DetailsMu.StoreDetails.Load(2); !ok {
+	if _, ok := sp.DetailsMu.StoreDetailsMu.Load(2); !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
 	sp.DetailsMu.RUnlock()
@@ -202,10 +202,10 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	mnl.SetNodeStatus(deadStore.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
 	sp.DetailsMu.Lock()
 	// Set declinedStore as throttled.
-	val, _ := sp.DetailsMu.StoreDetails.Load(declinedStore.StoreID)
+	val, _ := sp.DetailsMu.StoreDetailsMu.Load(declinedStore.StoreID)
 	(*val).ThrottledUntil = sp.clock.Now().AddDuration(time.Hour)
 	// Set suspectedStore as suspected.
-	val, _ = sp.DetailsMu.StoreDetails.Load(suspectedStore.StoreID)
+	val, _ = sp.DetailsMu.StoreDetailsMu.Load(suspectedStore.StoreID)
 	(*val).LastUnavailable = sp.clock.Now()
 	sp.DetailsMu.Unlock()
 
@@ -901,9 +901,9 @@ func TestStorePoolString(t *testing.T) {
 	mnl.SetNodeStatus(7, livenesspb.NodeLivenessStatus_DRAINING)
 	mnl.SetNodeStatus(8, livenesspb.NodeLivenessStatus_LIVE)
 	mnl.SetNodeStatus(9, livenesspb.NodeLivenessStatus_LIVE)
-	val, _ := sp.DetailsMu.StoreDetails.Load(8)
+	val, _ := sp.DetailsMu.StoreDetailsMu.Load(8)
 	(*val).LastUnavailable = sp.clock.Now()
-	val, _ = sp.DetailsMu.StoreDetails.Load(9)
+	val, _ = sp.DetailsMu.StoreDetailsMu.Load(9)
 	(*val).ThrottledUntil = sp.clock.Now().AddDuration(time.Second)
 
 	require.Equal(t, "1 (status=unknown): range-count=10 fraction-used=0.10\n"+
