@@ -6244,10 +6244,11 @@ func BenchmarkIbrahim(b *testing.B) {
 				return
 			default:
 				// Take the write lock on the store pool for store_id=2
-				storePool.DetailsMu.Lock()
+				sd, _ := storePool.DetailsMu.StoreDetailsMu.Load(roachpb.StoreID(2))
+				sd.Lock()
 				// Hold the lock briefly
 				time.Sleep(50 * time.Millisecond)
-				storePool.DetailsMu.Unlock()
+				sd.Unlock()
 			}
 		}
 	}()

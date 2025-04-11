@@ -330,10 +330,10 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 	livenessOverrides[decommissioningStore.Node.NodeID] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
 
 	// Set suspectedStore as suspected.
-	testStorePool.DetailsMu.Lock()
 	val, _ := testStorePool.DetailsMu.StoreDetailsMu.Load(suspectedStore.StoreID)
+	val.Lock()
 	val.LastUnavailable = testStorePool.clock.Now()
-	testStorePool.DetailsMu.Unlock()
+	val.Unlock()
 
 	// No filter or limited set of store IDs.
 	require.NoError(t, verifyStoreList(
