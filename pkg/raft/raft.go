@@ -2345,11 +2345,26 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 
-	if a.prev.index < r.raftLog.committed {
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
-			Commit: r.raftLog.committed})
+	// If the appended batch has no entries above the committed index, there is no
+	// new information in it. Instruct the leader to at least send a batch above
+	// the committed index.
+	if commit := r.raftLog.committed; a.lastIndex() <= commit {
+		// NB: A prerequisite for sending MsgAppResp, which is met here, is that the
+		// entry at Index is durable and matches the leader's. The durability is
+		// guaranteed due to the way r.send is handled. There is also a guarantee
+		// that all the leaders at term >= r.Term have the same committed prefix.
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: commit, Commit: commit})
 		return
+	} else if a.prev.index < commit {
+		// Discard the already committed entries from the appended log slice. They
+		// might have been already compacted out, so we don't try to match against
+		// them, but we could as a matter of an assertion. The maybeAppend call
+		// below still makes sure that the new "prev" entry ID in the appended log
+		// slice matches our log, so, by the Log Matching Property, all the
+		// preceding entries must have matched too.
+		a.LogSlice = a.forward(commit)
 	}
+
 	if r.raftLog.maybeAppend(a) {
 		// TODO(pav-kv): make it possible to commit even if the append did not
 		// succeed or is stale. If accTerm >= m.Term, then our log contains all
