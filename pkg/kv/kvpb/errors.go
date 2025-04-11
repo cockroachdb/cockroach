@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
@@ -347,6 +348,7 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.PebbleCorruptionError", &PebbleCorruptionError{})
 }
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1621,6 +1623,35 @@ func (e *InsufficientSpaceError) Format(s fmt.State, verb rune) {
 func (e *InsufficientSpaceError) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("store %d has insufficient remaining capacity to %s (remaining: %s / %.1f%%, min required: %.1f%%)",
 		e.StoreID, redact.SafeString(e.Op), humanizeutil.IBytes(e.Available), float64(e.Available)/float64(e.Capacity)*100, e.Required*100)
+	return nil
+}
+
+// NewPebbleCorruptionError creates a new PebbleCorruptionError.
+func NewPebbleCorruptionError(
+	storeID roachpb.StoreID, info *pebble.DataCorruptionInfo,
+) *PebbleCorruptionError {
+	err := &PebbleCorruptionError{
+		StoreID:  storeID,
+		Path:     info.Path,
+		IsRemote: info.IsRemote,
+		ExtraMsg: info.Details.Error(),
+	}
+	return err
+}
+
+func (e *PebbleCorruptionError) Error() string {
+	return fmt.Sprint(e)
+}
+
+// Format implements fmt.Formatter.
+func (e *PebbleCorruptionError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *PebbleCorruptionError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("pebble corruption error on store id:%d, path:%s, remote:%t, extra message: %s",
+		e.StoreID, e.Path, e.IsRemote, e.ExtraMsg)
 	return nil
 }
 
