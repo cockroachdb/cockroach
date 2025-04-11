@@ -7,6 +7,7 @@ go_library(
         "add_column.go",
         "add_database.go",
         "add_index.go",
+        "add_rls_policy.go",
         "backup_restore.go",
         "cluster_settings.go",
         "debug_zip.go",
