@@ -1,0 +1,41 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data STRING
+) PARTITION BY LIST (id) (
+    PARTITION p1 VALUES IN (1, 2, 3),
+    PARTITION p2 VALUES IN (4, 5, 6)
+);
+
+/* test */
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+ALTER PARTITION p2 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 10;
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE DISCARD;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER PARTITION p1 OF INDEX defaultdb.public.t@t_pkey CONFIGURE ZONE DISCARD; following ALTER PARTITION p1 OF INDEX defaultdb.public.t@t_pkey CONFIGURE ZONE USING num_replicas = ‹11›; ; ALTER PARTITION p2 OF INDEX defaultdb.public.t@t_pkey CONFIGURE ZONE USING num_replicas = ‹10›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward PUBLIC
+      │    │    ├── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1, PartitionName: "p1"}
+      │    │    ├── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2, PartitionName: "p1"}
+      │    │    └── ABSENT → PUBLIC PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 3, PartitionName: "p1"}
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1, PartitionName: "p2"}
+      │    │    └── PUBLIC → ABSENT PartitionZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2, PartitionName: "p2"}
+      │    └── 7 Mutation operations
+      │         ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+      │         ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── AddPartitionZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+      │         ├── DiscardSubzoneConfig {"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

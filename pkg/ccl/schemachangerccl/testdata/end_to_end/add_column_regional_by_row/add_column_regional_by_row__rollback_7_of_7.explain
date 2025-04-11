@@ -11,7 +11,7 @@ EXPLAIN (DDL) rollback at post-commit stage 7 of 7;
 ----
 Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN w STRING NOT NULL DEFAULT ‹'s'›;
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 16 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "w", ColumnID: 4 (w-)}
@@ -46,19 +46,26 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RemoveColumnNotNull {"ColumnID":4,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 6 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-)}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 4 (w-), TypeName: "STRING"}
-           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-), Expr: 's':::STRING}
-           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey+)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_pkey-)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
-           └── 7 Mutation operations
-                ├── RemoveColumnDefaultExpression {"ColumnID":4,"TableID":108}
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":108}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 6 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 4 (w-), TypeName: "STRING"}
+      │    │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-), Expr: 's':::STRING}
+      │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (table_regional_by_row_pkey-)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 3}
+      │    └── 7 Mutation operations
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":4,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

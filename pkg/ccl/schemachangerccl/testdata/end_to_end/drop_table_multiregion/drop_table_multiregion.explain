@@ -10,7 +10,7 @@ EXPLAIN (DDL) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 35 elements transitioning toward ABSENT
+ │         ├── 36 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -45,8 +45,9 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 46 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
+ │         └── 47 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
@@ -62,6 +63,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
@@ -95,7 +97,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 35 elements transitioning toward ABSENT
+ │    │    ├── 36 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -130,11 +132,12 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 35 elements transitioning toward ABSENT
+ │         ├── 36 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -169,8 +172,9 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 50 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
+ │         └── 51 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
@@ -186,6 +190,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}

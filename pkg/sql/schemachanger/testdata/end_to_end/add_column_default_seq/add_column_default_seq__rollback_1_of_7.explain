@@ -9,31 +9,39 @@ EXPLAIN (DDL) rollback at post-commit stage 1 of 7;
 ----
 Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 11 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
-           │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l-)}
-           │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l-), TypeName: "INT8"}
-           │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)], Expr: nextval(107:::REGCLASS)}
-           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
-           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
-           └── 14 Mutation operations
-                ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
-                ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
-                ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 11 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (l-)}
+      │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "l", ColumnID: 2 (l-)}
+      │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (l-), TypeName: "INT8"}
+      │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (l-), ReferencedSequenceIDs: [107 (sq1)], Expr: nextval(107:::REGCLASS)}
+      │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
+      │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
+      │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
+      │    │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
+      │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
+      │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 2 (tbl_pkey-)}
+      │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (l-), IndexID: 3}
+      │    └── 14 Mutation operations
+      │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
+      │         ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
+      │         ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

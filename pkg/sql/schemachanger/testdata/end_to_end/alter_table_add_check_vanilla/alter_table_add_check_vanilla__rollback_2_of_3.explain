@@ -1,0 +1,26 @@
+/* setup */
+CREATE TABLE t (i INT);
+INSERT INTO t(i) VALUES (1), (2), (3);
+
+/* test */
+ALTER TABLE t ADD CHECK (i > 0);
+EXPLAIN (DDL) rollback at post-commit stage 2 of 3;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CHECK (i > ‹0›);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_i-), ReferencedColumnIDs: [1]}
+      │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i-)}
+      │    └── 4 Mutation operations
+      │         ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -1,0 +1,45 @@
+/* setup */
+CREATE SEQUENCE s;
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+
+/* test */
+ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
+EXPLAIN (DDL) rollback at post-commit stage 3 of 3;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CHECK ((i > nextval(‹'s'›)) OR (j::typ = ‹'a'›));
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (_typ)], IndexID: 0, ConstraintID: 2 (check_i_j-), ReferencedColumnIDs: [1 2], ReferencedSequenceIDs: [104 (s)]}
+      │    │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 107 (t), Name: "check_i_j", ConstraintID: 2 (check_i_j-)}
+      │    └── 7 Mutation operations
+      │         ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":107}
+      │         ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":107}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── VALIDATED → ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (_typ)], IndexID: 0, ConstraintID: 2 (check_i_j-), ReferencedColumnIDs: [1 2], ReferencedSequenceIDs: [104 (s)]}
+      │    └── 8 Mutation operations
+      │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":107}
+      │         ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
+      │         ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 107 (t)}
+           └── 6 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

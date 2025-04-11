@@ -20,8 +20,8 @@ write *eventpb.DropTrigger to event log:
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
   ...
-     replacementOf:
        time: {}
+     schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
   -    dependsOnRoutines:
@@ -42,8 +42,8 @@ upsert descriptor #104
   -    name: tr
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -55,8 +55,8 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 # end StatementPhase
 # begin PreCommitPhase
@@ -66,8 +66,8 @@ persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 2 MutationType ops
 upsert descriptor #104
   ...
-     replacementOf:
        time: {}
+     schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
   -    dependsOnRoutines:
@@ -88,8 +88,8 @@ upsert descriptor #104
   -    name: tr
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -101,8 +101,8 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 persist all catalog changes to storage
 # end PreCommitPhase

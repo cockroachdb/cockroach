@@ -28,4 +28,4 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  ├── validate UNIQUE constraint backed by index idx_b+ in relation t
  ├── execute 3 system table mutations transactions
  ├── validate non-index-backed constraint check_crdb_internal_a_shard_10+ in relation t
- └── execute 2 system table mutations transactions
+ └── execute 3 system table mutations transactions

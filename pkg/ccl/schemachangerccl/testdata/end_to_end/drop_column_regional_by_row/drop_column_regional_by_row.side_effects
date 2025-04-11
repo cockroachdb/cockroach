@@ -28,7 +28,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -52,16 +52,6 @@ upsert descriptor #108
        regionalByRow: {}
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: StringFamily
-  +        oid: 25
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -147,6 +137,16 @@ upsert descriptor #108
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
      name: table_regional_by_row
      nextColumnId: 4
   -  nextConstraintId: 2
@@ -164,7 +164,9 @@ upsert descriptor #108
        unique: true
        vecConfig: {}
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -173,7 +175,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -229,16 +231,6 @@ upsert descriptor #108
        regionalByRow: {}
      modificationTime: {}
   +  mutations:
-  +  - column:
-  +      id: 2
-  +      name: crdb_internal_column_2_name_placeholder
-  +      nullable: true
-  +      type:
-  +        family: StringFamily
-  +        oid: 25
-  +    direction: DROP
-  +    mutationId: 1
-  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -324,6 +316,16 @@ upsert descriptor #108
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - column:
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
      name: table_regional_by_row
      nextColumnId: 4
   -  nextConstraintId: 2
@@ -341,7 +343,9 @@ upsert descriptor #108
        unique: true
        vecConfig: {}
   ...
+     replacementOf:
        time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -362,8 +366,8 @@ upsert descriptor #108
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     name: table_regional_by_row
-     nextColumnId: 4
+     - column:
+         id: 2
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -433,8 +437,8 @@ upsert descriptor #108
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     name: table_regional_by_row
-     nextColumnId: 4
+     - column:
+         id: 2
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -448,7 +452,7 @@ begin transaction #9
 validate forward indexes [2] in table #108
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 10 MutationType ops
 upsert descriptor #108
   ...
            statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
@@ -457,9 +461,8 @@ upsert descriptor #108
        targetRanks: <redacted>
        targets: <redacted>
   ...
-       direction: DROP
-       mutationId: 1
-  -    state: WRITE_ONLY
+     modificationTime: {}
+     mutations:
   -  - direction: ADD
   -    index:
   -      constraintId: 2
@@ -467,7 +470,8 @@ upsert descriptor #108
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 2
+  +  - column:
+         id: 2
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -500,7 +504,13 @@ upsert descriptor #108
   -      unique: true
   -      vecConfig: {}
   -      version: 4
-  -    mutationId: 1
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +    direction: DROP
+       mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - direction: DROP
@@ -537,9 +547,17 @@ upsert descriptor #108
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: WRITE_ONLY
+  -  - column:
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -    direction: DROP
+  -    mutationId: 1
+       state: WRITE_ONLY
      name: table_regional_by_row
-     nextColumnId: 4
   ...
      partitionAllBy: true
      primaryIndex:
@@ -570,11 +588,11 @@ upsert descriptor #108
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 6 MutationType ops
 upsert descriptor #108
   ...
          version: 4
@@ -589,41 +607,12 @@ upsert descriptor #108
   -  version: "7"
   +  version: "8"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 4 MutationType ops pending"
 commit transaction #11
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 6 MutationType ops
 upsert descriptor #108
   ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": k
-  -        "3": crdb_region
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 108
-  -      indexes:
-  -        "2": table_regional_by_row_pkey
-  -      name: table_regional_by_row
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›
-  -        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
      - columnIds:
        - 1
   -    - 2
@@ -703,12 +692,56 @@ upsert descriptor #108
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v"
   descriptor IDs: [108]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 1 MutationType op pending"
+commit transaction #12
+notified job registry to adopt jobs: [2]
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "3": crdb_region
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 108
+  -      indexes:
+  -        "2": table_regional_by_row_pkey
+  -      name: table_regional_by_row
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›
+  -        statement: ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 108
-commit transaction #12
-notified job registry to adopt jobs: [2]
+commit transaction #13
 # end PostCommitPhase
