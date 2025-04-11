@@ -27,7 +27,7 @@ import (
 // mutate the state of the StorePool such as UpdateLocalStoreAfterRebalance
 // are instead no-ops.
 //
-// NB: Despite the fact that StorePool.DetailsMu is held in write mode in
+// NB: Despite the fact that StorePool.Details is held in write mode in
 // some of the dispatched functions, these do not mutate the state of the
 // underlying StorePool.
 type OverrideStorePool struct {
@@ -114,39 +114,31 @@ func (o *OverrideStorePool) DecommissioningReplicas(
 func (o *OverrideStorePool) GetStoreList(
 	filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	var storeIDs roachpb.StoreIDSlice
-	o.sp.DetailsMu.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetail) bool {
+	o.sp.Details.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetailMu) bool {
 		storeIDs = append(storeIDs, storeID)
 		return true
 	})
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
 // GetStoreListFromIDs implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
 // GetStoreListForTargets implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreListForTargets(
 	candidates []roachpb.ReplicationTarget, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
 	for _, tgt := range candidates {
 		storeIDs = append(storeIDs, tgt.StoreID)
 	}
 
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
 // LiveAndDeadReplicas implements the AllocatorStorePool interface.
