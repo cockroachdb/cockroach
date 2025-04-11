@@ -520,7 +520,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}
-			typeDesc.AddReferencingDescriptorID(desc.ID)
+			_ = typeDesc.AddReferencingDescriptorID(desc.ID)
 			err = params.p.writeTypeSchemaChange(
 				params.ctx, typeDesc, "add REGIONAL BY TABLE back reference")
 			if err != nil {
