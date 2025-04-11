@@ -3385,9 +3385,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	desc.Capacity.Available = 1
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd := s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3409,9 +3410,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	// available disk space should be rejected.
 	desc.Capacity.Available = desc.Capacity.Capacity / 2
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd = s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
