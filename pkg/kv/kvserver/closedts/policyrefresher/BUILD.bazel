@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "policyrefresher",
-    srcs = ["policy_refresher.go"],
+    srcs = [
+        "config.go",
+        "policy_refresher.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher",
     visibility = ["//visibility:public"],
     deps = [
