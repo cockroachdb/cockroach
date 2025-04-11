@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -4437,6 +4438,18 @@ func RunLogicTest(
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
+	}
+	if config.UseSecondaryTenant == logictestbase.Always {
+		// Under multitenant configs running in EngFlow, we have seen that logic
+		// tests can be flaky due to an overload condition where schema change
+		// transactions do not heartbeat quickly enough. This prevents background
+		// jobs such as the spanconfig reconciler or the job registry "remove claims
+		// from dead sessions" loop from aborting the queries under test.
+		// See https://github.com/cockroachdb/cockroach/pull/140400#issuecomment-2634346278
+		// and https://github.com/cockroachdb/cockroach/issues/140494#issuecomment-2640208187
+		// for a detailed analysis of this issue.
+		cleanup := txnwait.TestingOverrideTxnLivenessThreshold(10 * time.Second)
+		defer cleanup()
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs
