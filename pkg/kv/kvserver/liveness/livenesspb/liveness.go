@@ -8,9 +8,12 @@ package livenesspb
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -159,6 +162,54 @@ type IsLiveMapEntry struct {
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
 type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
 
+// NodeConnectionStatus is a lightweight wrapper around the node dialer, where
+// calculating the connection status is done lazily upon the first call to
+// IsConnected(). This is useful as a member in structs where we sometimes want
+// to calculate the connection status, and sometimes we don't.
+type NodeConnectionStatus struct {
+	nodeDialer *nodedialer.Dialer
+	nodeID     roachpb.NodeID
+	// calculatedConnected specifies whether we did calculate the connected field
+	// or not. If we haven't, we can't rely on the value of connected.
+	calculatedConnected atomic.Bool
+	// connected is an atomic boolean that tracks whether we are connected to the node.
+	connected atomic.Bool
+}
+
+func NewNodeConnectionStatus(
+	nodeID roachpb.NodeID, nodeDialer *nodedialer.Dialer,
+) *NodeConnectionStatus {
+	ncs := &NodeConnectionStatus{
+		nodeDialer: nodeDialer,
+		nodeID:     nodeID,
+	}
+	return ncs
+}
+
+// SetIsConnected changes the connection status of the node.
+func (ncs *NodeConnectionStatus) SetIsConnected(connected bool) {
+	ncs.connected.Store(connected)
+	ncs.calculatedConnected.Store(true)
+}
+
+// IsConnected checks if we are connected to the supplied nodeID. It only
+// performs the calculation the first time. Future calls will use the cached
+// version.
+func (ncs *NodeConnectionStatus) IsConnected() bool {
+	if !ncs.calculatedConnected.Load() {
+		// If we need to calculate the connection status, we need to take upgrade
+		// our read lock. Note this is only done the first time this function is
+		// called.
+		// Some tests will set the nodeDialer to nil, so we need to check for that.
+		connected := ncs.nodeDialer == nil ||
+			ncs.nodeDialer.ConnHealth(ncs.nodeID, rpc.SystemClass) == nil
+		ncs.SetIsConnected(connected)
+		ncs.calculatedConnected.Store(true)
+	}
+
+	return ncs.connected.Load()
+}
+
 // NodeVitality should be used any place other than epoch leases where it is
 // necessary to determine if a node is currently alive and what its health is.
 // Aliveness and deadness are concepts that refer to our best guess of the
@@ -173,8 +224,9 @@ type NodeVitality struct {
 	draining bool
 	// membership is whether the node is active or in a state of decommissioning.
 	membership MembershipStatus
-	// connected is whether we are currently directly connect to this node.
-	connected bool
+	// nodeConnectionStatus calculates whether we are currently directly connect
+	// to this node.
+	nodeConnectionStatus *NodeConnectionStatus
 
 	// When the record is created. Records are not held for long, but they should
 	// always give consistent results when asked.
@@ -285,7 +337,7 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 			return nv.isAliveAndConnected()
 		}
 	case NetworkMap:
-		return nv.connected
+		return nv.nodeConnectionStatus.IsConnected()
 	case LossOfQuorum:
 		return nv.isAlive()
 	case ReplicaGCQueue:
@@ -315,7 +367,7 @@ func (nv NodeVitality) isAvailableNotDraining() bool {
 }
 
 func (nv NodeVitality) isAliveAndConnected() bool {
-	return nv.isAvailableNotDraining() && nv.connected
+	return nv.isAvailableNotDraining() && nv.nodeConnectionStatus.IsConnected()
 }
 
 // isAliveEpoch is used for epoch leases. It is similar to isAlive, but doesn't
@@ -535,7 +587,7 @@ func (l Liveness) CreateNodeVitality(
 	now hlc.Timestamp,
 	descUpdateTime hlc.Timestamp,
 	descUnavailableTime hlc.Timestamp,
-	connected bool,
+	connectionStatus *NodeConnectionStatus,
 	timeUntilNodeDead time.Duration,
 	timeAfterNodeSuspect time.Duration,
 ) NodeVitality {
@@ -546,7 +598,7 @@ func (l Liveness) CreateNodeVitality(
 		nodeID:               l.NodeID,
 		draining:             l.Draining,
 		membership:           l.Membership,
-		connected:            connected,
+		nodeConnectionStatus: connectionStatus,
 		now:                  now,
 		descUpdateTime:       descUpdateTime,
 		descUnavailableTime:  descUnavailableTime,
