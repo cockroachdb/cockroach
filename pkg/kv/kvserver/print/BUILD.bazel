@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "print",
+    srcs = ["debug_print.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/print",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/mvccencoding",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+    ],
+)
+
+go_test(
+    name = "print_test",
+    srcs = ["debug_print_test.go"],
+    embed = [":print"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/mvccencoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_stretchr_testify//require",
+    ],
+)

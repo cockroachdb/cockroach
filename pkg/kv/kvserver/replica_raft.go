@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -3079,7 +3080,7 @@ func (r *Replica) printRaftTail(
 			Key:   mvccKey,
 			Value: v,
 		}
-		sb.WriteString(truncateEntryString(SprintMVCCKeyValue(kv, true /* printKey */), 2000))
+		sb.WriteString(truncateEntryString(print.SprintMVCCKeyValue(kv, true /* printKey */), 2000))
 		sb.WriteRune('\n')
 
 		valid, err := it.PrevEngineKey()

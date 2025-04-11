@@ -84,15 +84,28 @@ type RaftState struct {
 	ByteSize  int64
 }
 
+// EntryStats contains stats about the appended log slice.
+type EntryStats struct {
+	RegularEntries    int
+	RegularBytes      int64
+	SideloadedEntries int
+	SideloadedBytes   int64
+}
+
+// Add increments the stats with the given delta.
+func (e *EntryStats) Add(delta EntryStats) {
+	e.RegularEntries += delta.RegularEntries
+	e.RegularBytes += delta.RegularBytes
+	e.SideloadedEntries += delta.SideloadedEntries
+	e.SideloadedBytes += delta.SideloadedBytes
+}
+
 // AppendStats describes a completed log storage append operation.
 type AppendStats struct {
 	Begin crtime.Mono
 	End   crtime.Mono
 
-	RegularEntries    int
-	RegularBytes      int64
-	SideloadedEntries int
-	SideloadedBytes   int64
+	EntryStats
 
 	PebbleBegin crtime.Mono
 	PebbleEnd   crtime.Mono
@@ -186,39 +199,26 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.Begin = crtime.NowMono()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := MaybeSideloadEntries(ctx, m.Entries, s.Sideload)
+		thinEntries, entryStats, err := MaybeSideloadEntries(ctx, m.Entries, s.Sideload)
 		if err != nil {
 			const expl = "during sideloading"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		state.ByteSize += sideLoadedEntriesSize
+		stats.EntryStats.Add(entryStats) // TODO(pav-kv): just return the stats.
+		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
 			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		stats.RegularEntries += len(thinEntries) - numSideloaded
-		stats.RegularBytes += otherEntriesSize
-		stats.SideloadedEntries += numSideloaded
-		stats.SideloadedBytes += sideLoadedEntriesSize
 		stats.End = crtime.NowMono()
 	}
 
-	if hs := m.HardState; !raft.IsEmptyHardState(hs) {
-		// NB: Note that without additional safeguards, it's incorrect to write
-		// the HardState before appending m.Entries. When catching up, a follower
-		// will receive Entries that are immediately Committed in the same
-		// Ready. If we persist the HardState but happen to lose the Entries,
-		// assertions can be tripped.
-		//
-		// We have both in the same batch, so there's no problem. If that ever
-		// changes, we must write and sync the Entries before the HardState.
-		if err := s.StateLoader.SetHardState(ctx, batch, hs); err != nil {
-			const expl = "during setHardState"
-			return RaftState{}, errors.Wrap(err, expl)
-		}
+	if err := storeHardState(ctx, batch, s.StateLoader, m.HardState); err != nil {
+		return RaftState{}, err
 	}
+
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
 	//
@@ -374,6 +374,26 @@ var logAppendPool = sync.Pool{
 			enginepb.MVCCStats
 		})
 	},
+}
+
+func storeHardState(
+	ctx context.Context, w storage.Writer, sl StateLoader, hs raftpb.HardState,
+) error {
+	if raft.IsEmptyHardState(hs) {
+		return nil
+	}
+	// NB: Note that without additional safeguards, it's incorrect to write the
+	// HardState before appending m.Entries. When catching up, a follower will
+	// receive Entries that are immediately Committed in the same Ready. If we
+	// persist the HardState but happen to lose the Entries, assertions can be
+	// tripped.
+	//
+	// We have both in the same batch, so there's no problem. If that ever
+	// changes, we must write and sync the Entries before the HardState.
+	if err := sl.SetHardState(ctx, w, hs); err != nil {
+		return errors.Wrap(err, "during SetHardState")
+	}
+	return nil
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
