@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -60,24 +61,13 @@ func newKVRowProcessor(
 	spec execinfrapb.LogicalReplicationWriterSpec,
 	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 ) (*kvRowProcessor, error) {
-	cdcEventTargets := changefeedbase.Targets{}
-	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(procConfigByDestID))
 	dstBySrc := make(map[descpb.ID]descpb.ID, len(procConfigByDestID))
 
 	for dstID, s := range procConfigByDestID {
 		dstBySrc[s.srcDesc.GetID()] = dstID
-		srcTablesBySrcID[s.srcDesc.GetID()] = s.srcDesc
-		cdcEventTargets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           s.srcDesc.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(s.srcDesc.GetName()),
-		})
 	}
 
-	prefixlessCodec := keys.SystemSQLCodec
-	rfCache, err := cdcevent.NewFixedRowFetcherCache(
-		ctx, prefixlessCodec, evalCtx.Settings, cdcEventTargets, srcTablesBySrcID,
-	)
+	decoder, err := newCdcEventDecoder(ctx, procConfigByDestID, evalCtx.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +78,37 @@ func newKVRowProcessor(
 		evalCtx:  evalCtx,
 		dstBySrc: dstBySrc,
 		writers:  make(map[descpb.ID]*kvTableWriter, len(procConfigByDestID)),
-		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
+		decoder:  decoder,
 	}
 	return p, nil
+}
+
+func newCdcEventDecoder(
+	ctx context.Context,
+	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
+	settings *cluster.Settings,
+) (cdcevent.Decoder, error) {
+	cdcEventTargets := changefeedbase.Targets{}
+	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(procConfigByDestID))
+
+	for _, s := range procConfigByDestID {
+		srcTablesBySrcID[s.srcDesc.GetID()] = s.srcDesc
+		cdcEventTargets.Add(changefeedbase.Target{
+			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+			TableID:           s.srcDesc.GetID(),
+			StatementTimeName: changefeedbase.StatementTimeName(s.srcDesc.GetName()),
+		})
+	}
+
+	prefixlessCodec := keys.SystemSQLCodec
+	rfCache, err := cdcevent.NewFixedRowFetcherCache(
+		ctx, prefixlessCodec, settings, cdcEventTargets, srcTablesBySrcID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false), nil
 }
 
 var originID1Options = &kvpb.WriteOptions{OriginID: 1}

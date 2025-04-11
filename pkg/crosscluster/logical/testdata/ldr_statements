@@ -174,4 +174,4 @@ DELETE FROM [112 AS replication_target] WHERE (((((id IS NOT DISTINCT FROM $1::U
 
 show-select table=user_events
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.user_id, replication_target.event_type, replication_target.event_data, replication_target.created_at, replication_target.region FROM ROWS FROM (unnest($1::UUID[], $2::@100110[])) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [112 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.region = key_list.key2)
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.user_id, replication_target.event_type, replication_target.event_data, replication_target.created_at, replication_target.region FROM ROWS FROM (unnest($1::UUID[], $2::@100111)) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [112 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.region = key_list.key2)

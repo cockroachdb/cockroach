@@ -104,16 +104,20 @@ const (
 	// is deprecated because it does not support the full set of features of the
 	// SQL writer.
 	writerTypeLegacyKV writerType = "legacy-kv"
+
+	// writerTypeCRUD is the shiny new sql writer that uses explicit reads,
+	// inserts, updates, and deletes instead of upserts.
+	writerTypeCRUD writerType = "crud"
 )
 
 var immediateModeWriter = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.immediate_mode_writer",
 	"the writer to use when in immediate mode",
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeSQL), string(writerTypeLegacyKV)),
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeSQL), string(writerTypeLegacyKV), string(writerTypeCRUD)),
 	settings.WithValidateString(func(sv *settings.Values, val string) error {
-		if val != string(writerTypeSQL) && val != string(writerTypeLegacyKV) {
-			return errors.Newf("immediate mode writer must be either 'sql' or 'legacy-kv', got '%s'", val)
+		if val != string(writerTypeSQL) && val != string(writerTypeLegacyKV) && val != string(writerTypeCRUD) {
+			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)
 		}
 		return nil
 	}),
@@ -743,6 +747,11 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 			if err != nil {
 				return err
 			}
+		case writerTypeCRUD:
+			rp, err = newCrudSqlWriter(ctx, flowCtx.Cfg, flowCtx.EvalCtx, sd, lrw.spec.Discard, lrw.configByTable)
+			if err != nil {
+				return err
+			}
 		default:
 			return errors.AssertionFailedf("unknown logical replication writer type: %s", writer)
 		}
@@ -1113,7 +1122,6 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 		return tooOld
 	}
 
-	// TODO(dt): maybe this should only be constraint violation errors?
 	return retryAllowed
 }
 
