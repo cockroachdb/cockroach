@@ -1,4 +1,7 @@
 statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
 CREATE TABLE tb(unused INT); INSERT INTO tb VALUES (1)
 
 subtest empty_tuple
