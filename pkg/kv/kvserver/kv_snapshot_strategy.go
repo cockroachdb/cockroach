@@ -170,7 +170,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
 
-				bytesEstimate := msstw.estimatedBytes()
+				bytesEstimate := msstw.estimatedDataSize()
 				delta := bytesEstimate - prevBytesEstimate
 				// Calling nil pacer is a noop.
 				if err := pacer.Pace(ctx, delta, false /* final */); err != nil {

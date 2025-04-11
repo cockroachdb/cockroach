@@ -43,8 +43,8 @@ type multiSSTWriter struct {
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
-	// The total size of the key and value pairs (not the total size of the
-	// SSTs). Updated on SST finalization.
+	// The total size of the key and value pairs (not the total size of the SSTs),
+	// excluding currSST. Updated on SST finalization.
 	dataSize int64
 	// The total size of the SSTs, excluding currSST. Updated on SST finalization.
 	sstSize int64
@@ -109,10 +109,10 @@ func newMultiSSTWriter(
 	return msstw, nil
 }
 
-// estimatedBytes returns the approximation of the written bytes. Must not be
-// called after Finish.
-func (msstw *multiSSTWriter) estimatedBytes() int64 {
-	return msstw.sstSize + int64(msstw.currSST.EstimatedSize())
+// estimatedDataSize returns the approximation of the written bytes to SSTs
+// (including currSST). Must not be called after Finish.
+func (msstw *multiSSTWriter) estimatedDataSize() int64 {
+	return msstw.sstSize + msstw.currSST.DataSize
 }
 
 func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
