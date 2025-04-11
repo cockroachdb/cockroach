@@ -1079,10 +1079,8 @@ func (s *state) UpdateStorePool(
 	sort.Sort(storeIDs)
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
-		copiedDetail := *detail
-		copiedDesc := *detail.Desc
-		copiedDetail.Desc = &copiedDesc
-		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+		copiedDetail := detail.Copy()
+		s.stores[storeID].storepool.DetailsMu.StoreDetails.Store(gossipStoreID, copiedDetail)
 	}
 }
 
