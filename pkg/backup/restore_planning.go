@@ -91,6 +91,14 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var restoreCompactedBackups = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"restore.compacted_backups.enabled",
+	"allow restoring from compacted backups",
+	true,
+	settings.WithVisibility(settings.Reserved),
+)
+
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
 // missing dependencies, and returns the resulting set of tables. If the
@@ -1784,14 +1792,15 @@ func doRestorePlan(
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
+	includeCompacted := restoreCompactedBackups.Get(&p.ExecCfg().Settings.SV)
 	// Given the stores for the base full backup, and the fully resolved backup
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(), false,
+		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv,
+		p.User(), false, includeCompacted,
 	)
-
 	if err != nil {
 		return err
 	}
