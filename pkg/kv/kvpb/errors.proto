@@ -791,3 +791,16 @@ message InsufficientSpaceError {
    // RequiredFraction is the required remaining capacity fraction.
    optional double required = 5 [(gogoproto.nullable) = false];
 }
+
+
+// PebbleCorruptionError indicates that pebble thinks that there is a data                                                                                                                                                                                  
+// corruption.                                                                                                                                                                                                                                                
+message PebbleCorruptionError {
+  optional int64 store_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  optional string path = 2 [(gogoproto.nullable) = false];
+  optional bool is_remote = 3 [(gogoproto.nullable) = false];
+  optional string extra_msg = 4 [(gogoproto.nullable) = false];
+}
+   

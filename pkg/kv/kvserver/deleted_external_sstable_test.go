@@ -33,8 +33,19 @@ import (
 // externalSSTTestCluster is a helper struct that has helper functions to set up
 // and run the tests.
 type externalSSTTestCluster struct {
-	tc *testcluster.TestCluster
-	db *kv.DB
+	tc        *testcluster.TestCluster
+	db        *kv.DB
+	externURI string
+	sstFile   string
+}
+
+// newExternalSSTTestCluster creates a new externalSSTTestCluster, and it also
+// initializes the sstFile and the externalURI to be used in the tests.
+func newExternalSSTTestCluster() *externalSSTTestCluster {
+	return &externalSSTTestCluster{
+		externURI: "nodelocal://1/external-files",
+		sstFile:   "file1.sst",
+	}
 }
 
 // testSetup creates a test cluster with ranges split in this way:
@@ -321,8 +332,9 @@ func (etc *externalSSTTestCluster) mergeHelper(ctx context.Context, key roachpb.
 
 // adminSplitArgs issues an AdminSplitRequest for the provided key.
 func (etc *externalSSTTestCluster) splitHelper(ctx context.Context, key roachpb.Key) error {
-	_, _, err := etc.tc.SplitRange(key)
-	return err
+	b := kv.Batch{}
+	b.AddRawRequest(adminSplitArgs(key))
+	return etc.db.Run(ctx, &b)
 }
 
 // exciseHelper excises the provided key range from the store.
@@ -365,7 +377,10 @@ func (etc *externalSSTTestCluster) checkKeysPointToSameRangeDesc(
 // due to the file not being found.
 func (etc *externalSSTTestCluster) requireNotFoundError(t *testing.T, err error) {
 	t.Helper()
-	require.Regexp(t, "no such file or directory", err)
+	pce := &kvpb.PebbleCorruptionError{}
+	require.ErrorAs(t, err, &pce)
+	require.True(t, pce.IsRemote)
+	require.Equal(t, fmt.Sprintf("remote-%s://%s", etc.externURI, etc.sstFile), pce.Path)
 }
 
 // TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST tests that general
@@ -404,7 +419,6 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-	const externURI = "nodelocal://1/external-files"
 
 	skip.UnderRace(t) // too slow under stressrace
 
@@ -833,7 +847,7 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx := context.Background()
-			etc := externalSSTTestCluster{}
+			etc := newExternalSSTTestCluster()
 			etc.testSetup(t)
 			defer etc.tc.Stopper().Stop(ctx)
 
@@ -842,21 +856,21 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 			stream, _ := etc.createRangeFeed(t, roachpb.Key("d"), roachpb.Key("g"))
 			defer stream.Cancel()
 
-			externalStorage, err := etc.createExternalStorage(ctx, externURI)
+			externalStorage, err := etc.createExternalStorage(ctx, etc.externURI)
 			require.NoError(t, err)
 
 			firstStartChar := testCase.deletedExternalSpanStart[0]
 			firstEndChar := testCase.deletedExternalSpanEnd[0]
 			require.NoError(t, etc.createExternalSSTableFile(t, ctx, externalStorage,
-				"file1.sst", firstStartChar, firstEndChar))
+				etc.sstFile, firstStartChar, firstEndChar))
 			require.NoError(t, etc.linkExternalSSTableToFile(ctx, testCase.deletedExternalSpanStart,
-				testCase.deletedExternalSpanEnd, externURI, "file1.sst"))
+				testCase.deletedExternalSpanEnd, etc.externURI, etc.sstFile))
 
 			// Before deleting the file, run some data operations that will be
 			// on top of the SSTable pointing to the soon-to-be deleted file.
 			pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
 			require.NoError(t, err)
-			require.NoError(t, externalStorage.Delete(ctx, "file1.sst"))
+			require.NoError(t, externalStorage.Delete(ctx, etc.sstFile))
 
 			// We should be able to commit the transactions since they just have
 			// point writes, and they wouldn't need the deleted file.
@@ -865,7 +879,7 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 			// Run the test function, and make sure that the store is consistent
 			// afterward.
-			testCase.testFunc(t, ctx, &etc)
+			testCase.testFunc(t, ctx, etc)
 			require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 		})
 	}
@@ -895,16 +909,15 @@ func TestRangeFeedWithExcise(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-	const externURI = "nodelocal://1/external-files"
 
 	ctx := context.Background()
-	etc := externalSSTTestCluster{}
+	etc := newExternalSSTTestCluster()
 
 	// Create a test cluster with the following ranges: [a, d), [d, g), [g, z).
 	etc.testSetup(t)
 	defer etc.tc.Stopper().Stop(ctx)
 
-	externalStorage, err := etc.createExternalStorage(ctx, externURI)
+	externalStorage, err := etc.createExternalStorage(ctx, etc.externURI)
 	require.NoError(t, err)
 
 	deletedStartKey := roachpb.Key("d")
@@ -913,9 +926,9 @@ func TestRangeFeedWithExcise(t *testing.T) {
 	firstEndChar := deletedEndKey[0]
 
 	require.NoError(t, etc.createExternalSSTableFile(t, ctx, externalStorage,
-		"file1.sst", firstStartChar, firstEndChar))
+		etc.sstFile, firstStartChar, firstEndChar))
 	require.NoError(t, etc.linkExternalSSTableToFile(ctx, deletedStartKey,
-		deletedEndKey, externURI, "file1.sst"))
+		deletedEndKey, etc.externURI, etc.sstFile))
 
 	// Create one range feed per range.
 	rfStream1, rfErr1 := etc.createRangeFeed(t, roachpb.Key("a"), roachpb.Key("d"))
@@ -954,7 +967,7 @@ func TestRangeFeedWithExcise(t *testing.T) {
 	pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
 	require.NoError(t, err)
 
-	require.NoError(t, externalStorage.Delete(ctx, "file1.sst"))
+	require.NoError(t, externalStorage.Delete(ctx, etc.sstFile))
 
 	require.NoError(t, pendingTxn1.Commit(ctx))
 	require.NoError(t, pendingTxn2.Commit(ctx))
