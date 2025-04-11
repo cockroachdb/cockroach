@@ -6215,3 +6215,49 @@ func BenchmarkLeaderTickWithLeaderLeases(b *testing.B) {
 		store.ProcessTick(ctx, repl.RangeID)
 	}
 }
+
+func BenchmarkIbrahim(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	// Create a cluster with one node to make sure that this is the leader.
+	cluster := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
+	defer cluster.Stopper().Stop(ctx)
+
+	// // Set up a replica to be ticked, and wait for the lease to get upgraded.
+	// keyA := cluster.ScratchRange(b)
+	// desc := cluster.LookupRangeOrFatal(b, keyA)
+	// cluster.MaybeWaitForLeaseUpgrade(ctx, b, desc)
+	// store := cluster.GetFirstStoreFromServer(b, 0)
+	// repl := store.LookupReplica(desc.StartKey)
+
+	// Start a goroutine that continuously takes the write lock on storepool for store_id=2
+	stopCh := make(chan struct{})
+	go func() {
+		store := cluster.GetFirstStoreFromServer(b, 0)
+		storePool := store.StorePool()
+
+		for {
+			select {
+			case <-stopCh:
+				return
+			default:
+				// Take the write lock on the store pool for store_id=2
+				storePool.DetailsMu.Lock()
+				// Hold the lock briefly
+				time.Sleep(50 * time.Millisecond)
+				storePool.DetailsMu.Unlock()
+			}
+		}
+	}()
+
+	// Ensure the goroutine is stopped when the benchmark completes
+	defer close(stopCh)
+
+	b.ResetTimer()
+	store := cluster.GetFirstStoreFromServer(b, 0)
+	for n := 0; n < b.N; n++ {
+		store.StorePool().IsStoreReadyForRoutineReplicaTransfer(ctx, roachpb.StoreID(1))
+	}
+}

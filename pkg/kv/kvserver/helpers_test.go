@@ -59,6 +59,10 @@ func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
 	return s.cfg.StoreLiveness.Transport
 }
 
+func (s *Store) StorePool() *storepool.StorePool {
+	return s.cfg.StorePool
+}
+
 func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (bool, error) {
