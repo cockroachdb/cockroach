@@ -22,7 +22,7 @@ import (
 
 var testingAvoidFullScans = metamorphic.ConstantWithTestBool(
 	"jobs.avoid_full_scans_in_find_running_jobs",
-	false, /* defaultValue */
+	true, /* defaultValue */
 )
 
 var avoidFullScans = settings.RegisterBoolSetting(
