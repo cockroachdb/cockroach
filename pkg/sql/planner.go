@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -257,7 +258,8 @@ type planner struct {
 	// curPlan collects the properties of the current plan being prepared. This state
 	// is undefined at the beginning of the planning of each new statement, and cannot
 	// be reused for an old prepared statement after a new statement has been prepared.
-	curPlan planTop
+	curPlan      planTop
+	compiledPlan planNode
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	txCtx     transform.ExprTransformContext
@@ -784,8 +786,8 @@ type statementPreparer interface {
 		stmt Statement,
 		placeholderHints tree.PlaceholderTypes,
 		rawTypeHints []oid.Oid,
-		origin PreparedStatementOrigin,
-	) (*PreparedStatement, error)
+		origin prep.StatementOrigin,
+	) (*prep.Statement, error)
 }
 
 var _ statementPreparer = &connExecutor{}

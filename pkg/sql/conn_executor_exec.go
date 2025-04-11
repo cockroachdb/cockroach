@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -150,7 +151,7 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, parserStmt, res)
 
 	case stateOpen:
-		var preparedStmt *PreparedStatement
+		var preparedStmt *prep.Statement
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
@@ -349,7 +350,7 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
 	parserStmt statements.Statement[tree.Statement],
-	prepared *PreparedStatement,
+	prepared *prep.Statement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
@@ -524,11 +525,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -844,7 +844,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -905,7 +905,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -1482,11 +1482,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
 		}
-		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
 		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
@@ -1871,7 +1870,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", name,
@@ -1932,7 +1931,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, prep.StatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -2513,7 +2512,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		return err
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
 	// We need to step the transaction's internal read sequence before committing
 	// if it has stepping enabled. If it doesn't have stepping enabled, then we
@@ -2643,7 +2642,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.extraTxnState.prepStmtsNamespace.closePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 	ex.recordDDLTxnTelemetry(true /* failed */)
 
 	// A non-retryable error automatically rolls-back the transaction if there are
@@ -2848,6 +2847,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
+		// TODO
 		ctx, err = ex.makeExecPlan(ctx, planner)
 		defer planner.curPlan.close(ctx)
 	}
@@ -2885,7 +2885,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols colinfo.ResultColumns
 	if stmt.AST.StatementReturnType() == tree.Rows {
-		cols = planner.curPlan.main.planColumns()
+		if planner.compiledPlan != nil {
+			cols = planColumns(planner.compiledPlan)
+		} else {
+			cols = planner.curPlan.main.planColumns()
+		}
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
 		res.SetError(err)
@@ -2893,6 +2897,38 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+
+	// TODO: Do something with the plan here.
+	if p := planner.compiledPlan; p != nil {
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, crtime.NowMono())
+		params := runParams{
+			ctx:             ctx,
+			extendedEvalCtx: ex.planner.ExtendedEvalContext(),
+			p:               &ex.planner,
+		}
+		if err := startExec(params, p); err != nil {
+			return err
+		}
+		for {
+			hasRow, err := p.Next(params)
+			if err != nil {
+				return err
+			}
+			if !hasRow {
+				break
+			}
+			if err := res.AddRow(ctx, p.Values()); err != nil {
+				return err
+			}
+			// TODO
+			ex.extraTxnState.rowsRead += 1
+			ex.extraTxnState.bytesRead += 1
+			ex.extraTxnState.rowsWritten += 1
+		}
+		p.Close(ctx)
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, crtime.NowMono())
+		return nil
+	}
 
 	var afterGetPlanDistribution func()
 	if planner.pausablePortal != nil {
@@ -3485,7 +3521,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		if ex.executorType == executorTypeExec {
 			// Check if a PCR reader catalog timestamp is set, which
 			// will cause to turn all txns into system time queries.
-			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() {
+			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() { // TODO: This is 0.7% of allocations.
 				return tree.ReadOnly, now, &newTS, nil
 			}
 		}
@@ -3641,12 +3677,12 @@ func (ex *connExecutor) beginImplicitTxn(
 	// an AOST clause. In these cases the clause is evaluated and applied
 	// when the command is evaluated again.
 	noBeginStmt := (*tree.BeginTransaction)(nil)
-	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt) // TODO: This is 1.5% of allocations.
 	if err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
 	return eventStartImplicitTxn,
-		makeEventTxnStartPayload(
+		makeEventTxnStartPayload( // TODO: This is 0.7% of allocations (somewhere in this return expression).
 			ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 			mode,
 			sqlTs,
@@ -4427,10 +4463,7 @@ func logTraceAboveThreshold(
 }
 
 func (ex *connExecutor) execWithProfiling(
-	ctx context.Context,
-	ast tree.Statement,
-	prepared *PreparedStatement,
-	op func(context.Context) error,
+	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {

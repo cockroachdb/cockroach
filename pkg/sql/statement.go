@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -32,7 +33,7 @@ type Statement struct {
 	//
 	// Given that the PreparedStatement can be modified during planning, it is
 	// not safe for use on multiple threads.
-	Prepared *PreparedStatement
+	Prepared *prep.Statement
 }
 
 func makeStatement(
@@ -46,7 +47,7 @@ func makeStatement(
 	}
 }
 
-func makeStatementFromPrepared(prepared *PreparedStatement, queryID clusterunique.ID) Statement {
+func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.ID) Statement {
 	return Statement{
 		Statement:       prepared.Statement,
 		Prepared:        prepared,
