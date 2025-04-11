@@ -183,6 +183,32 @@ func (oc *optCatalog) LookupDatabaseName(
 	return tree.Name(name), nil
 }
 
+func (oc *optCatalog) ResolveSchemaByID(
+	ctx context.Context, flags cat.Flags, schemaID cat.StableID,
+) (cat.Schema, error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.skipDescriptorCache = prev
+		}(oc.planner.skipDescriptorCache)
+		oc.planner.skipDescriptorCache = true
+	}
+
+	schemaLookup, err := oc.planner.LookupSchemaByID(ctx, descpb.ID(schemaID))
+	if err != nil {
+		return nil, err
+	}
+	databaseLookup, err := oc.planner.LookupDatabaseByID(ctx, schemaLookup.GetParentID())
+	if err != nil {
+		return nil, err
+	}
+	return &optSchema{
+		planner:  oc.planner,
+		database: databaseLookup,
+		schema:   schemaLookup,
+		name:     oc.tn.ObjectNamePrefix,
+	}, nil
+}
+
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
 	ctx context.Context, flags cat.Flags, name *cat.SchemaName,
@@ -1523,6 +1549,11 @@ func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
 }
 
+// GetSchemaID is part of the cat.Table interface.
+func (ot *optTable) GetSchemaID() descpb.ID {
+	return ot.desc.GetParentSchemaID()
+}
+
 // IsHypothetical is part of the cat.Table interface.
 func (ot *optTable) IsHypothetical() bool {
 	return false
@@ -2637,6 +2668,11 @@ func (ot *optVirtualTable) HomeRegionColName() (colName string, ok bool) {
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
 	return 0
+}
+
+// GetSchemaID is part of the cat.Table interface.
+func (ot *optVirtualTable) GetSchemaID() descpb.ID {
+	return ot.desc.GetParentSchemaID()
 }
 
 // IsHypothetical is part of the cat.Table interface.

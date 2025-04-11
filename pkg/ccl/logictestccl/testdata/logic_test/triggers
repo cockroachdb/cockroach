@@ -4037,7 +4037,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
-# Test that descriptor backreferences are cleaned up
+# Test that descriptor backreferences are cleaned up.
 # ==============================================================================
 
 subtest ensure_back_ref_cleanup
@@ -4085,6 +4085,100 @@ DROP FUNCTION update_listing_balance ;
 # Sanity to verify the dependency no longer exists.
 statement ok
 drop table listings_balance cascade;
+
+# ==============================================================================
+# Test trigger arguments.
+# ==============================================================================
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'NEW: %', NEW;
+    RAISE NOTICE 'OLD: %', OLD;
+    RAISE NOTICE 'TG_NAME: %', TG_NAME;
+    RAISE NOTICE 'TG_WHEN: %', TG_WHEN;
+    RAISE NOTICE 'TG_LEVEL: %', TG_LEVEL;
+    RAISE NOTICE 'TG_OP: %', TG_OP;
+    RAISE NOTICE 'TG_RELID: %', TG_RELID;
+    RAISE NOTICE 'TG_RELNAME: %', TG_RELNAME;
+    RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
+    RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
+    RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
+    -- TODO(#135311): uncomment this when we support TG_ARGV.
+    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE ON xy FOR EACH ROW WHEN ((NEW).x = 1) EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,2)
+NOTICE: OLD: <NULL>
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: INSERT
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+query T noticetrace
+UPDATE xy SET y = 3 WHERE x = 1;
+----
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: foo
+NOTICE: TG_WHEN: BEFORE
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+NOTICE: NEW: (1,3)
+NOTICE: OLD: (1,2)
+NOTICE: TG_NAME: bar
+NOTICE: TG_WHEN: AFTER
+NOTICE: TG_LEVEL: ROW
+NOTICE: TG_OP: UPDATE
+NOTICE: TG_RELID: 106
+NOTICE: TG_RELNAME: xy
+NOTICE: TG_TABLE_NAME: xy
+NOTICE: TG_TABLE_SCHEMA: public
+NOTICE: TG_NARGS: 0
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE true;
 
 # ==============================================================================
 # Regression tests.
