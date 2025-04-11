@@ -292,6 +292,8 @@ message LogicalReplicationDetails {
 
   string command = 16;
 
+  bool skip_schema_check = 17;
+
   // Next ID: 17.
 }
 
