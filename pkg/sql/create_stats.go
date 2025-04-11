@@ -155,7 +155,9 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			// (To handle race conditions we check this again after the job starts,
 			// but this check is used to prevent creating a large number of jobs that
 			// immediately fail).
-			if err := checkRunningJobsInTxn(ctx, jobspb.InvalidJobID, txn); err != nil {
+			if err := checkRunningJobsInTxn(
+				ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
+			); err != nil {
 				return err
 			}
 		}
@@ -785,18 +787,25 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 		jobID = job.ID()
 	}
 	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		return checkRunningJobsInTxn(ctx, jobID, txn)
+		if err = checkRunningJobsInTxn(
+			ctx, p.ExtendedEvalContext().Settings, jobID, txn,
+		); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
-// checkRunningJobsInTxn checks whether there are any other CreateStats jobs in
-// the pending, running, or paused status that started earlier than this one. If
-// there are, checkRunningJobsInTxn returns an error. If jobID is
-// jobspb.InvalidJobID, checkRunningJobsInTxn just checks if there are any pending,
-// running, or paused CreateStats jobs.
-func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn) error {
-	exists, err := jobs.RunningJobExists(ctx, jobID, txn,
-		jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
+// checkRunningJobsInTxn checks whether there are any other CreateStats jobs
+// (excluding auto partial stats jobs) in the pending, running, or paused status
+// that started earlier than this one. If there are, checkRunningJobsInTxn
+// returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxn just
+// checks if there are any pending, running, or paused CreateStats jobs.
+func checkRunningJobsInTxn(
+	ctx context.Context, cs *cluster.Settings, jobID jobspb.JobID, txn isql.Txn,
+) error {
+	exists, err := jobs.RunningJobExists(
+		ctx, cs, jobID, txn, jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
 	)
 	if err != nil {
 		return err
