@@ -556,6 +556,34 @@ $.a starts with $var
 ----
 ($."a" starts with $"var") -- normalized!
 
+parse
+($.a).b
+----
+$."a"."b" -- normalized!
+
+parse
+(($.a.b).c.d).e.f
+----
+$."a"."b"."c"."d"."e"."f" -- normalized!
+
+parse
+(1 == 1).abc
+----
+(1 == 1)."abc" -- normalized!
+
+parse
+(((1 == 1).a.b == 2).c.d == 3).e.f
+----
+(((1 == 1)."a"."b" == 2)."c"."d" == 3)."e"."f" -- normalized!
+
+error
+($[*] > 2 ? (@ == true)
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+($[*] > 2 ? (@ == true)
+                       ^
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
