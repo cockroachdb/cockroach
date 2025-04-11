@@ -5,10 +5,16 @@
 
 package spanconfigmanager
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+)
 
 // TestingCreateAndStartJobIfNoneExists is a wrapper around
 // createAndStartJobIfNoneExists for testing it.
-func (m *Manager) TestingCreateAndStartJobIfNoneExists(ctx context.Context) (bool, error) {
-	return m.createAndStartJobIfNoneExists(ctx)
+func (m *Manager) TestingCreateAndStartJobIfNoneExists(
+	ctx context.Context, cs *cluster.Settings,
+) (bool, error) {
+	return m.createAndStartJobIfNoneExists(ctx, cs)
 }
