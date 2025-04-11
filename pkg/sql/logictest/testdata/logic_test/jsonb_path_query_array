@@ -1,0 +1,34 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query T
+SELECT jsonb_path_query_array('{}', '$')
+----
+[{}]
+
+query T
+SELECT jsonb_path_query_array('{"a": [1, 2, {"b": [4, 5]}, null, [true, false]]}', '$.a[*]')
+----
+[1, 2, {"b": [4, 5]}, null, [true, false]]
+
+query T
+SELECT jsonb_path_query_array('{"a": [[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]}', '$.a ? (@.b == 1)');
+----
+[[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]
+
+query T
+SELECT jsonb_path_query_array('{}', 'strict $.a', '{}', true);
+----
+[]
+
+statement error pgcode 2203A pq: jsonb_path_query_array\(\): JSON object does not contain key "a"
+SELECT jsonb_path_query_array('{}', 'strict $.a', '{}', false);
+
+query T
+SELECT jsonb_path_query_array('{}', '$.a', '{}', true);
+----
+[]
+
+query T
+SELECT jsonb_path_query_array('{}', '$.a', '{}', false);
+----
+[]

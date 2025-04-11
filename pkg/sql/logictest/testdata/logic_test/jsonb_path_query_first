@@ -1,0 +1,34 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query T
+SELECT jsonb_path_query_first('[1, 2, 3]', '$[*]');
+----
+1
+
+query T
+SELECT jsonb_path_query_first('[2, 3]', '$[*]');
+----
+2
+
+query T
+SELECT jsonb_path_query_first('[]', '$[*]');
+----
+NULL
+
+query T
+SELECT jsonb_path_query_first('{}', 'strict $.a', '{}', true);
+----
+NULL
+
+statement error pgcode 2203A pq: jsonb_path_query_first\(\): JSON object does not contain key "a"
+SELECT jsonb_path_query_first('{}', 'strict $.a', '{}', false);
+
+query T
+SELECT jsonb_path_query_first('{}', '$.a', '{}', true);
+----
+NULL
+
+query T
+SELECT jsonb_path_query_first('{}', '$.a', '{}', false);
+----
+NULL
