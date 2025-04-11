@@ -1649,6 +1649,7 @@ func NewStore(
 
 	consistencyCheckRate.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		rate := consistencyCheckRate.Get(&cfg.Settings.SV)
+		log.Infof(ctx, "rate to changed: %d", rate)
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
 
