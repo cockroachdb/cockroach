@@ -255,6 +255,17 @@ func TestPrettyExprs(t *testing.T) {
 			Expr: tree.NewDString("foo"),
 			Type: types.MakeCollatedString(types.String, "en"),
 		}: `CAST('foo':::STRING AS STRING) COLLATE en`,
+		&tree.Tuple{
+			Exprs: []tree.Expr{
+				tree.NewStrVal("val1"),
+			},
+		}: `('val1')`,
+		&tree.Tuple{
+			Exprs: []tree.Expr{
+				tree.NewStrVal("val1"),
+				tree.NewStrVal("val2"),
+			},
+		}: `('val1', 'val2')`,
 	}
 
 	for expr, pretty := range tests {
