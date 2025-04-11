@@ -52,6 +52,12 @@ func (p *provider) GetHostErrorVMs(
 	return nil, nil
 }
 
+func (p *provider) GetLiveMigrationVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]string, error) {
+	return nil, nil
+}
+
 func (p *provider) GetVMSpecs(
 	l *logger.Logger, vms vm.List,
 ) (map[string]map[string]interface{}, error) {

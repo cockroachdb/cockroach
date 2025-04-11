@@ -928,6 +928,26 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_internal_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal/v2",
+        sha256 = "ca118b980624e02a37bf1b312771344e665dee30b8e9dd64aba7cb19201dd348",
+        strip_prefix = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal/v2@v2.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/internal/v2/com_github_azure_azure_sdk_for_go_sdk_resourcemanager_internal_v2-v2.0.0.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_monitor_armmonitor",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor",
+        sha256 = "97ad4d0a82444b35ce027cf64e2fe1f97e4fc6424165a13892cfe51bf599cda3",
+        strip_prefix = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor@v0.11.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor/com_github_azure_azure_sdk_for_go_sdk_resourcemanager_monitor_armmonitor-v0.11.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_network_armnetwork",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork",
@@ -941,10 +961,10 @@ def go_deps():
         name = "com_github_azure_azure_sdk_for_go_sdk_resourcemanager_resources_armresources",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources",
-        sha256 = "09d235afd45048829677351d042fba2c57754df4ae4dde8b25168e39e903db07",
-        strip_prefix = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources@v1.0.0",
+        sha256 = "859deb478c6150fcc8ab966b85be386ca0d0e0c385ace0bc5b3c73c14a877bcd",
+        strip_prefix = "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources@v1.1.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources/com_github_azure_azure_sdk_for_go_sdk_resourcemanager_resources_armresources-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources/com_github_azure_azure_sdk_for_go_sdk_resourcemanager_resources_armresources-v1.1.1.zip",
         ],
     )
     go_repository(
@@ -2705,10 +2725,10 @@ def go_deps():
         name = "com_github_dnaeon_go_vcr",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/dnaeon/go-vcr",
-        sha256 = "d6d94a1c8471809db30c2979add32bac647120bc577ea30f7e8fcc06436483f0",
-        strip_prefix = "github.com/dnaeon/go-vcr@v1.1.0",
+        sha256 = "6d34b7e17c158d51ffc34f6ac64df05ab736b2ae50c0db07be4a9556dac10c52",
+        strip_prefix = "github.com/dnaeon/go-vcr@v1.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dnaeon/go-vcr/com_github_dnaeon_go_vcr-v1.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dnaeon/go-vcr/com_github_dnaeon_go_vcr-v1.2.0.zip",
         ],
     )
     go_repository(
