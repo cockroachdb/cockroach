@@ -104,7 +104,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 
 	var g errgroup.Group
 	g.Go(func() error {
-		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		// Only try to start the job if the first goroutine has reached the testing
 		// knob and is blocked.
 		<-isBlocked
-		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 }
@@ -331,7 +331,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 		},
 	)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
@@ -354,7 +354,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	mu.err = nil
 	mu.Unlock()
 
-	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
@@ -421,7 +421,7 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 		nil,
 	)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
