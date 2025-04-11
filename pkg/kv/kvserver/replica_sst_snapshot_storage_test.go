@@ -12,9 +12,11 @@ import (
 	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -267,6 +269,10 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	testutils.RunTrueAndFalse(t, "interesting", testMultiSSTWriterInitSSTInner)
+}
+
+func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
@@ -279,6 +285,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 	desc := roachpb.RangeDescriptor{
+		RangeID:  100,
 		StartKey: roachpb.RKey("d"),
 		EndKey:   roachpb.RKeyMax,
 	}
@@ -297,19 +304,43 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Put a rangedel into the span. This case can occur in shared SST snapshots
-	// and if we don't fragment these additional rangedels properly against the
-	// one the msstw lays down, pebble will error out (since the resulting SST
-	// would be invalid).
-	//
-	// In practice additional rangedels would likely only occur on the MVCC span,
-	// which doesn't get a covering rangedel from msstw, so this case is slightly
-	// academical. Still, we don't want to make assumptions on what data we're
-	// required to handle.
-	//
-	// NB: we have (basic) coverage for *MVCC* range deletions, which require
-	// similar considerations, through TestRaftSnapshotsWithMVCCRangeKeysEverywhere.
-	for _, span := range keySpans {
+	var buf redact.StringBuilder
+	logSize := func(buf io.Writer) {
+		_, _ = fmt.Fprintf(buf, ">> writeBytes=%d sstSize=%d dataSize=%d\n", msstw.writeBytes, msstw.sstSize,
+			msstw.dataSize)
+	}
+
+	var putSpans []roachpb.Span
+	if interesting {
+		// Put rangedel and range keys into the spans. These cases can occur in
+		// shared SST snapshots and if we don't fragment these additional ranged
+		// inputs properly against the one the msstw lays down, pebble will error out
+		// (since the resulting SST would be invalid).
+		//
+		// In practice such operations would likely only occur on the MVCC span, so
+		// some of what is tested here is slightly academical. Still, we don't want to
+		// make assumptions on what data we're required to handle.
+		//
+		// NB: we have related (basic) coverage for MVCC range deletions through
+		// TestRaftSnapshotsWithMVCCRangeKeysEverywhere.
+
+		putSpans = []roachpb.Span{
+			{ // rangeID local span
+				Key:    keys.AbortSpanKey(desc.RangeID, uuid.Nil),
+				EndKey: keys.AbortSpanKey(desc.RangeID, uuid.NamespaceDNS),
+			},
+			{ // addressable local span
+				Key:    keys.RangeDescriptorKey(desc.StartKey),
+				EndKey: keys.RangeDescriptorKey(roachpb.RKey("f")),
+			},
+			// MVCC span
+			{
+				Key:    roachpb.Key("e"),
+				EndKey: roachpb.Key("f"),
+			},
+		}
+	}
+	for _, span := range putSpans {
 		// NB: we avoid covering the entire span because an SST can actually contain
 		// the same rangedel twice (as long as they're added in increasing seqno
 		// order), and we want to exercise the "tricky" case where pebble would
@@ -321,11 +352,15 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
 		}
 		require.NoError(t, msstw.PutInternalRangeKey(ctx, k, ek, rk))
-
+		_, _ = fmt.Fprintf(&buf, ">> rangekeyset [%s-%s)\n", span.Key, span.EndKey)
+		logSize(&buf)
 	}
 
+	_, _ = fmt.Fprintln(&buf, ">> finishing sst")
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
+
+	logSize(&buf)
 
 	var actualSSTs [][]byte
 	fileNames := msstw.scratch.SSTs()
@@ -335,15 +370,12 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		actualSSTs = append(actualSSTs, sst)
 	}
 
-	var buf redact.StringBuilder
-
-	_, _ = fmt.Fprintf(&buf, "writeBytes=%d sstSize=%d dataSize=%d\n", msstw.writeBytes, msstw.sstSize, msstw.dataSize)
-
 	for i := range fileNames {
 		name := fmt.Sprintf("sst%d", i)
 		require.NoError(t, storageutils.ReportSSTEntries(&buf, name, actualSSTs[i]))
 	}
-	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", t.Name())))
+	filename := strings.Replace(t.Name(), "/", "_", -1)
+	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", filename)))
 }
 
 func buildIterForScratch(
