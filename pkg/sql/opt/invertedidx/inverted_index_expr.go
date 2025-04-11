@@ -147,7 +147,7 @@ func TryFilterInvertedIndex(
 		}
 	}
 
-	var invertedExpr inverted.Expression
+	var invertedExpr *inverted.SpanExpression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
@@ -173,15 +173,11 @@ func TryFilterInvertedIndex(
 		return nil, nil, nil, nil, false
 	}
 
-	spanExpr, ok = invertedExpr.(*inverted.SpanExpression)
-	if !ok {
-		return nil, nil, nil, nil, false
-	}
 	if pfState != nil {
 		pfState.Typ = typ
 	}
 
-	return spanExpr, constraint, remainingFilters, pfState, true
+	return invertedExpr, constraint, remainingFilters, pfState, true
 }
 
 // TryFilterInvertedIndexBySimilarity attempts to constrain an inverted trigram
@@ -595,8 +591,9 @@ func getInvertedExpr(
 // expressions, and returns the resulting inverted.Expression. Delegates
 // evaluation of leaf expressions to the given evalInvertedExprLeaf function.
 func evalInvertedExpr(
-	expr tree.TypedExpr, evalInvertedExprLeaf func(expr tree.TypedExpr) (inverted.Expression, error),
-) (inverted.Expression, error) {
+	expr tree.TypedExpr,
+	evalInvertedExprLeaf func(expr tree.TypedExpr) (*inverted.SpanExpression, error),
+) (*inverted.SpanExpression, error) {
 	switch t := expr.(type) {
 	case *tree.AndExpr:
 		leftExpr, err := evalInvertedExpr(t.TypedLeft(), evalInvertedExprLeaf)
@@ -646,7 +643,7 @@ type invertedFilterPlanner interface {
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
 	extractInvertedFilterConditionFromLeaf(ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr) (
-		invertedExpr inverted.Expression,
+		invertedExpr *inverted.SpanExpression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 	)
@@ -673,7 +670,7 @@ func extractInvertedFilterCondition(
 	filterCond opt.ScalarExpr,
 	filterPlanner invertedFilterPlanner,
 ) (
-	invertedExpr inverted.Expression,
+	invertedExpr *inverted.SpanExpression,
 	remainingFilters opt.ScalarExpr,
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
