@@ -331,7 +331,8 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 
 	// Set suspectedStore as suspected.
 	testStorePool.DetailsMu.Lock()
-	testStorePool.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = testStorePool.clock.Now()
+	val, _ := testStorePool.DetailsMu.StoreDetails.Load(suspectedStore.StoreID)
+	val.LastUnavailable = testStorePool.clock.Now()
 	testStorePool.DetailsMu.Unlock()
 
 	// No filter or limited set of store IDs.
