@@ -100,7 +100,11 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
 #!/usr/bin/env bash
 
 ./drtprod sync
-PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
+if [ -z "\$PGURLS" ]; then
+    echo ">> No load-balancer configured; falling back to direct pgurl"
+    PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+fi
 read -r -a PGURLS_ARR <<< "\$PGURLS"
 j=0
 while true; do
