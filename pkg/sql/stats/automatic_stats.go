@@ -159,7 +159,6 @@ var statsGarbageCollectionInterval = settings.RegisterDurationSetting(
 	"sql.stats.garbage_collection_interval",
 	"interval between deleting stats for dropped tables, set to 0 to disable",
 	time.Hour,
-	settings.NonNegativeDuration,
 )
 
 // statsGarbageCollectionLimit controls the limit on the number of dropped

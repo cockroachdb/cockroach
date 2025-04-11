@@ -43,7 +43,6 @@ var GCInterval = settings.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	time.Hour,
-	settings.NonNegativeDuration,
 )
 
 // GCJitter specifies the jitter fraction on the interval between attempts to

@@ -36,7 +36,6 @@ var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("server.failed_reservation.timeout"),
 )
 

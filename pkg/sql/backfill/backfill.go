@@ -56,7 +56,6 @@ var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
 	30*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.

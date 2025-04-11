@@ -37,7 +37,6 @@ var telemetryCaptureIndexUsageStatsInterval = settings.RegisterDurationSetting(
 	"sql.telemetry.capture_index_usage_stats.interval",
 	"the scheduled interval time between capturing index usage statistics when capturing index usage statistics is enabled",
 	8*time.Hour,
-	settings.NonNegativeDuration,
 )
 
 var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.RegisterDurationSetting(
@@ -45,7 +44,6 @@ var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.Registe
 	"sql.telemetry.capture_index_usage_stats.check_enabled_interval",
 	"the scheduled interval time between checks to see if index usage statistics has been enabled",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 var telemetryCaptureIndexUsageStatsLoggingDelay = settings.RegisterDurationSetting(
@@ -54,7 +52,6 @@ var telemetryCaptureIndexUsageStatsLoggingDelay = settings.RegisterDurationSetti
 	"the time delay between emitting individual index usage stats logs, this is done to "+
 		"mitigate the log-line limit of 10 logs per second on the telemetry pipeline",
 	500*time.Millisecond,
-	settings.NonNegativeDuration,
 )
 
 // CaptureIndexUsageStatsTestingKnobs provides hooks and knobs for unit tests.

@@ -37,7 +37,6 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 	"server.jemalloc_purge_period",
 	"minimum amount of time that must pass between two jemalloc dirty page purges (0 disables purging)",
 	2*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 type sampleEnvironmentCfg struct {
