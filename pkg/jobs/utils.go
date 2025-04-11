@@ -23,7 +23,7 @@ var avoidFullScans = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"jobs.avoid_full_scans_in_find_running_jobs.enabled",
 	"when true, enables hints to avoid full scans for internal, jobs-related queries",
-	false)
+	true)
 
 // RunningJobExists checks that whether there are any job of the given types
 // in the pending, running, or paused state, optionally ignoring the job with
