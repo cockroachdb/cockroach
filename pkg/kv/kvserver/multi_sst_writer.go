@@ -382,17 +382,43 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 func (msstw *multiSSTWriter) PutInternalRangeKey(
 	ctx context.Context, start, end []byte, key rangekey.Key,
 ) error {
-	decodedStart, decodedEnd, err := decodeRangeStartEnd(start, end)
-	if err != nil {
-		return err
+	return msstw.putRangeKey(ctx, storage.EngineKeyRange{}, [2][]byte{start, end}, key)
+}
+
+func (msstw *multiSSTWriter) putRangeKey(
+	ctx context.Context, dec storage.EngineKeyRange, enc [2][]byte, key rangekey.Key,
+) error {
+	// We need both the encoded and decoded forms of the key range here. The caller
+	// may supply either.
+	haveDec, haveEnc := len(dec.End.Key) != 0, len(enc[1]) != 0
+	switch {
+	case !haveDec && !haveEnc:
+		return errors.AssertionFailedf("key range must be specified either in encoded or decoded form")
+	case !haveDec:
+		ds, de, err := decodeRangeStartEnd(enc[0], enc[1])
+		if err != nil {
+			return err
+		}
+		dec = storage.EngineKeyRange{
+			Start: ds,
+			End:   de,
+		}
+	case !haveEnc:
+		enc[0] = dec.Start.Encode()
+		enc[1] = dec.End.Encode()
 	}
-	if err := msstw.rolloverSST(ctx, decodedStart, decodedEnd); err != nil {
+
+	if k, ek := dec.Start.Key, dec.End.Key; k.Compare(ek) >= 0 {
+		return errors.AssertionFailedf("start key %s must be before end key %s", k, ek)
+	}
+
+	if err := msstw.rolloverSST(ctx, dec.Start, dec.End); err != nil {
 		return err
 	}
 
 	msstw.rangeKeyFrag.Add(rangekey.Span{
-		Start: start,
-		End:   end,
+		Start: enc[0],
+		End:   enc[1],
 		Keys:  []rangekey.Key{key},
 	})
 	return nil
@@ -401,17 +427,19 @@ func (msstw *multiSSTWriter) PutInternalRangeKey(
 func (msstw *multiSSTWriter) PutRangeKey(
 	ctx context.Context, start, end roachpb.Key, suffix []byte, value []byte,
 ) error {
-	if start.Compare(end) >= 0 {
-		return errors.AssertionFailedf("start key %s must be before end key %s", end, start)
-	}
-	if err := msstw.rolloverSST(ctx, storage.EngineKey{Key: start}, storage.EngineKey{Key: end}); err != nil {
-		return err
-	}
-
-	startKey, endKey := storage.EngineKey{Key: start}.Encode(), storage.EngineKey{Key: end}.Encode()
-	startTrailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet)
-	rk := rangekey.Key{Trailer: startTrailer, Suffix: suffix, Value: value}
-	return msstw.PutInternalRangeKey(ctx, startKey, endKey, rk)
+	return msstw.putRangeKey(
+		ctx,
+		storage.EngineKeyRange{
+			Start: storage.EngineKey{Key: start},
+			End:   storage.EngineKey{Key: end},
+		},
+		[2][]byte{}, // enc
+		rangekey.Key{
+			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
+			Suffix:  suffix,
+			Value:   value,
+		},
+	)
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
