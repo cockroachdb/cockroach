@@ -404,7 +404,7 @@ func TestTenantCtx(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
-		getErr := make(chan error)
+		getErr := make(chan error, 1)
 		pushErr := make(chan error)
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
