@@ -111,6 +111,17 @@ type scope struct {
 
 	// atRoot is whether we are currently at a root context.
 	atRoot bool
+
+	// checkMaxParamOrd is true if attempts to resolve a routine parameter via
+	// ordinal reference syntax (like $1) should be checked against the
+	// maxParamOrd.
+	checkMaxParamOrd bool
+
+	// maxParamOrd, if set, is the maximum 1-based ordinal reference that can be
+	// used to resolve a routine parameter. This is used to selectively allow
+	// references to internally-generated parameters such as those for PL/pgSQL
+	// sub-routines.
+	maxParamOrd int
 }
 
 // exprKind is used to represent the kind of the current expression in the
@@ -667,6 +678,10 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 // matching function argument column is found, nil is returned.
 func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 	for ; s != nil; s = s.parent {
+		if s.checkMaxParamOrd && int(idx) > s.maxParamOrd {
+			// Referencing this function parameter by ordinal is not allowed.
+			return nil
+		}
 		for i := range s.cols {
 			col := &s.cols[i]
 			if col.funcParamReferencedBy(idx) {

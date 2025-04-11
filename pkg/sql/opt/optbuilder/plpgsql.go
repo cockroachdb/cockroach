@@ -1546,7 +1546,7 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	inScope *scope, ident ast.Variable, val ast.Expr, indirection tree.Name,
 ) *scope {
-	typ := b.resolveVariableForAssign(ident)
+	typ, ord := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
@@ -1569,7 +1569,8 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 		scalar = b.buildSQLExpr(val, typ, inScope)
 	}
 	b.addBarrierIfVolatile(inScope, scalar)
-	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col.setParamOrd(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1578,7 +1579,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 // assignToHiddenVariable is similar to addPLpgSQLAssign, but it assigns to a
 // hidden variable that is not visible to the user.
 func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, name string, val ast.Expr) *scope {
-	typ := b.resolveHiddenVariableForAssign(name)
+	typ, ord := b.resolveHiddenVariableForAssign(name)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
@@ -1593,7 +1594,8 @@ func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, name string, val
 	colName := scopeColName("").WithMetadataName(name)
 	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
-	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col.setParamOrd(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1660,15 +1662,21 @@ func (b *plpgsqlBuilder) handleIndirectionForAssign(
 func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *scope {
 	var targetTypes []*types.T
 	var targetNames []ast.Variable
+	var targetOrds []int
 	if b.targetIsRecordVar(target) {
 		// For a single record-type variable, the SQL statement columns are assigned
 		// as elements of the variable, rather than the variable itself.
-		targetTypes = b.resolveVariableForAssign(target[0]).TupleContents()
+		//
+		// Note that we don't need to get the param ordinal here, since that's
+		// handled in projectRecordVar below.
+		typ, _ := b.resolveVariableForAssign(target[0])
+		targetTypes = typ.TupleContents()
 	} else {
 		targetNames = target
 		targetTypes = make([]*types.T, len(target))
+		targetOrds = make([]int, len(target))
 		for j := range target {
-			targetTypes[j] = b.resolveVariableForAssign(target[j])
+			targetTypes[j], targetOrds[j] = b.resolveVariableForAssign(target[j])
 		}
 	}
 
@@ -1692,7 +1700,8 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 			scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
 		}
 		scalar = b.coerceType(scalar, typ)
-		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col.setParamOrd(targetOrds[j])
 	}
 	b.ob.constructProjectForScope(stmtScope, intoScope)
 	if b.targetIsRecordVar(target) {
@@ -2125,11 +2134,15 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 			// If the target is a single record-type variable, the columns of the
 			// FETCH are assigned as its *elements*, rather than directly to the
 			// variable.
-			typs = b.resolveVariableForAssign(fetch.Target[0]).TupleContents()
+			//
+			// Note that we don't need to get the param ordinal here, since that's
+			// handled in projectRecordVar below.
+			typ, _ := b.resolveVariableForAssign(fetch.Target[0])
+			typs = typ.TupleContents()
 		} else {
 			typs = make([]*types.T, len(fetch.Target))
 			for i := range fetch.Target {
-				typ := b.resolveVariableForAssign(fetch.Target[i])
+				typ, _ := b.resolveVariableForAssign(fetch.Target[i])
 				typs[i] = typ
 			}
 		}
@@ -2171,7 +2184,11 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 // targetIsSingleCompositeVar returns true if the given INTO target is a single
 // RECORD-type variable.
 func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
-	return len(target) == 1 && b.resolveVariableForAssign(target[0]).Family() == types.TupleFamily
+	if len(target) != 1 {
+		return false
+	}
+	typ, _ := b.resolveVariableForAssign(target[0])
+	return typ.Family() == types.TupleFamily
 }
 
 // projectRecordVar handles the special case when a single RECORD-type variable
@@ -2179,7 +2196,7 @@ func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
 // statement should be wrapped into a tuple, which is assigned to the
 // RECORD-type variable.
 func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
-	typ := b.resolveVariableForAssign(name)
+	typ, ord := b.resolveVariableForAssign(name)
 	recordScope := s.push()
 	elems := make(memo.ScalarListExpr, len(s.cols))
 	for j := range elems {
@@ -2187,6 +2204,7 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 	}
 	tuple := b.ob.factory.ConstructTuple(elems, typ)
 	col := b.ob.synthesizeColumn(recordScope, scopeColName(name), typ, nil /* expr */, tuple)
+	col.setParamOrd(ord)
 	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
 	return recordScope
 }
@@ -2197,13 +2215,13 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 // continuations will have more parameters than those of its parent.
 func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
-	params := make(opt.ColList, 0, b.variableCount()+b.hiddenVariableCount())
+	params := make(opt.ColList, 0, b.variableCount(len(b.blocks)))
 	addParam := func(name scopeColumnName, typ *types.T) {
 		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
 		paramOrd := len(params)
-		col.setParamOrd(len(params))
+		col.setParamOrd(paramOrd)
 		if b.ob.insideFuncDef && b.options.isTriggerFn && paramOrd == triggerArgvColIdx {
 			// Due to #135311, we disallow references to the TG_ARGV param for now.
 			if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
@@ -2397,8 +2415,12 @@ func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt
 	// subqueries with inner CTEs.
 	prevCTEs := b.ob.ctes
 	b.ob.ctes = nil
+	s.checkMaxParamOrd = true
+	s.maxParamOrd = len(b.rootBlock().vars) - 1
 	defer func() {
 		b.ob.ctes = prevCTEs
+		s.checkMaxParamOrd = false
+		s.maxParamOrd = 0
 	}()
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
@@ -2433,6 +2455,12 @@ func (b *plpgsqlBuilder) buildSQLStatement(stmt tree.Statement, inScope *scope) 
 		outScope.expr = b.ob.factory.ConstructNoColsRow()
 		return outScope
 	}
+	inScope.checkMaxParamOrd = true
+	inScope.maxParamOrd = len(b.rootBlock().vars)
+	defer func() {
+		inScope.checkMaxParamOrd = false
+		inScope.maxParamOrd = 0
+	}()
 	return b.ob.buildStmtAtRootWithScope(stmt, nil /* desiredTypes */, inScope)
 }
 
@@ -2463,8 +2491,10 @@ func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.Sca
 }
 
 // resolveVariableForAssign attempts to retrieve the type of the variable with
-// the given name, throwing an error if no such variable exists.
-func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
+// the given name, as well as its ordinal position within the set of all
+// variables in the current scope. It throws an error if no such variable
+// exists.
+func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) (varTyp *types.T, varIdx int) {
 	// Search the blocks in reverse order to ensure that more recent declarations
 	// are encountered first.
 	for i := len(b.blocks) - 1; i >= 0; i-- {
@@ -2478,7 +2508,16 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 				panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
 			}
 		}
-		return typ
+		// Get the ordinal position of the variable within the set of variables in
+		// the current scope.
+		varIdx = b.variableCount(i)
+		for j := range block.vars {
+			if block.vars[j] == name {
+				varIdx += j
+				break
+			}
+		}
+		return typ, varIdx
 	}
 	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
 }
@@ -2486,7 +2525,7 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 // resolveHiddenVariableForAssign is similar to resolveVariableForAssign, but
 // applies to hidden variables, which are identified only by their name in the
 // query's metadata. It panics if the hidden variable is not found.
-func (b *plpgsqlBuilder) resolveHiddenVariableForAssign(name string) *types.T {
+func (b *plpgsqlBuilder) resolveHiddenVariableForAssign(name string) (varTyp *types.T, varIdx int) {
 	// Search the blocks in reverse order to ensure that more recent declarations
 	// are encountered first.
 	for i := len(b.blocks) - 1; i >= 0; i-- {
@@ -2495,7 +2534,16 @@ func (b *plpgsqlBuilder) resolveHiddenVariableForAssign(name string) *types.T {
 		if !ok {
 			continue
 		}
-		return typ
+		// Get the ordinal position of the variable within the set of variables in
+		// the current scope.
+		varIdx = b.variableCount(i) + len(block.vars)
+		for j := range block.hiddenVars {
+			if block.hiddenVars[j] == name {
+				varIdx += j
+				break
+			}
+		}
+		return typ, varIdx
 	}
 	panic(errors.AssertionFailedf("hidden variable %s not found", name))
 }
@@ -2510,14 +2558,15 @@ func (b *plpgsqlBuilder) projectTupleAsIntoTarget(inScope *scope, target []ast.V
 	intoScope := inScope.push()
 	tupleCol := inScope.cols[0].id
 	for i := range target {
-		typ := b.resolveVariableForAssign(target[i])
+		typ, ord := b.resolveVariableForAssign(target[i])
 		colName := scopeColName(target[i])
 		scalar := b.ob.factory.ConstructColumnAccess(
 			b.ob.factory.ConstructVariable(tupleCol),
 			memo.TupleOrdinal(i),
 		)
 		scalar = b.coerceType(scalar, typ)
-		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col.setParamOrd(ord)
 	}
 	b.ob.constructProjectForScope(inScope, intoScope)
 	return intoScope
@@ -2759,20 +2808,15 @@ func (b *plpgsqlBuilder) hasExceptionHandler() bool {
 }
 
 // variableCount returns the number of PL/pgSQL variables that are in scope for
-// the current block. Note that this count does not include hidden variables.
-func (b *plpgsqlBuilder) variableCount() int {
-	var count int
-	for i := range b.blocks {
-		count += len(b.blocks[i].vars)
+// the first numBlocks blocks. This count includes hidden variables.
+func (b *plpgsqlBuilder) variableCount(numBlocks int) int {
+	if numBlocks > len(b.blocks) {
+		panic(errors.AssertionFailedf(
+			"numBlocks %d exceeds number of blocks %d", numBlocks, len(b.blocks)))
 	}
-	return count
-}
-
-// variableCountWithHidden returns the number of hidden variables that are in
-// scope for the current block.
-func (b *plpgsqlBuilder) hiddenVariableCount() int {
 	var count int
-	for i := range b.blocks {
+	for i := range numBlocks {
+		count += len(b.blocks[i].vars)
 		count += len(b.blocks[i].hiddenVars)
 	}
 	return count
