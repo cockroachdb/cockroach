@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package print
 
 import (
 	"bytes"
@@ -232,7 +232,7 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
-func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
+func DecodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	// Ensure that we always update this function to consider any necessary
 	// updates when a new key kind is introduced. To do this, we assert
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
@@ -381,7 +381,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	e.Data = nil
 	cmd := e.Cmd
 
-	wbStr, err := decodeWriteBatch(cmd.WriteBatch)
+	wbStr, err := DecodeWriteBatch(cmd.WriteBatch)
 	if err != nil {
 		wbStr = "failed to decode: " + err.Error() + "\nafter:\n" + wbStr
 	}

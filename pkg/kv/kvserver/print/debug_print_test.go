@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package print
 
 import (
 	"encoding/hex"
@@ -27,7 +27,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	wb := &kvserverpb.WriteBatch{}
-	_, err := decodeWriteBatch(wb)
+	_, err := DecodeWriteBatch(wb)
 	require.ErrorContains(t, err, "batch invalid: too small: 0 bytes")
 
 	batch := pebble.Batch{}
@@ -36,7 +36,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}), []byte("test value"), nil /* WriteOptions */))
 	wb.Data = batch.Repr()
-	s, err := decodeWriteBatch(wb)
+	s, err := DecodeWriteBatch(wb)
 	require.NoError(t, err)
 	require.Equal(t, "Put: 9223372036.854775807,0 \"/db1\" (0x2f646231007fffffffffffffff09): \"test value\"\n", s)
 
@@ -46,7 +46,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	err = batch.SingleDelete(encodedKey, nil)
 	require.NoError(t, err)
 	wb.Data = batch.Repr()
-	s, err = decodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb)
 	require.NoError(t, err)
 	require.Equal(t, "Single Delete: /Local/Lock/Table/56/1/1169/5/3054/0 "+
 		"03623a9318c0384d07a6f22b858594df60 (0x017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012): \n",
@@ -72,7 +72,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = decodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb)
 	require.NoError(t, err)
 	require.Equal(t, "Set Range Key: 0.000000001,0 /db{1-2} (0x2f64623100-0x2f64623200): \"\"\n"+
 		"Set Range Key: 0.000000002,0 /db{1-2} (0x2f64623100-0x2f64623200): \"\\x00\\x00\\x00\\x04e\\n\\x02\\b\\x01\"\n",
@@ -92,7 +92,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = decodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb)
 	require.NoError(t, err)
 	require.Equal(t, "Unset Range Key: 0.000000001,0 /db{1-2} (0x2f64623100-0x2f64623200)\n"+
 		"Unset Range Key: 0.000000002,0 /db{1-2} (0x2f64623100-0x2f64623200)\n",
@@ -105,7 +105,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 		nil,
 	))
 	wb.Data = batch.Repr()
-	s, err = decodeWriteBatch(wb)
+	s, err = DecodeWriteBatch(wb)
 	require.NoError(t, err)
 	require.Equal(t, "Delete Range Keys: /db{1-2} (0x2f64623100-0x2f64623200)\n", s)
 }
