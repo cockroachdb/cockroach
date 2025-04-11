@@ -519,6 +519,8 @@ type Provider interface {
 	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
 	// GetHostErrorVMs returns a list of VMs that had host error since the time specified.
 	GetHostErrorVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
+	// GetLiveMigrationVMs checks a list of VMs if a live migration happened since the time specified.
+	GetLiveMigrationVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
 	// GetVMSpecs returns a map from VM.Name to a map of VM attributes, according to a specific cloud provider.
 	GetVMSpecs(l *logger.Logger, vms List) (map[string]map[string]interface{}, error)
 

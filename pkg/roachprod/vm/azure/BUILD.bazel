@@ -24,6 +24,7 @@ go_library(
         "@com_github_azure_azure_sdk_for_go//profiles/latest/resources/mgmt/resources",
         "@com_github_azure_azure_sdk_for_go//profiles/latest/resources/mgmt/subscriptions",
         "@com_github_azure_azure_sdk_for_go_sdk_resourcemanager_compute_armcompute//:armcompute",
+        "@com_github_azure_azure_sdk_for_go_sdk_resourcemanager_monitor_armmonitor//:armmonitor",
         "@com_github_azure_go_autorest_autorest//:autorest",
         "@com_github_azure_go_autorest_autorest_adal//:adal",
         "@com_github_azure_go_autorest_autorest_azure_auth//:auth",
