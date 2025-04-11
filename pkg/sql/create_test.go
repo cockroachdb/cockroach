@@ -408,3 +408,89 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateTypeInTemporarySchema verifies that types can be created in temporary schemas
+// without causing the "invalid schema kind" error.
+func TestCreateTypeInTemporarySchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := sqlDB.Exec(`CREATE DATABASE test_temp_types`); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name        string
+		statement   string
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name:        "Create type in public schema",
+			statement:   `CREATE TYPE test_temp_types.public.regular_type AS (a INT)`,
+			shouldError: false,
+		},
+		{
+			name:        "Create type in temporary schema",
+			statement:   `CREATE TYPE pg_temp.temp_type AS (a INT)`,
+			shouldError: false,
+		},
+		{
+			name:        "Create composite type in temporary schema",
+			statement:   `CREATE TYPE pg_temp.composite_type AS (a INT, b TEXT)`,
+			shouldError: false,
+		},
+		{
+			name:        "Create enum type in temporary schema",
+			statement:   `CREATE TYPE pg_temp.enum_type AS ENUM ('value1', 'value2')`,
+			shouldError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := sqlDB.Exec(tc.statement)
+
+			if tc.shouldError {
+				if err == nil {
+					t.Fatalf("expected error containing %q, but got no error", tc.errorMsg)
+				} else if !testutils.IsError(err, tc.errorMsg) {
+					t.Fatalf("expected error containing %q, but got %v", tc.errorMsg, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("expected no error, but got: %v", err)
+				}
+			}
+		})
+	}
+
+	t.Run("Use temporary type", func(t *testing.T) {
+		_, err := sqlDB.Exec(`
+			CREATE TABLE pg_temp.temp_table_with_type (
+				id INT PRIMARY KEY,
+				data pg_temp.temp_type
+			)
+		`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.Exec(`INSERT INTO pg_temp.temp_table_with_type VALUES (1, ROW(42))`); err != nil {
+			t.Fatal(err)
+		}
+
+		var val int
+		err = sqlDB.QueryRow(`SELECT (data).a FROM pg_temp.temp_table_with_type WHERE id = 1`).Scan(&val)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if val != 42 {
+			t.Fatalf("expected 42, got %d", val)
+		}
+	})
+}
