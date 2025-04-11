@@ -2793,7 +2793,7 @@ func mvccPutInternal(
 			return false, roachpb.LockAcquisition{}, err
 		}
 		lockAcquisition = roachpb.MakeLockAcquisition(
-			*newMeta.Txn, metaKey.Key, lock.Replicated, lock.Intent, opts.Txn.IgnoredSeqNums,
+			*newMeta.Txn, metaKey.Key, lock.Replicated, lock.Intent, opts.Txn.IgnoredSeqNums, opts.Txn.MaxExplicitRollbackTarget,
 		)
 	} else {
 		// Per-key stats count the full-key once and MVCCVersionTimestampSize for
