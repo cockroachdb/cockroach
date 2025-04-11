@@ -1,5 +1,6 @@
 echo
 ----
+writeBytes=4740 sstSize=4872 dataSize=132
 >> sst0:
 rangedel: /Local/RangeID/0/{r""-s""}
 rangekeydel: /Local/RangeID/0/{r""-s""}
