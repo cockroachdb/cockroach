@@ -284,8 +284,13 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
+	st := cluster.MakeTestingClusterSettings()
+
+	// Disabling columnar blocks causes stats changes.
+	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
+
 	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
+		ctx, st, scratch, localSpans, mvccSpan, 0,
 		false /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
 	)
 	require.NoError(t, err)
