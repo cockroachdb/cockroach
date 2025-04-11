@@ -9,6 +9,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -39,6 +42,8 @@ var orParams = base.TestClusterArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	},
 }
+
+var latestDownloadJobIDQuery = `SELECT id FROM system.jobs WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`
 
 func onlineImpl(rng *rand.Rand) string {
 	opt := "EXPERIMENTAL DEFERRED COPY"
@@ -104,6 +109,111 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	})
 
 }
+
+func TestOnlineRestoreRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir := t.TempDir()
+
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	const numAccounts = 1000
+
+	externalStorage := "nodelocal://1/backup"
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	restoreToPausedDownloadJob := func(t *testing.T, newDBName string) int {
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var linkJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=%s, detached", externalStorage, newDBName)).Scan(&linkJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(linkJobID))
+		var downloadJobID int
+		sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+
+		var dbExists bool
+		sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) > 0 FROM system.namespace WHERE name = '%s'", newDBName)).Scan(&dbExists)
+		require.True(t, dbExists, "database should exist")
+
+		var externalBytes int64
+		sqlDB.QueryRow(t, jobutils.GetExternalBytesForConnectedTenant).Scan(&externalBytes)
+		require.Greater(t, externalBytes, int64(0), "external bytes should be greater than 0")
+		return downloadJobID
+	}
+
+	checkRecovery := func(t *testing.T, dbName string) {
+		sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+		var dbExists bool
+		sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) > 0 FROM system.namespace WHERE name = '%s'", dbName)).Scan(&dbExists)
+		require.False(t, dbExists, "database %s should not exist", dbName)
+	}
+
+	t.Run("cancel download job", func(t *testing.T) {
+		dbName := "data_cancel"
+		downloadJobID := restoreToPausedDownloadJob(t, dbName)
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("delete file", func(t *testing.T) {
+		dbName := "data_delete"
+		downloadJobID := restoreToPausedDownloadJob(t, dbName)
+		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		sqlDB.ExpectErr(t, "no such file or directory", "SELECT count(*) FROM data_delete.bank")
+		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
+		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(downloadJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("cancel link job", func(t *testing.T) {
+		dbName := "data_link"
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var linkJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&linkJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(linkJobID))
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", linkJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(linkJobID))
+		checkRecovery(t, dbName)
+	})
+	t.Run("delete file block job", func(t *testing.T) {
+		dbName := "data_block"
+		defer func() {
+			sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		}()
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+		var blockingJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&blockingJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(blockingJobID))
+		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", blockingJobID))
+		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(blockingJobID))
+		checkRecovery(t, dbName)
+	})
+}
+
+func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri string) {
+	var filePath string
+	filePathQuery := fmt.Sprintf("SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN '%s'] LIMIT 1", uri)
+	parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
+	sqlDB.QueryRow(t, filePathQuery).Scan(&filePath)
+	fullPath := filepath.Join(ioDir, parsedURI.Path, filePath)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(fullPath))
+}
+
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -257,7 +367,7 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 func waitForLatestDownloadJobToSucceed(t *testing.T, sqlDB *sqlutils.SQLRunner) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t,
-		`SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`,
+		latestDownloadJobIDQuery,
 	).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 }
