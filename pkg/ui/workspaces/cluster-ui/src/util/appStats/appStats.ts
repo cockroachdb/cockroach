@@ -202,6 +202,7 @@ export function addStatementStats(
   return {
     count: a.count.add(b.count),
     failure_count: a.failure_count.add(b.failure_count),
+    generic_count: a.generic_count.add(b.generic_count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
     max_retries: a.max_retries.greaterThan(b.max_retries)
       ? a.max_retries
