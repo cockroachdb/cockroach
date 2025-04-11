@@ -407,7 +407,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	// Finally, set that store to be throttled and ensure we don't send the
 	// replica to purgatory.
 	sp.DetailsMu.Lock()
-	storeDetail, ok := sp.DetailsMu.StoreDetails[singleStore[0].StoreID]
+	storeDetail, ok := sp.DetailsMu.StoreDetails.Load(singleStore[0].StoreID)
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
