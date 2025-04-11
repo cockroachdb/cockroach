@@ -1,3 +1,14 @@
+### ANYELEMENT functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="int4in"></a><code>int4in(input: anyelement) &rarr; int4</code></td><td><span class="funcdesc"><p>Parses a string as an INT4.</p>
+</span></td><td>Invalid</td></tr>
+<tr><td><a name="int4recv"></a><code>int4recv(input: anyelement) &rarr; int4</code></td><td><span class="funcdesc"><p>Converts a 4-byte big-endian binary representation to INT4.</p>
+</span></td><td>Invalid</td></tr></tbody>
+</table>
+
 ### Array functions
 
 <table>
@@ -1162,6 +1173,17 @@ available replica will error.</p>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: anyelement, thresholds: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned given an array listing the lower bounds of the buckets; returns 0 for an input less than the first lower bound; the thresholds array must be sorted, smallest first, or unexpected results will be obtained</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
+### INT4 functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="int4out"></a><code>int4out(input: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts an INT4 to its text representation.</p>
+</span></td><td>Invalid</td></tr>
+<tr><td><a name="int4send"></a><code>int4send(input: int4) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Converts an INT4 value to its big-endian binary representation.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
