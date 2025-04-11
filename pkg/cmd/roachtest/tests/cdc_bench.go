@@ -92,6 +92,32 @@ func registerCDCBench(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
 				},
+				PostProcessPerfMetrics: func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+					metrics := roachtestutil.AggregatedPerfMetrics{}
+
+					// Find the scan-rate summary
+					var scanRate float64
+					for _, summary := range histograms.Summaries {
+						if summary.Name == "scan-rate" {
+							// There's just one value in the histogram, which is recorded as a duration in seconds
+							// but actually represents rows per second
+							if len(summary.Values) > 0 {
+								scanRate = float64(summary.Values[0].Max) / float64(time.Second)
+							}
+							break
+						}
+					}
+
+					// Add scan rate metric (higher is better)
+					metrics = append(metrics, &roachtestutil.AggregatedMetric{
+						Name:           "scan_rate",
+						Value:          roachtestutil.MetricPoint(scanRate),
+						Unit:           "rows/s",
+						IsHigherBetter: true,
+					})
+
+					return metrics, nil
+				},
 			})
 		}
 	}

@@ -351,7 +351,20 @@ func runAllocationBench(
 	// worst/best case outcomes.
 	result, sampleStddev := findMinDistanceClusterStatRun(t, samples)
 	for tag, value := range sampleStddev {
-		result.Total[fmt.Sprintf("std_%s", tag)] = value
+		metricName := fmt.Sprintf("std_%s", tag)
+		result.Total[metricName] = value
+
+		// Populate BenchmarkMetrics with metadata if it's initialized
+		// (it will be initialized only when OpenMetrics is enabled)
+		if result.BenchmarkMetrics != nil {
+			result.BenchmarkMetrics[metricName] = roachtestutil.AggregatedMetric{
+				Name:             metricName,
+				Value:            roachtestutil.MetricPoint(value),
+				Unit:             "stddev",
+				IsHigherBetter:   false, // Lower standard deviation is better
+				AdditionalLabels: nil,
+			}
+		}
 	}
 	if result == nil {
 		t.L().PrintfCtx(ctx, "no samples found for allocation bench run, won't put any artifacts")
