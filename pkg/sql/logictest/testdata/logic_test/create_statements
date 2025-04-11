@@ -37,7 +37,7 @@ query TTTT colnames
 SELECT
   regexp_replace(create_statement, '\n', ' ', 'g'),
   regexp_replace(create_nofks, '\n', ' ', 'g'),
-  alter_statements,
+  fk_statements,
   validate_statements
 FROM
   crdb_internal.create_statements
