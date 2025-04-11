@@ -261,7 +261,11 @@ SELECT range_id, start_pretty, end_pretty FROM crdb_internal.ranges_no_leases
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0  RANGE default
+0   RANGE default
+42  TABLE system.public.statement_statistics
+43  TABLE system.public.transaction_statistics
+61  TABLE system.public.statement_activity
+62  TABLE system.public.transaction_activity
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')

@@ -48,10 +48,6 @@ type TestingKnobs struct {
 	// updated.
 	JobMonitorUpdateCheckInterval time.Duration
 
-	// SkipZoneConfigBootstrap used for backup tests where we want to skip
-	// the Zone Config TTL setup.
-	SkipZoneConfigBootstrap bool
-
 	// FlushInterceptor intercepts persistedsqlstats flush operation.
 	FlushInterceptor FlushFn
 
