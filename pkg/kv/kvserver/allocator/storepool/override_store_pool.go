@@ -118,7 +118,7 @@ func (o *OverrideStorePool) GetStoreList(
 	defer o.sp.DetailsMu.Unlock()
 
 	var storeIDs roachpb.StoreIDSlice
-	o.sp.DetailsMu.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetail) bool {
+	o.sp.DetailsMu.StoreDetailsMu.Range(func(storeID roachpb.StoreID, _ *StoreDetailMu) bool {
 		storeIDs = append(storeIDs, storeID)
 		return true
 	})
