@@ -57,6 +57,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:alter_table.bnf",
     "//docs/generated/sql/bnf:alter_table_cmds.bnf",
     "//docs/generated/sql/bnf:alter_table_locality_stmt.bnf",
+    "//docs/generated/sql/bnf:alter_table_logged_stmt.bnf",
     "//docs/generated/sql/bnf:alter_table_owner_stmt.bnf",
     "//docs/generated/sql/bnf:alter_table_partition_by.bnf",
     "//docs/generated/sql/bnf:alter_table_reset_storage_param.bnf",

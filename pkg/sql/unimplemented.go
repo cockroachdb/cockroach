@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -73,4 +74,22 @@ func makeUnimplementedLegacyError(stmtSyntax redact.SafeString) error {
 		),
 		dscDocDetail,
 	)
+}
+
+// AlterTableSetLogged set table as unlogged or logged.
+// No-op since unlogged tables are not supported.
+func (p *planner) AlterTableSetLogged(
+	ctx context.Context, n *tree.AlterTableSetLogged,
+) (planNode, error) {
+	operation := redact.SafeString("LOGGED")
+	if !n.IsLogged {
+		operation = redact.SafeString("UNLOGGED")
+	}
+	p.BufferClientNotice(
+		ctx, pgnotice.Newf(
+			"SET %s is not supported and has no effect",
+			operation,
+		),
+	)
+	return nil, nil
 }
