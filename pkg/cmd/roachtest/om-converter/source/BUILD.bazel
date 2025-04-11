@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "source",
+    srcs = [
+        "file.go",
+        "gcp.go",
+        "source.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/source",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/om-converter/model",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+        "@org_golang_google_api//option",
+    ],
+)
