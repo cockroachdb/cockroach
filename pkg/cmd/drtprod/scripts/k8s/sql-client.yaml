@@ -1,0 +1,48 @@
+# Copyright 2025 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cockroachdb-client-secure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cockroachdb-client-secure
+  template:
+    metadata:
+      labels:
+        app: cockroachdb-client-secure
+    spec:
+      serviceAccountName: drt-k8s-sa
+      containers:
+        - name: cockroachdb-client-secure
+          image: cockroachdb/cockroach:v24.2.5
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: client-certs
+              mountPath: /cockroach/certs/
+          command:
+            - sleep
+            - "2147483648" # 2^31
+      terminationGracePeriodSeconds: 0
+      volumes:
+        - name: client-certs
+          projected:
+            sources:
+              - secret:
+                  name: drt-k8s-node
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - secret:
+                  name: drt-k8s-root
+                  items:
+                    - key: tls.crt
+                      path: client.root.crt
+                    - key: tls.key
+                      path: client.root.key
+            defaultMode: 256

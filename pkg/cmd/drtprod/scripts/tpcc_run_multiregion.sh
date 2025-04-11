@@ -33,29 +33,23 @@ do
 
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./roachprod sync
-PGURLS=\$(./roachprod pgurl $CLUSTER:$NODE_OFFSET-$LAST_NODE_IN_REGION | sed s/\'//g)
+PGURLS=\$(./roachprod pgurl $CLUSTER | sed s/\'//g)
 read -r -a PGURLS_REGION <<< "\$PGURLS"
 
-j=0
-while true; do
-  echo ">> Starting tpcc workload"
-  ((j++))
-  ./workload run tpcc \
-      --db=$DB_NAME \
-      --ramp=10m \
-      --conns=$NUM_CONNECTIONS \
-      --workers=$EFFECTIVE_NUM_WORKERS \
-      --warehouses=$TPCC_WAREHOUSES \
-      --max-rate=$MAX_RATE \
-      --duration=$RUN_DURATION \
-      --wait=false \
-      --partitions=$NUM_REGIONS \
-      --partition-affinity=$(($NODE-1)) \
-      --tolerate-errors \
-      \${PGURLS_REGION[@]} \
-      --survival-goal region \
-      --regions=$REGIONS
-done
+echo ">> Starting tpcc workload"
+./cockroach workload run tpcc \
+    --db=$DB_NAME \
+    --warehouses=$TPCC_WAREHOUSES \
+    --active-warehouses=6000 \
+    --ramp=5m \
+    --duration=$RUN_DURATION \
+    --wait=true \
+    --partitions=$NUM_REGIONS \
+    --partition-affinity=$(($NODE-1)) \
+    --tolerate-errors \
+    --survival-goal region \
+    --regions=$REGIONS \
+    \${PGURLS_REGION[@]}
 EOF
 
   ./bin/drtprod put $WORKLOAD_CLUSTER:$NODE /tmp/tpcc_run.sh
