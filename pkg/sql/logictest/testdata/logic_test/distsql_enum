@@ -68,6 +68,9 @@ start_key                 end_key       replicas  lease_holder
 <before:/Table/109/1/20>  …/1/0         {3}       3
 …/1/20                    <after:/Max>  {3}       3
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # Always enable the direct columnar scans to make the output below
 # deterministic.
 statement ok
@@ -101,3 +104,6 @@ SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
 
 statement ok
 RESET direct_columnar_scans_enabled
+
+statement ok
+RESET kv_transaction_buffered_writes_enabled;
