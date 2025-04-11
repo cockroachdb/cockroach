@@ -47,6 +47,8 @@ type SQLStats struct {
 	knobs *sqlstats.TestingKnobs
 }
 
+var _ SQLStatsSink = &SQLStats{}
+
 func newSQLStats(
 	st *cluster.Settings,
 	uniqueStmtFingerprintLimit *settings.IntSetting,
@@ -176,4 +178,34 @@ func (s *SQLStats) MaybeDumpStatsToLog(
 
 func (s *SQLStats) GetClusterSettings() *cluster.Settings {
 	return s.st
+}
+
+// ObserveTransaction implements the sslocal.SQLStatsSink interface.
+func (s *SQLStats) ObserveTransaction(
+	ctx context.Context,
+	transaction *sqlstats.RecordedTxnStats,
+	statements []*sqlstats.RecordedStmtStats,
+) {
+	if transaction != nil {
+		// Write statements.
+		appStats := s.GetApplicationStats(transaction.Application)
+		for _, stmt := range statements {
+			err := appStats.RecordStatement(ctx, stmt)
+			if err != nil {
+				// todo
+			}
+		}
+		err := appStats.RecordTransaction(ctx, transaction)
+		if err != nil {
+			// todo
+		}
+	} else {
+		for _, stmt := range statements {
+			appStats := s.GetApplicationStats(stmt.App)
+			err := appStats.RecordStatement(ctx, stmt)
+			if err != nil {
+				// todo
+			}
+		}
+	}
 }
