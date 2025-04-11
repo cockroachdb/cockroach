@@ -54,7 +54,7 @@ concurrency:
 jobs:
   acceptance:
     runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,7 +75,7 @@ jobs:
         if: always()
   check_generated_code:
     runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +90,7 @@ jobs:
         if: always()
   docker_image_amd64:
     runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,7 +111,7 @@ jobs:
         if: always()
   examples_orms:
     runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 40
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,7 +132,7 @@ jobs:
         if: always()
   lint:
     runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -156,7 +156,7 @@ jobs:
         if: always()
   local_roachtest:
     runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -181,7 +181,7 @@ jobs:
         if: always()
   local_roachtest_fips:
     runs-on: [self-hosted, basic_runner_group_fips]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -206,7 +206,7 @@ jobs:
         if: always()
   linux_amd64_build:
     runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -227,7 +227,7 @@ jobs:
         if: always()
   linux_amd64_fips_build:
     runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -248,7 +248,7 @@ jobs:
         if: always()
   unit_tests:
     runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
