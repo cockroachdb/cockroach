@@ -6,6 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/util/encoding",
@@ -18,6 +20,7 @@ go_test(
     srcs = ["encoding_test.go"],
     deps = [
         ":vecencoding",
+        "//pkg/roachpb",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

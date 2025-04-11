@@ -147,6 +147,9 @@ type PartitionStateDetails struct {
 	//   be merged into the root partition.
 	Source PartitionKey
 	// Timestamp is the time of the last state transition for the partition.
+	// NOTE: We use NowNoMono to get the current time because the monotonic clock
+	// reading is not round-tripped through the encoding/decoding functions, since
+	// it's not useful to store.
 	Timestamp time.Time
 }
 
@@ -154,7 +157,7 @@ type PartitionStateDetails struct {
 func MakeReadyDetails() PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     ReadyState,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -165,7 +168,7 @@ func MakeSplittingDetails(target1, target2 PartitionKey) PartitionStateDetails {
 		State:     SplittingState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -176,7 +179,7 @@ func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDe
 		State:     DrainingForSplitState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -186,7 +189,7 @@ func MakeDrainingForMergeDetails(target PartitionKey) PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     DrainingForMergeState,
 		Target1:   target,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -196,7 +199,7 @@ func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
 	return PartitionStateDetails{
 		State:     UpdatingState,
 		Source:    source,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 
@@ -208,7 +211,7 @@ func MakeAddingLevelDetails(target1, target2 PartitionKey) PartitionStateDetails
 		State:     AddingLevelState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.Now(),
+		Timestamp: timeutil.NowNoMono(),
 	}
 }
 

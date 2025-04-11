@@ -841,6 +841,9 @@ func (tc *TestCluster) changeReplicas(
 		); err != nil {
 			return errors.Wrap(err, "range descriptor lookup error")
 		}
+		if !beforeDesc.IsInitialized() {
+			return errors.Errorf("no RangeDescriptor found")
+		}
 		var err error
 		desc, err = db.AdminChangeReplicas(
 			ctx, startKey.AsRawKey(), beforeDesc, kvpb.MakeReplicationChanges(changeType, targets...),
