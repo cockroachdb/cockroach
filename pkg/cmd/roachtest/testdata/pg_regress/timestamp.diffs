@@ -1189,7 +1189,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - Mon Jan 01 17:32:01 2001    |       1 |  1000 |  1000000
 -(65 rows)
 -
-+ERROR:  date_part(): unsupported timespan: msec
++ERROR:  unsupported timespan: msec
  SELECT d1 as "timestamp",
     date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
     date_part( 'isodow', d1) AS isodow, date_part( 'dow', d1) AS dow,
@@ -2430,7 +2430,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
  -- should fail
  select make_timestamp(0, 7, 15, 12, 30, 15);
 -ERROR:  date field value out of range: 0-07-15
-+ERROR:  make_timestamp(): year value of 0 is not valid
++ERROR:  year value of 0 is not valid
  -- generate_series for timestamp
  select * from generate_series('2020-01-01 00:00'::timestamp,
                                '2020-01-02 03:00'::timestamp,
