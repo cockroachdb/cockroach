@@ -198,6 +198,12 @@ func (rn *RawNode) LogSnapshot() LogSnapshot {
 	return rn.raft.raftLog.snap(rn.raft.raftLog.storage.LogSnapshot())
 }
 
+// LogStorage is the same as LogSnapshot, but the returned handle is only valid
+// while Replica.mu is held, and there are no steps to this RawNode.
+func (rn *RawNode) LogStorage() LogSnapshot {
+	return rn.raft.raftLog.snap(rn.raft.raftLog.storage)
+}
+
 // SendMsgApp conditionally sends a MsgApp message containing the given log
 // slice to the given peer. The message is returned to the caller, who is
 // responsible for actually sending it. The RawNode only updates the internal

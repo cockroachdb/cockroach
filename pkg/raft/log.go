@@ -411,11 +411,11 @@ func (l *raftLog) lastEntryID() entryID {
 }
 
 func (l *raftLog) term(i uint64) (uint64, error) {
-	return l.snap(l.storage).term(i)
+	return l.snap(l.storage).Term(i)
 }
 
-// term returns the term of the log entry at the given index.
-func (l LogSnapshot) term(index uint64) (uint64, error) {
+// Term returns the term of the log entry at the given index.
+func (l LogSnapshot) Term(index uint64) (uint64, error) {
 	// Check the unstable log first, even before computing the valid index range,
 	// which may need to access the storage. If we find the entry's term in the
 	// unstable log, we know it was in the valid range.
@@ -544,7 +544,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 // Returns at least one entry if the interval contains any. The maxSize can only
 // be exceeded if the first entry (lo+1) is larger.
 func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error) {
-	prevTerm, err := l.term(lo)
+	prevTerm, err := l.Term(lo)
 	if err != nil {
 		// The log is probably compacted at index > lo (err == ErrCompacted), or it
 		// can be a custom storage error.
