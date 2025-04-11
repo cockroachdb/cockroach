@@ -54,6 +54,10 @@ func runAddIndex(
 	rng, _ := randutil.NewPseudoRand()
 	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
 	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", dbName)); err != nil {
+		o.Fatal(err)
+	}
+
 	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
 		`
 SELECT
