@@ -8,8 +8,6 @@ package jsonpath
 import (
 	"fmt"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type Jsonpath struct {
@@ -23,10 +21,6 @@ func (j Jsonpath) String() string {
 		mode = "strict "
 	}
 	return mode + j.Path.String()
-}
-
-func (j Jsonpath) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(j.String())
 }
 
 type Path interface {
@@ -130,8 +124,7 @@ func (r Regex) String() string {
 	return fmt.Sprintf("%q flag %q", r.Regex, r.Flags)
 }
 
-var _ tree.RegexpCacheKey = Regex{}
-
+// Pattern implements the tree.RegexpCacheKey interface.
 func (r Regex) Pattern() (string, error) {
 	return r.Regex, nil
 }

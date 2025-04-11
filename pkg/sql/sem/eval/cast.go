@@ -495,7 +495,7 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DJSON:
 			s = t.JSON.String()
 		case *tree.DJsonpath:
-			s = string(*t)
+			s = t.Jsonpath.String()
 		case *tree.DTSQuery:
 			s = t.TSQuery.String()
 		case *tree.DTSVector:
