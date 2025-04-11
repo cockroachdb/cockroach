@@ -57,19 +57,15 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
-	sp.DetailsMu.RLock()
-	if _, ok := sp.DetailsMu.StoreDetails[2]; ok {
+	if _, ok := sp.DetailsMu.StoreDetailsMu.Load(2); ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
-	sp.DetailsMu.RUnlock()
 
 	sg.GossipStores(uniqueStore, t)
 
-	sp.DetailsMu.RLock()
-	if _, ok := sp.DetailsMu.StoreDetails[2]; !ok {
+	if _, ok := sp.DetailsMu.StoreDetailsMu.Load(2); !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
-	sp.DetailsMu.RUnlock()
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.
@@ -200,12 +196,16 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	// Set deadStore as dead.
 	mnl.SetNodeStatus(deadStore.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
-	sp.DetailsMu.Lock()
 	// Set declinedStore as throttled.
-	sp.DetailsMu.StoreDetails[declinedStore.StoreID].ThrottledUntil = sp.clock.Now().AddDuration(time.Hour)
+	val, _ := sp.DetailsMu.StoreDetailsMu.Load(declinedStore.StoreID)
+	val.Lock()
+	(*val).ThrottledUntil = sp.clock.Now().AddDuration(time.Hour)
+	val.Unlock()
 	// Set suspectedStore as suspected.
-	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = sp.clock.Now()
-	sp.DetailsMu.Unlock()
+	val, _ = sp.DetailsMu.StoreDetailsMu.Load(suspectedStore.StoreID)
+	val.Lock()
+	(*val).LastUnavailable = sp.clock.Now()
+	val.Unlock()
 
 	// No filter or limited set of store IDs.
 	if err := verifyStoreList(
@@ -424,8 +424,6 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	sp.DetailsMu.Lock()
-	defer sp.DetailsMu.Unlock()
 	if detail := sp.GetStoreDetailLocked(roachpb.StoreID(1)); detail.Desc != nil {
 		t.Errorf("unexpected fetched store ID 1: %+v", detail.Desc)
 	}
@@ -588,13 +586,13 @@ func TestStorePoolThrottle(t *testing.T) {
 	expected := sp.clock.Now().AddDuration(FailedReservationsTimeout.Get(&sp.st.SV))
 	sp.Throttle(ThrottleFailed, "", 1)
 
-	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(1)
-	sp.DetailsMu.Unlock()
+	detail.RLock()
 	if detail.ThrottledUntil.WallTime != expected.WallTime {
 		t.Errorf("expected store to have been throttled to %v, found %v",
 			expected, detail.ThrottledUntil)
 	}
+	detail.RUnlock()
 }
 
 // See state transition diagram in storeDetail.status() for a visual
@@ -627,9 +625,7 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	// Store starts in a live state if it hasn't been marked suspect yet.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	sp.DetailsMu.Lock()
 	detail = sp.GetStoreDetailLocked(store.StoreID)
-	defer sp.DetailsMu.Unlock()
 
 	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, storeStatusAvailable)
@@ -899,8 +895,10 @@ func TestStorePoolString(t *testing.T) {
 	mnl.SetNodeStatus(7, livenesspb.NodeLivenessStatus_DRAINING)
 	mnl.SetNodeStatus(8, livenesspb.NodeLivenessStatus_LIVE)
 	mnl.SetNodeStatus(9, livenesspb.NodeLivenessStatus_LIVE)
-	sp.DetailsMu.StoreDetails[8].LastUnavailable = sp.clock.Now()
-	sp.DetailsMu.StoreDetails[9].ThrottledUntil = sp.clock.Now().AddDuration(time.Second)
+	val, _ := sp.DetailsMu.StoreDetailsMu.Load(8)
+	(*val).LastUnavailable = sp.clock.Now()
+	val, _ = sp.DetailsMu.StoreDetailsMu.Load(9)
+	(*val).ThrottledUntil = sp.clock.Now().AddDuration(time.Second)
 
 	require.Equal(t, "1 (status=unknown): range-count=10 fraction-used=0.10\n"+
 		"2 (status=dead): range-count=20 fraction-used=0.20\n"+
