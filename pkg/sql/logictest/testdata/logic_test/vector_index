@@ -315,3 +315,127 @@ SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 
 statement ok
 DROP TABLE exec_test
+
+#
+# Test backfill.
+#
+# The SELECT statements for these tests retrieve all the rows in the table
+# because the point is to test that backfill is happening correctly and that
+# we're still able to insert into and modify the index after the backfill is
+# done.
+
+subtest backfill
+
+statement ok
+CREATE TABLE backfill_test (
+  id INT PRIMARY KEY,
+  username STRING COLLATE en_US_u_ks_level2,
+  data INT NOT NULL,
+  enc VECTOR(3),
+  prefix_enc VECTOR(3)
+)
+
+statement ok
+INSERT INTO backfill_test VALUES
+  (1, 'jack', 10, '[1.0, 2.0, 3.0]', '[3.0, 2.0, 1.0]'),
+  (2, 'jill', 20, '[4.0, 5.0, 6.0]', '[6.0, 5.0, 4.0]'),
+  (3, 'ash',  30, '[7.0, 8.0, 9.0]', '[9.0, 8.0, 7.0]');
+
+statement ok
+CREATE VECTOR INDEX ON backfill_test (enc)
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[1.0, 2.0, 3.0]' LIMIT 3
+----
+1  jack  10  [1,2,3]  [3,2,1]
+2  jill  20  [4,5,6]  [6,5,4]
+3  ash   30  [7,8,9]  [9,8,7]
+
+statement ok
+INSERT INTO backfill_test VALUES
+  (4, 'jill', 40, '[1.0, 2.0, 3.5]', '[3.5, 2.0, 1.0]'),
+  (5, 'jack', 50, '[4.0, 5.5, 6.0]', '[6.0, 5.5, 4.0]'),
+  (6, 'ash',  60, '[7.5, 8.0, 9.0]', '[9.0, 8.0, 7.5]');
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[4.0, 5.0, 6.5]' LIMIT 6
+----
+2  jill  20  [4,5,6]    [6,5,4]
+5  jack  50  [4,5.5,6]  [6,5.5,4]
+3  ash   30  [7,8,9]    [9,8,7]
+4  jill  40  [1,2,3.5]  [3.5,2,1]
+6  ash   60  [7.5,8,9]  [9,8,7.5]
+1  jack  10  [1,2,3]    [3,2,1]
+
+statement ok
+UPDATE backfill_test SET data = data + 1 WHERE id IN (SELECT id FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[1.0, 2.0, 3.0]' LIMIT 2)
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[1.0, 2.0, 3.0]' LIMIT 6
+----
+1  jack  11  [1,2,3]    [3,2,1]
+4  jill  41  [1,2,3.5]  [3.5,2,1]
+2  jill  20  [4,5,6]    [6,5,4]
+5  jack  50  [4,5.5,6]  [6,5.5,4]
+3  ash   30  [7,8,9]    [9,8,7]
+6  ash   60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+UPDATE backfill_test SET enc = '[3.0, 2.0, 1.0]' WHERE id = 1
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[1.0, 2.0, 3.0]' LIMIT 6
+----
+4  jill  41  [1,2,3.5]  [3.5,2,1]
+1  jack  11  [3,2,1]    [3,2,1]
+2  jill  20  [4,5,6]    [6,5,4]
+5  jack  50  [4,5.5,6]  [6,5.5,4]
+3  ash   30  [7,8,9]    [9,8,7]
+6  ash   60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+CREATE VECTOR INDEX ON backfill_test (username, prefix_enc)
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username = 'ash' ORDER BY prefix_enc <-> '[3.0, 2.0, 1.0]' LIMIT 2
+----
+3  ash  30  [7,8,9]    [9,8,7]
+6  ash  60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+INSERT INTO backfill_test VALUES
+  (7, 'ash',  70, '[3.0, 2.0, 1.0]', '[1.0, 2.0, 3.0]'),
+  (8, 'jack', 80, '[4.0, 5.0, 6.0]', '[6.0, 5.0, 4.0]'),
+  (9, 'jill', 90, '[7.0, 8.0, 9.0]', '[9.0, 8.0, 7.0]');
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username = 'ash' ORDER BY username, prefix_enc <-> '[3.0, 2.0, 1.0]' LIMIT 3
+----
+7  ash  70  [3,2,1]    [1,2,3]
+3  ash  30  [7,8,9]    [9,8,7]
+6  ash  60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+UPDATE backfill_test SET data = data - 1 WHERE id IN (SELECT id FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username = 'ash' ORDER BY username, prefix_enc <-> '[3.0, 2.0, 1.0]' LIMIT 1)
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username = 'ash' ORDER BY username, prefix_enc <-> '[3.0, 2.0, 1.0]' LIMIT 3
+----
+7  ash  69  [3,2,1]    [1,2,3]
+3  ash  30  [7,8,9]    [9,8,7]
+6  ash  60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+UPDATE backfill_test SET prefix_enc = '[3.0, 2.0, 1.0]' WHERE id = 7
+
+query ITITT
+SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username = 'ash' ORDER BY username, prefix_enc <-> '[3.0, 2.0, 1.0]' LIMIT 3
+----
+7  ash  69  [3,2,1]    [3,2,1]
+3  ash  30  [7,8,9]    [9,8,7]
+6  ash  60  [7.5,8,9]  [9,8,7.5]
+
+statement ok
+DROP TABLE backfill_test
+
+subtest end

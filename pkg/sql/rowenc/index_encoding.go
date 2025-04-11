@@ -8,6 +8,7 @@ package rowenc
 import (
 	"bytes"
 	"context"
+	"slices"
 	"sort"
 	"unsafe"
 
@@ -1151,6 +1152,12 @@ func encodeVectorIndexKey(
 	if err != nil {
 		return nil, err
 	}
+	// If the index has prefix columns, the capacity of the key may already have been
+	// enlarged enough to fit the vector-specific key bytes.
+	vecKeyLen := vecencoding.EncodedPartitionKeyLen(partitionKey) + vecencoding.EncodedPartitionLevelLen(cspann.LeafLevel)
+	if cap(key) < len(key)+vecKeyLen {
+		key = growKey(key, vecKeyLen)
+	}
 	key = vecencoding.EncodePartitionKey(key, partitionKey)
 	key = vecencoding.EncodePartitionLevel(key, cspann.LeafLevel)
 	return key, err
@@ -1736,13 +1743,9 @@ func EncodeSecondaryIndexes(
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 
 	for i, idx := range indexes {
-		keyPrefix := keyPrefixes[i]
-		// TODO(annie): For now, we recompute the key prefix of inverted indexes. This is because index
-		// keys with multiple associated values somehow get encoded into the same kv pair when using
-		// our precomputed key prefix. `inverted_index/arrays` (logictest) illustrates this issue.
-		if idx.GetType() == idxtype.INVERTED {
-			keyPrefix = MakeIndexKeyPrefix(codec, tableDesc.GetID(), idx.GetID())
-		}
+		// Cap keyPrefix so that we don't accidentally extend the cached prefix and use
+		// it as part of our return value.
+		keyPrefix := slices.Clip(keyPrefixes[i])
 		entries, err := encodeSecondaryIndexWithKeyPrefix(
 			ctx, tableDesc, idx, keyPrefix, colMap, values, includeEmpty, vh,
 		)

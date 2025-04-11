@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -165,4 +166,70 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	default:
 		t.Fatalf("unexpected type %T", q1)
 	}
+}
+
+func TestDecodeKey(t *testing.T) {
+	// Build an encoded key with no prefix columns.
+	var buf []byte
+	// Encode a partition key (e.g. 456).
+	partitionKey := cspann.PartitionKey(456)
+	buf = vecencoding.EncodePartitionKey(buf, partitionKey)
+	// Encode a partition level (e.g. 2).
+	level := cspann.Level(2)
+	buf = vecencoding.EncodePartitionLevel(buf, level)
+	// Add some suffix bytes.
+	expectedSuffix := []byte("mySuffix")
+	buf = append(buf, expectedSuffix...)
+
+	// Call DecodeKey with numPrefixColumns=0.
+	indexKey, err := vecencoding.DecodeKey(buf, 0)
+	require.NoError(t, err)
+	// No prefix since numPrefixColumns=0.
+	require.Empty(t, indexKey.Prefix)
+	// Verify partition key and level.
+	require.Equal(t, partitionKey, indexKey.PartitionKey)
+	require.Equal(t, level, indexKey.Level)
+	// Suffix should match.
+	require.Equal(t, expectedSuffix, indexKey.Suffix)
+}
+
+func TestDecodeKeyPrefixColumns(t *testing.T) {
+	var buf []byte
+
+	// Encode a prefix column.
+	// Here we simulate a prefix column by encoding a byte slice.
+	prefixVal := []byte("prefixColumnValue")
+	buf = encoding.EncodeBytesAscending(buf, prefixVal)
+
+	// Encode another prefix column.
+	prefixVal2 := []byte("anotherPrefixColumnValue")
+	buf = encoding.EncodeBytesAscending(buf, prefixVal2)
+
+	// Capture the prefix bytes to compare later.
+	prefixEncoded := make(cspann.TreeKey, len(buf))
+	copy(prefixEncoded, buf)
+
+	// Append a partition key.
+	partitionKey := cspann.PartitionKey(1234)
+	buf = vecencoding.EncodePartitionKey(buf, partitionKey)
+
+	// Append a partition level.
+	level := cspann.Level(5)
+	buf = vecencoding.EncodePartitionLevel(buf, level)
+
+	// Append some suffix bytes.
+	expectedSuffix := []byte("suffixData")
+	buf = append(buf, expectedSuffix...)
+
+	// Extract the key with one prefix column.
+	key, err := vecencoding.DecodeKey(buf, 2)
+	require.NoError(t, err)
+
+	// Verify that the extracted prefix matches.
+	require.Equal(t, prefixEncoded, key.Prefix)
+	// Verify partition key and level.
+	require.Equal(t, partitionKey, key.PartitionKey)
+	require.Equal(t, level, key.Level)
+	// Verify that the remaining bytes form the suffix.
+	require.Equal(t, expectedSuffix, key.Suffix)
 }

@@ -30,6 +30,78 @@ Value:
   └────────────────────────┴────────────────────────┘
 */
 
+// VectorIndexKey is a deconstructed key value, as described above, minus the
+// index prefix. Any suffix bytes (child partition, primary key) are left in the
+// Suffix value.
+type VectorIndexKey struct {
+	Prefix       cspann.TreeKey
+	PartitionKey cspann.PartitionKey
+	Level        cspann.Level
+	Suffix       []byte
+}
+
+// DecodeKey takes an encoded key value, minus the /Tenant/Table/Index prefix,
+// and extracts the vector index specific portions of it in an VectorIndexKey
+// struct.
+func DecodeKey(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKey, err error) {
+	prefixLen := 0
+	for i := 0; i < numPrefixColumns; i++ {
+		columnWidth, err := encoding.PeekLength(keyBytes[prefixLen:])
+		if err != nil {
+			return vecIndexKey, err
+		}
+		prefixLen += columnWidth
+	}
+	if prefixLen > 0 {
+		vecIndexKey.Prefix = keyBytes[:prefixLen]
+		keyBytes = keyBytes[prefixLen:]
+	}
+
+	partitionKey, keyBytes, err := DecodePartitionKey(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.PartitionKey = partitionKey
+
+	level, keyBytes, err := DecodePartitionLevel(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.Level = level
+
+	if len(keyBytes) > 0 {
+		vecIndexKey.Suffix = keyBytes
+	}
+
+	return vecIndexKey, nil
+}
+
+// Encode takes a VectorIndexKey and turns it back into encoded bytes that can be
+// appended to the index's prefix to form a key value.
+func (vik *VectorIndexKey) Encode(appendTo []byte) []byte {
+	appendTo = append(appendTo, vik.Prefix...)
+	appendTo = EncodePartitionKey(appendTo, vik.PartitionKey)
+	appendTo = EncodePartitionLevel(appendTo, vik.Level)
+	return append(appendTo, vik.Suffix...)
+}
+
+// EncodedVectorIndexValueLen returns the number of bytes needed to encode the
+// value side of a vector index entry.
+func EncodedVectorIndexValueLen(vectorData []byte, compositeData []byte) int {
+	return len(vectorData) + len(compositeData)
+}
+
+// EncodeVectorIndexValue takes a quantized vector entry and any composite key
+// data and returns the byte slice encoding the value side of the vector index
+// entry. This value will still need to be further encoded as Bytes in the
+// valueside.Value
+func EncodeVectorIndexValue(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
+	// The value side is encoded as a concatenation of the vector data and the
+	// composite data.
+	appendTo = append(appendTo, vectorData...)
+	return append(appendTo, compositeData...)
+}
+
 // EncodePartitionMetadata encodes the metadata for a partition.
 func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
 	// The encoding consists of 8 bytes for the level, and a 4-byte length,
@@ -178,4 +250,21 @@ func DecodeChildKey(encChildKey []byte, level cspann.Level) (cspann.ChildKey, er
 		}
 		return cspann.ChildKey{PartitionKey: cspann.PartitionKey(childPartitionKey)}, nil
 	}
+}
+
+func DecodePartitionKey(encodedPartitionKey []byte) (cspann.PartitionKey, []byte, error) {
+	remainingBytes, partitionKey, err := encoding.DecodeUvarintAscending(encodedPartitionKey)
+	if err != nil {
+		return 0, nil, err
+	}
+	return cspann.PartitionKey(partitionKey), remainingBytes, nil
+}
+
+func DecodePartitionLevel(encodedLevel []byte) (cspann.Level, []byte, error) {
+	remainingBytes, level, err := encoding.DecodeUvarintAscending(encodedLevel)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return cspann.Level(level), remainingBytes, nil
 }
