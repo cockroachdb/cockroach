@@ -3294,3 +3294,82 @@ statement ok
 EXECUTE foo (100);
 
 subtest end
+
+# Make sure that only the original function parameters can be referenced by
+# ordinal syntax.
+subtest regression_143887
+
+# Case with SQL expression.
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN $3; END $$;
+
+# Case with SQL statement.
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT $3; RETURN 0; END $$;
+
+# Case with SQL expression.
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    z INT := x + y;
+  BEGIN
+    RETURN $3;
+  END
+$$;
+
+# Case with SQL statement.
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    z INT := x + y;
+  BEGIN
+    SELECT $3;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    z INT := x + y;
+  BEGIN
+    z := z * 100 * x;
+    IF x > y THEN
+      RETURN $3;
+    END IF;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 42P02 pq: no value provided for placeholder: \$3
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    z INT := x + y;
+  BEGIN
+    DECLARE
+      w INT := z + x + y;
+    BEGIN
+      z := z * 100 * x;
+      RETURN $3 + $4;
+    END;
+    RETURN 0;
+  END
+$$;
+
+# Make sure that function parameters can still be referenced via ordinal syntax.
+statement ok
+CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    z INT := x + y;
+  BEGIN
+    SELECT $1 + $2;
+    RETURN $1 + $2;
+  END
+$$;
+
+query I
+SELECT f143887(100, 200);
+----
+300
+
+subtest end
