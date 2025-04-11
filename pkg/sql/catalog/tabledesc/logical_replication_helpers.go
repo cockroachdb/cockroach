@@ -39,7 +39,7 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
-	if err := checkExpressionEvaluation(dst); err != nil {
+	if err := checkExpressionEvaluation(dst, requireKvWriterCompatible); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 	if err := checkUniqueWithoutIndex(dst); err != nil {
@@ -87,11 +87,13 @@ func checkOutboundReferences(dst *descpb.TableDescriptor) error {
 // expressions. The writer expects to receive the full set of columns, even the
 // computed ones, along with a list of columns that we've already determined
 // should be updated.
-func checkExpressionEvaluation(dst *descpb.TableDescriptor) error {
+func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible bool) error {
 	// Disallow partial indexes.
-	for _, idx := range dst.Indexes {
-		if idx.IsPartial() {
-			return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+	if requireKVCompatible {
+		for _, idx := range dst.Indexes {
+			if idx.IsPartial() {
+				return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+			}
 		}
 	}
 
