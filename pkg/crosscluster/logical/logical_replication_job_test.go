@@ -2550,8 +2550,16 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	expectErr(t, "tab", "cannot create logical replication stream: table tab has a partial index partial_idx")
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
-	// Check for virtual computed columns that are a key of a secondary index.
+	// Check for hash sharded indexes.
 	dbA.Exec(t, "DROP INDEX partial_idx")
+	dbA.Exec(t, "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)")
+	dbB.Exec(t, "CREATE INDEX hash_idx ON b.tab(pk) USING HASH WITH (bucket_count = 4)")
+	expectErr(t, "tab", "tab has a virtual computed column crdb_internal_pk_shard_4 that is a key of index hash_idx")
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	dbA.Exec(t, "DROP INDEX hash_idx")
+	dbB.Exec(t, "DROP INDEX hash_idx")
+
+	// Check for virtual computed columns that are a key of a secondary index.
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
 	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
 	dbA.Exec(t, "CREATE INDEX virtual_col_idx ON tab(virtual_col)")
