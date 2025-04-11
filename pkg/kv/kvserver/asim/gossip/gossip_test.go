@@ -28,17 +28,17 @@ func TestGossip(t *testing.T) {
 	for _, rng := range s.Ranges() {
 		s.TransferLease(rng.RangeID(), 1)
 	}
-	details := map[state.StoreID]*syncutil.Map[roachpb.StoreID, storepool.StoreDetail]{}
+	details := map[state.StoreID]*syncutil.Map[roachpb.StoreID, storepool.StoreDetailMu]{}
 
 	for _, store := range s.Stores() {
 		// Cast the storepool to a concrete storepool type in order to mutate
 		// it directly for testing.
 		sp := s.StorePool(store.StoreID()).(*storepool.StorePool)
-		details[store.StoreID()] = &sp.DetailsMu.StoreDetails
+		details[store.StoreID()] = &sp.Details.StoreDetails
 	}
 
-	assertStorePool := func(f func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail])) {
-		var prev *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]
+	assertStorePool := func(f func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetailMu])) {
+		var prev *syncutil.Map[roachpb.StoreID, storepool.StoreDetailMu]
 		for _, cur := range details {
 			if prev != nil {
 				f(prev, cur)
@@ -47,13 +47,13 @@ func TestGossip(t *testing.T) {
 		}
 	}
 
-	assertEmptyFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]) {
+	assertEmptyFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetailMu]) {
 		prevCount, curCount := 0, 0
-		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetailMu) bool {
 			prevCount++
 			return true
 		})
-		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetailMu) bool {
 			curCount++
 			return true
 		})
@@ -61,20 +61,20 @@ func TestGossip(t *testing.T) {
 		require.Equal(t, 0, curCount)
 	}
 
-	assertSameFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetail]) {
+	assertSameFn := func(prev, cur *syncutil.Map[roachpb.StoreID, storepool.StoreDetailMu]) {
 		var prevResults []struct {
 			StoreID roachpb.StoreID
-			Detail  *storepool.StoreDetail
+			Detail  *storepool.StoreDetailMu
 		}
 		var curResults []struct {
 			StoreID roachpb.StoreID
-			Detail  *storepool.StoreDetail
+			Detail  *storepool.StoreDetailMu
 		}
 
-		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+		prev.Range(func(key roachpb.StoreID, value *storepool.StoreDetailMu) bool {
 			prevResults = append(prevResults, struct {
 				StoreID roachpb.StoreID
-				Detail  *storepool.StoreDetail
+				Detail  *storepool.StoreDetailMu
 			}{
 				StoreID: key,
 				Detail:  value,
@@ -82,10 +82,10 @@ func TestGossip(t *testing.T) {
 			return true
 		})
 
-		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetail) bool {
+		cur.Range(func(key roachpb.StoreID, value *storepool.StoreDetailMu) bool {
 			curResults = append(curResults, struct {
 				StoreID roachpb.StoreID
-				Detail  *storepool.StoreDetail
+				Detail  *storepool.StoreDetailMu
 			}{
 				StoreID: key,
 				Detail:  value,
