@@ -13,12 +13,29 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
+
+var AppNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.metrics.application_name.enabled",
+	"when enabled, SQL metrics would export application name as and additional label as part of child metrics."+
+		" The number of unique label combinations is limited to 5000 by default.",
+	false, /* default */
+	settings.WithPublic)
+
+var DBNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.metrics.database_name.enabled",
+	"when enabled, SQL metrics would export database name as and additional label as part of child metrics."+
+		" The number of unique label combinations is limited to 5000 by default.",
+	false, /* default */
+	settings.WithPublic)
 
 // A Registry is a list of metrics. It provides a simple way of iterating over
 // them, can marshal into JSON, and generate a prometheus format.
@@ -224,6 +241,33 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 		})
 	}
 	return json.Marshal(m)
+}
+
+// ReinitialiseChildMetrics reinitialize childSet of tracked agg metrics with updated label values.
+// This is used when the cluster settings are updated and, we need to reinitialise
+// child metrics with StorageTypeCache.
+func (r *Registry) ReinitialiseChildMetrics(isDBNameEnabled, isAppNameEnabled bool) {
+	r.Lock()
+	defer r.Unlock()
+
+	labelConfig := LabelConfigDisabled
+
+	if isDBNameEnabled && isAppNameEnabled {
+		labelConfig = LabelConfigAppAndDB
+	} else if isAppNameEnabled {
+		labelConfig = LabelConfigApp
+	} else if isDBNameEnabled {
+		labelConfig = LabelConfigDB
+	}
+
+	for _, metric := range r.tracked {
+		// Check if the metric implements the metric.PrometheusReinitialisable interface as we want to
+		// reinitialise the child metrics.
+		if m, ok := metric.(PrometheusReinitialisable); ok {
+			m.ReinitialiseChildMetrics(labelConfig)
+		}
+	}
+
 }
 
 var (

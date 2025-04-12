@@ -1407,6 +1407,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
 
+	metric.AppNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.UpdateLabelValueConfig(&cfg.Settings.SV, cfg.registry)
+	})
+
+	metric.DBNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		pgServer.SQLServer.UpdateLabelValueConfig(&cfg.Settings.SV, cfg.registry)
+	})
+
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
 	return &SQLServer{
