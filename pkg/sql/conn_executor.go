@@ -850,6 +850,11 @@ func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
 	return s.pool
 }
 
+func (s *Server) UpdateLabelValueConfig(sv *settings.Values, registry *metric.Registry) {
+	registry.ReinitialiseChildMetrics(metric.DBNameLabelEnabled.Get(sv),
+		metric.AppNameLabelEnabled.Get(sv))
+}
+
 // SetupConn creates a connExecutor for the client connection.
 //
 // When this method returns there are no resources allocated yet that
