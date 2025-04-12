@@ -4128,9 +4128,6 @@ alter table roach add column serial_id2 SERIAL
 
 subtest end
 
-statement ok
-set use_declarative_schema_changer = on
-
 # Tests for #131948 where we incorrectly backfilled empty column
 # families for composite datums.
 subtest composite_type_131948
@@ -4454,6 +4451,7 @@ CREATE TABLE alter_table_alter_primary_key_duplicate_storage_params_a (
   b TEXT NOT NULL
 );
 
+skipif config local-legacy-schema-changer
 statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
 ALTER TABLE alter_table_alter_primary_key_duplicate_storage_params_a
   ALTER PRIMARY KEY
@@ -4468,6 +4466,11 @@ subtest end
 # when adding a column with an invalid geometry expression.
 subtest alter_table_add_column_with_invalid_geometry_expression
 
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = on
 
 statement ok
 CREATE TABLE alter_table_add_column_with_invalid_geometry_expression (
@@ -4477,5 +4480,86 @@ INSERT INTO alter_table_add_column_with_invalid_geometry_expression VALUES (1);
 
 statement error pgcode 22023 pq: failed to construct index entries during backfill: error parsing EWKB: unexpected EOF
 ALTER TABLE alter_table_add_column_with_invalid_geometry_expression ADD COLUMN geom GEOMETRY NULL DEFAULT x'001a'
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
+subtest end
+
+# This is a regression test for #144293 where we were bumping the UDT version of
+# all types unconditionally in the legacy schema changer.
+subtest conditional_bump_udt_version
+
+statement ok
+CREATE TABLE t_conditional_bump_udt_version (
+  id INT PRIMARY KEY
+);
+
+statement ok
+CREATE TYPE e1 AS ENUM ('a', 'b', 'c');
+
+let $e1_version
+SELECT crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version'
+from system.descriptor
+where id = 'e1'::REGTYPE::INT - 100000;
+
+# Add a column using e1. We expect a version bump in the enum.
+statement ok
+ALTER TABLE t_conditional_bump_udt_version ADD COLUMN e1_col e1;
+
+query I
+SELECT 1
+FROM system.descriptor
+WHERE id = 'e1'::REGTYPE::INT - 100000 AND
+  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
+----
+1
+
+let $e1_version
+SELECT crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version'
+from system.descriptor
+where id = 'e1'::REGTYPE::INT - 100000;
+
+# Add a regular int column. That should not bump the version.
+statement ok
+ALTER TABLE t_conditional_bump_udt_version ADD COLUMN i_col INT;
+
+query I
+SELECT 1
+FROM system.descriptor
+WHERE id = 'e1'::REGTYPE::INT - 100000 AND
+  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
+----
+1
+
+# No bump for drop column.
+statement ok
+ALTER TABLE t_conditional_bump_udt_version DROP COLUMN i_col;
+
+query I
+SELECT 1
+FROM system.descriptor
+WHERE id = 'e1'::REGTYPE::INT - 100000 AND
+  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
+----
+1
+
+# Ensure version bump happens when we drop the column using the type.
+statement ok
+ALTER TABLE t_conditional_bump_udt_version DROP COLUMN e1_col;
+
+query I
+SELECT 1
+FROM system.descriptor
+WHERE id = 'e1'::REGTYPE::INT - 100000 AND
+  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
+----
+1
+
+statement ok
+DROP TABLE t_conditional_bump_udt_version;
+
+statement ok
+DROP TYPE e1;
 
 subtest end
