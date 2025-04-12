@@ -1205,7 +1205,7 @@ func TestIngestDelayLimit(t *testing.T) {
 		{max, 55, -1},
 	} {
 		var m pebble.Metrics
-		m.Levels[0].NumFiles = tc.fileCount
+		m.Levels[0].TablesCount = tc.fileCount
 		m.Levels[0].Sublevels = tc.sublevelCount
 		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &m))
 	}

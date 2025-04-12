@@ -3935,7 +3935,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SecondaryCacheEvictions.Update(m.SecondaryCacheMetrics.Evictions)
 	sm.SecondaryCacheWriteBackFails.Update(m.SecondaryCacheMetrics.WriteBackFailures)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
-	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
+	sm.RdbL0NumFiles.Update(m.Levels[0].TablesCount)
 	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
@@ -3968,7 +3968,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	totalWriteAmp := float64(0)
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
-		sm.RdbLevelSize[level].Update(stats.Size)
+		sm.RdbLevelSize[level].Update(stats.TablesSize)
 		sm.RdbLevelScore[level].Update(stats.Score)
 		totalWriteAmp += stats.WriteAmp()
 	}
