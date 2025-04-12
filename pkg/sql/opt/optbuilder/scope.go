@@ -673,32 +673,18 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 }
 
 // findFuncArgCol returns the column that represents a function argument and has
-// an ordinal matching the given placeholder index. If such a column is not
-// found in the current scope, ancestor scopes are successively searched. If no
-// matching function argument column is found, nil is returned.
-func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
+// an ordinal matching the given 0-based ordinal position. If such a column is
+// not found in the current scope, ancestor scopes are successively searched.
+// If no matching function argument column is found, nil is returned.
+func (s *scope) findFuncArgCol(ord int) *scopeColumn {
 	for ; s != nil; s = s.parent {
-		if s.checkMaxParamOrd && int(idx) > s.maxParamOrd {
+		if s.checkMaxParamOrd && ord > s.maxParamOrd {
 			// Referencing this function parameter by ordinal is not allowed.
 			return nil
 		}
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.funcParamReferencedBy(idx) {
-				return col
-			}
-		}
-	}
-	return nil
-}
-
-// findAnonymousColumnWithMetadataName returns the first anonymous column that
-// has the given name in the query metadata.
-func (s *scope) findAnonymousColumnWithMetadataName(metadataName string) *scopeColumn {
-	for ; s != nil; s = s.parent {
-		for i := range s.cols {
-			col := &s.cols[i]
-			if col.name.refName == "" && col.name.metadataName == metadataName {
+			if col.funcParamReferencedBy(ord) {
 				return col
 			}
 		}
@@ -1119,7 +1105,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// NOTE: This likely won't work if we want to allow PREPARE statements
 		// within user-defined function bodies. We'll need to avoid replacing
 		// placeholders that are prepared statement parameters.
-		if col := s.findFuncArgCol(t.Idx); col != nil {
+		if col := s.findFuncArgCol(int(t.Idx)); col != nil {
 			return false, col
 		}
 

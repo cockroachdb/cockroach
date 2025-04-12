@@ -3340,3 +3340,39 @@ CREATE FUNCTION f143887(x INT, y INT) RETURNS INT LANGUAGE PLpgSQL AS $$
 $$;
 
 subtest end
+
+# Nested FOR loops should not interfere with one another.
+subtest regression_144321
+
+statement ok
+CREATE FUNCTION f144321() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    outer_counter INT := 0;
+    inner_counter INT := 0;
+  BEGIN
+    FOR i IN 1..4 LOOP
+      FOR j IN 1..2 LOOP
+        RAISE NOTICE 'i: % j: %', i, j;
+        inner_counter := inner_counter + 1;
+      END LOOP;
+      outer_counter := outer_counter + 1;
+    END LOOP;
+    RAISE NOTICE 'outer_counter: % inner_counter: %', outer_counter, inner_counter;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f144321();
+----
+NOTICE: i: 1 j: 1
+NOTICE: i: 1 j: 2
+NOTICE: i: 2 j: 1
+NOTICE: i: 2 j: 2
+NOTICE: i: 3 j: 1
+NOTICE: i: 3 j: 2
+NOTICE: i: 4 j: 1
+NOTICE: i: 4 j: 2
+NOTICE: outer_counter: 4 inner_counter: 8
+
+subtest end
