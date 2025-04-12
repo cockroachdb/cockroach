@@ -5972,6 +5972,131 @@ project
                      │                                                                     └── const: 0 [as=stmt_return_4:10]
                      └── const: 1
 
+# Case with a FETCH into a composite-typed variable.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS xy LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo xy;
+    bar REFCURSOR;
+  BEGIN
+    OPEN bar FOR SELECT 1, 2;
+    FETCH bar INTO foo;
+    RETURN foo;
+  END;
+$$;
+----
+
+build format=(show-scalars,show-types)
+SELECT f();
+----
+project
+ ├── columns: f:21(tuple{int AS x, int AS y})
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── udf: f [as=f:21, type=tuple{int AS x, int AS y}]
+           └── body
+                └── limit
+                     ├── columns: "_gen_cursor_name_6":20(tuple{int AS x, int AS y})
+                     ├── project
+                     │    ├── columns: "_gen_cursor_name_6":20(tuple{int AS x, int AS y})
+                     │    ├── barrier
+                     │    │    ├── columns: foo:1(tuple{int AS x, int AS y}) bar:2(refcursor)
+                     │    │    └── project
+                     │    │         ├── columns: bar:2(refcursor) foo:1(tuple{int AS x, int AS y})
+                     │    │         ├── project
+                     │    │         │    ├── columns: foo:1(tuple{int AS x, int AS y})
+                     │    │         │    ├── values
+                     │    │         │    │    └── tuple [type=tuple]
+                     │    │         │    └── projections
+                     │    │         │         └── cast: RECORD [as=foo:1, type=tuple{int AS x, int AS y}]
+                     │    │         │              └── null [type=unknown]
+                     │    │         └── projections
+                     │    │              └── cast: REFCURSOR [as=bar:2, type=refcursor]
+                     │    │                   └── null [type=unknown]
+                     │    └── projections
+                     │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":20, type=tuple{int AS x, int AS y}]
+                     │              ├── args
+                     │              │    ├── variable: foo:1 [type=tuple{int AS x, int AS y}]
+                     │              │    └── variable: bar:2 [type=refcursor]
+                     │              ├── params: foo:16(tuple{int AS x, int AS y}) bar:17(refcursor)
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: "_stmt_open_1":19(tuple{int AS x, int AS y})
+                     │                        ├── barrier
+                     │                        │    ├── columns: bar:18(refcursor)
+                     │                        │    └── project
+                     │                        │         ├── columns: bar:18(refcursor)
+                     │                        │         ├── values
+                     │                        │         │    └── tuple [type=tuple]
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=bar:18, type=refcursor]
+                     │                        │                   └── variable: bar:17 [type=refcursor]
+                     │                        └── projections
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":19, type=tuple{int AS x, int AS y}]
+                     │                                  ├── tail-call
+                     │                                  ├── args
+                     │                                  │    ├── variable: foo:16 [type=tuple{int AS x, int AS y}]
+                     │                                  │    └── variable: bar:18 [type=refcursor]
+                     │                                  ├── params: foo:3(tuple{int AS x, int AS y}) bar:4(refcursor)
+                     │                                  └── body
+                     │                                       ├── open-cursor
+                     │                                       │    └── project
+                     │                                       │         ├── columns: "?column?":5(int!null) "?column?":6(int!null)
+                     │                                       │         ├── values
+                     │                                       │         │    └── tuple [type=tuple]
+                     │                                       │         └── projections
+                     │                                       │              ├── const: 1 [as="?column?":5, type=int]
+                     │                                       │              └── const: 2 [as="?column?":6, type=int]
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_fetch_2":15(tuple{int AS x, int AS y})
+                     │                                            ├── values
+                     │                                            │    └── tuple [type=tuple]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":15, type=tuple{int AS x, int AS y}]
+                     │                                                      ├── tail-call
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: foo:3 [type=tuple{int AS x, int AS y}]
+                     │                                                      │    └── variable: bar:4 [type=refcursor]
+                     │                                                      ├── params: foo:7(tuple{int AS x, int AS y}) bar:8(refcursor)
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_fetch_ret_4":14(tuple{int AS x, int AS y})
+                     │                                                                ├── barrier
+                     │                                                                │    ├── columns: stmt_fetch_3:9(tuple{int, int}) foo:10(tuple{int AS x, int AS y})
+                     │                                                                │    └── project
+                     │                                                                │         ├── columns: foo:10(tuple{int AS x, int AS y}) stmt_fetch_3:9(tuple{int, int})
+                     │                                                                │         ├── project
+                     │                                                                │         │    ├── columns: stmt_fetch_3:9(tuple{int, int})
+                     │                                                                │         │    ├── values
+                     │                                                                │         │    │    └── tuple [type=tuple]
+                     │                                                                │         │    └── projections
+                     │                                                                │         │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:9, type=tuple{int, int}]
+                     │                                                                │         │              ├── variable: bar:8 [type=refcursor]
+                     │                                                                │         │              ├── const: 0 [type=int]
+                     │                                                                │         │              ├── const: 1 [type=int]
+                     │                                                                │         │              └── tuple [type=tuple{int, int}]
+                     │                                                                │         │                   ├── null [type=int]
+                     │                                                                │         │                   └── null [type=int]
+                     │                                                                │         └── projections
+                     │                                                                │              └── cast: RECORD [as=foo:10, type=tuple{int AS x, int AS y}]
+                     │                                                                │                   └── variable: stmt_fetch_3:9 [type=tuple{int, int}]
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_fetch_ret_4 [as="_stmt_fetch_ret_4":14, type=tuple{int AS x, int AS y}]
+                     │                                                                          ├── tail-call
+                     │                                                                          ├── args
+                     │                                                                          │    ├── variable: foo:10 [type=tuple{int AS x, int AS y}]
+                     │                                                                          │    └── variable: bar:8 [type=refcursor]
+                     │                                                                          ├── params: foo:11(tuple{int AS x, int AS y}) bar:12(refcursor)
+                     │                                                                          └── body
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_return_5:13(tuple{int AS x, int AS y})
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple [type=tuple]
+                     │                                                                                    └── projections
+                     │                                                                                         └── variable: foo:11 [as=stmt_return_5:13, type=tuple{int AS x, int AS y}]
+                     └── const: 1 [type=int]
+
 # Correctly display the OTHERS branch.
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$

@@ -1144,12 +1144,20 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				return b.callContinuation(&fetchCon, s)
 			}
 			// crdb_internal.plpgsql_fetch will return a tuple with the results of the
-			// FETCH call. Project each element as a PLpgSQL variable.
-			//
-			// Note: The number of tuple elements is equal to the length of the target
-			// list (padded with NULLs), so we can assume each target variable has a
-			// corresponding element.
-			intoScope := b.projectTupleAsIntoTarget(fetchScope, t.Target)
+			// FETCH call. Now we need to assign the results to the target variables.
+			var intoScope *scope
+			if b.targetIsRecordVar(t.Target) {
+				// When the target is a single composite-typed variable, the tuple
+				// result of the fetch is directly assigned to it.
+				intoScope = b.addPLpgSQLAssign(fetchScope, t.Target[0], &fetchScope.cols[0], noIndirection)
+			} else {
+				// Project each element as a PLpgSQL variable.
+				//
+				// Note: The number of tuple elements is equal to the length of the target
+				// list (padded with NULLs), so we can assume each target variable has a
+				// corresponding element.
+				intoScope = b.projectTupleAsIntoTarget(fetchScope, t.Target)
+			}
 
 			// Add a barrier in case the projected variables are never referenced
 			// again, to prevent column-pruning rules from removing the FETCH.
@@ -2157,10 +2165,6 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	fetchScope := s.push()
 	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
 	b.ob.constructProjectForScope(s, fetchScope)
-	if !fetch.IsMove && b.targetIsRecordVar(fetch.Target) {
-		// Handle a single record-type variable (see projectRecordVar for details).
-		fetchScope = b.projectRecordVar(fetchScope, fetch.Target[0])
-	}
 	return fetchScope
 }
 
@@ -2171,9 +2175,9 @@ func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
 }
 
 // projectRecordVar handles the special case when a single RECORD-type variable
-// is the target of an INTO clause or FETCH statement. In this case, the columns
-// from the SQL statement (or FETCH) should be wrapped into a tuple, which is
-// assigned to the RECORD-type variable.
+// is the target of an INTO clause. In this case, the columns from the SQL
+// statement should be wrapped into a tuple, which is assigned to the
+// RECORD-type variable.
 func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 	typ := b.resolveVariableForAssign(name)
 	recordScope := s.push()
