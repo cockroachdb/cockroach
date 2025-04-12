@@ -278,6 +278,15 @@ func (sm *SQLMetric) getChildByLabelConfig(
 	}
 }
 
+// ReinitialiseChildMetrics clears the child metrics and
+// sets the label configuration.
+func (sm *SQLMetric) ReinitialiseChildMetrics(labelConfig uint64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.children.Clear()
+	sm.labelConfig.Store(labelConfig)
+}
+
 type MetricItem interface {
 	labelValuer
 }
