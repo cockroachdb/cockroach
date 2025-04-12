@@ -63,7 +63,7 @@ func TestSQLHistogram(t *testing.T) {
 	h.mu.children = &UnorderedCacheWrapper{
 		cache: cacheStorage,
 	}
-	h.labelConfig.Store(LabelConfigAppAndDB)
+	h.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
 
 	for i := 0; i < cacheSize; i++ {
 		h.RecordValue(1, "1", strconv.Itoa(i))

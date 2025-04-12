@@ -360,14 +360,14 @@ type SQLGauge struct {
 }
 
 var _ metric.Iterable = (*SQLGauge)(nil)
-var _ metric.PrometheusIterable = (*SQLGauge)(nil)
+var _ metric.PrometheusReinitialisable = (*SQLGauge)(nil)
 var _ metric.PrometheusExportable = (*SQLGauge)(nil)
 
 func NewSQLGauge(metadata metric.Metadata) *SQLGauge {
 	g := &SQLGauge{
 		g: *metric.NewGauge(metadata),
 	}
-	g.SQLMetric = NewSQLMetric(LabelConfigDisabled)
+	g.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
 	return g
 }
 
