@@ -209,7 +209,7 @@ type SQLHistogram struct {
 }
 
 var _ metric.Iterable = (*SQLHistogram)(nil)
-var _ metric.PrometheusIterable = (*SQLHistogram)(nil)
+var _ metric.PrometheusReinitialisable = (*SQLHistogram)(nil)
 var _ metric.PrometheusExportable = (*SQLHistogram)(nil)
 var _ metric.WindowedHistogram = (*SQLHistogram)(nil)
 var _ metric.CumulativeHistogram = (*SQLHistogram)(nil)
@@ -222,7 +222,7 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 		h:      create(),
 		create: create,
 	}
-	s.SQLMetric = NewSQLMetric(LabelConfigDisabled)
+	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
 	s.ticker.Ticker = tick.NewTicker(
 		now(),
 		opts.Duration/metric.WindowedHistogramWrapNum,

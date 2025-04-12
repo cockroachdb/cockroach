@@ -28,13 +28,6 @@ const (
 	appLabel = "application_name"
 )
 
-const (
-	LabelConfigDisabled = iota
-	LabelConfigApp
-	LabelConfigDB
-	LabelConfigAppAndDB
-)
-
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
 	labels []string
@@ -189,9 +182,9 @@ type SQLMetric struct {
 	}
 }
 
-func NewSQLMetric(labelConfig uint64) *SQLMetric {
+func NewSQLMetric(labelConfig metric.LabelConfig) *SQLMetric {
 	sm := &SQLMetric{}
-	sm.labelConfig.Store(labelConfig)
+	sm.labelConfig.Store(uint64(labelConfig))
 	sm.mu.children = &UnorderedCacheWrapper{
 		cache: getCacheStorage(),
 	}
@@ -213,17 +206,17 @@ func (sm *SQLMetric) Each(
 		dbLabel := dbLabel
 		appLabel := appLabel
 		switch sm.labelConfig.Load() {
-		case LabelConfigDB:
+		case uint64(metric.LabelConfigDB):
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &dbLabel,
 				Value: &lvs[0],
 			})
-		case LabelConfigApp:
+		case uint64(metric.LabelConfigApp):
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &appLabel,
 				Value: &lvs[0],
 			})
-		case LabelConfigAppAndDB:
+		case uint64(metric.LabelConfigAppAndDB):
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
 				Name:  &dbLabel,
 				Value: &lvs[0],
@@ -275,18 +268,27 @@ func (sm *SQLMetric) getChildByLabelConfig(
 ) (ChildMetric, bool) {
 	var childMetric ChildMetric
 	switch sm.labelConfig.Load() {
-	case LabelConfigDB:
+	case uint64(metric.LabelConfigDB):
 		childMetric = sm.getOrAddChild(f, db)
 		return childMetric, true
-	case LabelConfigApp:
+	case uint64(metric.LabelConfigApp):
 		childMetric = sm.getOrAddChild(f, app)
 		return childMetric, true
-	case LabelConfigAppAndDB:
+	case uint64(metric.LabelConfigAppAndDB):
 		childMetric = sm.getOrAddChild(f, db, app)
 		return childMetric, true
 	default:
 		return nil, false
 	}
+}
+
+// ReinitialiseChildMetrics clears the child metrics and
+// sets the label configuration.
+func (sm *SQLMetric) ReinitialiseChildMetrics(labelConfig metric.LabelConfig) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.children.Clear()
+	sm.labelConfig.Store(uint64(labelConfig))
 }
 
 type MetricItem interface {
