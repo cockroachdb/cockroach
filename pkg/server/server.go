@@ -678,8 +678,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
-	policyRefresher := policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
-		rpcContext.RemoteClocks.AllLatencies)
+	var policyRefresher *policyrefresher.PolicyRefresher
+	{
+		var knobs *policyrefresher.TestingKnobs
+		if policyRefresherKnobs := cfg.TestingKnobs.PolicyRefresherTestingKnobs; policyRefresherKnobs != nil {
+			knobs = policyRefresherKnobs.(*policyrefresher.TestingKnobs)
+		}
+		policyRefresher = policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
+			rpcContext.RemoteClocks.AllLatencies, knobs)
+	}
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
