@@ -145,9 +145,9 @@ func (c *scopeColumn) getParamOrd() int {
 }
 
 // funcParamReferencedBy returns true if the scopeColumn is a function parameter
-// column that can be referenced by the given placeholder.
-func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
-	return c.paramOrd > 0 && tree.PlaceholderIdx(c.paramOrd-1) == idx
+// column that can be referenced by the given 0-based ordinal.
+func (c *scopeColumn) funcParamReferencedBy(ord int) bool {
+	return c.paramOrd > 0 && int(c.paramOrd-1) == ord
 }
 
 // clearName sets the empty table and column name. This is used to make the
