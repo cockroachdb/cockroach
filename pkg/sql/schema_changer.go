@@ -1160,10 +1160,11 @@ func (sc *SchemaChanger) dropViewDeps(
 				log.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
 			}
-			typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID())
-			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
-				log.Warningf(ctx, "error removing dependency from type ID %d", id)
-				return err
+			if typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID()) {
+				if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
+					log.Warningf(ctx, "error removing dependency from type ID %d", id)
+					return err
+				}
 			}
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
@@ -1878,9 +1879,9 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					return err
 				}
 				if isAddition {
-					typ.AddReferencingDescriptorID(scTable.ID)
+					_ = typ.AddReferencingDescriptorID(scTable.ID)
 				} else {
-					typ.RemoveReferencingDescriptorID(scTable.ID)
+					_ = typ.RemoveReferencingDescriptorID(scTable.ID)
 				}
 				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
 					return err
