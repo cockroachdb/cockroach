@@ -23,6 +23,7 @@ go_library(
         "partition.go",
         "partition_metadata.go",
         "search_set.go",
+        "searcher.go",
         "split_data.go",
         "store.go",
         "store_errors.go",
