@@ -307,7 +307,7 @@ func computeCumStoreCompactionStats(m *pebble.Metrics) cumStoreCompactionStats {
 	baseLevel := -1
 	for i := range m.Levels {
 		compactedWriteBytes += m.Levels[i].BytesCompacted
-		if i > 0 && m.Levels[i].Size > 0 && baseLevel < 0 {
+		if i > 0 && m.Levels[i].TablesSize > 0 && baseLevel < 0 {
 			baseLevel = i
 		}
 	}
@@ -546,7 +546,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
 				cumL0AddedBytes:              m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
-				curL0Bytes:                   m.Levels[0].Size,
+				curL0Bytes:                   m.Levels[0].TablesSize,
 				cumWriteStallCount:           metrics.WriteStallCount,
 				cumFlushWriteThroughput:      m.Flush.WriteThroughput,
 				cumCompactionStats:           computeCumStoreCompactionStats(m),
@@ -564,9 +564,9 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 			ioThreshold: &admissionpb.IOThreshold{
 				L0NumSubLevels:           int64(m.Levels[0].Sublevels),
 				L0NumSubLevelsThreshold:  math.MaxInt64,
-				L0NumFiles:               m.Levels[0].NumFiles,
+				L0NumFiles:               m.Levels[0].TablesCount,
 				L0NumFilesThreshold:      math.MaxInt64,
-				L0Size:                   m.Levels[0].Size,
+				L0Size:                   m.Levels[0].TablesSize,
 				L0MinimumSizePerSubLevel: 0,
 			},
 		}
@@ -831,11 +831,11 @@ func (io *ioLoadListener) adjustTokensInner(
 	memTableSizeForStopWrites uint64,
 ) adjustTokensResult {
 	ioThreshold := &admissionpb.IOThreshold{
-		L0NumFiles:               l0Metrics.NumFiles,
+		L0NumFiles:               l0Metrics.TablesCount,
 		L0NumFilesThreshold:      threshNumFiles,
 		L0NumSubLevels:           int64(l0Metrics.Sublevels),
 		L0NumSubLevelsThreshold:  threshNumSublevels,
-		L0Size:                   l0Metrics.Size,
+		L0Size:                   l0Metrics.TablesSize,
 		L0MinimumSizePerSubLevel: l0MinSizePerSubLevel,
 	}
 	unflushedMemTableTooLarge := memTableSize > memTableSizeForStopWrites
@@ -845,7 +845,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	// history.
 	recentUnflushedMemTableTooLarge := unflushedMemTableTooLarge || io.unflushedMemTableTooLarge
 
-	curL0Bytes := l0Metrics.Size
+	curL0Bytes := l0Metrics.TablesSize
 	cumL0AddedBytes := l0Metrics.BytesFlushed + l0Metrics.BytesIngested
 	// L0 growth over the last interval.
 	intL0AddedBytes := int64(cumL0AddedBytes) - int64(prev.cumL0AddedBytes)

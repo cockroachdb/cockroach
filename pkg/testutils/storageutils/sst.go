@@ -166,7 +166,7 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 	}
 
 	// Dump rangedels.
-	if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
+	if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rdIter != nil {
 		defer rdIter.Close()
@@ -191,7 +191,7 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 	}
 
 	// Dump range keys.
-	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
+	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rkIter != nil {
 		defer rkIter.Close()
