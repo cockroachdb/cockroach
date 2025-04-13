@@ -1895,10 +1895,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "35742402ba6ca70d76fb64293d58fe4837d01620aa68a339cb157c540f909597",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250408215241-4d38942f0ce0",
+        sha256 = "b8b78da44b535acb000e9cdacc4a5d2b65a59874d989b2ebe15c574347970f2a",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250412125957-bf1dcd085694",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250408215241-4d38942f0ce0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250412125957-bf1dcd085694.zip",
         ],
     )
     go_repository(
@@ -4160,10 +4160,10 @@ def go_deps():
         name = "com_github_google_btree",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/btree",
-        sha256 = "9b9f66ca4eb36bb1867b5ff9134fb2eb9fe9717d44e28836f2e977f9c03b4128",
-        strip_prefix = "github.com/google/btree@v1.0.1",
+        sha256 = "11b736bc8252b52fecdf346d3707ccf3a2b6d458ba21b4f843616fc12eeb30b2",
+        strip_prefix = "github.com/google/btree@v1.1.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/btree/com_github_google_btree-v1.0.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/btree/com_github_google_btree-v1.1.3.zip",
         ],
     )
     go_repository(
@@ -7960,6 +7960,16 @@ def go_deps():
         strip_prefix = "github.com/PuerkitoBio/urlesc@v0.0.0-20170810143723-de5bf2ad4578",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/PuerkitoBio/urlesc/com_github_puerkitobio_urlesc-v0.0.0-20170810143723-de5bf2ad4578.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_raduberinde_axisds",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/RaduBerinde/axisds",
+        sha256 = "53a2821f7d7cc76e91278e457d5f58bc5a856c7968d4170435dac86f2d003a87",
+        strip_prefix = "github.com/RaduBerinde/axisds@v0.0.0-20250405232732-ecb85bedf677",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/com_github_raduberinde_axisds-v0.0.0-20250405232732-ecb85bedf677.zip",
         ],
     )
     go_repository(

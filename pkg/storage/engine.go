@@ -1333,7 +1333,7 @@ type MetricsForInterval struct {
 func (m *Metrics) NumSSTables() int64 {
 	var num int64
 	for _, lm := range m.Metrics.Levels {
-		num += lm.NumFiles
+		num += lm.TablesCount
 	}
 	return num
 }
@@ -1397,13 +1397,13 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
 	for i, l := range m.Levels {
-		if l.NumFiles == 0 {
+		if l.TablesCount == 0 {
 			continue
 		}
 		e.Levels = append(e.Levels, eventpb.LevelStats{
 			Level:           uint32(i),
-			NumFiles:        l.NumFiles,
-			SizeBytes:       l.Size,
+			NumFiles:        l.TablesCount,
+			SizeBytes:       l.TablesSize,
 			Score:           float32(l.Score),
 			BytesIn:         l.BytesIn,
 			BytesIngested:   l.BytesIngested,
@@ -1764,7 +1764,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 		return
 	}
 	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
-		targetDelay, metrics.Levels[0].NumFiles, metrics.Levels[0].Sublevels)
+		targetDelay, metrics.Levels[0].TablesCount, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -1777,7 +1777,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := metrics.Levels[0].NumFiles
+	l0ReadAmp := metrics.Levels[0].TablesCount
 	if metrics.Levels[0].Sublevels >= 0 {
 		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}
