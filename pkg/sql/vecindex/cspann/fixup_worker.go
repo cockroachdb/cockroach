@@ -124,6 +124,7 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 		}
 		fw.treeKey = next.TreeKey
 		fw.singleStep = next.SingleStep
+		fw.txn = nil
 
 		// Invoke the fixup function. Note that we do not hold the lock while
 		// processing the fixup.
@@ -574,14 +575,9 @@ func (fw *fixupWorker) linkNearbyVectors(
 	// TODO(andyk): Add way to filter search set in order to skip vectors deeper
 	// down in the search rather than afterwards.
 	idxCtx := fw.reuseIndexContext(fw.txn, fw.treeKey)
-	idxCtx.options = SearchOptions{ReturnVectors: true}
+	idxCtx.options = SearchOptions{}
 	idxCtx.level = partition.Level()
 	idxCtx.randomized = partition.Centroid()
-
-	// Ensure that the search never returns the last remaining vector in a
-	// non-leaf partition, in order to avoid moving it and creating an empty
-	// non-leaf partition, which is not allowed by a balanced K-means tree.
-	idxCtx.ignoreLonelyVector = partition.Level() != LeafLevel
 
 	// Don't link more vectors than the number of remaining slots in the split
 	// partition, to avoid triggering another split.
@@ -828,10 +824,13 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 		return nil
 	}
 
- 	// Run in a transaction if not already.
+	// Run in a transaction if not already.
 	if fw.txn == nil {
 		err = fw.index.store.RunTransaction(ctx, func(txn Txn) error {
 			fw.txn = txn
+			defer func() {
+				fw.txn = nil
+			}()
 			return run()
 		})
 	} else {

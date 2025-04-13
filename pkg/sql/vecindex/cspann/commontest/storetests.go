@@ -1085,18 +1085,17 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 		suite.NoError(err)
 		suite.False(removed) // no vectors removed
 
-		// Try to remove the last remaining vectors in the partition.
+		// Remove the last remaining vectors in the partition.
 		childKeys = []cspann.ChildKey{partitionKey2, partitionKey3}
 		removed, err = store.TryRemoveFromPartition(suite.ctx, treeKey, partitionKey,
 			childKeys, expected)
-		suite.ErrorContains(err, "cannot remove last remaining vector from non-leaf partition")
+		suite.NoError(err)
 		suite.True(removed)
 
-		// Verify that partition contains one last remaining vector.
+		// Verify that partition contains no remaining vectors.
 		partition, err = store.TryGetPartition(suite.ctx, treeKey, partitionKey)
 		suite.NoError(err)
-		suite.Equal(1, partition.Count())
-		suite.Equal([]cspann.ChildKey{partitionKey3}, partition.ChildKeys())
+		suite.Equal(0, partition.Count())
 	}
 
 	suite.Run("default tree", func() {
@@ -1347,7 +1346,7 @@ func (suite *StoreTestSuite) testLeafPartition(
 			// Search partition.
 			searchSet := cspann.SearchSet{MaxResults: 2}
 			toSearch := []cspann.PartitionToSearch{{Key: partitionKey}}
-			 err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
+			err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
 			suite.NoError(err)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 1, ErrorBound: 0,

@@ -212,6 +212,12 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		}
 	}
 
+	// If re-ranking results, make sure there are enough extra results to do that
+	// effectively.
+	if !options.SkipRerank {
+		searchSet.MaxExtraResults = searchSet.MaxResults * cspann.RerankMultiplier
+	}
+
 	if vec == nil {
 		// Parse input as the vector to search for.
 		vec = s.parseVector(d.Input)
@@ -653,9 +659,10 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		}
 	}
 
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
-	s.MemStore = memstore.New(s.Quantizer, 42)
-	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, 42, &s.Options, s.Stopper)
+	const seed = 42
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed)
+	s.MemStore = memstore.New(s.Quantizer, seed)
+	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
 
 	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
@@ -941,19 +948,28 @@ func TestIndexConcurrency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// Load features.
-	vectors := testutils.LoadFeatures(t, 1000)
+	features := testutils.LoadFeatures(t, 1000)
 
-	primaryKeys := make([]cspann.KeyBytes, vectors.Count)
-	for i := range vectors.Count {
+	// Trim feature dimensions from 512 to 4, in order to make the test run
+	// faster and hit more interesting concurrency combinations.
+	const dims = 4
+	vectors := vector.MakeSet(dims)
+
+	primaryKeys := make([]cspann.KeyBytes, features.Count)
+	for i := range features.Count {
 		primaryKeys[i] = cspann.KeyBytes(fmt.Sprintf("vec%d", i))
+		vectors.Add(features.At(i)[:dims])
 	}
 
 	for i := range 10 {
+		log.Infof(ctx, "iteration %d", i)
+
 		options := cspann.IndexOptions{
 			MinPartitionSize: 2,
 			MaxPartitionSize: 8,
 			BaseBeamSize:     2,
 			QualitySamples:   4,
+			UseNewFixups:     true,
 		}
 		seed := int64(i)
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
@@ -1009,6 +1025,7 @@ func buildIndex(
 			var idxCtx cspann.Context
 			for j := start; j < end; j += blockSize {
 				insertBlock(&idxCtx, j, min(j+blockSize, end))
+				index.ProcessFixups()
 			}
 		}(i, end)
 	}
@@ -1031,54 +1048,66 @@ func buildIndex(
 
 	// Process any remaining fixups.
 	index.ProcessFixups()
+
+	log.Infof(ctx, "%d vectors inserted", vectors.Count)
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
 	treeKey := memstore.ToTreeKey(memstore.TreeID(0))
 
-	vectorCount := 0
+	// Duplicate vectors are possible in the index, so the total count of vectors
+	// is not deterministc. Instead, return the number of unique vectors, which
+	// should be stable.
+	var deDup cspann.ChildKeyDeDup
+	deDup.Init(1000)
+
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
 	for {
 		// Get all child keys for next level.
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
 			partition, err := store.TryGetPartition(ctx, treeKey, key)
-			require.NoError(t, err)
-			childKeys = append(childKeys, partition.ChildKeys()...)
+			if !errors.Is(err, cspann.ErrPartitionNotFound) {
+				// Ignore ErrPartitionNotFound, as splits can cause dangling
+				// partition keys.
+				require.NoError(t, err)
+				childKeys = append(childKeys, partition.ChildKeys()...)
+			}
 		}
 
 		if len(childKeys) == 0 {
 			break
 		}
 
-		// Verify full vectors exist for the level.
-		commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
-			refs := make([]cspann.VectorWithKey, len(childKeys))
-			for i := range childKeys {
-				refs[i].Key = childKeys[i]
-			}
-			err := txn.GetFullVectors(ctx, treeKey, refs)
-			require.NoError(t, err)
-			for i := range refs {
-				if refs[i].Vector == nil {
-					panic("vector is nil")
+		if childKeys[0].KeyBytes != nil {
+			// This is the leaf level, so verify that full vectors exist. Count
+			// the number of unique vectors.
+			commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
+				refs := make([]cspann.VectorWithKey, len(childKeys))
+				for i := range childKeys {
+					refs[i].Key = childKeys[i]
+					deDup.TryAdd(childKeys[i])
 				}
-				require.NotNil(t, refs[i].Vector)
-			}
-		})
+				err := txn.GetFullVectors(ctx, treeKey, refs)
+				require.NoError(t, err)
+				for i := range refs {
+					if refs[i].Vector == nil {
+						panic("vector is nil")
+					}
+					require.NotNil(t, refs[i].Vector)
+				}
+			})
 
-		// If this is not the leaf level, then process the next level.
-		if childKeys[0].KeyBytes == nil {
-			partitionKeys = make([]cspann.PartitionKey, len(childKeys))
-			for i := range childKeys {
-				partitionKeys[i] = childKeys[i].PartitionKey
-			}
-		} else {
-			// This is the leaf level, so count vectors and end.
-			vectorCount += len(childKeys)
+			// No more levels to process.
 			break
+		}
+
+		// This is not the leaf level, so process the next level.
+		partitionKeys = make([]cspann.PartitionKey, len(childKeys))
+		for i := range childKeys {
+			partitionKeys[i] = childKeys[i].PartitionKey
 		}
 	}
 
-	return vectorCount
+	return deDup.Count()
 }
