@@ -8,6 +8,7 @@ package vecindex
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -175,7 +176,7 @@ func (m *Manager) GetWithDesc(
 				return nil, err
 			}
 
-			return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+			return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, m.getIndexOptions(), m.stopper)
 		},
 	)
 }
@@ -205,9 +206,18 @@ func (m *Manager) Get(
 			// passed to cspann.NewIndex, and we don't want that to be the context of
 			// the Get call.
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(), m.stopper)
 		},
 	)
+}
+
+func (m *Manager) getIndexOptions() *cspann.IndexOptions {
+	// Hook up the StalledOpTimeout callback to the cluster setting.
+	return &cspann.IndexOptions{
+		StalledOpTimeout: func() time.Duration {
+			return StalledOpTimeoutSetting.Get(m.sv)
+		},
+	}
 }
 
 func (m *Manager) getVecConfig(
