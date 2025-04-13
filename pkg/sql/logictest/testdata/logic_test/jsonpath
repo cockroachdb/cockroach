@@ -195,6 +195,11 @@ SELECT '$.number()'::JSONPATH;
 statement error unimplemented
 SELECT '$.string()'::JSONPATH;
 
+query T
+SELECT '$.*'::JSONPATH
+----
+$.*
+
 ## When we allow table creation
 
 # statement ok
@@ -221,11 +226,6 @@ SELECT '$.string()'::JSONPATH;
 # SELECT * FROM a WHERE j = '$.a'
 
 ## Unsupported Jsonpath
-
-# query T
-# SELECT '$.*'::JSONPATH
-# ----
-# $.*
 
 # query T
 # SELECT '$.a.type()'::JSONPATH

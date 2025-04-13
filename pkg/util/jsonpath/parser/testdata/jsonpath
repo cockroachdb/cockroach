@@ -608,19 +608,21 @@ $."a".type() -- normalized!
 # $.abc[1.1]
 # ----
 
-# in postgres this becomes $."a"[1000000000]
-# parse
-# $.abc[1e9]
-# ----
+# Postgres outputs $."abc"[1000000000].
+parse
+$.abc[1e9]
+----
+$."abc"[1E+9] -- normalized!
 
 # parse
 # $.abc[0.0]
 # ----
 
-# postgres allows negatives as array indexes
-# parse
-# $.abc[-0]
-# ----
+# TODO(normanchenn): Related to the TODOs in pkg/util/jsonpath/operation.go.
+parse
+$.abc[-0]
+----
+$."abc"[(-0)] -- normalized!
 
 # parse
 # $.abc[-1.99]
@@ -630,10 +632,11 @@ $."a".type() -- normalized!
 # $[1.999999999999999]
 # ----
 
-# parse
-# $.1a
-# ----
+parse
+$[null]
+----
+$[null]
 
 # parse
-# $[null]
+# $.1a
 # ----
