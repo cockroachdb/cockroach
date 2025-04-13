@@ -1049,10 +1049,12 @@ vec6: (7, 4)
     └───• vec4 (-3, 2)
 
 # Trigger completion of partition #2 split.
+# NOTE: vec6 is an extra duplicate zero (within error bound of zero).
 search
 (7, 4)
 ----
 vec2: 0 (centroid=0.28)
+vec6: 0 (centroid=3.81)
 10 leaf vectors, 14 vectors, 3 full vectors, 4 partitions
 
 format-tree

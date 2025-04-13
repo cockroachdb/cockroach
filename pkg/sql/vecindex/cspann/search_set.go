@@ -168,20 +168,18 @@ func (ss *SearchStats) Add(other *SearchStats) {
 
 // SearchSet incrementally maintains the nearest candidates that result from
 // searching a partition for the data vectors that are nearest to a query
-// vector. Candidates are repeatedly added via the Add methods and the Pop
-// methods return a sorted list of the best candidates. Candidates are
+// vector. Candidates are repeatedly added via the Add methods and then the Pop
+// methods returns a sorted list of the best candidates. Candidates are
 // de-duplicated, such that no two results will have the same child key.
 type SearchSet struct {
-	// MaxResults specifies the max number of search results to return. Although
-	// these are the best results, the search process may retrieve additional
-	// candidates for reranking and statistics (up to MaxExtraResults) that are
-	// within the error threshold of being among the best results.
+	// MaxResults specifies the max number of best search results to return from
+	// a call to the Pop methods.
 	MaxResults int
 
 	// MaxExtraResults is the maximum number of additional candidates (beyond
-	// MaxResults) that will be returned by the search process for reranking and
-	// statistics. These results are within the error threshold of being among the
-	// best results.
+	// MaxResults) that will be returned by the Pop methods. These results are
+	// within the error threshold of being among the best results and are used
+	// for reranking.
 	MaxExtraResults int
 
 	// MatchKey, if non-nil, filters out all search candidates that do not have a
@@ -193,7 +191,7 @@ type SearchSet struct {
 	Stats SearchStats
 
 	// deDuper is used to de-duplicate search results by their child keys.
-	deDuper childKeyDeDup
+	deDuper ChildKeyDeDup
 	// pruningThreshold records how many results can be added to the search set
 	// before a pruning pass happens, where the best results are retained and
 	// worse results are discarded.
@@ -202,8 +200,24 @@ type SearchSet struct {
 	// unsorted order. Periodically, these are pruned so that its length never
 	// exceeds the pruning threshold.
 	candidates searchResultHeap
+	// heapified is true if heap.Init has been called on the candidates so that
+	// the heap invariants hold.
+	heapified bool
 	// tempResult is used to avoid heap allocations when searching partitions.
 	tempResult SearchResult
+}
+
+// Count returns the number of search candidates in the set.
+// NOTE: This can be greater than MaxResults + MaxExtraResults in the case where
+// pruning has not yet taken place.
+func (ss *SearchSet) Count() int {
+	return len(ss.candidates)
+}
+
+// Clear removes all candidates from the set.
+func (ss *SearchSet) Clear() {
+	ss.candidates = ss.candidates[:0]
+	ss.deDuper.Clear()
 }
 
 // RemoveByParent removes all results that are in the given parent partition.
@@ -222,6 +236,7 @@ func (ss *SearchSet) RemoveByParent(parentPartitionKey PartitionKey) {
 		}
 		i++
 	}
+	ss.heapified = false
 }
 
 // Add includes a new candidate in the search set.
@@ -232,18 +247,12 @@ func (ss *SearchSet) Add(candidate *SearchResult) {
 	}
 
 	if ss.candidates == nil {
-		ss.candidates = make(searchResultHeap, 0, ss.MaxResults)
+		// Pre-allocate some capacity for candidates.
+		ss.candidates = make(searchResultHeap, 0, 16)
 	}
 	ss.candidates = append(ss.candidates, *candidate)
-
-	// If the length of the candidates slice has reached the pruning threshold,
-	// then prune results with the highest distances.
-	if ss.pruningThreshold == 0 {
-		ss.pruningThreshold = max(20, (ss.MaxResults+ss.MaxExtraResults)*2)
-	}
-	if len(ss.candidates) >= ss.pruningThreshold {
-		ss.pruneCandidates()
-	}
+	ss.heapified = false
+	ss.checkPruneCandidates()
 }
 
 // AddAll includes a set of candidates in the search set.
@@ -254,41 +263,154 @@ func (ss *SearchSet) AddAll(candidates SearchResults) {
 	}
 }
 
-// PopResults removes all results from the set and returns them in sorted order,
-// by distance.
-func (ss *SearchSet) PopResults() SearchResults {
-	ss.pruneCandidates()
-	popped := ss.candidates
-	ss.candidates = nil
-	return SearchResults(popped)
+// AddSet copies all candidates from the given search set to this search set.
+func (ss *SearchSet) AddSet(searchSet *SearchSet) {
+	if searchSet.Count() == 0 {
+		return
+	}
+	ss.candidates = slices.Grow(ss.candidates, len(searchSet.candidates))
+	if ss.MatchKey != nil {
+		// Add each candidate individually in order to check the match key.
+		ss.AddAll(SearchResults(searchSet.candidates))
+	} else {
+		// Append entire candidates slice.
+		ss.candidates = append(ss.candidates, searchSet.candidates...)
+		ss.heapified = false
+		ss.checkPruneCandidates()
+	}
 }
 
-// pruneCandidates keeps the best candidates, up to the configured maximum
-// number of results, and arranges them in sorted order in the candidates slice.
-// Candidates that are farther away (within error bounds) are discarded. Pruning
-// happens only after a sizeable number of candidates have been added to the
-// search set.
-//
-// Pruning in batches is O(N + K + K*logN), where N is the number of candidates
-// and K is the number of best results (always fewer than MaxResults +
-// MaxExtraResults). Compare that to pruning as results are added to the search
-// set, which has complexity O(N + N + N*logN). The savings come from being able
-// to short-circuit results that are outside the best distance bounds. For
-// example, there's no need to perform expensive duplicate detection if a
-// result's distance could never be among the best results.
-//
-// NOTE: After calling this, the length of the candidates slice will always be
-// <= MaxResults + MaxExtraResults. Results will be ordered by their
-// QuerySquaredDistance field in that slice.
+// FindBestDistances sets the input "distances" slice to the
+// QuerySquaredDistance values for the closest candidate search results. It
+// returns the "distances" slice, possibly truncated if there are not enough
+// search results to fill it. The returned distances are unsorted and duplicates
+// are not filtered.
+func (ss *SearchSet) FindBestDistances(distances []float64) []float64 {
+	// Can't return more distances than there are candidates.
+	n := len(ss.candidates)
+	k := min(len(distances), n)
+
+	// Copy all distances to the output slice. Track the max distance.
+	maxDistance := float32(-1)
+	maxOffset := -1
+	for i := range k {
+		distance := ss.candidates[i].QuerySquaredDistance
+		if distance > maxDistance {
+			maxDistance = distance
+			maxOffset = i
+		}
+		distances[i] = float64(distance)
+	}
+
+	// For each remaining candidate, if its distance is smaller than the largest
+	// in our result so far, replace that largest one.
+	for i := k; i < n; i++ {
+		distance := ss.candidates[i].QuerySquaredDistance
+		if distance < maxDistance {
+			// Find the largest distance in our current result.
+			distances[maxOffset] = float64(distance)
+			maxDistance64 := distances[0]
+			maxOffset = 0
+			for j := 1; j < k; j++ {
+				if distances[j] > maxDistance64 {
+					maxDistance64 = distances[j]
+					maxOffset = j
+				}
+			}
+			maxDistance = float32(maxDistance64)
+		}
+	}
+
+	return distances[:k]
+}
+
+// PopResults removes the best results from the set, returning them in sorted
+// order, by distance. The number of best results is always <= ss.MaxResults +
+// ss.MaxExtraResults. This method may be called repeatedly to get additional
+// results that may be cached in the set. As long as the Add methods are not
+// called between calls to Pop methods, duplicates will never be returned.
+func (ss *SearchSet) PopResults() SearchResults {
+	// findBestCandidates moves the best candidates to the beginning of the
+	// ss.candidates list, so return those and preserve remaining candidates for
+	// any future calls to PopResults. Discard any duplicates by reslicing after
+	// both best and duplicate candidates. Note that any remaining candidates are
+	// still in heap order.
+	count, dups := ss.findBestCandidates(ss.MaxResults, ss.MaxExtraResults)
+	popped := SearchResults(ss.candidates[:count])
+	ss.candidates = ss.candidates[count+dups:]
+	return popped
+}
+
+// PopBestResult removes the best result from the set and returns it. This
+// method may be called repeatedly to get additional results that may be cached
+// in the set. As long as the Add methods are not called between calls to Pop
+// methods, duplicates will never be returned.
+func (ss *SearchSet) PopBestResult() *SearchResult {
+	count, dups := ss.findBestCandidates(1, 0)
+	if count == 0 {
+		return nil
+	}
+	popped := &ss.candidates[0]
+	ss.candidates = ss.candidates[count+dups:]
+	return popped
+}
+
+// checkPruneCandidates checks if the length of the candidates slice has reached
+// the pruning threshold. If so, it prunes results with the highest distances.
+func (ss *SearchSet) checkPruneCandidates() {
+	if ss.pruningThreshold == 0 {
+		ss.pruningThreshold = max(1024, (ss.MaxResults+ss.MaxExtraResults)*2)
+	}
+	if len(ss.candidates) >= ss.pruningThreshold {
+		ss.pruneCandidates()
+	}
+}
+
+// pruneCandidates reduces the number of search candidates to ss.MaxResults +
+// ss.MaxExtraResults, retaining only the best candidates by distance.
+// Candidates that are farther away are discarded. Pruning happens only after a
+// sizeable number of candidates have been added to the search set.
 func (ss *SearchSet) pruneCandidates() {
+	// The best candidates are moved to the beginning of the ss.candidates slice,
+	// so this amounts to truncating the slice.
+	count, _ := ss.findBestCandidates(ss.MaxResults, ss.MaxExtraResults)
+	ss.candidates = ss.candidates[:count]
+
+	// The candidates are not in heap order. Also clear the de-duper, to release
+	// the memory from discarded candidates.
+	ss.heapified = false
+	ss.deDuper.Clear()
+}
+
+// findBestCandidates finds the best candidates by distance, up to the specified
+// maximum number of results, and returns their count. The best candidates are
+// moved to the front of the candidates slice in sorted order.
+// findBestCandidates also returns the number of duplicate candidates it found.
+// These are moved just beyond the best candidates.
+//
+// Finding in batches is O(N + K + K*logN), where N is the total number of
+// candidates and K is the specified maximum number of results. Compare that to
+// pruning as results are added to the search set, which has complexity
+// O(N + N + N*logN). The savings come from being able to short-circuit results
+// that are outside the best distance bounds. For example, there's no need to
+// perform expensive duplicate detection if a result's distance could never be
+// among the best results.
+func (ss *SearchSet) findBestCandidates(maxResults, extraResults int) (count, dups int) {
 	candidates := ss.candidates
 	totalCount := 0
 	nonDupCount := 0
 	var thresholdCandidate *SearchResult
 
-	ss.deDuper.Init(ss.MaxResults * 2)
-	heap.Init(&candidates)
-	for len(candidates) > 0 && nonDupCount < ss.MaxResults+ss.MaxExtraResults {
+	if ss.deDuper.Count() == 0 {
+		ss.deDuper.Init(maxResults + extraResults)
+	}
+
+	if !ss.heapified {
+		heap.Init(&candidates)
+		ss.heapified = true
+	}
+
+	for len(candidates) > 0 && nonDupCount < maxResults+extraResults {
 		// Pop will copy the candidate with the smallest distance to candidates[0].
 		heap.Pop(&candidates)
 
@@ -308,11 +430,11 @@ func (ss *SearchSet) pruneCandidates() {
 			}
 			nonDupCount++
 
-			// Once we have MaxResults candidates, then we need to start looking
-			// for MaxExtraResults candidates. A candidate is only eligible to be
+			// Once we have maxResults candidates, then we need to start looking
+			// for maxExtraResults candidates. A candidate is only eligible to be
 			// an extra result if it could be among the best results, according to
 			// its error bounds.
-			if thresholdCandidate == nil && nonDupCount >= ss.MaxResults {
+			if extraResults > 0 && thresholdCandidate == nil && nonDupCount >= maxResults {
 				thresholdCandidate = &ss.candidates[nonDupCount-1]
 			}
 		}
@@ -320,5 +442,5 @@ func (ss *SearchSet) pruneCandidates() {
 		candidates = candidates[1:]
 	}
 
-	ss.candidates = ss.candidates[:nonDupCount]
+	return nonDupCount, totalCount - nonDupCount
 }

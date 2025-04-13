@@ -111,21 +111,9 @@ type memPartition struct {
 		partition *cspann.Partition
 		// created is the logical clock time at which the partition was created.
 		created uint64
-		// deleted is true if the partition has been deleted.
-		deleted bool
+		// deleted is the logical clock time at which the partition was deleted.
+		deleted uint64
 	}
-}
-
-// isVisibleLocked returns true if the partition is visible to a transaction at
-// the given logical clock time. Once a partition has been deleted, it is not
-// considered visible to any transaction, regardless of its current time. In
-// addition, if a transaction's current time is before the root partition's
-// creation time, then the partition is not visible. This latter check is
-// necessary because the root partition is modified in-place, unlike other
-// partitions which are never reused after their deletion.
-// NOTE: Callers must acquire p.lock before calling this.
-func (p *memPartition) isVisibleLocked(current uint64) bool {
-	return !p.lock.deleted && (p.key.partitionKey != cspann.RootKey || current > p.lock.created)
 }
 
 // pendingItem tracks currently active transactions as well as partitions that
@@ -245,26 +233,6 @@ func (s *Store) commitTransaction(txn cspann.Txn) error {
 	tx := txn.(*memTxn)
 	for i := range tx.ownedLocks {
 		tx.ownedLocks[i].Release()
-	}
-
-	// Panic if the K-means tree contains an empty non-leaf partition after the
-	// transaction ends, as this violates the constraint that the K-means tree
-	// is always full balanced. This is helpful in testing.
-	if tx.unbalanced != nil {
-		// Need to acquire partition lock before inspecting the partition.
-		func() {
-			tx.unbalanced.lock.AcquireShared(tx.id)
-			defer tx.unbalanced.lock.ReleaseShared()
-
-			partition := tx.unbalanced.lock.partition
-			if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
-				if tx.unbalanced.isVisibleLocked(tx.current) {
-					panic(errors.AssertionFailedf(
-						"K-means tree is unbalanced, with empty non-leaf partition %d",
-						tx.unbalanced.key))
-				}
-			}
-		}()
 	}
 
 	s.mu.Lock()
@@ -389,14 +357,14 @@ func (s *Store) TryDeletePartition(
 	}
 	defer memPart.lock.Release()
 
-	// Mark partition as deleted.
-	if memPart.lock.deleted {
-		panic(errors.AssertionFailedf("partition %d is already deleted", partitionKey))
-	}
-	memPart.lock.deleted = true
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Mark partition as deleted.
+	if memPart.lock.deleted != 0 {
+		panic(errors.AssertionFailedf("partition %d is already deleted", partitionKey))
+	}
+	memPart.lock.deleted = s.tickLocked()
 
 	// Add the partition to the pending list so that it will only be garbage
 	// collected once all older transactions have ended.
@@ -541,18 +509,6 @@ func (s *Store) TryRemoveFromPartition(
 
 	// Remove vectors from the partition.
 	for i := range childKeys {
-		if partition.Level() > cspann.LeafLevel && partition.Count() == 1 {
-			// Cannot remove the last remaining vector in a non-leaf partition, as
-			// this would create an unbalanced K-means tree. However, this doesn't
-			// apply to the root partition that's draining.
-			state := existing.StateDetails.State
-			if partitionKey != cspann.RootKey || state != cspann.DrainingForSplitState {
-				err = errors.AssertionFailedf(
-					"cannot remove last remaining vector from non-leaf partition %d", partitionKey)
-				break
-			}
-		}
-
 		removed = partition.ReplaceWithLastByKey(childKeys[i]) || removed
 	}
 
@@ -856,7 +812,7 @@ func (s *Store) lockPartition(
 	}
 
 	// If the partition is deleted, then release the lock and return nil.
-	if memPart.lock.deleted {
+	if memPart.lock.deleted != 0 {
 		if isExclusive {
 			memPart.lock.Release()
 		} else {
