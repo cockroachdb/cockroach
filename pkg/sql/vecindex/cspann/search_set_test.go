@@ -95,11 +95,6 @@ func TestSearchSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Empty.
-	searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
-	require.Nil(t, searchSet.PopResults())
-
-	// Exceed max results, outside of error bounds.
 	result1 := SearchResult{
 		QuerySquaredDistance: 3, ErrorBound: 0.5, CentroidDistance: 10, ParentPartitionKey: 100, ChildKey: ChildKey{KeyBytes: []byte{10}}}
 	result2 := SearchResult{
@@ -108,58 +103,172 @@ func TestSearchSet(t *testing.T) {
 		QuerySquaredDistance: 1, ErrorBound: 0.5, CentroidDistance: 30, ParentPartitionKey: 300, ChildKey: ChildKey{KeyBytes: []byte{30}}}
 	result4 := SearchResult{
 		QuerySquaredDistance: 4, ErrorBound: 0.5, CentroidDistance: 40, ParentPartitionKey: 400, ChildKey: ChildKey{KeyBytes: []byte{40}}}
-	searchSet.Add(&result1)
-	searchSet.Add(&result2)
-	searchSet.Add(&result3)
-	searchSet.Add(&result4)
-	require.Equal(t, SearchResults{result3, result1, result4}, searchSet.PopResults())
-
-	// Exceed max results, but within error bounds.
 	result5 := SearchResult{
 		QuerySquaredDistance: 6, ErrorBound: 1.5, CentroidDistance: 50, ParentPartitionKey: 500, ChildKey: ChildKey{KeyBytes: []byte{50}}}
 	result6 := SearchResult{
 		QuerySquaredDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{KeyBytes: []byte{60}}}
-	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	require.Equal(t, SearchResults{result3, result1, result4, result6}, searchSet.PopResults())
-
-	// Don't allow extra results.
-	otherSet := SearchSet{MaxResults: 3}
-	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	require.Equal(t, SearchResults{result3, result1, result4}, otherSet.PopResults())
-
-	// Add better results that invalidate farther candidates.
 	result7 := SearchResult{
 		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{KeyBytes: []byte{70}}}
-	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
-
 	result8 := SearchResult{
 		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{KeyBytes: []byte{80}}}
-	searchSet.AddAll(SearchResults{result1, result2, result3, result4})
-	searchSet.AddAll(SearchResults{result5, result6, result7, result8})
-	require.Equal(t, SearchResults{result8, result3, result1, result4, result7}, searchSet.PopResults())
 
-	// Allow one extra result.
-	otherSet.MaxExtraResults = 1
-	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result3, result1, result4, result7}, otherSet.PopResults())
+	t.Run("empty set", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		require.Equal(t, 0, searchSet.Count())
+		require.Nil(t, searchSet.PopResults())
+	})
 
-	// Ignore duplicate results.
-	searchSet.AddAll(SearchResults{result1, result2, result1, result3, result4, result1, result5, result6, result7, result1})
-	require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
+	t.Run("exceed max results, outside of error bounds", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		searchSet.Add(&result1)
+		searchSet.Add(&result2)
+		searchSet.Add(&result3)
+		searchSet.Add(&result4)
+		require.Equal(t, 4, searchSet.Count())
+		require.Equal(t, SearchResults{result3, result1, result4}, searchSet.PopResults())
+	})
 
-	// Ignore results without a matching primary key.
-	otherSet = SearchSet{MaxResults: 2, MatchKey: []byte{60}}
-	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result6}, otherSet.PopResults())
+	t.Run("exceed max results, but within error bounds", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+		require.Equal(t, SearchResults{result3, result1, result4, result6}, searchSet.PopResults())
+	})
 
-	// RemoveByParent.
-	searchSet = SearchSet{MaxResults: 4, MaxExtraResults: 2}
-	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	searchSet.RemoveByParent(100)
-	require.Equal(t, SearchResults{result3, result4, result6, result2, result5}, searchSet.PopResults())
+	t.Run("don't allow extra results", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+		require.Equal(t, SearchResults{result3, result1, result4}, searchSet.PopResults())
+	})
 
-	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	searchSet.RemoveByParent(200)
-	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
+	t.Run("add better results that invalidate farther candidates", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+		require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
+		searchSet.Clear()
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4})
+		searchSet.AddAll(SearchResults{result5, result6, result7, result8})
+		require.Equal(t, SearchResults{result8, result3, result1, result4, result7}, searchSet.PopResults())
+	})
+
+	t.Run("allow one extra result", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 1}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+		require.Equal(t, SearchResults{result3, result1, result4, result7}, searchSet.PopResults())
+	})
+
+	t.Run("ignore duplicate results", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		searchSet.AddAll(SearchResults{result1, result2, result1, result3, result4, result1, result5, result6, result7, result1})
+		require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
+	})
+
+	t.Run("ignore results without a matching primary key", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 2, MatchKey: []byte{60}}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+		require.Equal(t, SearchResults{result6}, searchSet.PopResults())
+	})
+
+	t.Run("test RemoveByParent", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 4, MaxExtraResults: 2}
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+		searchSet.RemoveByParent(100)
+		require.Equal(t, SearchResults{result3, result4, result6, result2, result5}, searchSet.PopResults())
+		searchSet.Clear()
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+		searchSet.RemoveByParent(200)
+		require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
+	})
+
+	t.Run("trigger pruning", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		searchSet.pruningThreshold = 5
+		searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+		require.Equal(t, 4, searchSet.Count())
+		require.Equal(t, SearchResults{result3, result1, result4}, searchSet.PopResults())
+	})
+
+	t.Run("call PopResults repeatedly, with duplicates present", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		searchSet.AddAll(SearchResults{result1, result2, result1, result3, result4, result1, result5, result6, result7, result1, result8})
+		require.Equal(t, SearchResults{result8, result3}, searchSet.PopResults())
+		require.Equal(t, SearchResults{result1, result4, result7}, searchSet.PopResults())
+		require.Equal(t, SearchResults{result6, result2, result5}, searchSet.PopResults())
+
+		// Duplicates are ignored until Clear is called.
+		searchSet.AddAll(SearchResults{result1, result1})
+		require.Equal(t, SearchResults{}, searchSet.PopResults())
+		searchSet.Clear()
+		searchSet.AddAll(SearchResults{result1, result1})
+		require.Equal(t, SearchResults{result1}, searchSet.PopResults())
+	})
+
+	t.Run("call PopBestResult repeatedly, with duplicates present", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
+		searchSet.AddAll(SearchResults{result1, result2, result1, result3, result4, result1, result5, result6, result7, result1, result8})
+		require.Equal(t, &result8, searchSet.PopBestResult())
+		require.Equal(t, &result3, searchSet.PopBestResult())
+		require.Equal(t, &result1, searchSet.PopBestResult())
+		require.Equal(t, &result4, searchSet.PopBestResult())
+		require.Equal(t, &result7, searchSet.PopBestResult())
+		require.Equal(t, &result6, searchSet.PopBestResult())
+		require.Equal(t, &result2, searchSet.PopBestResult())
+		require.Equal(t, &result5, searchSet.PopBestResult())
+
+		// Duplicates are ignored until Clear is called.
+		searchSet.AddAll(SearchResults{result1, result5, result3, result8})
+		require.Equal(t, SearchResults{}, searchSet.PopResults())
+		searchSet.Clear()
+		searchSet.AddAll(SearchResults{result1, result5, result3, result8})
+		require.Equal(t, SearchResults{result8, result3, result1}, searchSet.PopResults())
+	})
+
+	t.Run("test AddSet with no MatchKey", func(t *testing.T) {
+		// set1 has results 1 to 4.
+		set1 := SearchSet{MaxResults: 3, MaxExtraResults: 1}
+		set1.AddAll(SearchResults{result1, result2, result1, result3, result4})
+
+		// set2 has results 5 to 8, with duplicate results 1 and 2.
+		set2 := SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		set2.AddAll(SearchResults{result1, result5, result6, result2, result7, result1, result8})
+
+		// Add set1 to set2 and check that both sets have expected candidates.
+		set2.AddSet(&set1)
+		require.Equal(t, 5, set1.Count())
+		require.Equal(t, 12, set2.Count())
+		require.Equal(t, SearchResults{result3, result1, result4}, set1.PopResults())
+		require.Equal(t, SearchResults{result2}, set1.PopResults())
+		require.Equal(t, SearchResults{result8, result3}, set2.PopResults())
+		require.Equal(t, SearchResults{result1, result4, result7}, set2.PopResults())
+		require.Equal(t, SearchResults{result6, result2, result5}, set2.PopResults())
+
+		// Add empty set.
+		set1 = SearchSet{MaxResults: 3, MaxExtraResults: 1}
+		set1.AddAll(SearchResults{result1, result2, result1, result3, result4})
+		set2 = SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		set1.AddSet(&set2)
+		require.Equal(t, 5, set1.Count())
+	})
+
+	t.Run("test AddSet with MatchKey", func(t *testing.T) {
+		set1 := SearchSet{MaxResults: 1, MatchKey: []byte{60}}
+		set1.AddAll(SearchResults{result6})
+		set2 := SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		set2.AddAll(SearchResults{result6, result2, result6, result5})
+		set1.AddSet(&set2)
+		require.Equal(t, 3, set1.Count())
+		require.Equal(t, 4, set2.Count())
+	})
+
+	t.Run("test FindBestDistances", func(t *testing.T) {
+		searchSet := SearchSet{MaxResults: 2, MaxExtraResults: 1}
+		searchSet.AddAll(SearchResults{
+			result1, result2, result3, result4, result1, result5, result6, result7, result1, result8})
+
+		var distances [20]float64
+		require.Equal(t, []float64{}, searchSet.FindBestDistances(distances[:0]))
+		require.Equal(t, []float64{0.5}, searchSet.FindBestDistances(distances[:1]))
+		require.Equal(t, []float64{0.5, 3, 1, 3}, searchSet.FindBestDistances(distances[:4]))
+		require.Equal(t, []float64{3, 3, 1, 4, 3, 0.5, 5, 4}, searchSet.FindBestDistances(distances[:8]))
+		require.Equal(t, []float64{3, 6, 1, 4, 3, 6, 5, 4, 3, 0.5}, searchSet.FindBestDistances(distances[:12]))
+	})
 }

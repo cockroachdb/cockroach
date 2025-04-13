@@ -19,42 +19,48 @@ func TestChildKeyDeDupAddPartitionKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var dd childKeyDeDup
+	var dd ChildKeyDeDup
 	dd.Init(10)
 
 	// Add a new PartitionKey.
 	added := dd.TryAdd(ChildKey{PartitionKey: 123})
 	require.True(t, added)
+	require.Equal(t, 1, dd.Count())
 
 	// Try to add the same key again (should be a duplicate).
 	added = dd.TryAdd(ChildKey{PartitionKey: 123})
 	require.False(t, added)
+	require.Equal(t, 1, dd.Count())
 
 	// Add a different PartitionKey.
 	added = dd.TryAdd(ChildKey{PartitionKey: 456})
 	require.True(t, added)
+	require.Equal(t, 2, dd.Count())
 }
 
 func TestChildKeyDeDupAddKeyBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var dd childKeyDeDup
+	var dd ChildKeyDeDup
 	dd.Init(10)
 
 	// Add a new KeyBytes.
 	key1 := []byte("key1")
 	added := dd.TryAdd(ChildKey{KeyBytes: key1})
 	require.True(t, added)
+	require.Equal(t, 1, dd.Count())
 
 	// Try to add the same key again (should be a duplicate).
 	added = dd.TryAdd(ChildKey{KeyBytes: key1})
 	require.False(t, added)
+	require.Equal(t, 1, dd.Count())
 
 	// Add a different KeyBytes.
 	key2 := []byte("key2")
 	added = dd.TryAdd(ChildKey{KeyBytes: key2})
 	require.True(t, added)
+	require.Equal(t, 2, dd.Count())
 
 	// Verify that both keys are properly stored by checking for duplicates.
 	added = dd.TryAdd(ChildKey{KeyBytes: key1})
@@ -67,17 +73,19 @@ func TestChildKeyDeDupClear(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var dd childKeyDeDup
+	var dd ChildKeyDeDup
 	dd.Init(10)
 
 	// Add a mix of keys.
 	require.True(t, dd.TryAdd(ChildKey{PartitionKey: 123}))
 	require.True(t, dd.TryAdd(ChildKey{KeyBytes: []byte("key1")}))
+	require.Equal(t, 2, dd.Count())
 
 	// Clear the deduplicator.
 	dd.Clear()
 
 	// Verify keys were cleared.
+	require.Equal(t, 0, dd.Count())
 	require.True(t, dd.TryAdd(ChildKey{PartitionKey: 123}))
 	require.True(t, dd.TryAdd(ChildKey{KeyBytes: []byte("key1")}))
 }
@@ -96,7 +104,7 @@ func TestChildKeyDeDupRehashing(t *testing.T) {
 		return maphash.Bytes(seed, key)
 	}
 
-	var dd childKeyDeDup
+	var dd ChildKeyDeDup
 	dd.Init(100)
 	dd.hashKeyBytes = customHashFunc
 
