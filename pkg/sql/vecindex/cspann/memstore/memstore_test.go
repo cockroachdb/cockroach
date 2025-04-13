@@ -129,7 +129,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 			commontest.RunTransaction(ctx, t, store, func(txn2 cspann.Txn) {
 				searchSet := cspann.SearchSet{MaxResults: 1}
 				toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
-				_, err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
+				err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 				require.NoError(t, err)
 				result1 := cspann.SearchResult{
 					QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
