@@ -101,24 +101,6 @@ func (hc *HistogramConverter) Convert(labels []model.Label, src model.FileInfo) 
 
 	// Extract test information
 	runDate, testName := getTestDateAndName(src)
-
-	// Run cleanup if needed
-	if hc.shouldRunCleanup() {
-		//runDate, _ := getTestDateAndName(src)
-		if runDate != "" && len(runDate) >= 8 {
-			// Parse runDate to use for cleanup
-			dateStr := strings.Split(runDate, "-")[0]
-			if len(dateStr) == 8 { // Make sure it's a valid YYYYMMDD format
-				parsedDate, err := time.Parse("20060102", dateStr)
-				if err == nil {
-					// Run cleanup with parsedDate as reference time
-					hc.cleanupOldEntries(parsedDate)
-					// Update the last cleanup time
-					hc.updateCleanupTime()
-				}
-			}
-		}
-	}
 	postProcessFn := hc.getTestPostProcessFunction(testName)
 
 	// Get buffers from pool instead of creating new ones
@@ -147,15 +129,9 @@ func (hc *HistogramConverter) Convert(labels []model.Label, src model.FileInfo) 
 		return nil
 	}
 
-	if !strings.Contains(src.Path, "tpccbench") {
-		// Handle aggregated metrics output
-		if err := hc.writeAggregatedMetrics(rawBuffer, aggregatedBuffer, postProcessFn, src.Path, runDate, testName); err != nil {
-			return errors.Wrap(err, "failed to write aggregated metrics")
-		}
-	} else {
-		if err := hc.writeTpccBenchAggregateMetrics(rawBuffer, aggregatedBuffer, postProcessFn, src.Path, runDate, testName); err != nil {
-			return errors.Wrap(err, "failed to write tpccbench aggregated metrics")
-		}
+	// Handle aggregated metrics output
+	if err := hc.writeAggregatedMetrics(rawBuffer, aggregatedBuffer, postProcessFn, src.Path, runDate, testName); err != nil {
+		return errors.Wrap(err, "failed to write aggregated metrics")
 	}
 
 	// Clear buffers explicitly to help with memory pressure
@@ -163,120 +139,6 @@ func (hc *HistogramConverter) Convert(labels []model.Label, src model.FileInfo) 
 	aggregatedBuffer.Reset()
 
 	return nil
-}
-
-func (hc *HistogramConverter) writeTpccBenchAggregateMetrics(
-	rawBuffer *bytes.Buffer,
-	aggregatedBuffer *bytes.Buffer,
-	postProcessFn func(string, *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error),
-	sourcePath string,
-	runDate string,
-	testName string,
-) error {
-	histograms, finalLabels, err := roachtestutil.GetHistogramMetrics(rawBuffer)
-	if err != nil {
-		return errors.Wrap(err, "failed to get histogram metrics")
-	}
-
-	// Add nil check before calling the post-process function
-	if histograms == nil {
-		fmt.Printf("Warning: No histograms found for %s\n", testName)
-		return nil // Or handle this case appropriately
-	}
-	aggregatedMetrics, err := roachtestutil.PostProcessMetrics(testName, postProcessFn, histograms)
-	if err != nil {
-		return errors.Wrap(err, "failed to post-process metrics")
-	}
-
-	val, isHigher := hc.getMaxWarehouse(runDate+testName, float64(aggregatedMetrics[2].Value))
-	aggregatedMetrics = aggregatedMetrics[:2]
-
-	parsedTime, err := time.Parse("20060102", strings.Split(runDate, "-")[0])
-	if err != nil {
-		return errors.Wrap(err, "failed to parse run date")
-	}
-	if err := roachtestutil.GetAggregatedMetricBytes(aggregatedMetrics, finalLabels, parsedTime, aggregatedBuffer); err != nil {
-		return errors.Wrap(err, "failed to get aggregated metric bytes")
-	}
-
-	if err := hc.sink.Sink(aggregatedBuffer, strings.Trim(strings.TrimSuffix(sourcePath, "stats.json"), `/`), AggregatedStatsFile); err != nil {
-		return errors.Wrap(err, "failed to sink aggregated metrics")
-	}
-	if isHigher {
-		aggregatedBuffer.Reset()
-		if err := roachtestutil.GetAggregatedMetricBytes(roachtestutil.AggregatedPerfMetrics{
-			&roachtestutil.AggregatedMetric{
-				Name:           fmt.Sprintf("%s_max_warehouse", testName),
-				Value:          roachtestutil.MetricPoint(val),
-				Unit:           "warehouse",
-				IsHigherBetter: true,
-				AdditionalLabels: []*roachtestutil.Label{{
-					Name:  "warehouses",
-					Value: "",
-				}},
-			},
-		}, finalLabels, parsedTime, aggregatedBuffer); err != nil {
-			return errors.Wrap(err, "failed to get aggregated metric bytes")
-		}
-		result := re.ReplaceAllString(sourcePath, "")
-		return hc.sink.Sink(aggregatedBuffer, strings.Trim(result, `/`), AggregatedStatsFile)
-	}
-
-	return nil
-}
-
-func (hc *HistogramConverter) getMaxWarehouse(st string, current float64) (float64, bool) {
-	hc.mu.RLock()
-	defer hc.mu.RUnlock()
-
-	if val, ok := hc.maxWareHouse[st]; ok {
-		if current > val {
-			hc.maxWareHouse[st] = current
-			return current, true
-		}
-	} else {
-		hc.maxWareHouse[st] = current
-		return current, true
-	}
-
-	return 0.0, false
-
-}
-
-// processTpccMetricsData processes the tpcc metrics
-func (hc *HistogramConverter) processTpccMetricsData(
-	rawBuffer *bytes.Buffer,
-	postProcessFn func(string, *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error),
-	testName string,
-) (roachtestutil.AggregatedPerfMetrics, []*roachtestutil.Label, error) {
-	histograms, finalLabels, err := roachtestutil.GetHistogramMetrics(rawBuffer)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get histogram metrics")
-	}
-
-	// Add nil check before calling the post-process function
-	if histograms == nil {
-		return nil, nil, nil
-	}
-
-	aggregatedMetrics, err := roachtestutil.PostProcessMetrics(testName, postProcessFn, histograms)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to post-process metrics")
-	}
-
-	// Store max warehouse values for the current test
-	hc.mu.Lock()
-	defer hc.mu.Unlock()
-
-	for _, value := range aggregatedMetrics {
-		if strings.Contains(value.Name, "max") {
-			// Use test name as key to avoid parsing issues
-			hc.maxWareHouse[testName] = float64(value.Value)
-			break
-		}
-	}
-
-	return aggregatedMetrics, finalLabels, nil
 }
 
 // initializeExporter sets up the OpenMetrics exporter with proper configuration
@@ -435,6 +297,10 @@ func (hc *HistogramConverter) writeAggregatedMetrics(
 	aggregatedMetrics, err := roachtestutil.PostProcessMetrics(testName, postProcessFn, histograms)
 	if err != nil {
 		return errors.Wrap(err, "failed to post-process metrics")
+	}
+
+	if strings.Contains(sourcePath, "tpccbench") {
+		aggregatedMetrics = aggregatedMetrics[:2]
 	}
 
 	parsedTime, err := time.Parse("20060102", strings.Split(runDate, "-")[0])
