@@ -231,19 +231,21 @@ func (tx *memTxn) SearchPartitions(
 	toSearch []cspann.PartitionToSearch,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
-) (level cspann.Level, err error) {
+) error {
 	for i := range toSearch {
-		var searchLevel cspann.Level
-
 		memPart, ok := tx.store.getPartition(treeKey, toSearch[i].Key)
 		if !ok {
 			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
-				searchLevel = cspann.LeafLevel
+				toSearch[i].Level = cspann.LeafLevel
 				toSearch[i].StateDetails = cspann.MakeReadyDetails()
 				toSearch[i].Count = 0
 			} else {
-				return cspann.InvalidLevel, cspann.ErrPartitionNotFound
+				// Partition does not exist, so return InvalidLevel, MissingState
+				// and Count=0.
+				toSearch[i].Level = cspann.InvalidLevel
+				toSearch[i].StateDetails = cspann.PartitionStateDetails{}
+				toSearch[i].Count = 0
 			}
 		} else {
 			// Acquire shared lock on partition and search it. Note that we don't
@@ -255,23 +257,14 @@ func (tx *memTxn) SearchPartitions(
 				defer memPart.lock.ReleaseShared()
 
 				partition := memPart.lock.partition
+				toSearch[i].Level = partition.Level()
 				toSearch[i].StateDetails = partition.Metadata().StateDetails
-				searchLevel, toSearch[i].Count = partition.Search(
-					&tx.workspace, toSearch[i].Key, queryVector, searchSet)
+				toSearch[i].Count = partition.Search(&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 			}()
-		}
-
-		if i == 0 {
-			level = searchLevel
-		} else if level != searchLevel {
-			// Callers should only search for partitions at the same level.
-			panic(errors.AssertionFailedf(
-				"caller already searched a partition at level %d, cannot search at level %d",
-				level, searchLevel))
 		}
 	}
 
-	return level, nil
+	return nil
 }
 
 // GetFullVectors implements the Txn interface.
@@ -286,14 +279,13 @@ func (tx *memTxn) GetFullVectors(
 		if ref.Key.PartitionKey != cspann.InvalidKey {
 			// Get the partition's centroid.
 			memPart, ok := tx.store.getPartitionLocked(treeKey, ref.Key.PartitionKey)
-			if !ok {
-				return errors.Wrapf(cspann.ErrPartitionNotFound,
-					"getting partition %d centroid", ref.Key.PartitionKey)
+			if ok {
+				// Don't need to acquire lock to call the Centroid method, since it
+				// is immutable and thread-safe.
+				ref.Vector = memPart.lock.partition.Centroid()
+			} else {
+				ref.Vector = nil
 			}
-
-			// Don't need to acquire lock to call the Centroid method, since it
-			// is immutable and thread-safe.
-			ref.Vector = memPart.lock.partition.Centroid()
 		} else {
 			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
 			if ok {

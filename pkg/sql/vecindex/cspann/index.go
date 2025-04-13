@@ -605,6 +605,21 @@ func (vi *Index) searchForInsertHelper(
 	var seen map[PartitionKey]struct{}
 	maxResults := 2
 	allowRetry := true
+
+	// Check the next partition in the result list. If there are no more
+	// partitions to check, then expand the search to a wider set of partitions
+	// by increasing MaxResults.
+	checkNextPartition := func(partitionKey PartitionKey) {
+		results = results[1:]
+		if len(results) == 0 {
+			if seen == nil {
+				seen = make(map[PartitionKey]struct{})
+			}
+			seen[partitionKey] = struct{}{}
+			maxResults *= 2
+		}
+	}
+
 	for {
 		// If there are no more results, get more now.
 		if len(results) == 0 {
@@ -626,8 +641,10 @@ func (vi *Index) searchForInsertHelper(
 				return nil, err
 			}
 			original = idxCtx.tempSearchSet.PopResults()
-			if len(original) < 1 {
-				return nil, errors.AssertionFailedf("SearchForInsert should return at least one result")
+			if len(original) == 0 {
+				// No results, so try again with more results at each search level.
+				maxResults *= 2
+				continue
 			}
 			results = original
 			allowRetry = false
@@ -669,18 +686,12 @@ func (vi *Index) searchForInsertHelper(
 					return nil, err
 				}
 			} else {
-				// This is a non-root partition, so check the next partition in the
-				// result list. If there are no more partitions to check, then expand
-				// the search to a wider set of partitions by increasing MaxResults.
-				results = results[1:]
-				if len(results) == 0 {
-					if seen == nil {
-						seen = make(map[PartitionKey]struct{})
-					}
-					seen[partitionKey] = struct{}{}
-					maxResults *= 2
-				}
+				// This is a non-root partition, so try next partition.
+				checkNextPartition(partitionKey)
 			}
+		} else if errors.Is(err, ErrPartitionNotFound) {
+			// This partition does not exist, so try next partition.
+			checkNextPartition(partitionKey)
 		} else {
 			return nil, err
 		}
@@ -740,19 +751,19 @@ func (vi *Index) fallbackOnTargets(
 				"fetching centroids for target partitions %d and %d, for splitting partition %d",
 				state.Target1, state.Target2, partitionKey)
 		}
-		if len(tempResults) != 2 {
-			return nil, errors.AssertionFailedf(
-				"expected to get two centroids for state %s", state.String())
+
+		// Calculate the distance of the query vector to the centroids.
+		for i := range tempResults {
+			tempResults[i].QuerySquaredDistance = num32.L2SquaredDistance(vec, tempResults[i].Vector)
+		}
+
+		if len(tempResults) < 2 {
+			// One or both of the target partitions have been deleted.
+			return tempResults, nil
 		}
 
 		// Order by the distance of the centroids from the query vector.
-		dist1 := num32.L2SquaredDistance(vec, tempResults[0].Vector)
-		dist2 := num32.L2SquaredDistance(vec, tempResults[1].Vector)
-
-		tempResults[0].QuerySquaredDistance = dist1
-		tempResults[1].QuerySquaredDistance = dist2
-
-		if dist1 > dist2 {
+		if tempResults[0].QuerySquaredDistance > tempResults[1].QuerySquaredDistance {
 			// Swap results.
 			tempResult := tempResults[0]
 			tempResults[0] = tempResults[1]
@@ -848,12 +859,6 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 
 	for {
 		results := subSearchSet.PopResults()
-		if len(results) == 0 && searchLevel > LeafLevel {
-			// This should never happen, as it means that interior partition(s)
-			// have no children. The vector deletion logic should prevent that.
-			panic(errors.AssertionFailedf(
-				"interior partition(s) on level %d has no children", searchLevel))
-		}
 
 		var zscore float64
 		if searchLevel > LeafLevel {
@@ -974,13 +979,17 @@ func (vi *Index) searchChildPartitions(
 		}
 	}
 
-	level, err = idxCtx.txn.SearchPartitions(
+	err = idxCtx.txn.SearchPartitions(
 		ctx, idxCtx.treeKey, idxCtx.tempToSearch, idxCtx.randomized, searchSet)
 	if err != nil {
 		return 0, err
 	}
 
 	for i := range parentResults {
+		if level == InvalidLevel {
+			level = idxCtx.tempToSearch[i].Level
+		}
+
 		count := idxCtx.tempToSearch[i].Count
 		searchSet.Stats.SearchedPartition(level, count)
 
@@ -1130,11 +1139,15 @@ func (vi *Index) getFullVectors(
 	for i < len(candidates) {
 		candidates[i].Vector = idxCtx.tempVectorsWithKeys[i].Vector
 
-		// Exclude deleted vectors from results.
+		// Exclude deleted child keys from results.
 		if candidates[i].Vector == nil {
-			// Vector was deleted, so add fixup to delete it.
-			vi.fixups.AddDeleteVector(
-				ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
+			// TODO(andyk): Need to create an DeletePartitionKey fixup to handle
+			// the case of a dangling partition key.
+			if candidates[i].ChildKey.KeyBytes != nil {
+				// Vector was deleted, so add fixup to delete it.
+				vi.fixups.AddDeleteVector(
+					ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
+			}
 
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.
