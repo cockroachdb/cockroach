@@ -758,6 +758,10 @@ func (fw *fixupWorker) deleteVector(
 				// Root partition's level has been updated, so just abort.
 				return nil
 			} else if err != nil {
+				if errors.Is(err, ErrPartitionNotFound) {
+					log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
+					return nil
+				}
 				return errors.Wrapf(err, "getting root partition's level")
 			}
 		}

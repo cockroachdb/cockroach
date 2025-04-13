@@ -130,13 +130,12 @@ func (p *Partition) ValueBytes() []ValueBytes {
 }
 
 // Search estimates the set of data vectors that are nearest to the given query
-// vector and returns them in the given search set. Search also returns this
-// partition's level in the K-means tree and the count of quantized vectors in
-// the partition.
+// vector and returns them in the given search set. Search also returns the
+// count of quantized vectors in the partition.
 func (p *Partition) Search(
 	w *workspace.T, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
-) (level Level, count int) {
-	count = p.Count()
+) int {
+	count := p.Count()
 	tempFloats := w.AllocFloats(count * 2)
 	defer w.FreeFloats(tempFloats)
 
@@ -161,7 +160,7 @@ func (p *Partition) Search(
 		searchSet.Add(&searchSet.tempResult)
 	}
 
-	return p.Level(), count
+	return count
 }
 
 // Add quantizes the given vector as part of this partition. If a vector with

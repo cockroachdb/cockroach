@@ -111,7 +111,7 @@ func (suite *StoreTestSuite) TestRunTransaction() {
 	suite.ErrorContains(store.RunTransaction(suite.ctx, func(tx cspann.Txn) error {
 		toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
 		searchSet := cspann.SearchSet{MaxResults: 1}
-		_, err := tx.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, -1}, &searchSet)
+		err := tx.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, -1}, &searchSet)
 		suite.NoError(err)
 		suite.Equal(1, toSearch[0].Count)
 		return errors.New("abort")
@@ -260,16 +260,15 @@ func (suite *StoreTestSuite) TestNonRootPartition() {
 			// Search partition.
 			toSearch := []cspann.PartitionToSearch{{Key: partitionKey}}
 			searchSet := cspann.SearchSet{MaxResults: 1}
-			searchLevel, err := txn.SearchPartitions(
-				suite.ctx, treeKey, toSearch, vector.T{5, -1}, &searchSet)
+			err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{5, -1}, &searchSet)
 			suite.NoError(err)
-			suite.Equal(cspann.SecondLevel, searchLevel)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 17, ErrorBound: 0, CentroidDistance: 0,
 				ParentPartitionKey: partitionKey, ChildKey: partitionKey3, ValueBytes: valueBytes3}
 			results := searchSet.PopResults()
 			RoundResults(results, 4)
 			suite.Equal(cspann.SearchResults{result1}, results)
+			suite.Equal(cspann.SecondLevel, toSearch[0].Level)
 			suite.Equal(2, toSearch[0].Count)
 		})
 	}
@@ -308,9 +307,8 @@ func (suite *StoreTestSuite) TestSearchMultiplePartitions() {
 
 			searchSet := cspann.SearchSet{MaxResults: 2}
 			toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}, {Key: partitionKey}}
-			level, err := txn.SearchPartitions(suite.ctx, treeKey, toSearch, vec4, &searchSet)
+			err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vec4, &searchSet)
 			suite.NoError(err)
-			suite.Equal(cspann.LeafLevel, level)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 24, ErrorBound: 24.08, CentroidDistance: 3.16,
 				ParentPartitionKey: partitionKey, ChildKey: primaryKey1, ValueBytes: valueBytes1}
@@ -318,7 +316,9 @@ func (suite *StoreTestSuite) TestSearchMultiplePartitions() {
 				QuerySquaredDistance: 29, ErrorBound: 0, CentroidDistance: 5,
 				ParentPartitionKey: cspann.RootKey, ChildKey: primaryKey3, ValueBytes: valueBytes3}
 			suite.Equal(cspann.SearchResults{result1, result2}, RoundResults(searchSet.PopResults(), 2))
+			suite.Equal(cspann.LeafLevel, toSearch[0].Level)
 			suite.Equal(3, toSearch[0].Count)
+			suite.Equal(cspann.LeafLevel, toSearch[1].Level)
 			suite.Equal(2, toSearch[1].Count)
 		})
 	}
@@ -602,6 +602,7 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
 				{Key: cspann.ChildKey{PartitionKey: partitionKey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
+				{Key: cspann.ChildKey{PartitionKey: cspann.PartitionKey(99)}}, // No such partition.
 			}
 			err := txn.GetFullVectors(suite.ctx, treeKey, results)
 			suite.NoError(err)
@@ -612,6 +613,7 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 			suite.Nil(results[4].Vector)
 			suite.Equal(vector.T{4, 3}, results[5].Vector)
 			suite.Equal(vec3, results[6].Vector)
+			suite.Nil(results[7].Vector)
 
 			// Grab another set of vectors to ensure that saved state is properly reset.
 			results = []cspann.VectorWithKey{
@@ -1228,10 +1230,10 @@ func (suite *StoreTestSuite) testEmptyOrMissingRoot(store TestStore, treeID int,
 		RunTransaction(suite.ctx, suite.T(), store, func(txn cspann.Txn) {
 			searchSet := cspann.SearchSet{MaxResults: 2}
 			toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
-			level, err := txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
+			err := txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
 			suite.NoError(err)
-			suite.Equal(cspann.LeafLevel, level)
 			suite.Nil(searchSet.PopResults())
+			suite.Equal(cspann.LeafLevel, toSearch[0].Level)
 			suite.Equal(0, toSearch[0].Count)
 		})
 	})
@@ -1345,10 +1347,8 @@ func (suite *StoreTestSuite) testLeafPartition(
 			// Search partition.
 			searchSet := cspann.SearchSet{MaxResults: 2}
 			toSearch := []cspann.PartitionToSearch{{Key: partitionKey}}
-			searchLevel, err := txn.SearchPartitions(
-				suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
+			 err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{1, 1}, &searchSet)
 			suite.NoError(err)
-			suite.Equal(cspann.LeafLevel, searchLevel)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 1, ErrorBound: 0,
 				CentroidDistance:   testutils.RoundFloat(num32.L2Distance(vec1, centroid), 4),
@@ -1367,6 +1367,7 @@ func (suite *StoreTestSuite) testLeafPartition(
 			results := searchSet.PopResults()
 			RoundResults(results, 4)
 			suite.Equal(cspann.SearchResults{result1, result2}, results)
+			suite.Equal(cspann.LeafLevel, toSearch[0].Level)
 			suite.Equal(3, toSearch[0].Count)
 
 			// Ensure partition metadata is updated.
@@ -1407,10 +1408,8 @@ func (suite *StoreTestSuite) testLeafPartition(
 			// Search partition.
 			searchSet := cspann.SearchSet{MaxResults: 1}
 			toSearch := []cspann.PartitionToSearch{{Key: partitionKey}}
-			searchLevel, err := txn.SearchPartitions(
-				suite.ctx, treeKey, toSearch, vector.T{10, -5}, &searchSet)
+			err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{10, -5}, &searchSet)
 			suite.NoError(err)
-			suite.Equal(cspann.LeafLevel, searchLevel)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 25, ErrorBound: 0,
 				CentroidDistance:   testutils.RoundFloat(num32.L2Distance(vec4, centroid), 4),
@@ -1423,6 +1422,7 @@ func (suite *StoreTestSuite) testLeafPartition(
 			results := searchSet.PopResults()
 			RoundResults(results, 4)
 			suite.Equal(cspann.SearchResults{result1}, results)
+			suite.Equal(cspann.LeafLevel, toSearch[0].Level)
 			suite.Equal(3, toSearch[0].Count)
 		})
 	})
@@ -1470,16 +1470,15 @@ func (suite *StoreTestSuite) setRootPartition(store TestStore, treeID int) {
 		// Search partition.
 		searchSet := cspann.SearchSet{MaxResults: 1}
 		toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
-		searchLevel, err := txn.SearchPartitions(
-			suite.ctx, treeKey, toSearch, vector.T{5, 5}, &searchSet)
+		err = txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{5, 5}, &searchSet)
 		suite.NoError(err)
-		suite.Equal(cspann.SecondLevel, searchLevel)
 		result1 := cspann.SearchResult{
 			QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 3.1623,
 			ParentPartitionKey: cspann.RootKey, ChildKey: partitionKey2, ValueBytes: valueBytes2}
 		results := searchSet.PopResults()
 		RoundResults(results, 4)
 		suite.Equal(cspann.SearchResults{result1}, results)
+		suite.Equal(cspann.SecondLevel, toSearch[0].Level)
 		suite.Equal(2, toSearch[0].Count)
 	})
 }
