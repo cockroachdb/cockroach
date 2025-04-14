@@ -10,7 +10,8 @@ import "fmt"
 type OperationType int
 
 const (
-	OpCompEqual OperationType = iota
+	OpInvalid OperationType = iota
+	OpCompEqual
 	OpCompNotEqual
 	OpCompLess
 	OpCompLessEqual
@@ -32,7 +33,7 @@ const (
 	OpStartsWith
 )
 
-var OperationTypeStrings = map[OperationType]string{
+var OperationTypeStrings = [...]string{
 	OpCompEqual:        "==",
 	OpCompNotEqual:     "!=",
 	OpCompLess:         "<",
@@ -64,6 +65,9 @@ type Operation struct {
 var _ Path = Operation{}
 
 func (o Operation) String() string {
+	if int(o.Type) < 0 || int(o.Type) >= len(OperationTypeStrings) || o.Type == OpInvalid {
+		panic(fmt.Sprintf("invalid operation type: %d", o.Type))
+	}
 	// TODO(normanchenn): Fix recursive brackets. When there is a operation like
 	// 1 == 1 && 1 != 1, postgres will output (1 == 1 && 1 != 1), but we output
 	// ((1 == 1) && (1 != 1)).
