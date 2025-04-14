@@ -7626,17 +7626,8 @@ table's zone configuration this will return NULL.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				if evalCtx.SQLStatsController == nil {
-					return nil, errors.AssertionFailedf("sql stats controller not set")
-				}
-				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
-					return nil, err
-				}
+				// This function is currently a no-op as the system insights tables are not
+				// currently in use.
 				return tree.MakeDBool(true), nil
 			},
 			Info:       `This function is used to clear the statement and transaction insights statistics.`,
