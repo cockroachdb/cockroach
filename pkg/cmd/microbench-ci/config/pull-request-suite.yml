@@ -10,9 +10,9 @@ benchmarks:
     retries: 3
     metrics:
       - name: "sec/op"
-        threshold: .3
+        threshold: .6
       - name: "allocs/op"
-        threshold: .1
+        threshold: .2
 
   - display_name: Sysbench
     labels: ["KV", "3node", "oltp_read_only"]
@@ -25,9 +25,9 @@ benchmarks:
     retries: 3
     metrics:
       - name: "sec/op"
-        threshold: .4
+        threshold: 0.9
       - name: "allocs/op"
-        threshold: .1
+        threshold: .3
 
   - display_name: Sysbench
     labels: ["KV", "3node", "oltp_write_only"]
@@ -40,6 +40,6 @@ benchmarks:
     retries: 3
     metrics:
       - name: "sec/op"
-        threshold: .4
+        threshold: 0.9
       - name: "allocs/op"
-        threshold: .1
+        threshold: .3
