@@ -29,7 +29,12 @@ func registerDatabaseDrop(r registry.Registry) {
 		spec.CPU(8),
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(8),
-		spec.VolumeSize(500),
+		// The dataset uses above 4TiB of data, and if we have to create the dataset
+		// via IMPORT we need some buffer. 500GiB per node (4.5TiB total) has been
+		// found to fail regularly in the past since the IMPORT job fails when any
+		// node falls below 5% available capacity. 800GiB (7.2TiB) ought to be more
+		// than enough.
+		spec.VolumeSize(800),
 		spec.GCEVolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 		spec.GCEZones("us-east1-b"),
