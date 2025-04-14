@@ -470,7 +470,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			setupReq.JobTag = jobTag.ValueStr()
 		}
 	}
-	if localState.Txn != nil {
+	if evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions && localState.Txn != nil {
 		// Propagate the admission control header so that leaf transactions
 		// correctly inherit it.
 		setupReq.LeafTxnAdmissionHeader = localState.Txn.AdmissionHeader()
