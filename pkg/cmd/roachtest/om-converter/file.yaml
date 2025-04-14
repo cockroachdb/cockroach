@@ -1,6 +1,6 @@
 source:
   type: gcp
-  directory: artifacts/20250127-18618691/allocbench/nodes=7/cpu=8/kv/r=95/access=skew
+  directory: artifacts/20250205-18731442/tpccbench/nodes=3/cpu=16/run_1
   bucket: cockroach-nightly
   project: cockroach-ephemeral
 

@@ -29,13 +29,13 @@ import (
 // Default configuration values
 const (
 	// DefaultMaxEntryAge defines the default for how old an entry can be before it's cleaned up
-	DefaultMaxEntryAge = 2 * 24 * time.Hour // 2 days
+	DefaultMaxEntryAge = 7 * 24 * time.Hour // 2 days
 
 	// DefaultMaxCleanupBatchSize is the default limit for how many entries we clean up at once
 	DefaultMaxCleanupBatchSize = 1000
 
 	// DefaultCleanupInterval is the default interval between cleanup runs
-	DefaultCleanupInterval = 2 * time.Minute
+	DefaultCleanupInterval = 30 * time.Minute
 )
 
 // Configurable settings - can be modified via CLI flags
@@ -86,7 +86,7 @@ func (hc *HistogramConverter) shouldRunCleanup() bool {
 	defer hc.mu.RUnlock()
 
 	// Run cleanup if enough time has passed or maxWareHouse map is getting large
-	return time.Since(hc.lastCleanupTime) > CleanupInterval || len(hc.maxWareHouse) > 1000
+	return time.Since(hc.lastCleanupTime) > CleanupInterval || len(hc.maxWareHouse) > 100000
 }
 
 // updateCleanupTime updates the last cleanup time
