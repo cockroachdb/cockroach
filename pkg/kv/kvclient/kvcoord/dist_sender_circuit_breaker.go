@@ -913,14 +913,14 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
-			for !timer.Read { // select until probe interval timer fires
+			for { // select until probe interval timer fires
 				select {
 				case <-timer.C:
-					timer.Read = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
 					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
+					continue
 				case <-r.closedC:
 					// The circuit breaker has been GCed, exit. We could cancel the context
 					// instead to also abort an in-flight probe, but that requires extra
@@ -932,6 +932,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				case <-ctx.Done():
 					return
 				}
+				break
 			}
 
 			// If there haven't been any recent requests, stop probing but keep the
