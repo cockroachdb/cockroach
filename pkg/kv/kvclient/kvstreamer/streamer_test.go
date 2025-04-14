@@ -52,7 +52,7 @@ func getStreamer(
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.AppStopper(),
-		kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
+		kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */),
 		cluster.MakeTestingClusterSettings(),
 		nil, /* sd */
 		lock.WaitPolicy(0),
