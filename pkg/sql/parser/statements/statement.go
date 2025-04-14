@@ -98,7 +98,8 @@ func (stmt JsonpathStatement) String() string {
 // StringWithFlags returns the AST formatted as a string (with the given flags).
 func (stmt JsonpathStatement) StringWithFlags(flags tree.FmtFlags) string {
 	ctx := tree.NewFmtCtx(flags)
-	stmt.AST.Format(ctx)
+	// TODO(#22513): Create a specific Format method for jsonpath that redacts constants.
+	ctx.FormatStringConstant(stmt.AST.String())
 	return ctx.CloseAndGetString()
 }
 

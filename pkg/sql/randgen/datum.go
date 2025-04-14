@@ -27,9 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	// TODO(normanchenn): temporarily import the parser here to ensure that
-	// init() is called.
-	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -233,8 +231,11 @@ func RandDatumWithNullChance(
 		}
 		return &tree.DJSON{JSON: j}
 	case types.JsonpathFamily:
-		jsonpath := randJsonpath(rng)
-		return tree.NewDJsonpath(jsonpath)
+		jp, err := jsonpathparser.Parse(randJsonpath(rng))
+		if err != nil {
+			return nil
+		}
+		return tree.NewDJsonpath(*jp.AST)
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {

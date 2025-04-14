@@ -1515,9 +1515,10 @@ SELECT jsonb_path_query('null', '"123".type()');
 ----
 "string"
 
-# TODO(#144258): should be "number", but the scanner doesn't scan this properly.
-statement error pgcode 42601 pq: at or near \"trailing junk after numeric literal
+query T
 SELECT jsonb_path_query('null', '(123).type()');
+----
+"number"
 
 query T
 SELECT jsonb_path_query('null', 'true.type()');
