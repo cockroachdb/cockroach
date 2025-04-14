@@ -4862,3 +4862,45 @@ func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error 
 	}
 	return nil
 }
+
+func (og *operationGenerator) alterTableRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s ENABLE ROW LEVEL SECURITY`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+
+	// Define the available RLS options
+	rlsOptions := []string{
+		"ENABLE ROW LEVEL SECURITY",
+		"DISABLE ROW LEVEL SECURITY",
+		"FORCE ROW LEVEL SECURITY",
+		"NO FORCE ROW LEVEL SECURITY",
+	}
+
+	// Randomly decide how many options to include (between 1 and 4)
+	numOptions := og.randIntn(4) + 1
+
+	// Randomly select options without replacement
+	perm := og.params.rng.Perm(len(rlsOptions))
+	selectedOptions := make([]string, numOptions)
+	for i := 0; i < numOptions; i++ {
+		selectedOptions[i] = rlsOptions[perm[i]]
+	}
+
+	// Build the SQL statement
+	sqlStatement := fmt.Sprintf(`ALTER TABLE %s %s`, tableName, strings.Join(selectedOptions, ", "))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement
+	return opStmt, nil
+}
