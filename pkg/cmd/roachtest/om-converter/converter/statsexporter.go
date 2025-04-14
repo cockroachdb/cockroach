@@ -159,16 +159,14 @@ func (s StatsExporterConverter) processFile(
 			}
 
 			// Write lines to total metrics
-			for i, line := range lines {
+			for _, line := range lines {
 				if _, err = totalMetricsWriter.Write(line); err != nil {
 					// putBuffer(tempBuf)
 					return err
 				}
-				if i < len(lines)-1 {
-					if err = totalMetricsWriter.WriteByte('\n'); err != nil {
-						// putBuffer(tempBuf)
-						return err
-					}
+				if _, err = totalMetricsWriter.Write([]byte("\n")); err != nil {
+					// putBuffer(tempBuf)
+					return err
 				}
 			}
 			putBuffer(tempBuf)
