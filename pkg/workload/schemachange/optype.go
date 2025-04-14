@@ -101,6 +101,10 @@ const (
 	alterTableDropConstraint          // ALTER TABLE <table> DROP CONSTRAINT <constraint>
 	alterTableDropNotNull             // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
 	alterTableDropStored              // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
+	alterTableEnableRLS               // ALTER TABLE <table> ENABLE ROW LEVEL SECURITY
+	alterTableDisableRLS              // ALTER TABLE <table> DISABLE ROW LEVEL SECURITY
+	alterTableForceRLS                // ALTER TABLE <table> FORCE ROW LEVEL SECURITY
+	alterTableNoForceRLS              // ALTER TABLE <table> NO FORCE ROW LEVEL SECURITY
 	alterTableLocality                // ALTER TABLE <table> LOCALITY <locality>
 	alterTableRenameColumn            // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	alterTableSetColumnDefault        // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
@@ -224,6 +228,10 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableDropConstraint:          (*operationGenerator).dropConstraint,
 	alterTableDropNotNull:             (*operationGenerator).dropColumnNotNull,
 	alterTableDropStored:              (*operationGenerator).dropColumnStored,
+	alterTableEnableRLS:               (*operationGenerator).enableRLS,
+	alterTableDisableRLS:              (*operationGenerator).disableRLS,
+	alterTableForceRLS:                (*operationGenerator).forceRLS,
+	alterTableNoForceRLS:              (*operationGenerator).noForceRLS,
 	alterTableLocality:                (*operationGenerator).alterTableLocality,
 	alterTableRenameColumn:            (*operationGenerator).renameColumn,
 	alterTableSetColumnDefault:        (*operationGenerator).setColumnDefault,
@@ -275,6 +283,10 @@ var opWeights = []int{
 	alterTableDropConstraint:          1,
 	alterTableDropNotNull:             1,
 	alterTableDropStored:              1,
+	alterTableEnableRLS:               1,
+	alterTableDisableRLS:              1,
+	alterTableForceRLS:                1,
+	alterTableNoForceRLS:              1,
 	alterTableLocality:                1,
 	alterTableRenameColumn:            1,
 	alterTableSetColumnDefault:        1,
@@ -318,6 +330,10 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableDropColumn:              clusterversion.MinSupported,
 	alterTableDropConstraint:          clusterversion.MinSupported,
 	alterTableDropNotNull:             clusterversion.MinSupported,
+	alterTableEnableRLS:               clusterversion.V25_2,
+	alterTableDisableRLS:              clusterversion.V25_2,
+	alterTableForceRLS:                clusterversion.V25_2,
+	alterTableNoForceRLS:              clusterversion.V25_2,
 	alterTypeDropValue:                clusterversion.MinSupported,
 	commentOn:                         clusterversion.MinSupported,
 	createIndex:                       clusterversion.MinSupported,

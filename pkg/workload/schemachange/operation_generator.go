@@ -4862,3 +4862,107 @@ func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error 
 	}
 	return nil
 }
+
+func (og *operationGenerator) enableRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s ENABLE ROW LEVEL SECURITY`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	og.LogMessage(fmt.Sprintf("enabling row level security on table %s", tableName))
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(`ALTER TABLE %s ENABLE ROW LEVEL SECURITY`, tableName)
+	return opStmt, nil
+}
+
+func (og *operationGenerator) disableRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s DISABLE ROW LEVEL SECURITY`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	og.LogMessage(fmt.Sprintf("disabling row level security on table %s", tableName))
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(`ALTER TABLE %s DISABLE ROW LEVEL SECURITY`, tableName)
+	return opStmt, nil
+}
+
+func (og *operationGenerator) forceRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s FORCE ROW LEVEL SECURITY`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	og.LogMessage(fmt.Sprintf("forcing row level security on table %s", tableName))
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(`ALTER TABLE %s FORCE ROW LEVEL SECURITY`, tableName)
+	return opStmt, nil
+}
+
+func (og *operationGenerator) noForceRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s NO FORCE ROW LEVEL SECURITY`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	og.LogMessage(fmt.Sprintf("disabling forced row level security on table %s", tableName))
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(`ALTER TABLE %s NO FORCE ROW LEVEL SECURITY`, tableName)
+	return opStmt, nil
+}
