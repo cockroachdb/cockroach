@@ -6,10 +6,9 @@
 package eval
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/errors"
 )
 
 func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error) {
@@ -19,7 +18,7 @@ func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error)
 			return nil, err
 		}
 		if val == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", scalar.Variable)
+			return nil, errors.AssertionFailedf("variable %q not found in jsonpath context", scalar.Variable)
 		}
 		return val, nil
 	}
