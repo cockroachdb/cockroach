@@ -16,11 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/sink"
 )
 
-const (
-	// Reduced buffer sizes to prevent excessive memory use
-	scannerBufferSize = 1 * 1024 * 1024 // 1MB initial buffer
-	statsMaxBuffer    = 5 * 1024 * 1024 // 5MB max buffer
-)
+const BufferSize = 10 * 1024 * 1024 // buffer size to 10MB
 
 type StatsExporterConverter struct {
 	sink                   sink.Sink
@@ -29,138 +25,89 @@ type StatsExporterConverter struct {
 }
 
 func (s StatsExporterConverter) Convert(labels []model.Label, src model.FileInfo) (err error) {
-	// Get a buffer from the pool for the scanner
-	scannerBuf := getBuffer()
-	defer putBuffer(scannerBuf)
-
-	// Create scanner with pooled buffer
 	scanner := bufio.NewScanner(bytes.NewReader(src.Content))
-	scanner.Buffer(scannerBuf.Bytes()[:scannerBufferSize], statsMaxBuffer)
+	scanner.Buffer(make([]byte, 1024*1024), BufferSize)
+	buf := bytes.NewBuffer(nil)
+	metricsBuffer := bufio.NewWriter(buf)
 
-	// Get buffers from pool for metrics
-	metricsBuf := getBuffer()
-	defer putBuffer(metricsBuf)
-	metricsBuffer := bufio.NewWriter(metricsBuf)
+	totalMetricsBuffer := bytes.NewBuffer(nil)
+	totalMetricsWriter := bufio.NewWriter(totalMetricsBuffer)
 
-	totalMetricsBuf := getBuffer()
-	defer putBuffer(totalMetricsBuf)
-	totalMetricsWriter := bufio.NewWriter(totalMetricsBuf)
-
-	// Ensure proper cleanup of writers
 	defer func() {
-		if flushErr := metricsBuffer.Flush(); flushErr != nil && err == nil {
-			err = flushErr
+		err = metricsBuffer.Flush()
+		if err != nil {
 			return
 		}
-		if flushErr := totalMetricsWriter.Flush(); flushErr != nil && err == nil {
-			err = flushErr
-			return
-		}
+		err = s.sink.Sink(buf, src.Path, RawStatsFile)
 	}()
 
-	// Process the file
-	if err = s.processFile(scanner, labels, metricsBuffer, totalMetricsWriter, src); err != nil {
-		return err
-	}
+	defer func() {
+		err = totalMetricsWriter.Flush()
+		if err != nil {
+			return
+		}
+		err = s.sink.Sink(totalMetricsBuffer, src.Path, AggregatedStatsFile)
+	}()
 
-	// Write EOF marker
-	if _, err = totalMetricsWriter.WriteString("# EOF"); err != nil {
-		return err
-	}
-
-	// Ensure all writes are flushed before sinking
-	if err = metricsBuffer.Flush(); err != nil {
-		return err
-	}
-	if err = totalMetricsWriter.Flush(); err != nil {
-		return err
-	}
-
-	// Sink the buffers
-	if err = s.sink.Sink(metricsBuf, src.Path, RawStatsFile); err != nil {
-		return err
-	}
-	return s.sink.Sink(totalMetricsBuf, src.Path, AggregatedStatsFile)
-}
-
-func (s StatsExporterConverter) processFile(
-	scanner *bufio.Scanner,
-	labels []model.Label,
-	metricsBuffer *bufio.Writer,
-	totalMetricsWriter *bufio.Writer,
-	src model.FileInfo,
-) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		var clusterStatsRun clusterstats.ClusterStatRun
-		if err := json.Unmarshal([]byte(line), &clusterStatsRun); err != nil {
+		if err = json.Unmarshal([]byte(line), &clusterStatsRun); err != nil {
 			return err
 		}
 
-		// Process total metrics
-		totalClusterRun := clusterstats.ClusterStatRun{
-			Total: clusterStatsRun.Total,
-		}
-		clusterStatsRun.Total = nil
+		var totalClusterRun clusterstats.ClusterStatRun
 
-		// Process regular metrics
+		totalClusterRun.Total = clusterStatsRun.Total
+		clusterStatsRun.Total = nil
 		labelString := util.LabelMapToString(getLabelMap(src, labels, false, "", nil))
 		openMetricsBuffer, err := clusterstats.SerializeOpenmetricsReport(clusterStatsRun, &labelString)
 		if err != nil {
 			return err
 		}
-		defer putBuffer(openMetricsBuffer)
 
 		if _, err = metricsBuffer.Write(openMetricsBuffer.Bytes()); err != nil {
 			return err
 		}
 
-		// Process total metrics
 		for key, val := range totalClusterRun.Total {
 			labelString = util.LabelMapToString(getLabelMap(src, labels, true, key, s.MetricLabels[key]))
 			currentStatsMap := make(map[string]float64)
 			currentStatsMap[key] = val
 			currentTotalStatsRun := clusterstats.ClusterStatRun{Total: currentStatsMap}
-
-			// Get a buffer from the pool for temporary operations
-			tempBuf := getBuffer()
 			tempBuffer, err := clusterstats.SerializeOpenmetricsReport(currentTotalStatsRun, &labelString)
-			if err != nil {
-				putBuffer(tempBuf)
-				return err
-			}
-			defer putBuffer(tempBuf)
-
 			lines := bytes.Split(tempBuffer.Bytes(), []byte("\n"))
-			// Remove EOF markers
+
+			// Remove the last line if it's "# EOF"
 			if len(lines) > 0 && bytes.Equal(lines[len(lines)-1], []byte("# EOF")) {
 				lines = lines[:len(lines)-1]
-			} else if len(lines) > 1 && bytes.Equal(lines[len(lines)-2], []byte("# EOF")) {
+			} else if len(lines) > 0 && bytes.Equal(lines[len(lines)-2], []byte("# EOF")) {
 				lines = lines[:len(lines)-2]
 			}
 
-			// Write lines to total metrics
-			for i, line := range lines {
-				if _, err = totalMetricsWriter.Write(line); err != nil {
-					return err
-				}
-				if i < len(lines)-1 {
-					if err = totalMetricsWriter.WriteByte('\n'); err != nil {
-						return err
-					}
-				}
+			// Rebuild the buffer
+			newBuf := bytes.NewBuffer(nil)
+			for _, line := range lines {
+				newBuf.Write(line)
+				//// Don't add newline after the last line (optional)
+				//if i < len(lines)-1 {
+				newBuf.WriteByte('\n')
+				//}
+			}
+			openMetricsBuffer = newBuf
+			if _, err = totalMetricsBuffer.Write(openMetricsBuffer.Bytes()); err != nil {
+				return err
 			}
 		}
 	}
-
-	return scanner.Err()
+	totalMetricsBuffer.WriteString("# EOF")
+	return err
 }
 
 func NewStatsExporterConverter(sink sink.Sink, metricSpec []model.Metric) Converter {
-	HigherBetterMetricsSet := make(map[string]bool)
+	HigherBetterMetricsSet := map[string]bool{}
 	metricLabels := make(map[string][]model.Label)
-
 	for _, spec := range metricSpec {
 		for _, val := range spec.HigherBetterMetrics {
 			HigherBetterMetricsSet[val] = true
