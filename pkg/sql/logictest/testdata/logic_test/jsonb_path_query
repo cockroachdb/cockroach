@@ -1552,3 +1552,37 @@ query T
 SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
 ----
 3
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
+
+query T
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
+----
+{"a": 10}
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $value && @.b > $value)');
+
+# Postgres would outputs min, but we sort the variable names and then check for invalid variables.
+statement error pgcode 42704 pq: could not find jsonpath variable "max"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $min && @.b > $max)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', false);
+
