@@ -23,15 +23,25 @@ type TpceConverter struct {
 }
 
 func (t *TpceConverter) Convert(labels []model.Label, src model.FileInfo) (err error) {
+	// Get a buffer from the pool for the scanner
+	scannerBuf := getBuffer()
+	defer putBuffer(scannerBuf)
+
+	// Create scanner with pooled buffer
 	scanner := bufio.NewScanner(bytes.NewReader(src.Content))
-	scanner.Buffer(make([]byte, 1024*1024), BufferSize)
+	scanner.Buffer(scannerBuf.Bytes()[:scannerBufferSize], statsMaxBuffer)
+
 	labelString := util.LabelMapToString(getLabelMap(src, labels, true, "", nil))
 	runDate, _ := getTestDateAndName(src)
 	timestamp, err := time.Parse("20060102", strings.Split(runDate, "-")[0])
 	if err != nil {
 		return err
 	}
-	buf := bytes.NewBuffer([]byte{})
+
+	// Get a buffer from the pool for metrics
+	metricsBuf := getBuffer()
+	defer putBuffer(metricsBuf)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		var metrics tests.TpceMetrics
@@ -39,9 +49,16 @@ func (t *TpceConverter) Convert(labels []model.Label, src model.FileInfo) (err e
 			return err
 		}
 		openmetricBytes := tests.GetTpceOpenmetricsBytes(metrics, "0", labelString, timestamp.Unix())
-		buf.Write(openmetricBytes)
+		if _, err = metricsBuf.Write(openmetricBytes); err != nil {
+			return err
+		}
 	}
-	return t.sink.Sink(buf, src.Path, AggregatedStatsFile)
+
+	if err = scanner.Err(); err != nil {
+		return err
+	}
+
+	return t.sink.Sink(metricsBuf, src.Path, AggregatedStatsFile)
 }
 
 func NewTpceConverter(sink sink.Sink) Converter {

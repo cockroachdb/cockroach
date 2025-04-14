@@ -84,7 +84,14 @@ type WorkerPool struct {
 	numWorkers    int
 	specs         *[]registry.TestSpec
 	registry      *converterRegistry
+	lastGC        time.Time
 }
+
+// Constants for memory management
+const (
+	minGCInterval = 5 * time.Second
+	gcInterval    = 25 // Run GC after processing this many files
+)
 
 // NewWorkerPool creates a new worker pool for converting metrics
 func NewWorkerPool(
@@ -131,41 +138,44 @@ func (p *WorkerPool) worker(wg *sync.WaitGroup, errChannel chan string) {
 	defer func() {
 		if r := recover(); r != nil {
 			errMsg := fmt.Sprintf("Recovered from panic in worker: %v", r)
-			errChannel <- errMsg
+			select {
+			case errChannel <- errMsg:
+			case <-time.After(100 * time.Millisecond):
+				fmt.Printf("Warning: Error channel full, dropping error: %v\n", errMsg)
+			}
 		}
 	}()
 
 	// Add a counter to periodically trigger garbage collection
 	processed := 0
-	const gcInterval = 25 // Run GC after processing this many files
 
 	for {
 		select {
 		case <-p.ctx.Done():
-			errChannel <- fmt.Sprintf(ErrWorkerCanceled.Error())
+			select {
+			case errChannel <- ErrWorkerCanceled.Error():
+			case <-time.After(100 * time.Millisecond):
+				fmt.Printf("Warning: Error channel full, dropping error: %v\n", ErrWorkerCanceled)
+			}
 			return
 		case file, ok := <-p.sourceChannel:
 			if !ok {
-				// Channel is closed, worker should exit
 				return
 			}
 
-			// Process file with protection against individual file failures
 			if err := p.processSafeFile(file); err != nil {
 				select {
 				case errChannel <- err.Error():
-					// Error sent successfully
-				default:
-					// Channel is full, log and continue
+				case <-time.After(100 * time.Millisecond):
 					fmt.Printf("Warning: Error channel full, dropping error: %v\n", err)
 				}
 				continue
 			}
 
-			// Increment counter and periodically force GC to reclaim memory
 			processed++
-			if processed >= gcInterval {
+			if processed >= gcInterval && time.Since(p.lastGC) >= minGCInterval {
 				processed = 0
+				p.lastGC = time.Now()
 				runtime.GC()
 				debug.FreeOSMemory()
 			}
@@ -189,11 +199,8 @@ func (p *WorkerPool) processSafeFile(file model.FileInfo) (err error) {
 
 // processFile handles the conversion of a single file with timeout
 func (p *WorkerPool) processFile(file model.FileInfo) error {
-
 	start := time.Now()
-
 	defer fmt.Printf("Completed file %s completed in %f seconds\n", file.Path, time.Since(start).Seconds())
-	// rest of the function
 
 	// Create a timeout context for this specific file
 	ctx, cancel := context.WithTimeout(p.ctx, 5*time.Minute)
@@ -204,6 +211,12 @@ func (p *WorkerPool) processFile(file model.FileInfo) error {
 
 	// Process the file in a separate goroutine
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				result <- fmt.Errorf("panic processing file %s: %v", file.Path, r)
+			}
+		}()
+
 		metricType, labels := p.getBenchmarkMetric(file)
 		if metricType == "" {
 			result <- nil
@@ -234,25 +247,28 @@ func (p *WorkerPool) processFile(file model.FileInfo) error {
 
 // combineLabels creates a new slice combining metric-specific and global labels
 func (p *WorkerPool) combineLabels(metricLabels []model.Label) []model.Label {
-	combinedLabels := make([]model.Label, 0, len(metricLabels)+len(p.globalLabels))
-	// Copy metric-specific labels
-	combinedLabels = append(combinedLabels, metricLabels...)
+	// Pre-allocate with exact size needed
+	labelMap := make(map[string]model.Label, len(metricLabels)+len(p.globalLabels))
 
-	// Copy global labels, avoiding duplicates
-	for _, global := range p.globalLabels {
-		isDuplicate := false
-		for _, existing := range metricLabels {
-			if existing.Name == global.Name {
-				isDuplicate = true
-				break
-			}
-		}
-		if !isDuplicate {
-			combinedLabels = append(combinedLabels, global)
+	// Add metric labels first (they take precedence)
+	for _, label := range metricLabels {
+		labelMap[label.Name] = label
+	}
+
+	// Add global labels only if not already present
+	for _, label := range p.globalLabels {
+		if _, exists := labelMap[label.Name]; !exists {
+			labelMap[label.Name] = label
 		}
 	}
 
-	return combinedLabels
+	// Convert map back to slice
+	result := make([]model.Label, 0, len(labelMap))
+	for _, label := range labelMap {
+		result = append(result, label)
+	}
+
+	return result
 }
 
 // getBenchmarkMetric finds the matching metric definition for a file
