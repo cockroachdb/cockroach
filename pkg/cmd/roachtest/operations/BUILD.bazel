@@ -8,6 +8,7 @@ go_library(
         "add_database.go",
         "add_index.go",
         "backup_restore.go",
+        "cancel_job.go",
         "cluster_settings.go",
         "debug_zip.go",
         "disk_stall.go",
