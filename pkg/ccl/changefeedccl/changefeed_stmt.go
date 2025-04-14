@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -419,7 +420,7 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh)
+		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil)
 		if err == nil {
 			log.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -1416,6 +1417,17 @@ func (b *changefeedResumer) resumeWithRetries(
 		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
 	}
 
+	onTracingEvent := func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents) {
+		componentID := execinfrapb.ComponentID{
+			FlowID:        meta.FlowID,
+			SQLInstanceID: meta.SQLInstanceID,
+		}
+
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.mu.perNodeAggregatorStats[componentID] = *meta
+	}
+
 	for r := getRetry(ctx); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
@@ -1433,7 +1445,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			g := ctxgroup.WithContext(ctx)
 			g.GoCtx(func(ctx context.Context) error {
 				defer close(confPoller)
-				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh)
+				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent)
 			})
 			g.GoCtx(func(ctx context.Context) error {
 				t := time.NewTicker(15 * time.Second)
@@ -1669,12 +1681,12 @@ func (b *changefeedResumer) CollectProfile(ctx context.Context, execCtx interfac
 	p := execCtx.(sql.JobExecContext)
 	var aggStatsCopy bulk.ComponentAggregatorStats
 	func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		aggStatsCopy = b.mu.perNodeAggregatorStats.DeepCopy()
 	}()
 
-	if err := bulk.FlushTracingAggregatorStats(ctx, r.job.ID(),
+	if err := bulk.FlushTracingAggregatorStats(ctx, b.job.ID(),
 		p.ExecCfg().InternalDB, aggStatsCopy); err != nil {
 		return errors.Wrap(err, "failed to flush aggregator stats")
 	}

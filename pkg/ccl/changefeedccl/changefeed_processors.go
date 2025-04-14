@@ -333,7 +333,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	ca.agg = tracing.TracingAggregatorForContext(ctx)
 	if ca.agg != nil {
-		ca.aggTimer.Reset(15 * time.Second)
+		ca.aggTimer.Reset(1 * time.Second)
 	}
 
 	spans, err := ca.setupSpansAndFrontier()
@@ -779,7 +779,7 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		select {
 		case <-ca.aggTimer.C:
 			ca.aggTimer.Read = true
-			ca.aggTimer.Reset(15 * time.Second)
+			ca.aggTimer.Reset(1 * time.Second)
 			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(ca.Ctx(),
 				ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
 		default:
@@ -1332,7 +1332,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	cf.agg = tracing.TracingAggregatorForContext(ctx)
 	if cf.agg != nil {
-		cf.aggTimer.Reset(15 * time.Second)
+		cf.aggTimer.Reset(1 * time.Second)
 	}
 
 	cf.input.Start(ctx)
@@ -1578,7 +1578,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		select {
 		case <-cf.aggTimer.C:
 			cf.aggTimer.Read = true
-			cf.aggTimer.Reset(15 * time.Second)
+			cf.aggTimer.Reset(1 * time.Second)
 			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(cf.Ctx(),
 				cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
 		default:
