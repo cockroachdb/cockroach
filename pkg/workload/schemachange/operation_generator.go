@@ -3048,6 +3048,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
+		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
@@ -4861,4 +4862,46 @@ func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error 
 		return err
 	}
 	return nil
+}
+
+func (og *operationGenerator) alterTableRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Define the available RLS options
+	rlsOptions := []string{
+		"ENABLE ROW LEVEL SECURITY",
+		"DISABLE ROW LEVEL SECURITY",
+		"FORCE ROW LEVEL SECURITY",
+		"NO FORCE ROW LEVEL SECURITY",
+	}
+
+	// Randomly decide between 1 or 2 options
+	numOptions := og.randIntn(2) + 1
+
+	// Randomly select a unique permutation of the options
+	perm := og.params.rng.Perm(len(rlsOptions))
+	selectedOptions := make([]string, numOptions)
+	for i := 0; i < numOptions; i++ {
+		selectedOptions[i] = rlsOptions[perm[i]]
+	}
+
+	// Build the SQL statement
+	sqlStatement := fmt.Sprintf(`ALTER TABLE %s %s`, tableName, strings.Join(selectedOptions, ", "))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	opStmt.sql = sqlStatement
+	return opStmt, nil
 }
