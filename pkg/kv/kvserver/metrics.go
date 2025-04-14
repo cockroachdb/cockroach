@@ -1028,6 +1028,20 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaSSTableRemoteBytes = metric.Metadata{
+		Name: "storage.sstable.remote.bytes",
+		Help: "Bytes in SSTables that are stored off-disk (remotely) " +
+			"in object storage.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaSSTableRemoteCount = metric.Metadata{
+		Name: "storage.sstable.remote.count",
+		Help: "Count of SSTables that are stored off-disk (remotely) " +
+			"in object storage.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSSTableCompressionSnappy = metric.Metadata{
 		Name: "storage.sstable.compression.snappy.count",
 		Help: "Count of SSTables that have been compressed with the snappy " +
@@ -2775,6 +2789,8 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Counter
 	BatchCommitCommitWaitDuration     *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
+	SSTableRemoteBytes                *metric.Gauge
+	SSTableRemoteCount                *metric.Gauge
 	SSTableCompressionSnappy          *metric.Gauge
 	SSTableCompressionZstd            *metric.Gauge
 	SSTableCompressionUnknown         *metric.Gauge
@@ -3499,6 +3515,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
+		SSTableRemoteBytes:                metric.NewGauge(metaSSTableRemoteBytes),
+		SSTableRemoteCount:                metric.NewGauge(metaSSTableRemoteCount),
 		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
 		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
 		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
@@ -3958,6 +3976,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
+	count, size := m.RemoteTablesTotal()
+	sm.SSTableRemoteBytes.Update(int64(size))
+	sm.SSTableRemoteCount.Update(int64(count))
 	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
 	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)
 	sm.SSTableCompressionUnknown.Update(m.Table.CompressedCountUnknown)
