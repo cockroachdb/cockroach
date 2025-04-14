@@ -488,6 +488,8 @@ func (ca *changeAggregator) startKVFeed(
 	// If RunAsyncTask immediately returns an error, the kvfeed was not run and
 	// will not run.
 	if err := ca.FlowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
+		ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed")
+		defer sp.Finish()
 		defer close(doneCh)
 		defer kvFeedMemMon.Stop(ctx)
 		errCh <- kvfeed.Run(ctx, kvfeedCfg)
