@@ -200,6 +200,27 @@ SELECT '$.*'::JSONPATH
 ----
 $.*
 
+statement error unimplemented
+SELECT '$.**'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.decimal()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.datetime()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time_tz()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp_tz()'::JSONPATH;
+
 ## When we allow table creation
 
 # statement ok
