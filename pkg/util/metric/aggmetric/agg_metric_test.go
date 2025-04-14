@@ -293,24 +293,23 @@ func TestAggMetricClear(t *testing.T) {
 	}, "tenant_id")
 	r.AddMetric(c)
 
-	d := NewCounter(metric.Metadata{
+	d := NewSQLCounter(metric.Metadata{
 		Name: "bar_counter",
-	}, "tenant_id")
-	d.initWithCacheStorageType([]string{"tenant_id"})
+	})
 	r.AddMetric(d)
-
+	d.labelConfig.Store(LabelConfigAppAndDB)
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
 	t.Run("before clear", func(t *testing.T) {
 		c1.Inc(2)
-		d.Inc(2, "3")
+		d.Inc(2, "test-db", "test-app")
 		testFile := "aggMetric_pre_clear.txt"
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
 	c.clear()
-	d.clear()
+	d.mu.children.Clear()
 
 	t.Run("post clear", func(t *testing.T) {
 		testFile := "aggMetric_post_clear.txt"

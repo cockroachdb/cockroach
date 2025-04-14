@@ -22,6 +22,18 @@ import (
 
 var delimiter = []byte{'_'}
 
+const (
+	dbLabel  = "database"
+	appLabel = "application_name"
+)
+
+const (
+	LabelConfigDisabled = iota
+	LabelConfigApp
+	LabelConfigDB
+	LabelConfigAppAndDB
+)
+
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
 	labels []string
@@ -78,12 +90,8 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 	}
 }
 
-func (cs *childSet) initWithCacheStorageType(labels []string) {
-	// cacheSize is the default number of children that can be stored in the cache.
-	// If the cache exceeds this size, the oldest children are evicted. This is
-	// specific to cache storage for children
+func getCacheStorage() *cache.UnorderedCache {
 	const cacheSize = 5000
-	cs.labels = labels
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		//TODO (aa-joshi) : make cacheSize configurable in the future
@@ -91,9 +99,7 @@ func (cs *childSet) initWithCacheStorageType(labels []string) {
 			return size > cacheSize
 		},
 	})
-	cs.mu.children = &UnorderedCacheWrapper{
-		cache: cacheStorage,
-	}
+	return cacheStorage
 }
 
 func (cs *childSet) Each(

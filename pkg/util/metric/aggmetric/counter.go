@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -81,29 +81,6 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 	}
 	c.add(child)
 	return child
-}
-
-// Inc increments the counter value by i for the given label values. If a
-// counter with the given label values doesn't exist yet, it creates a new
-// counter and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this counter and if the storage type
-// is not StorageTypeCache.
-func (c *AggCounter) Inc(i int64, labelVals ...string) {
-	if len(c.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(c.labels), c.labels))
-	}
-
-	// If the child already exists, increment it.
-	if child, ok := c.get(labelVals...); ok {
-		child.(*Counter).Inc(i)
-		return
-	}
-
-	// Otherwise, create a new child and increment it.
-	child := c.AddChild(labelVals...)
-	child.Inc(i)
 }
 
 // RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
@@ -266,4 +243,189 @@ func (g *CounterFloat64) Inc(i float64) {
 // than the currently set one. It's assumed the caller holds
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
 	g.value.UpdateIfHigher(i)
+}
+
+// SQLCounter maintains a value as the sum of its children. The counter will
+// report to crdb-internal time series only the aggregate sum of all of its
+// children, while its children are additionally exported to prometheus via the
+// PrometheusIterable interface. SQLCounter differs from AggCounter in that
+// a SQLCounter creates child metrics dynamically while AggCounter needs the
+// child creation up front.
+type SQLCounter struct {
+	g           metric.Counter
+	labelConfig atomic.Uint64
+	mu          struct {
+		syncutil.Mutex
+		children ChildrenStorage
+	}
+}
+
+func (c *SQLCounter) Each(
+	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.mu.children.Do(func(e interface{}) {
+		cm := c.mu.children.GetChildMetric(e)
+		pm := cm.ToPrometheusMetric()
+
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+2)
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		dbLabel := dbLabel
+		appLabel := appLabel
+		switch c.labelConfig.Load() {
+		case LabelConfigDB:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &dbLabel,
+				Value: &lvs[0],
+			})
+		case LabelConfigApp:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &appLabel,
+				Value: &lvs[0],
+			})
+		case LabelConfigAppAndDB:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &dbLabel,
+				Value: &lvs[0],
+			})
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &appLabel,
+				Value: &lvs[1],
+			})
+		default:
+		}
+		pm.Label = childLabels
+		f(pm)
+	})
+}
+
+var _ metric.Iterable = (*SQLCounter)(nil)
+var _ metric.PrometheusIterable = (*SQLCounter)(nil)
+var _ metric.PrometheusExportable = (*SQLCounter)(nil)
+
+// NewSQLCounter constructs a new SQLCounter.
+func NewSQLCounter(metadata metric.Metadata) *SQLCounter {
+	c := &SQLCounter{
+		g: *metric.NewCounter(metadata),
+	}
+	c.mu.children = &UnorderedCacheWrapper{
+		cache: getCacheStorage(),
+	}
+	c.labelConfig.Store(LabelConfigDisabled)
+	return c
+}
+
+// getOrAddChild returns the child metric for the given label values. If the child
+// doesn't exist, it creates a new one and adds it to the collection.
+func (c *SQLCounter) getOrAddChild(labelValues ...string) ChildMetric {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// If the child already exists, return it.
+	if child, ok := c.mu.children.Get(labelValues...); ok {
+		return child
+	}
+
+	// Otherwise, create a new child and return it.
+	child := &SQLChildCounter{
+		labelValuesSlice: labelValuesSlice(labelValues),
+	}
+	c.mu.children.Add(child)
+	return child
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (c *SQLCounter) GetType() *io_prometheus_client.MetricType {
+	return c.g.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (c *SQLCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return c.g.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (c *SQLCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return c.g.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (c *SQLCounter) GetName(useStaticLabels bool) string {
+	return c.g.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (c *SQLCounter) GetHelp() string {
+	return c.g.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (c *SQLCounter) GetMeasurement() string {
+	return c.g.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (c *SQLCounter) GetUnit() metric.Unit {
+	return c.g.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (c *SQLCounter) GetMetadata() metric.Metadata {
+	return c.g.GetMetadata()
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (c *SQLCounter) Inspect(f func(interface{})) {
+	f(c)
+}
+
+// Inc increments the counter value by i for the given label values. If a
+// counter with the given label values doesn't exist yet, it creates a new
+// counter based on labelConfig and increments it. Inc increments parent metrics
+// irrespective of labelConfig.
+func (c *SQLCounter) Inc(i int64, db, app string) {
+	c.g.Inc(i)
+
+	var childMetric ChildMetric
+	switch c.labelConfig.Load() {
+	case LabelConfigDB:
+		childMetric = c.getOrAddChild(db)
+	case LabelConfigApp:
+		childMetric = c.getOrAddChild(app)
+	case LabelConfigAppAndDB:
+		childMetric = c.getOrAddChild(db, app)
+	default:
+		return
+	}
+	childMetric.(*SQLChildCounter).Inc(i)
+}
+
+// SQLChildCounter is a child of a SQLCounter. When metrics are collected by prometheus,
+// each of the children will appear with a distinct label, however, when cockroach
+// internally collects metrics, only the parent is collected.
+type SQLChildCounter struct {
+	labelValuesSlice
+	value metric.Counter
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this Counter.
+func (s *SQLChildCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Counter: &io_prometheus_client.Counter{
+			Value: proto.Float64(float64(s.Value())),
+		},
+	}
+}
+
+// Value returns the SQLChildCounter's current value.
+func (s *SQLChildCounter) Value() int64 {
+	return s.value.Count()
+}
+
+// Inc increments the SQLChildCounter's value.
+func (s *SQLChildCounter) Inc(i int64) {
+	s.value.Inc(i)
 }
