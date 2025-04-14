@@ -1401,7 +1401,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc.AddReferencingDescriptorID(table.GetID())
+					_ = typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := descsCol.WriteDescToBatch(
 						ctx, kvTrace, typDesc, b,
 					); err != nil {
@@ -3119,7 +3119,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				}
 				existing := desc.(*typedesc.Mutable)
 				existing.MaybeIncrementVersion()
-				existing.RemoveReferencingDescriptorID(tbl.ID)
+				_ = existing.RemoveReferencingDescriptorID(tbl.ID)
 			}
 		}
 	}

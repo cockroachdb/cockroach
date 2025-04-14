@@ -1375,42 +1375,65 @@ func TestStepIgnoreOldTermMsg(t *testing.T) {
 //     delete the existing entry and all that follow it; append any new entries not already in the log.
 //  3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func TestHandleMsgApp(t *testing.T) {
-	tests := []struct {
+	const term = 2
+	init := index(1).terms(1, 2) // the initial log
+
+	msgApp := func(term uint64, ls LogSlice, commit uint64) pb.Message {
+		return pb.Message{
+			From: 2, To: 1, Type: pb.MsgApp, Term: term,
+			Index: ls.prev.index, LogTerm: ls.prev.term, Entries: ls.Entries(),
+			Commit: commit,
+		}
+	}
+	for _, tt := range []struct {
+		commit  uint64 // the initial commit index
 		m       pb.Message
 		wIndex  uint64
 		wCommit uint64
 		wReject bool
 	}{
 		// Ensure 1
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
+		{m: msgApp(3, entryID{index: 2, term: 3}.terms(), 3), wIndex: 2, wReject: true}, // previous log mismatch
+		{m: msgApp(3, entryID{index: 3, term: 3}.terms(), 3), wIndex: 2, wReject: true}, // previous log non-exist
 
 		// Ensure 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []pb.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []pb.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
+		{m: msgApp(2, entryID{index: 1, term: 1}.terms(), 1), wIndex: 2, wCommit: 1},
+		{m: msgApp(3, entryID{}.terms(3), 1), wIndex: 1, wCommit: 1},
+		{m: msgApp(2, entryID{index: 2, term: 2}.terms(2, 2), 3), wIndex: 4, wCommit: 3},
+		{m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
+		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 4), wIndex: 2, wCommit: 2},
+
+		// Appends overlapping the commit index.
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 2), wIndex: 2, wCommit: 2},
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2, 2, 2), 4), wIndex: 4, wCommit: 4},
+		{commit: 2, m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
+		// Something is wrong with the appended slice. Entry at index 2 is already
+		// committed with term = 2, but we are receiving an append which says entry
+		// 2 has term 1 and is committed. This must be rejected.
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(1, 1), 3), wIndex: 2, wCommit: 2, wReject: true},
 
 		// Ensure 3
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
-	}
+		{m: msgApp(1, entryID{index: 1, term: 1}.terms(), 3), wIndex: 2, wCommit: 1},  // match entry 1, commit up to last new entry 1
+		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 3), wIndex: 2, wCommit: 2}, // match entry 1, commit up to last new entry 2
+		{m: msgApp(2, entryID{index: 2, term: 2}.terms(), 3), wIndex: 2, wCommit: 2},  // match entry 2, commit up to last new entry 2
+		{m: msgApp(2, entryID{index: 2, term: 2}.terms(), 4), wIndex: 2, wCommit: 2},  // commit up to log.last()
+	} {
+		t.Run("", func(t *testing.T) {
+			storage := newTestMemoryStorage(withPeers(1, 2))
+			require.NoError(t, storage.Append(init))
+			require.NoError(t, storage.SetHardState(pb.HardState{
+				Term:   term,
+				Commit: tt.commit,
+			}))
+			sm := newTestRaft(1, 10, 1, storage)
 
-	for i, tt := range tests {
-		storage := newTestMemoryStorage(withPeers(1))
-		require.NoError(t, storage.Append(index(1).terms(1, 2)))
-		sm := newTestRaft(1, 10, 1, storage)
-		sm.becomeFollower(2, None)
-
-		sm.handleAppendEntries(tt.m)
-		assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex(), "#%d", i)
-		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
-		m := sm.readMessages()
-		require.Len(t, m, 1, "#%d", i)
-		assert.Equal(t, tt.wReject, m[0].Reject, "#%d", i)
+			sm.handleAppendEntries(tt.m)
+			assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex())
+			assert.Equal(t, tt.wCommit, sm.raftLog.committed)
+			m := sm.readMessages()
+			require.Len(t, m, 1)
+			assert.Equal(t, tt.wReject, m[0].Reject)
+		})
 	}
 }
 

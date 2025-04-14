@@ -159,6 +159,42 @@ SELECT 'last'::JSONPATH
 statement error pgcode 42601 pq: could not parse "@" as type jsonpath: @ is not allowed in root expressions
 SELECT '@'::JSONPATH
 
+statement error unimplemented
+SELECT '$ ? (@ like_regex ".*" flag "i")'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.keyvalue()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.abs()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.ceiling()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.floor()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.bigint()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.boolean()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.date()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.double()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.integer()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.number()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.string()'::JSONPATH;
+
 ## When we allow table creation
 
 # statement ok
