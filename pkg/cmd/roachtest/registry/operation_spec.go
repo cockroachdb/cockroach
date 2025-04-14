@@ -27,6 +27,8 @@ const (
 	OperationRequiresZeroUnavailableRanges
 	OperationRequiresZeroUnderreplicatedRanges
 	OperationRequiresLDRJobRunning
+	OperationRequiresRunningBackupJob
+	OperationRequiresRunningRestoreJob
 )
 
 // OperationIsolation specifies to what extent the operation runner will try
