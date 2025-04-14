@@ -2166,6 +2166,9 @@ func (c *clusterImpl) StartE(
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
+	if c.t.Spec().(*registry.TestSpec).Benchmark {
+		startOpts.RoachprodOpts.ScheduleBackups = false
+	}
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
