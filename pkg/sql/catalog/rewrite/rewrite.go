@@ -1176,6 +1176,9 @@ func FunctionDescs(
 					fnDesc.Name, dep.ID)
 			}
 		}
+		if err := rewriteSchemaChangerState(fnDesc, descriptorRewrites); err != nil {
+			return err
+		}
 	}
 	return nil
 }
