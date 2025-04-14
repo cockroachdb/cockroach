@@ -487,6 +487,15 @@ func initFollowerReadsDB(
 	require.NoError(t, err)
 	_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
 	require.NoError(t, err)
+	if rng.Intn(2) == 0 {
+		_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true'")
+		require.NoError(t, err)
+		_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s'")
+		require.NoError(t, err)
+		_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s'")
+		require.NoError(t, err)
+		t.L().Printf("metamorphically enabled closed timestamp auto-tuning")
+	}
 
 	// Check the cluster regions.
 	if topology.multiRegion {
