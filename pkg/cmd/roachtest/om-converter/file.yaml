@@ -1,6 +1,6 @@
 source:
   type: gcp
-  directory: artifacts/20250330-19261902/tpccbench
+  directory: artifacts/20241231-18339528/restore/online/workload=true/tpcc/8TB/gce/inc-count=0/nodes=10/cpus=8/run_1/1.perf/
   bucket: cockroach-nightly
   project: cockroach-ephemeral
 

@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
@@ -35,7 +36,19 @@ func (s StatsExporterConverter) Convert(labels []model.Label, src model.FileInfo
 
 	// Create scanner with pooled buffer
 	scanner := bufio.NewScanner(bytes.NewReader(src.Content))
-	scanner.Buffer(scannerBuf.Bytes()[:scannerBufferSize], statsMaxBuffer)
+
+	// Ensure the buffer has enough capacity
+	if scannerBuf.Cap() < scannerBufferSize {
+		// Log a warning about the buffer size issue
+		fmt.Printf("Warning: Buffer capacity (%d) is less than required size (%d) for file %s. Creating a new buffer.\n",
+			scannerBuf.Cap(), scannerBufferSize, src.Path)
+
+		// If the buffer doesn't have enough capacity, create a new one
+		scannerBuf = bytes.NewBuffer(make([]byte, 0, scannerBufferSize))
+	}
+
+	// Use the buffer with the correct size
+	scanner.Buffer(scannerBuf.Bytes()[:0], statsMaxBuffer)
 
 	// Get buffers from pool for metrics
 	metricsBuf := getBuffer()
@@ -49,38 +62,43 @@ func (s StatsExporterConverter) Convert(labels []model.Label, src model.FileInfo
 	// Ensure proper cleanup of writers
 	defer func() {
 		if flushErr := metricsBuffer.Flush(); flushErr != nil && err == nil {
-			err = flushErr
+			err = fmt.Errorf("failed to flush metrics buffer for %s: %w", src.Path, flushErr)
 			return
 		}
 		if flushErr := totalMetricsWriter.Flush(); flushErr != nil && err == nil {
-			err = flushErr
+			err = fmt.Errorf("failed to flush total metrics buffer for %s: %w", src.Path, flushErr)
 			return
 		}
 	}()
 
 	// Process the file
 	if err = s.processFile(scanner, labels, metricsBuffer, totalMetricsWriter, src); err != nil {
-		return err
+		return fmt.Errorf("failed to process file %s: %w", src.Path, err)
 	}
 
 	// Write EOF marker
 	if _, err = totalMetricsWriter.WriteString("# EOF"); err != nil {
-		return err
+		return fmt.Errorf("failed to write EOF marker for %s: %w", src.Path, err)
 	}
 
 	// Ensure all writes are flushed before sinking
 	if err = metricsBuffer.Flush(); err != nil {
-		return err
+		return fmt.Errorf("failed to flush metrics buffer for %s: %w", src.Path, err)
 	}
 	if err = totalMetricsWriter.Flush(); err != nil {
-		return err
+		return fmt.Errorf("failed to flush total metrics buffer for %s: %w", src.Path, err)
 	}
 
 	// Sink the buffers
 	if err = s.sink.Sink(metricsBuf, src.Path, RawStatsFile); err != nil {
-		return err
+		return fmt.Errorf("failed to sink raw metrics for %s: %w", src.Path, err)
 	}
-	return s.sink.Sink(totalMetricsBuf, src.Path, AggregatedStatsFile)
+
+	if err = s.sink.Sink(totalMetricsBuf, src.Path, AggregatedStatsFile); err != nil {
+		return fmt.Errorf("failed to sink aggregated metrics for %s: %w", src.Path, err)
+	}
+
+	return nil
 }
 
 func (s StatsExporterConverter) processFile(
