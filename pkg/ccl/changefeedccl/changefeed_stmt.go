@@ -1432,7 +1432,6 @@ func (b *changefeedResumer) resumeWithRetries(
 	}
 
 	onTracingEvent := func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents) {
-		fmt.Printf("onTracingEvent: %+v\n", meta)
 		componentID := execinfrapb.ComponentID{
 			FlowID:        meta.FlowID,
 			SQLInstanceID: meta.SQLInstanceID,
