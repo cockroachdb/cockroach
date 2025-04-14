@@ -148,8 +148,7 @@ func (sd *StoreDetailMu) status(
 	nl NodeLivenessFunc,
 	suspectDuration time.Duration,
 ) storeStatus {
-	sd.Lock()
-	defer sd.Unlock()
+	sd.RLock() // all exist paths will RUnlock() the lock.
 	// During normal operation, we expect the state transitions for stores to look like the following:
 	//
 	//      +-----------------------+
@@ -171,19 +170,37 @@ func (sd *StoreDetailMu) status(
 	//                                        heartbeat
 	//
 
+	// updateLastUnavailableAndReturnStatusRLocked upgrades the read lock to a
+	// write lock, updates the LastUnavailable timestamp, returns the store
+	// status, and unlocks the write lock.
+	updateLastUnavailableAndReturnStatusRLocked := func(
+		lastUnavailable hlc.Timestamp, returnStatus storeStatus,
+	) storeStatus {
+		sd.RUnlock()
+		sd.Lock()
+		defer sd.Unlock()
+		sd.LastUnavailable = lastUnavailable
+		return returnStatus
+	}
+
+	// returnStatusRLocked unlocks the read lock and returns the store status.
+	returnStatusRLocked := func(returnStatus storeStatus) storeStatus {
+		defer sd.RUnlock()
+		return returnStatus
+	}
+
 	// The store is considered dead if it hasn't been updated via gossip
 	// within the liveness threshold. Note that LastUpdatedTime is set
 	// when the store detail is created and will have a non-zero value
 	// even before the first gossip arrives for a store.
 	deadAsOf := sd.LastUpdatedTime.AddDuration(deadThreshold)
 	if now.After(deadAsOf) {
-		sd.LastUnavailable = now
-		return storeStatusDead
+		return updateLastUnavailableAndReturnStatusRLocked(now, storeStatusDead)
 	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
 	// store), return unavailable.
 	if sd.Desc == nil {
-		return storeStatusUnknown
+		return returnStatusRLocked(storeStatusUnknown)
 	}
 
 	// Even if the store has been updated via gossip, we still rely on
@@ -193,34 +210,31 @@ func (sd *StoreDetailMu) status(
 	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
 	switch nl(sd.Desc.Node.NodeID) {
 	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
-		sd.LastUnavailable = now
-		return storeStatusDead
+		return updateLastUnavailableAndReturnStatusRLocked(now, storeStatusDead)
 	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
-		return storeStatusDecommissioning
+		return returnStatusRLocked(storeStatusDecommissioning)
 	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
-		sd.LastUnavailable = now
-		return storeStatusUnknown
+		return updateLastUnavailableAndReturnStatusRLocked(now, storeStatusUnknown)
 	case livenesspb.NodeLivenessStatus_UNKNOWN:
-		return storeStatusUnknown
+		return returnStatusRLocked(storeStatusUnknown)
 	case livenesspb.NodeLivenessStatus_DRAINING:
-		sd.LastUnavailable = now
-		return storeStatusDraining
+		return updateLastUnavailableAndReturnStatusRLocked(now, storeStatusDraining)
 	}
 
 	// A store is throttled if it has missed receiving snapshots recently.
 	if sd.ThrottledUntil.After(now) {
-		return storeStatusThrottled
+		return returnStatusRLocked(storeStatusThrottled)
 	}
 
 	// Check whether the store is currently suspect. We measure that by
 	// looking at the time it was last unavailable making sure we have not seen any
 	// failures for a period of time defined by StoreSuspectDuration.
 	if sd.LastUnavailable.AddDuration(suspectDuration).After(now) {
-		return storeStatusSuspect
+		return returnStatusRLocked(storeStatusSuspect)
 	}
 
 	// Clear out the LastUnavailable once we return available status.
-	return storeStatusAvailable
+	return returnStatusRLocked(storeStatusAvailable)
 }
 
 // localityWithString maintains a string representation of each locality along
