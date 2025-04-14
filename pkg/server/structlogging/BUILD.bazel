@@ -41,9 +41,11 @@ go_test(
         "//pkg/base",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
@@ -54,5 +56,6 @@ go_test(
         "//pkg/util/log/logpb",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
