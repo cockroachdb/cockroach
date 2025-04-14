@@ -36,70 +36,136 @@ type sysbenchMetrics struct {
 }
 
 func (s *SysbenchConverter) Convert(labels []model.Label, src model.FileInfo) (err error) {
+	// Get a buffer from the pool for the scanner
+	scannerBuf := getBuffer()
+	defer putBuffer(scannerBuf)
+
+	// Create scanner with pooled buffer
 	scanner := bufio.NewScanner(bytes.NewReader(src.Content))
-	scanner.Buffer(make([]byte, 1024*1024), BufferSize)
-	buf := bytes.NewBuffer(nil)
+	scanner.Buffer(scannerBuf.Bytes()[:scannerBufferSize], statsMaxBuffer)
+
+	// Get buffers from pool for metrics
+	rawMetricsBuf := getBuffer()
+	defer putBuffer(rawMetricsBuf)
+
+	aggregatedMetricsBuf := getBuffer()
+	defer putBuffer(aggregatedMetricsBuf)
+
 	openmetricsMap := make(map[string][]openmetricsValues)
 	labelString := util.LabelMapToString(getLabelMap(src, labels, true, "", nil))
-	defer func() {
-		writeQpsSum := 0.0
-		readQpsSum := 0.0
-		otherQpsSum := 0.0
-		totalQpsSum := 0.0
-		count := 0.0
-		var timestamp int64
-		for _, values := range openmetricsMap["read_qps"] {
-			val, _ := strconv.ParseFloat(values.Value, 32)
-			readQpsSum += val
-			count++
-			timestamp = values.Time
-		}
 
-		for _, values := range openmetricsMap["write_qps"] {
-			val, _ := strconv.ParseFloat(values.Value, 32)
-			writeQpsSum += val
-		}
-		for _, values := range openmetricsMap["other_qps"] {
-			val, _ := strconv.ParseFloat(values.Value, 32)
-			otherQpsSum += val
-		}
+	// Process the file
+	if err = s.processFile(scanner, openmetricsMap, rawMetricsBuf, labelString); err != nil {
+		return err
+	}
 
-		for _, values := range openmetricsMap["qps"] {
-			val, _ := strconv.ParseFloat(values.Value, 32)
-			totalQpsSum += val
-		}
+	// Write aggregated metrics
+	if err = s.writeAggregatedMetrics(openmetricsMap, aggregatedMetricsBuf, labelString); err != nil {
+		return err
+	}
 
-		newBuf := bytes.NewBuffer([]byte{})
-		labelString = labelString + `,unit="ops/s",is_higher_better="true"`
-		newBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_read_qps"))
-		newBuf.WriteString(fmt.Sprintf("sysbench_read_qps{%s} %f %d\n", labelString, readQpsSum/count, timestamp))
-		newBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_write_qps"))
-		newBuf.WriteString(fmt.Sprintf("sysbench_write_qps{%s} %f %d\n", labelString, writeQpsSum/count, timestamp))
-		newBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_other_qps"))
-		newBuf.WriteString(fmt.Sprintf("sysbench_other_qps{%s} %f %d\n", labelString, otherQpsSum/count, timestamp))
-		newBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_total_qps"))
-		newBuf.WriteString(fmt.Sprintf("sysbench_total_qps{%s} %f %d\n", labelString, totalQpsSum/count, timestamp))
-		newBuf.WriteString("# EOF")
-		err = s.sink.Sink(newBuf, src.Path, AggregatedStatsFile)
-	}()
+	// Sink the buffers
+	if err = s.sink.Sink(rawMetricsBuf, src.Path, RawStatsFile); err != nil {
+		return err
+	}
+	return s.sink.Sink(aggregatedMetricsBuf, src.Path, AggregatedStatsFile)
+}
 
-	defer func() {
-		err = s.sink.Sink(buf, src.Path, RawStatsFile)
-	}()
-
+func (s *SysbenchConverter) processFile(
+	scanner *bufio.Scanner,
+	openmetricsMap map[string][]openmetricsValues,
+	metricsBuf *bytes.Buffer,
+	labelString string,
+) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		var metrics sysbenchMetrics
-		if err = json.Unmarshal([]byte(line), &metrics); err != nil {
+		if err := json.Unmarshal([]byte(line), &metrics); err != nil {
 			return err
 		}
 
 		addCurrentSnapshotToOpenmetrics(metrics, openmetricsMap)
 	}
 
-	getOpenmetricsBytes(openmetricsMap, labelString, buf)
-	return err
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	getOpenmetricsBytes(openmetricsMap, labelString, metricsBuf)
+	return nil
+}
+
+func (s *SysbenchConverter) writeAggregatedMetrics(
+	openmetricsMap map[string][]openmetricsValues,
+	buf *bytes.Buffer,
+	labelString string,
+) error {
+	writeQpsSum := 0.0
+	readQpsSum := 0.0
+	otherQpsSum := 0.0
+	totalQpsSum := 0.0
+	count := 0.0
+	var timestamp int64
+
+	for _, values := range openmetricsMap["read_qps"] {
+		val, _ := strconv.ParseFloat(values.Value, 32)
+		readQpsSum += val
+		count++
+		timestamp = values.Time
+	}
+
+	for _, values := range openmetricsMap["write_qps"] {
+		val, _ := strconv.ParseFloat(values.Value, 32)
+		writeQpsSum += val
+	}
+
+	for _, values := range openmetricsMap["other_qps"] {
+		val, _ := strconv.ParseFloat(values.Value, 32)
+		otherQpsSum += val
+	}
+
+	for _, values := range openmetricsMap["qps"] {
+		val, _ := strconv.ParseFloat(values.Value, 32)
+		totalQpsSum += val
+	}
+
+	if count == 0 {
+		return fmt.Errorf("no metrics found to aggregate")
+	}
+
+	labelString = labelString + `,unit="ops/s",is_higher_better="true"`
+
+	// Write aggregated metrics
+	if _, err := buf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_read_qps")); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(fmt.Sprintf("sysbench_read_qps{%s} %f %d\n", labelString, readQpsSum/count, timestamp)); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_write_qps")); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(fmt.Sprintf("sysbench_write_qps{%s} %f %d\n", labelString, writeQpsSum/count, timestamp)); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_other_qps")); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(fmt.Sprintf("sysbench_other_qps{%s} %f %d\n", labelString, otherQpsSum/count, timestamp)); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(roachtestutil.GetOpenmetricsGaugeType("sysbench_total_qps")); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString(fmt.Sprintf("sysbench_total_qps{%s} %f %d\n", labelString, totalQpsSum/count, timestamp)); err != nil {
+		return err
+	}
+	if _, err := buf.WriteString("# EOF"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type openmetricsValues struct {

@@ -2,9 +2,11 @@ package om_converter
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/converter"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/model"
@@ -53,28 +55,40 @@ func Start(config *model.Config, numWorkers int, specs *[]registry.TestSpec) (er
 		numWorkers = 2
 	}
 
-	// Create buffered channel for file information
+	// Create buffered channel for file information with reasonable size
 	sourceChannel := make(chan model.FileInfo, ChannelBufferSize)
-	defer close(sourceChannel)
+	defer func() {
+		close(sourceChannel)
+		// Ensure channel is drained to prevent goroutine leaks
+		for range sourceChannel {
+		}
+	}()
 
 	// Setup context with cancellation for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ctrlC(ctx, cancel)
+	defer func() {
+		cancel()
+		// Give some time for goroutines to clean up
+		time.Sleep(100 * time.Millisecond)
+	}()
 
 	// Initialize source component
 	fileSource, err := initializeSource(ctx, config)
 	if err != nil {
 		return err
 	}
-	defer fileSource.Close()
+	defer func() {
+		fileSource.Close()
+	}()
 
 	// Initialize sink component
 	dataSink, err := initializeSink(ctx, config)
 	if err != nil {
 		return err
 	}
-	defer dataSink.Close()
+	defer func() {
+		dataSink.Close()
+	}()
 
 	// Start processing pipeline
 	return runProcessingPipeline(ctx, cancel, fileSource, dataSink, sourceChannel, config, numWorkers, specs)
@@ -117,7 +131,11 @@ func runProcessingPipeline(
 	go func() {
 		defer wg.Done()
 		if err := fileSource.Start(sourceChannel); err != nil {
-			errCh <- errors.Wrap(err, "source processing failed")
+			select {
+			case errCh <- errors.Wrap(err, "source processing failed"):
+			case <-time.After(100 * time.Millisecond):
+				fmt.Printf("Warning: Error channel full, dropping error: %v\n", err)
+			}
 			cancel()
 		}
 	}()
@@ -127,7 +145,11 @@ func runProcessingPipeline(
 	go func() {
 		defer wg.Done()
 		if err := converter.StartConverter(ctx, sourceChannel, dataSink, config.Metrics, config.Global, numWorkers, specs); err != nil {
-			errCh <- errors.Wrap(err, "converter processing failed")
+			select {
+			case errCh <- errors.Wrap(err, "converter processing failed"):
+			case <-time.After(100 * time.Millisecond):
+				fmt.Printf("Warning: Error channel full, dropping error: %v\n", err)
+			}
 			cancel()
 		}
 	}()
