@@ -1540,14 +1540,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, matchGuess tracker.MatchGuess,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, matchGuess)
 	return r.electionTracker.TallyVotes()
 }
 
@@ -2217,7 +2217,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		r.handleVoteResp(m)
+		r.handleVoteResp(m, myVoteRespType)
 	}
 	return nil
 }
@@ -2346,8 +2346,42 @@ func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
 	}
 }
 
-func (r *raft) handleVoteResp(m pb.Message) {
-	gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
+func (r *raft) handleVoteResp(m pb.Message, myVoteRespType pb.MessageType) {
+	voterLast := entryID{index: m.RejectHint, term: m.LogTerm}
+	matchGuess := tracker.MatchGuess{Index: r.raftLog.lastIndex()}
+
+	// If the voter voted for us through MsgVoteResp, it will not vote again at
+	// terms <= r.Term, and can only accept MsgApp from terms >= term. Thus, if
+	// this candidate wins election, the voter's log will not change until the
+	// first MsgApp from this or later leader.
+	// (See section 5.2 & 5.4 of the Raft paper for more details.)
+	//
+	// Avoid scanning the whole leader log in findConflictByTerm if the voter
+	// did not attach a hint for any reason.
+	if myVoteRespType == pb.MsgVoteResp && !m.Reject && voterLast.term > 0 && voterLast.index > 0 {
+		index, term := r.raftLog.findConflictByTerm(voterLast.index, voterLast.term)
+		matchGuess = tracker.MatchGuess{
+			// NB: index <= voterLast.index.
+			// Also, raftLog.term(index) <= voterLast.term, or the entry at
+			// index is missing.
+			Index: index,
+			// If we found an entry at <= voterLast.index with a matching term then
+			// our log matches the voter's at matchGuess, by Log Matching Property.
+			// If this candidate becomes the leader, it can directly set this
+			// follower to StateReplicate and begin sending MsgApp from matchGuess.
+			//
+			// NB: By Raft invariants, term == voterLast.term can be true even if
+			// index < voterLast.index.
+			//
+			// The returned term can be 0 if the entry at the index is missing, in
+			// which case we don't consider it a match.
+			Match: term == voterLast.term,
+		}
+	}
+
+	// Record Vote and hint information. The collected matchGuess will be used
+	// for the first round of MsgApp if this candidate wins election.
+	gr, rj, res := r.poll(m.From, m.Type, !m.Reject, matchGuess)
 	r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 	switch res {
 	case quorum.VoteWon:
