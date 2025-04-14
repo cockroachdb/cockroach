@@ -2428,7 +2428,17 @@ func TestMismatchColIDs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, sqlA, sqlB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     2 * time.Microsecond,
+			MaxRetries:     1,
+		},
+	}
+	args := testClusterBaseClusterArgs
+	args.ServerArgs.Knobs.Streaming = streamingKnobs
+	tc, s, sqlA, sqlB := setupLogicalTestServer(t, ctx, args, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2449,17 +2459,29 @@ func TestMismatchColIDs(t *testing.T) {
 	sqlB.Exec(t, "ALTER TABLE foo DROP COLUMN bar")
 	sqlB.Exec(t, "INSERT INTO foo VALUES (4, 'world')")
 
-	// LDR immediate mode creation should fail because of mismatched column IDs.
+	// When using the kv writer, LDR immediate mode creation should fail because of mismatched column IDs.
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
 	sqlA.ExpectErr(t,
 		"destination table foo column baz has ID 3, but the source table foo has ID 4",
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String())
 
-	// LDR validated mode creation should succeed because the SQL writer supports mismatched column IDs.
 	var jobID jobspb.JobID
 	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'validated'", dbBURL.String()).Scan(&jobID)
-
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, sqlA, jobID)
+
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'sql'")
+	sqlA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = 'immediate'", dbBURL.String()).Scan(&jobID)
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, sqlA, jobID)
+
+	// Ensure the validation works on resumption as well.
+	sqlA.Exec(t, "PAUSE JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, sqlA, jobID)
+
+	sqlA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
+	sqlA.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, sqlA, jobID)
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
