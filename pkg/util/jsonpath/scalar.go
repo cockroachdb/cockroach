@@ -36,3 +36,14 @@ func (s Scalar) String() string {
 	}
 	return s.Value.String()
 }
+
+func (s Scalar) Validate(vars map[string]int, nestingLevel int, insideArraySubscript bool) error {
+	if s.Type == ScalarVariable {
+		// If the variable is not in the map, add it with a strictly increasing
+		// index, so we are able to sort the variables by their first appearance.
+		if _, ok := vars[s.Variable]; !ok {
+			vars[s.Variable] = len(vars)
+		}
+	}
+	return nil
+}

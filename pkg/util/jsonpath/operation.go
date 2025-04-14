@@ -88,3 +88,17 @@ func (o Operation) String() string {
 	}
 	return fmt.Sprintf("(%s %s %s)", o.Left, OperationTypeStrings[o.Type], o.Right)
 }
+
+func (o Operation) Validate(
+	vars map[string]int, nestingLevel int, insideArraySubscript bool,
+) error {
+	if err := o.Left.Validate(vars, nestingLevel, insideArraySubscript); err != nil {
+		return err
+	}
+	if o.Right != nil {
+		if err := o.Right.Validate(vars, nestingLevel, insideArraySubscript); err != nil {
+			return err
+		}
+	}
+	return nil
+}

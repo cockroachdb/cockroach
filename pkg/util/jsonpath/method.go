@@ -29,3 +29,7 @@ var _ Path = Method{}
 func (m Method) String() string {
 	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
 }
+
+func (m Method) Validate(vars map[string]int, nestingLevel int, insideArraySubscript bool) error {
+	return nil
+}

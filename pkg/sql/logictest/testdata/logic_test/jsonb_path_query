@@ -1552,3 +1552,42 @@ query T
 SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
 ----
 3
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
+
+query T
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
+----
+{"a": 10}
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $value && @.b > $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "min"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $min && @.b > $max)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "d"
+SELECT jsonb_path_query('{}', '$ ? ($d < $a && @.c > $b)');
+
+# Postgres doesn't error, because they short-circuit the evaluation of the predicate.
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
