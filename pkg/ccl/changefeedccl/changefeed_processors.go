@@ -232,6 +232,12 @@ func newChangeAggregatorProcessor(
 					producerMeta = []execinfrapb.ProducerMetadata{{Changefeed: &meta}}
 				}
 
+				if ca.agg != nil {
+					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+						ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
+					producerMeta = append(producerMeta, *meta)
+				}
+
 				ca.close()
 				return producerMeta
 			},
@@ -1254,6 +1260,11 @@ func newChangeFrontierProcessor(
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				cf.close()
+				if cf.agg != nil {
+					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+						cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
+				}
 				return nil
 			},
 			InputsToDrain: []execinfra.RowSource{cf.input},
