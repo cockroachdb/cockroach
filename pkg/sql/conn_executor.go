@@ -340,9 +340,6 @@ type Server struct {
 	// node. Newly collected statistics flow into localSqlStats.
 	localSqlStats *sslocal.SQLStats
 
-	// sqlStatsController is the control-plane interface for sqlStats.
-	sqlStatsController *persistedsqlstats.Controller
-
 	// sqlStatsIngester provides the interface to consume stats about a sql execution.
 	sqlStatsIngester *sslocal.SQLStatsIngester
 
@@ -507,6 +504,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
 		SQLIDContainer:          cfg.NodeInfo.NodeID,
 		JobRegistry:             s.cfg.JobRegistry,
+		FanoutServer:            cfg.SQLStatusServer,
 		Knobs:                   cfg.SQLStatsTestingKnobs,
 		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
 		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
@@ -516,7 +514,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
-	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -698,12 +695,6 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
-}
-
-// GetSQLStatsController returns the persistedsqlstats.Controller for current
-// sql.Server's SQL Stats.
-func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
-	return s.sqlStatsController
 }
 
 // GetSchemaTelemetryController returns the schematelemetryschedule.Controller
@@ -3840,7 +3831,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.sqlStatsController,
+			SQLStatsController:             ex.server.sqlStats,
 			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,

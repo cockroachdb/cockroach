@@ -63,7 +63,7 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	sqlServer := s.SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
@@ -213,7 +213,7 @@ func TestSQLStatCollection(t *testing.T) {
 
 	// Reset the SQL statistics, which will dump stats into the
 	// reported statistics pool.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Query the reported statistics.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
@@ -271,7 +271,7 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Flush the SQL stats again.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Find our statement stat from the reported stats pool.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
@@ -396,7 +396,7 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	hashedAppName := "hashed app name"
@@ -409,13 +409,13 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlRunner.Exec(t, `DELETE FROM t.test WHERE x=5`)
 
 	// verify that with low limit, number of stats is within that limit
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	stats, err := sqlServer.GetScrubbedReportingStats(ctx, 5, true)
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(stats), 5)
 
 	// verify that with high limit, the number of	queries is as much as the above
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(stats), 7)
