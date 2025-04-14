@@ -525,7 +525,6 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		case result := <-ioEmitter.GetResult():
 			handleResult(result)
 		case <-flushTimer.Ch():
-			flushTimer.MarkRead()
 			isTimerPending = false
 			if err := flushAll(); err != nil {
 				s.handleError(err)

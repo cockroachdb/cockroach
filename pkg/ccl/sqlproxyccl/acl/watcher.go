@@ -362,7 +362,6 @@ func pollAndUpdateChan(
 				log.Errorf(ctx, "WatchList daemon stopped: %v", ctx.Err())
 				return
 			case <-t.Ch():
-				t.MarkRead()
 				result <- accessController
 			}
 		}

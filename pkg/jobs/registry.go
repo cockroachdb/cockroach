@@ -1070,7 +1070,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				r.cancelAllAdoptedJobs()
 				return
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				cancelLoopTask(ctx)
 				lc.onExecute()
 			}
@@ -1107,7 +1106,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case <-r.drainJobs:
 				return
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				old := timeutil.Now().Add(-1 * retentionDuration())
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
@@ -1145,7 +1143,6 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				processClaimedJobs(ctx)
 			case <-lc.timer.C:
-				lc.timer.Read = true
 				claimJobs(ctx)
 				processClaimedJobs(ctx)
 				lc.onExecute()

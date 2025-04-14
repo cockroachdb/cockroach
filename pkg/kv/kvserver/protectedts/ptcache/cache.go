@@ -173,7 +173,6 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
-			timer.Read = true
 			future, _ := c.sf.DoChan(ctx,
 				refreshKey,
 				singleflight.DoOpts{

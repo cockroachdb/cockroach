@@ -231,7 +231,6 @@ func (c *ClientCertExpirationCache) startPurgePastExpirations(ctx context.Contex
 		for ; ; timer.Reset(period) {
 			select {
 			case <-timer.C:
-				timer.Read = true
 				c.Purge(ctx)
 			case <-c.stopper.ShouldQuiesce():
 				return
