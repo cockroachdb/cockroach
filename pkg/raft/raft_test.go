@@ -1386,6 +1386,7 @@ func TestHandleMsgApp(t *testing.T) {
 		}
 	}
 	for _, tt := range []struct {
+		commit  uint64 // the initial commit index
 		m       pb.Message
 		wIndex  uint64
 		wCommit uint64
@@ -1402,6 +1403,16 @@ func TestHandleMsgApp(t *testing.T) {
 		{m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
 		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 4), wIndex: 2, wCommit: 2},
 
+		// Appends overlapping the commit index.
+		// TODO(pav-kv): accept these appends.
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 2), wIndex: 2, wCommit: 2},
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2, 2, 2), 4), wIndex: 2, wCommit: 2},
+		{commit: 2, m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
+		// Something is wrong with the appended slice. Entry at index 2 is already
+		// committed with term = 2, but we are receiving an append which says entry
+		// 2 has term 1 and is committed. This must be rejected.
+		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(1, 1), 3), wIndex: 2, wCommit: 2},
+
 		// Ensure 3
 		{m: msgApp(1, entryID{index: 1, term: 1}.terms(), 3), wIndex: 2, wCommit: 1},  // match entry 1, commit up to last new entry 1
 		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 3), wIndex: 2, wCommit: 2}, // match entry 1, commit up to last new entry 2
@@ -1411,8 +1422,11 @@ func TestHandleMsgApp(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := newTestMemoryStorage(withPeers(1, 2))
 			require.NoError(t, storage.Append(init))
+			require.NoError(t, storage.SetHardState(pb.HardState{
+				Term:   term,
+				Commit: tt.commit,
+			}))
 			sm := newTestRaft(1, 10, 1, storage)
-			sm.becomeFollower(term, None)
 
 			sm.handleAppendEntries(tt.m)
 			assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex())
