@@ -569,6 +569,16 @@ stabilize 1
   1->1 MsgAppResp Term:8 Log:0/21 Commit:18
   1->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
 
+status 1
+----
+1: StateReplicate match=21 next=22 sentCommit=18 matchCommit=18
+2: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+3: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+4: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+5: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+6: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+7: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+
 ## Recover each follower, one by one.
 stabilize 1 2
 ----
