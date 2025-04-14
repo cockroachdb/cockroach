@@ -195,6 +195,27 @@ SELECT '$.number()'::JSONPATH;
 statement error unimplemented
 SELECT '$.string()'::JSONPATH;
 
+statement error unimplemented
+SELECT '$.**'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.decimal()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.datetime()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time_tz()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp_tz()'::JSONPATH;
+
 query T
 SELECT '$.*'::JSONPATH
 ----
@@ -224,10 +245,3 @@ $.*
 
 # statement error unsupported comparison operator
 # SELECT * FROM a WHERE j = '$.a'
-
-## Unsupported Jsonpath
-
-# query T
-# SELECT '$.a.type()'::JSONPATH
-# ----
-# $.a.type()
