@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -2076,7 +2077,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		numIncrementals = 2
 	}
 	l.Printf("creating %d incremental backups", numIncrementals)
-	for i := 0; i < numIncrementals; i++ {
+	for i := range numIncrementals {
 		d.randomWait(l, rng)
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
@@ -2117,6 +2118,14 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 			}); err != nil {
 				return nil, err
 			}
+			// Since a compacted backup was made, then the backup end times of the
+			// backups it compacted should be removed from the slice. This prevents a
+			// scenario where a later compaction attempts to pick a start time from
+			// one of the backups that were compacted. Since compaction looks at the
+			// elided backup chain, these compacted backups are replaced by the
+			// compacted backup and compaction will fail due to being unable to find
+			// the starting backup.
+			backupEndTimes = slices.Delete(backupEndTimes, startIdx+1, endIdx)
 		}
 	}
 
