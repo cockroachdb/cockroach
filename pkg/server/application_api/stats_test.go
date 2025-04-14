@@ -64,7 +64,7 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 
 	// Flush stats at the beginning of the test.
 	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
 	// are unaffected by the calls to report diagnostics.
@@ -178,8 +178,8 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	// Execute some queries against the sqlDB to build up some stats.
 	// As we are scrubbing the stats, we want to make sure the app name
@@ -397,7 +397,7 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 	// Flush stats at the beginning of the test.
 	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	hashedAppName := "hashed app name"
 	sqlRunner.Exec(t, `SET application_name = $1;`, hashedAppName)

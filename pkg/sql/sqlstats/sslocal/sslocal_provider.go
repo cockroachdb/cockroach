@@ -10,7 +10,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -45,12 +44,6 @@ func New(
 		reportingSink,
 		knobs,
 	)
-}
-
-// GetController returns a sqlstats.Controller responsible for the current
-// SQLStats.
-func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
-	return NewController(s, server)
 }
 
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
