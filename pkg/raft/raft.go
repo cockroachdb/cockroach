@@ -1038,7 +1038,10 @@ func (r *raft) maybeCommit() bool {
 	return true
 }
 
-func (r *raft) reset(term uint64) {
+// reset is called during state transitions, such as becoming leader or
+// follower. The visit function is used to initialize/reset every peer in the
+// config. Can be nil, in which case the default initializer is used.
+func (r *raft) reset(term uint64, visit func(id pb.PeerID, pr *tracker.Progress)) {
 	if r.Term != term {
 		// NB: There are state transitions where reset may be called on a follower
 		// that supports a fortified leader. One example is when a follower is
@@ -1062,16 +1065,25 @@ func (r *raft) reset(term uint64) {
 
 	r.abortLeaderTransfer()
 
+	if visit != nil {
+		r.trk.Visit(visit)
+	} else {
+		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+			// TODO(pav-kv): do not use progress map in non-StateLeader.
+			// Except IsLearner and the fact that certain IDs are populated, none
+			// of the fields are used in other states. We can instead rely on
+			// r.config for these signals.
+			*pr = tracker.Progress{
+				Match:       0,
+				MatchCommit: 0,
+				Next:        r.raftLog.lastIndex() + 1,
+				Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+				IsLearner:   pr.IsLearner,
+			}
+		})
+	}
+
 	r.electionTracker.ResetVotes()
-	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
-		*pr = tracker.Progress{
-			Match:       0,
-			MatchCommit: 0,
-			Next:        r.raftLog.lastIndex() + 1,
-			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
-			IsLearner:   pr.IsLearner,
-		}
-	})
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -1280,7 +1292,7 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 		r.bcastDeFortify()
 	}
 
-	r.reset(term)
+	r.reset(term, nil)
 	r.setLead(lead)
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 	r.logger.Debugf("%x reset election elapsed to %d", r.id, r.electionElapsed)
@@ -1295,7 +1307,8 @@ func (r *raft) becomeCandidate() {
 	// we're already fortified.
 	assertTrue(!r.supportingFortifiedLeader(), "shouldn't become a candidate if we're supporting a fortified leader")
 	r.step = stepCandidate
-	r.reset(r.Term + 1)
+	r.reset(r.Term+1, nil)
+
 	r.tick = r.tickElection
 	r.setVote(r.id)
 	r.state = pb.StateCandidate
@@ -1329,7 +1342,7 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term)
+	r.reset(r.Term, nil)
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
