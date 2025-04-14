@@ -231,7 +231,11 @@ func NewTxnFromProto(
 
 // NewLeafTxn instantiates a new leaf transaction.
 func NewLeafTxn(
-	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, tis *roachpb.LeafTxnInputState,
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	tis *roachpb.LeafTxnInputState,
+	header *kvpb.AdmissionHeader,
 ) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
@@ -246,6 +250,19 @@ func NewLeafTxn(
 	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.LeafTransactionalSender(tis)
+	if header != nil {
+		if admissionpb.WorkPriority(header.Priority) != admissionpb.NormalPri {
+			log.VEventf(ctx, 2,
+				"initializing leaf txn admission control header with priority: %v",
+				admissionpb.WorkPriority(header.Priority),
+			)
+		}
+		txn.admissionHeader = kvpb.AdmissionHeader{
+			CreateTime: header.CreateTime,
+			Priority:   header.Priority,
+			Source:     header.Source,
+		}
+	}
 	return txn
 }
 
