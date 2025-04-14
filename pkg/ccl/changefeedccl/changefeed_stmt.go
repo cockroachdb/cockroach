@@ -78,7 +78,9 @@ func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeChangefeed,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return &changefeedResumer{job: job}
+			r := &changefeedResumer{job: job}
+			r.mu.perNodeAggregatorStats = make(bulk.ComponentAggregatorStats)
+			return r
 		},
 		jobs.UsesTenantCostControl,
 	)
@@ -1224,6 +1226,18 @@ type changefeedResumer struct {
 		// TODO: feed into this in the metadatacallbackwriter, as in logicalReplicationResumer.ingest()
 	}
 }
+
+// DumpTraceAfterRun implements jobs.TraceableJob.
+func (b *changefeedResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
+// ForceRealSpan implements jobs.TraceableJob.
+func (b *changefeedResumer) ForceRealSpan() bool {
+	return true
+}
+
+var _ jobs.TraceableJob = &changefeedResumer{}
 
 func (b *changefeedResumer) setJobStatusMessage(
 	ctx context.Context, lastUpdate time.Time, fmtOrMsg string, args ...interface{},
