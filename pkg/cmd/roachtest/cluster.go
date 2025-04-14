@@ -1104,7 +1104,6 @@ func attachToExistingCluster(
 	if err := c.validate(clusterSpec, l); err != nil {
 		return nil, err
 	}
-	fmt.Printf("cloud: %s\n", c.cloud)
 	// Assert cloud was set.
 	if c.cloud == spec.AnyCloud {
 		return nil, errors.New("unable to validate cloud provider")
