@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/om-converter/model",
+        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",
     ],
