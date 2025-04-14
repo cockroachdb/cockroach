@@ -42,7 +42,19 @@ func (s *SysbenchConverter) Convert(labels []model.Label, src model.FileInfo) (e
 
 	// Create scanner with pooled buffer
 	scanner := bufio.NewScanner(bytes.NewReader(src.Content))
-	scanner.Buffer(scannerBuf.Bytes()[:scannerBufferSize], statsMaxBuffer)
+
+	// Ensure the buffer has enough capacity
+	if scannerBuf.Cap() < scannerBufferSize {
+		// Log a warning about the buffer size issue
+		fmt.Printf("Warning: Buffer capacity (%d) is less than required size (%d) for file %s. Creating a new buffer.\n",
+			scannerBuf.Cap(), scannerBufferSize, src.Path)
+
+		// If the buffer doesn't have enough capacity, create a new one
+		scannerBuf = bytes.NewBuffer(make([]byte, 0, scannerBufferSize))
+	}
+
+	// Use the buffer with the correct size
+	scanner.Buffer(scannerBuf.Bytes()[:0], statsMaxBuffer)
 
 	// Get buffers from pool for metrics
 	rawMetricsBuf := getBuffer()
@@ -56,19 +68,24 @@ func (s *SysbenchConverter) Convert(labels []model.Label, src model.FileInfo) (e
 
 	// Process the file
 	if err = s.processFile(scanner, openmetricsMap, rawMetricsBuf, labelString); err != nil {
-		return err
+		return fmt.Errorf("failed to process file %s: %w", src.Path, err)
 	}
 
 	// Write aggregated metrics
 	if err = s.writeAggregatedMetrics(openmetricsMap, aggregatedMetricsBuf, labelString); err != nil {
-		return err
+		return fmt.Errorf("failed to write aggregated metrics for %s: %w", src.Path, err)
 	}
 
 	// Sink the buffers
 	if err = s.sink.Sink(rawMetricsBuf, src.Path, RawStatsFile); err != nil {
-		return err
+		return fmt.Errorf("failed to sink raw metrics for %s: %w", src.Path, err)
 	}
-	return s.sink.Sink(aggregatedMetricsBuf, src.Path, AggregatedStatsFile)
+
+	if err = s.sink.Sink(aggregatedMetricsBuf, src.Path, AggregatedStatsFile); err != nil {
+		return fmt.Errorf("failed to sink aggregated metrics for %s: %w", src.Path, err)
+	}
+
+	return nil
 }
 
 func (s *SysbenchConverter) processFile(
