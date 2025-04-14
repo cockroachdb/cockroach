@@ -6,11 +6,6 @@
 package optbuilder
 
 import (
-	"context"
-	"fmt"
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -20,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,8 +24,31 @@ import (
 func (b *Builder) addRowLevelSecurityFilter(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
 ) {
+	scalar, _ := b.maybeBuildRLSUsingExpr(tabMeta, tableScope, cmdScope, nil)
+	if scalar != nil {
+		tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
+			memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+	}
+}
+
+// maybeBuildRLSUsingExpr attempts to construct a scalar expression for
+// applicable RLS USING policies. It is intended for filtering rows during
+// read operations. Returns nil if the user is exempt from RLS enforcement.
+func (b *Builder) maybeBuildRLSUsingExpr(
+	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope, colRefs *opt.ColSet,
+) (scalar opt.ScalarExpr, colIDs opt.ColSet) {
+	if b.isExemptFromRLSPolicies(tabMeta, cmdScope) {
+		return nil, opt.ColSet{}
+	}
+	return b.buildRowLevelSecurityUsingExpression(tabMeta, tableScope, cmdScope, colRefs)
+}
+
+// isExemptFromRLSPolicies will check if the given user is exempt from RLS policies.
+func (b *Builder) isExemptFromRLSPolicies(
+	tabMeta *opt.TableMeta, cmdScope cat.PolicyCommandScope,
+) bool {
 	if !tabMeta.Table.IsRowLevelSecurityEnabled() || cmdScope == cat.PolicyScopeExempt {
-		return
+		return true
 	}
 
 	// Check for cases where users are exempt from policies.
@@ -51,27 +68,25 @@ func (b *Builder) addRowLevelSecurityFilter(
 		isOwnerAndNotForced, bypassRLS)
 	// Check if RLS filtering is exempt.
 	if isAdmin || isOwnerAndNotForced || bypassRLS {
-		return
+		return true
 	}
-
-	scalar := b.buildRowLevelSecurityUsingExpression(tabMeta, tableScope, cmdScope)
-	tableScope.expr = b.factory.ConstructSelect(tableScope.expr,
-		memo.FiltersExpr{b.factory.ConstructFiltersItem(scalar)})
+	return false
 }
 
 // buildRowLevelSecurityUsingExpression generates a scalar expression for read
 // operations by combining all applicable RLS policies. An expression is always
 // returned; if no policies apply, a 'false' expression is returned.
 func (b *Builder) buildRowLevelSecurityUsingExpression(
-	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
-) opt.ScalarExpr {
-	combinedExpr := b.combinePolicyUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
+	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope, colRefs *opt.ColSet,
+) (scalar opt.ScalarExpr, colIDs opt.ColSet) {
+	combinedExpr, colIDs := b.combinePolicyUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
 	if combinedExpr == nil {
 		// No policies, filter out all rows by adding a "false" expression.
 		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
-		return memo.FalseSingleton
+		return memo.FalseSingleton, opt.ColSet{}
 	}
-	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
+	scalar = b.buildScalar(combinedExpr, tableScope, nil, nil, colRefs)
+	return scalar, colIDs
 }
 
 // combinePolicyUsingExpressionForCommand generates a `tree.TypedExpr` command
@@ -81,20 +96,21 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 // calls to that function to generate the expression.
 func (b *Builder) combinePolicyUsingExpressionForCommand(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
-) tree.TypedExpr {
+) (tree.TypedExpr, opt.ColSet) {
 	// For DELETE and UPDATE, we always apply SELECT/ALL policies because
 	// reading the existing row is necessary before performing the write.
 	switch cmdScope {
 	case cat.PolicyScopeUpdate, cat.PolicyScopeDelete:
-		selectExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cat.PolicyScopeSelect)
+		selectExpr, selectColIDs := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cat.PolicyScopeSelect)
 		if selectExpr == nil {
-			return selectExpr
+			return selectExpr, opt.ColSet{}
 		}
-		updateExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
+		updateExpr, updateColIDs := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
 		if updateExpr == nil {
-			return nil
+			return nil, opt.ColSet{}
 		}
-		return tree.NewTypedAndExpr(selectExpr, updateExpr)
+		updateColIDs.UnionWith(selectColIDs)
+		return tree.NewTypedAndExpr(selectExpr, updateExpr), updateColIDs
 	default:
 		return b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
 	}
@@ -104,9 +120,10 @@ func (b *Builder) combinePolicyUsingExpressionForCommand(
 // for all policies that apply to the given policy command scope.
 func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
-) tree.TypedExpr {
+) (tree.TypedExpr, opt.ColSet) {
 	var policiesUsed opt.PolicyIDSet
 	var combinedExpr tree.TypedExpr
+	var colIDs opt.ColSet
 	policies := tabMeta.Table.Policies()
 
 	// Create a closure to handle building the expression for one policy.
@@ -117,6 +134,9 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 		strExpr := policy.UsingExpr
 		if strExpr == "" {
 			return
+		}
+		for _, id := range policy.UsingColumnIDs {
+			colIDs.Add(opt.ColumnID(id))
 		}
 		policiesUsed.Add(policy.ID)
 		parsedExpr, err := parser.ParseExpr(strExpr)
@@ -142,7 +162,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 	}
 	if combinedExpr == nil {
 		// No permissive policies. Return an empty expr to force the caller to generate a deny-all expression.
-		return nil
+		return nil, colIDs
 	}
 	for _, policy := range policies.Restrictive {
 		buildForPolicy(policy, true /* restrictive */)
@@ -153,7 +173,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 		panic(errors.AssertionFailedf("at least one applicable policy should have been found"))
 	}
 	b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, true /* applyFilterExpr */)
-	return combinedExpr
+	return combinedExpr, colIDs
 }
 
 // policyAppliesToCommandScope checks whether a given PolicyCommandScope applies
@@ -189,133 +209,154 @@ func (b *Builder) isTableOwnerAndRLSNotForced(tabMeta *opt.TableMeta) (bool, err
 	return b.catalog.IsOwner(b.ctx, tabMeta.Table, b.checkPrivilegeUser)
 }
 
-// optRLSConstraintBuilder is used synthesize a check constraint to enforce the
-// RLS policies for new rows.
-type optRLSConstraintBuilder struct {
-	tab      cat.Table
-	md       *opt.Metadata
-	tabMeta  *opt.TableMeta
-	oc       cat.Catalog
-	user     username.SQLUsername
-	isUpdate bool
-}
-
-// Build will construct a CheckConstraint to enforce the policies for the
-// current user and command.
-func (r *optRLSConstraintBuilder) Build(ctx context.Context) cat.CheckConstraint {
-	expr, colIDs := r.genExpression(ctx)
-	if expr == "" {
-		panic(fmt.Sprintf("must return some expression but empty string returned for user: %v", r.user))
-	}
-	return &rlsCheckConstraint{
-		constraint: expr,
-		colIDs:     colIDs,
-		tab:        r.tab,
-	}
-}
-
-// genExpression builds the expression that will be used within the check
-// constraint built for RLS.
-func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []int) {
-	// colIDs tracks the column IDs referenced in all the policy expressions
-	// that are applied. We use a set as we need to combine the columns used
-	// for multiple policies.
-	var colIDs intsets.Fast
-
-	// Check for cases where users are exempt from policies.
-	isAdmin, err := r.oc.UserHasAdminRole(ctx, r.user)
-	if err != nil {
-		panic(err)
-	}
-	isOwnerAndNotForced, err := r.isTableOwnerAndRLSNotForced(ctx)
-	if err != nil {
-		panic(err)
-	}
-	bypassRLS, err := r.oc.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, r.user)
-	if err != nil {
-		panic(err)
-	}
-	r.md.SetRLSEnabled(r.user, isAdmin, r.tabMeta.MetaID, isOwnerAndNotForced, bypassRLS)
-	if isAdmin || isOwnerAndNotForced || bypassRLS {
-		// Return a constraint check that always passes.
-		return "true", nil
+// buildRLSCheckExpr builds the expression that will be used within the check
+// constraint built for RLS. The built expression is returned along with the
+// column IDs referenced in the check (indexed by external column ordinal).
+func (b *Builder) buildRLSCheckExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	needsSelectPriv bool,
+	fetchScope *scope,
+	outScope *scope,
+	canaryColID opt.ColumnID,
+	referencedCols *opt.ColSet,
+) (opt.ScalarExpr, opt.ColSet) {
+	if b.isExemptFromRLSPolicies(tabMeta, cmdScope) {
+		return memo.TrueSingleton, opt.ColSet{}
 	}
 
-	combinedExpr := r.combinePolicyWithCheckExpr(&colIDs)
+	var combinedExpr opt.ScalarExpr
+	var colIDs opt.ColSet
+	// UPSERT is complex because the applied policies depend on whether a conflict
+	// occurred. This is handled separately because of that complexity.
+	if cmdScope == cat.PolicyScopeUpsert {
+		combinedExpr, colIDs = b.combinePolicyWithCheckExprForUpsert(
+			tabMeta, needsSelectPriv, fetchScope, outScope, canaryColID, referencedCols)
+	} else {
+		combinedExpr, colIDs = b.combinePolicyWithCheckExpr(tabMeta, cmdScope, needsSelectPriv, outScope, referencedCols)
+	}
 	// If no policies apply, then we will add a false check as nothing is allowed
 	// to be written.
-	if combinedExpr == "" {
-		r.md.GetRLSMeta().NoPoliciesApplied = true
-		return "false", nil
+	if combinedExpr == nil {
+		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
+		return memo.FalseSingleton, colIDs
 	}
-	return combinedExpr, colIDs.Ordered()
+	return combinedExpr, colIDs
 }
 
 // combinePolicyWithCheckExpr will build a combined expression depending if this
 // is INSERT or UPDATE.
-func (r *optRLSConstraintBuilder) combinePolicyWithCheckExpr(colIDs *intsets.Fast) string {
-	// When handling UPDATE, we need to add the SELECT/ALL using expressions
-	// first, then apply any UPDATE policy.
-	if r.isUpdate {
-		selExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeSelect)
-		if selExpr == "" {
-			return ""
+func (b *Builder) combinePolicyWithCheckExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	needsSelectPriv bool,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+) (scalar opt.ScalarExpr, colIDs opt.ColSet) {
+	var selExpr opt.ScalarExpr
+	var selColIDs opt.ColSet
+	if needsSelectPriv {
+		selExpr, selColIDs = b.genPolicyUsingExprForCommand(tabMeta, cat.PolicyScopeSelect, exprScope, referencedCols)
+		if selExpr == nil {
+			return selExpr, selColIDs
 		}
-		updExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeUpdate)
-		if updExpr == "" {
-			return ""
-		}
-		return fmt.Sprintf("(%s) and (%s)", selExpr, updExpr)
+		colIDs.UnionWith(selColIDs)
 	}
-	return r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeInsert)
+
+	writeExpr, writeColIDs := b.genPolicyWithCheckExprForCommand(tabMeta, cmdScope, exprScope, referencedCols)
+	if writeExpr == nil {
+		return writeExpr, writeColIDs
+	}
+	if selExpr == nil {
+		return writeExpr, writeColIDs
+	}
+	colIDs.UnionWith(writeColIDs)
+	return b.factory.ConstructAnd(selExpr, writeExpr), colIDs
 }
 
 // genPolicyWithCheckExprForCommand will build a WITH CHECK expression for the
 // given policy command.
-func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
-	colIDs *intsets.Fast, cmdScope cat.PolicyCommandScope,
-) string {
-	var sb strings.Builder
+func (b *Builder) genPolicyWithCheckExprForCommand(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+) (opt.ScalarExpr, opt.ColSet) {
+	return b.genCheckExprForCommand(tabMeta, cmdScope, exprScope, referencedCols, false /* onlyUsingExpr */)
+}
+
+// genPolicyUsingExprForCommand will build a USING expression for the given policy command.
+func (b *Builder) genPolicyUsingExprForCommand(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+) (opt.ScalarExpr, opt.ColSet) {
+	return b.genCheckExprForCommand(tabMeta, cmdScope, exprScope, referencedCols, true /* onlyUsingExpr */)
+}
+
+// genCheckExprForCommand will build a check expression for the given policy command.
+func (b *Builder) genCheckExprForCommand(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+	onlyUsingExpr bool,
+) (opt.ScalarExpr, opt.ColSet) {
+	// colIDs tracks the column IDs referenced in all the policy expressions
+	// that are applied. We use a set as we need to combine the columns used
+	// for multiple policies.
+	var colIDs opt.ColSet
+	var scalar opt.ScalarExpr
 	var policiesUsed opt.PolicyIDSet
-	policies := r.tabMeta.Table.Policies()
+	policies := tabMeta.Table.Policies()
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(p cat.Policy, restrictive bool) {
-		if !p.AppliesToRole(r.user) || !policyAppliesToCommandScope(p, cmdScope) {
+		if !p.AppliesToRole(b.checkPrivilegeUser) || !policyAppliesToCommandScope(p, cmdScope) {
 			return
 		}
 		policiesUsed.Add(p.ID)
 
 		var expr string
-		// If the WITH CHECK expression is missing, we default to the USING
-		// expression. If both are missing, then this policy doesn't apply and can
+		// The USING expression is used in two scenarios:
+		// - When the WITH CHECK expression is not defined
+		// - When the caller explicitly requests only the USING expression (e.g.,
+		// during UPSERT)
+		//
+		// Note: If both expressions are missing, the policy does not apply and can
 		// be skipped.
-		if p.WithCheckExpr == "" {
+		if p.WithCheckExpr == "" || onlyUsingExpr {
 			if p.UsingExpr == "" {
 				return
 			}
 			expr = p.UsingExpr
 			for _, id := range p.UsingColumnIDs {
-				colIDs.Add(int(id))
+				colIDs.Add(opt.ColumnID(id))
 			}
 		} else {
 			expr = p.WithCheckExpr
 			for _, id := range p.WithCheckColumnIDs {
-				colIDs.Add(int(id))
+				colIDs.Add(opt.ColumnID(id))
 			}
 		}
-		if sb.Len() != 0 {
+		pexpr, err := parser.ParseExpr(expr)
+		if err != nil {
+			panic(err)
+		}
+		texpr := exprScope.resolveAndRequireType(pexpr, types.Bool)
+		singleExprScalar := b.buildScalar(texpr, exprScope, nil, nil, referencedCols)
+
+		// Build up a scalar expression of all singleExprScalar's combined.
+		if scalar != nil {
 			if restrictive {
-				sb.WriteString(" AND ")
+				scalar = b.factory.ConstructAnd(scalar, singleExprScalar)
 			} else {
-				sb.WriteString(" OR ")
+				scalar = b.factory.ConstructOr(scalar, singleExprScalar)
 			}
 		} else {
-			sb.WriteString("(") // Add the outer parenthesis that surrounds all permissive policies
+			scalar = singleExprScalar
 		}
-		sb.WriteString("(")
-		sb.WriteString(expr)
-		sb.WriteString(")")
 	}
 
 	for _, policy := range policies.Permissive {
@@ -323,36 +364,74 @@ func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
 	}
 	// If no permissive policies apply, then we will add a false check as
 	// nothing is allowed to be written.
-	if sb.Len() == 0 {
-		r.md.GetRLSMeta().NoPoliciesApplied = true
-		return "false"
+	if scalar == nil {
+		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
+		return memo.FalseSingleton, colIDs
 	}
-	sb.WriteString(")") // Close the outer parenthesis that surrounds all permissive policies
 	for _, policy := range policies.Restrictive {
 		buildForPolicy(policy, true /* restrictive */)
 	}
 
-	if sb.Len() == 0 {
+	if scalar == nil {
 		panic(errors.AssertionFailedf("at least one applicable policy should have been included"))
 	}
-	r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed, false /* applyFilterExpr */)
-	return sb.String()
+	b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, false /* applyFilterExpr */)
+	return scalar, colIDs
 }
 
-// isTableOwnerAndRLSNotForced returns true iff the user is the table owner and
-// the NO FORCE option is set.
-func (r *optRLSConstraintBuilder) isTableOwnerAndRLSNotForced(ctx context.Context) (bool, error) {
-	if r.tabMeta.Table.IsRowLevelSecurityForced() {
-		return false, nil
+// combinePolicyWithCheckExprForUpsert is function to build up the WITH CHECK
+// expression for an UPSERT operation.
+func (b *Builder) combinePolicyWithCheckExprForUpsert(
+	tabMeta *opt.TableMeta,
+	needsSelectPriv bool,
+	fetchScope *scope,
+	exprScope *scope,
+	canaryColID opt.ColumnID,
+	referencedCols *opt.ColSet,
+) (scalar opt.ScalarExpr, colIDs opt.ColSet) {
+	conflictScanScalar, fetchColIDs := b.maybeBuildRLSUsingExpr(
+		tabMeta, fetchScope, cat.PolicyScopeUpdate, referencedCols)
+	if conflictScanScalar == nil {
+		conflictScanScalar = memo.TrueSingleton
 	}
-	return r.oc.IsOwner(ctx, r.tabMeta.Table, r.user)
+	colIDs.UnionWith(fetchColIDs)
+
+	conflictUpdateScalar, updateColIDs := b.combinePolicyWithCheckExpr(
+		tabMeta, cat.PolicyScopeUpdate, needsSelectPriv, exprScope, referencedCols)
+	colIDs.UnionWith(updateColIDs)
+	noConflictScalar, insertColIDs := b.combinePolicyWithCheckExpr(
+		tabMeta, cat.PolicyScopeInsert, needsSelectPriv, exprScope, referencedCols)
+	colIDs.UnionWith(insertColIDs)
+
+	isNotConflict := b.factory.ConstructIs(
+		b.factory.ConstructVariable(canaryColID),
+		memo.NullSingleton,
+	)
+	isConflict := b.factory.ConstructNot(isNotConflict)
+	scalar = b.factory.ConstructAnd(
+		b.factory.ConstructAnd(
+			b.factory.ConstructOr(
+				isNotConflict,
+				conflictScanScalar,
+			),
+			b.factory.ConstructOr(
+				isNotConflict,
+				conflictUpdateScalar,
+			),
+		),
+		b.factory.ConstructOr(
+			isConflict,
+			noConflictScalar,
+		),
+	)
+	return scalar, colIDs
 }
 
 // rlsCheckConstraint is an implementation of cat.CheckConstraint for the
 // check constraint built to enforce the RLS policies on write.
 type rlsCheckConstraint struct {
 	constraint string
-	colIDs     []int
+	colIDs     opt.ColList
 	tab        cat.Table
 }
 
