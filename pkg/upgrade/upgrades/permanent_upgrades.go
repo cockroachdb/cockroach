@@ -45,7 +45,6 @@ func bootstrapSystem(
 	}{
 		{"initialize cluster version", populateVersionSetting, false},
 		{"configure key visualizer", keyVisualizerTablesMigration, true},
-		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
 	} {
 		if skipSomeSteps && u.skippableInTest {
 			log.Infof(ctx, "skipping system bootstrap step %q", u.name)
@@ -88,6 +87,7 @@ func bootstrapCluster(
 		{"create update cached table metadata job", createUpdateTableMetadataCacheJob, true},
 		{"maybe initialize replication standby read-only catalog", maybeSetupPCRStandbyReader, true},
 		{"create sql activity flush job", createSqlActivityFlushJob, true},
+		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
 	} {
 
 		if skipSomeSteps && u.skippableInTest {
