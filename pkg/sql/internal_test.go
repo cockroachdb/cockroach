@@ -487,7 +487,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	ltis, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis, nil /* header */)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err = ie.ExecEx(
