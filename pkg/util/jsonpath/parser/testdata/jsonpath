@@ -584,6 +584,21 @@ DETAIL: source SQL:
 ($[*] > 2 ? (@ == true)
                        ^
 
+parse
+$.a.size()
+----
+$."a".size() -- normalized!
+
+parse
+($.a).size()
+----
+$."a".size() -- normalized!
+
+parse
+$.a.type()
+----
+$."a".type() -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

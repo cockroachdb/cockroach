@@ -19,6 +19,7 @@ jobs:
     name: build merge base
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'X-skip-perf-check') }}
     outputs:
       merge_base: ${{ steps.build.outputs.merge_base }}
     steps:
@@ -34,6 +35,7 @@ jobs:
     name: build head
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'X-skip-perf-check') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,6 +74,10 @@ jobs:
   compare:
     runs-on: [self-hosted, basic_runner_group]
     timeout-minutes: 30
+    permissions:
+        contents: read
+        pull-requests: write
+        issues: write    
     needs: [base, run-group-1, run-group-2]
     steps:
       - name: Checkout
@@ -85,33 +91,9 @@ jobs:
         env:
           BASE_SHA: ${{ needs.base.outputs.merge_base }}
           HEAD_SHA: ${{ env.HEAD }}
-      - name: Clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        shell: bash
-        if: always()
-  post:
-    runs-on: [ self-hosted, basic_runner_group ]
-    if: contains(github.event.pull_request.labels.*.name, 'T-microbench-post') # TODO: remove this check once results are confirmed to be stable on CI.
-    timeout-minutes: 30
-    permissions:
-        contents: read
-        pull-requests: write
-        issues: write
-    needs: [ base, compare ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - run: ./build/github/get-engflow-keys.sh
-        shell: bash
-      - name: Unique Build ID
-        run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
-      - name: Compare and Post
-        run: ./build/github/microbenchmarks/post.sh
-        env:
-          HEAD_SHA: ${{ env.HEAD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: "cockroachdb/cockroach"
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPO: "cockroachdb/cockroach"
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
       - name: Clean up
         run: ./build/github/cleanup-engflow-keys.sh
         shell: bash

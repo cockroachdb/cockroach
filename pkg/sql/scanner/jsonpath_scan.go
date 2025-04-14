@@ -57,7 +57,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		// With allowEscapes == false,
 		//  - String literal input "^\\$" is scanned as "^\\\\$" (two escaped backslashes)
 		if s.scanString(lval, identQuote, true /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.STRING)
+			lval.SetID(lexbase.STR)
 		}
 		return
 	case '=':
