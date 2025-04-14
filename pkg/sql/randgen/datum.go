@@ -231,11 +231,11 @@ func RandDatumWithNullChance(
 		}
 		return &tree.DJSON{JSON: j}
 	case types.JsonpathFamily:
-		jp, err := jsonpathparser.Parse(randJsonpath(rng))
+		jp, vars, err := jsonpathparser.Parse(randJsonpath(rng))
 		if err != nil {
 			return nil
 		}
-		return tree.NewDJsonpath(*jp.AST)
+		return tree.NewDJsonpath(*jp.AST, vars)
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {
