@@ -471,7 +471,7 @@ $."abc".*."def".* -- normalized!
 parse
 -1
 ----
-(-1) -- normalized!
+-1
 
 parse
 - "hello"
@@ -491,7 +491,7 @@ parse
 parse
 1 + 2 * -4
 ----
-(1 + (2 * (-4))) -- normalized!
+(1 + (2 * -4)) -- normalized!
 
 error
 $ ? (@ like_regex "(invalid pattern")
@@ -622,16 +622,15 @@ $.abc[0.0]
 ----
 $."abc"[0] -- normalized!
 
-# TODO(normanchenn): Related to the TODOs in pkg/util/jsonpath/operation.go.
 parse
 $.abc[-0]
 ----
-$."abc"[(-0)] -- normalized!
+$."abc"[0] -- normalized!
 
 parse
 $.abc[-1.99]
 ----
-$."abc"[(-1.99)] -- normalized!
+$."abc"[-1.99] -- normalized!
 
 parse
 $[1.999999999999999]
@@ -642,6 +641,46 @@ parse
 $[null]
 ----
 $[null]
+
+parse
++1
+----
+1 -- normalized!
+
+parse
+++1
+----
+1 -- normalized!
+
+parse
++++1
+----
+1 -- normalized!
+
+parse
+- -1
+----
+1 -- normalized!
+
+parse
+- - -1
+----
+-1 -- normalized!
+
+parse
+(1--123).type()
+----
+(1 - -123).type() -- normalized!
+
+parse
+(1-+-123).type()
+----
+(1 - -123).type() -- normalized!
+
+parse
+(1+-+-123).type()
+----
+(1 + 123).type() -- normalized!
 
 # parse
 # $.1a
