@@ -232,6 +232,7 @@ func newChangeAggregatorProcessor(
 					producerMeta = []execinfrapb.ProducerMetadata{{Changefeed: &meta}}
 				}
 
+				fmt.Printf("agg: %+v\n", ca.agg)
 				if ca.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
@@ -1260,6 +1261,8 @@ func newChangeFrontierProcessor(
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				cf.close()
+				fmt.Printf("(cf) agg: %+v\n", cf.agg)
+
 				if cf.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
@@ -1326,14 +1329,16 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		ctx = logtags.AddTag(ctx, "job", cf.spec.JobID)
 	}
 	ctx = logtags.AddTag(ctx, changeFrontierLogTag, nil /* value */)
-	// StartInternal called at the beginning of the function because there are
-	// early returns if errors are detected.
-	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
 	cf.agg = tracing.TracingAggregatorForContext(ctx)
+	fmt.Printf("(cf start) agg: %+v\n", cf.agg)
 	if cf.agg != nil {
 		cf.aggTimer.Reset(1 * time.Second)
 	}
+
+	// StartInternal called at the beginning of the function because there are
+	// early returns if errors are detected.
+	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
 	cf.input.Start(ctx)
 
