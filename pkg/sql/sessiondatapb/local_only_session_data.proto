@@ -653,6 +653,13 @@ message LocalOnlySessionData {
   // though it currently doesn't have Postgres-compatible 0-based indexing
   // behavior.
   bool allow_create_trigger_function_with_argv_references = 165;
+  
+  // SwallowSettingOverrideErr, if set, indicates that when an app tenant
+	// attempts to set a cluster setting overrode by the system tenant, the query
+	// no-ops instead of errors. 
+  bool swallow_setting_override_err = 166;
+
+  // NextID 167 
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

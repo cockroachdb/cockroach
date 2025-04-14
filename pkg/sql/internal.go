@@ -970,6 +970,10 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	// TODO(yuzefovich): remove this for 25.3.
 	sd.BufferedWritesEnabled = false
 
+	if o.SwallowSettingOverrideErr {
+		sd.SwallowSettingOverrideErr = true
+	}
+
 	if o.MultiOverride != "" {
 		overrides := strings.Split(o.MultiOverride, ",")
 		for _, override := range overrides {
