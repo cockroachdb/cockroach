@@ -1052,7 +1052,6 @@ GO_TARGETS = [
     "//pkg/ccl/workloadccl:workloadccl",
     "//pkg/ccl/workloadccl:workloadccl_test",
     "//pkg/ccl:ccl",
-    "//pkg/cdc/changefeedccl/sink:sink",
     "//pkg/cli/clicfg:clicfg",
     "//pkg/cli/clientflags:clientflags",
     "//pkg/cli/clienturl:clienturl",
