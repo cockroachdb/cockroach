@@ -2277,3 +2277,29 @@ vectorized: true
 
 statement ok
 RESET variable_inequality_lookup_join_enabled
+
+# Make sure the admission control priority is correctly set for leaf txns.
+subtest regression_144421
+
+statement ok
+SET default_transaction_quality_of_service=background
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT small.a, large.c FROM small INNER LOOKUP JOIN large ON small.a = large.b
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE MESSAGE LIKE 'initializing leaf txn%';
+----
+initializing leaf txn admission control header with priority: user-low-pri
+initializing leaf txn admission control header with priority: user-low-pri
+
+statement ok
+RESET default_transaction_quality_of_service
+
+subtest end
