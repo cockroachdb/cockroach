@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -106,6 +108,11 @@ type changeAggregator struct {
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
 	frontier *resolvedspan.AggregatorFrontier
+
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// changeAggregator's trace recording.
+	agg      *tracing.TracingAggregator
+	aggTimer timeutil.Timer
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
@@ -317,6 +324,11 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ctx = logtags.RemoveTag(ctx, changeFrontierLogTag)
 	ctx = logtags.AddTag(ctx, changeAggregatorLogTag, nil /* value */)
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
+
+	ca.agg = tracing.TracingAggregatorForContext(ctx)
+	if ca.agg != nil {
+		ca.aggTimer.Reset(15 * time.Second)
+	}
 
 	spans, err := ca.setupSpansAndFrontier()
 	if err != nil {
@@ -758,6 +770,15 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			break
 		}
 
+		select {
+		case <-ca.aggTimer.C:
+			ca.aggTimer.Read = true
+			ca.aggTimer.Reset(15 * time.Second)
+			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(ca.Ctx(),
+				ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
+		default:
+		}
+
 		if err := ca.tick(); err != nil {
 			var e kvevent.ErrBufferClosed
 			if errors.As(err, &e) {
@@ -1045,6 +1066,11 @@ type changeFrontier struct {
 	metricsID    int
 	sliMetricsID int64
 
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// changeFrontier's trace recording.
+	agg      *tracing.TracingAggregator
+	aggTimer timeutil.Timer
+
 	knobs TestingKnobs
 
 	usageWg       sync.WaitGroup
@@ -1293,6 +1319,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// StartInternal called at the beginning of the function because there are
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
+
+	cf.agg = tracing.TracingAggregatorForContext(ctx)
+	if cf.agg != nil {
+		cf.aggTimer.Reset(15 * time.Second)
+	}
+
 	cf.input.Start(ctx)
 
 	// The job registry has a set of metrics used to monitor the various jobs it
@@ -1531,6 +1563,15 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			return cf.ProcessRowHelper(cf.passthroughBuf.Pop()), nil
 		} else if !cf.resolvedBuf.IsEmpty() {
 			return cf.ProcessRowHelper(cf.resolvedBuf.Pop()), nil
+		}
+
+		select {
+		case <-cf.aggTimer.C:
+			cf.aggTimer.Read = true
+			cf.aggTimer.Reset(15 * time.Second)
+			return nil, bulkutil.ConstructTracingAggregatorProducerMeta(cf.Ctx(),
+				cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
+		default:
 		}
 
 		if ok, boundaryType, boundaryTime := cf.frontier.AtBoundary(); ok &&
