@@ -510,7 +510,10 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	if defaultFnID := payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
-
+	writer, err := getWriterType(ctx, payload.Mode, execCfg.Settings)
+	if err != nil {
+		return nil, nil, info, err
+	}
 	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
 	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
@@ -534,6 +537,10 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 			scDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
 			if err != nil {
 				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
+			}
+
+			if err := tabledesc.CheckLogicalReplicationCompatibility(&srcTableDesc, dstTableDesc.TableDesc(), payload.SkipSchemaCheck || payload.CreateTable, writer == writerTypeLegacyKV); err != nil {
+				return err
 			}
 
 			var fnOID oid.Oid
@@ -590,6 +597,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.Discard,
 		payload.Mode,
 		payload.MetricsLabel,
+		writer,
 	)
 	if err != nil {
 		return nil, nil, info, err

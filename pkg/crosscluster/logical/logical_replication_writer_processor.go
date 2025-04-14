@@ -711,6 +711,17 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 		b.Close(lrw.Ctx())
 	}
 
+	writer := writerType(lrw.spec.WriterType)
+	if writer == "" && !lrw.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+		var err error
+		writer, err = getWriterType(
+			ctx, lrw.spec.Mode, lrw.FlowCtx.Cfg.Settings,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
 	for i := range lrw.bh {
@@ -718,10 +729,6 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 		var err error
 		sd := sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)
 
-		writer, err := getWriterType(ctx, lrw.spec.Mode, flowCtx.Cfg.Settings)
-		if err != nil {
-			return err
-		}
 		switch writer {
 		case writerTypeSQL:
 			rp, err = makeSQLProcessor(
@@ -744,7 +751,7 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 				return err
 			}
 		default:
-			return errors.AssertionFailedf("unknown logical replication writer type: %s", writer)
+			return errors.AssertionFailedf("unknown logical replication writer type: %s", lrw.spec.WriterType)
 		}
 
 		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
