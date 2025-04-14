@@ -1600,3 +1600,17 @@ query T
 SELECT jsonb_path_query('[1, 2, 3]', '$[-0.99999999]');
 ----
 1
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
+
+query T
+SELECT * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
+----
+{"a": 10}

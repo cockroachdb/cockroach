@@ -475,11 +475,11 @@ func DecodeDatum(
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oidext.T_jsonpath:
-			jp, err := jsonpathparser.Parse(bs)
+			jp, vars, err := jsonpathparser.Parse(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST, Variables: vars}), nil
 		case oid.T_tsquery:
 			ret, err := tsearch.ParseTSQuery(bs)
 			if err != nil {
@@ -765,11 +765,11 @@ func DecodeDatum(
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oidext.T_jsonpath:
-			jp, err := jsonpathparser.Parse(bs)
+			jp, vars, err := jsonpathparser.Parse(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST, Variables: vars}), nil
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
