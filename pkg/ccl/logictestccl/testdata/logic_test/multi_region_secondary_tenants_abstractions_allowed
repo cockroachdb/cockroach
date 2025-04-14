@@ -29,6 +29,12 @@ ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.max_replicas_per_region = 
 
 user root
 
+# Wait for the setting to be propagated to the tenant cluster.
+query I retry
+SHOW CLUSTER SETTING sql.zone_configs.max_replicas_per_region
+----
+4
+
 # Our setting should not affect non-constraint related zone config updates.
 statement ok
 ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 1
@@ -48,6 +54,12 @@ statement ok
 ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.max_replicas_per_region = 3
 
 user root
+
+# Wait for the setting to be propagated to the tenant cluster.
+query I retry
+SHOW CLUSTER SETTING sql.zone_configs.max_replicas_per_region
+----
+3
 
 statement ok
 ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 1
@@ -72,6 +84,12 @@ statement ok
 ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.default_range_modifiable_by_non_root.enabled = false
 
 user root
+
+# Wait for the setting to be propagated to the tenant cluster.
+query B retry
+SHOW CLUSTER SETTING sql.zone_configs.default_range_modifiable_by_non_root.enabled
+----
+false
 
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
