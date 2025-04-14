@@ -36,3 +36,12 @@ func (s Scalar) String() string {
 	}
 	return s.Value.String()
 }
+
+func (s Scalar) Validate(
+	vars map[string]struct{}, nestingLevel int, insideArraySubscript bool,
+) error {
+	if s.Type == ScalarVariable {
+		vars[s.Variable] = struct{}{}
+	}
+	return nil
+}

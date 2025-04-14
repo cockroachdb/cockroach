@@ -31,3 +31,9 @@ func (m Method) String() string {
 	}
 	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
 }
+
+func (m Method) Validate(
+	vars map[string]struct{}, nestingLevel int, insideArraySubscript bool,
+) error {
+	return nil
+}
