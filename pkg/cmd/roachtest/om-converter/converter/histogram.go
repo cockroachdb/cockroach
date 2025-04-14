@@ -318,8 +318,8 @@ func (hc *HistogramConverter) processHistogramData(
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 
 	// Use a larger buffer for the scanner to handle large lines
-	const maxScanTokenSize = 1024 * 1024 // 1MB
-	buf := make([]byte, maxScanTokenSize)
+	const maxScanTokenSize = 5 * 1024 * 1024 // 5MB
+	buf := make([]byte, 0, maxScanTokenSize) // Create with zero length but 1MB capacity
 	scanner.Buffer(buf, maxScanTokenSize)
 
 	for scanner.Scan() {
