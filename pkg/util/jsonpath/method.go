@@ -15,7 +15,7 @@ const (
 	TypeMethod
 )
 
-var MethodTypeStrings = map[MethodType]string{
+var methodTypeStrings = [...]string{
 	SizeMethod: "size",
 	TypeMethod: "type",
 }
@@ -27,5 +27,8 @@ type Method struct {
 var _ Path = Method{}
 
 func (m Method) String() string {
-	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
+	if int(m.Type) < 0 || int(m.Type) >= len(methodTypeStrings) || m.Type == InvalidMethod {
+		panic(fmt.Sprintf("invalid method type: %d", m.Type))
+	}
+	return fmt.Sprintf(".%s()", methodTypeStrings[m.Type])
 }
