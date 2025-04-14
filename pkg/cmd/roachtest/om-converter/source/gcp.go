@@ -15,10 +15,16 @@ import (
 // Constants for configuration
 const (
 	// DefaultBufferSize is the size of the buffer used for reading files
-	DefaultBufferSize = 10 * 1024 * 1024 // 1MB
+	DefaultBufferSize = 10 * 1024 * 1024 // 10MB
+
+	// MaxFileSize is the maximum size of a file to process
+	MaxFileSize = 100 * 1024 * 1024 // 100MB
 
 	// PollInterval is the duration to wait between checking for new objects
 	PollInterval = time.Second
+
+	// ChannelTimeout is the maximum time to wait when sending to channel
+	ChannelTimeout = 5 * time.Second
 )
 
 // gcpSource implements the Source interface for Google Cloud Storage
@@ -107,6 +113,14 @@ func (p *gcpFileProcessor) processNextBatch() error {
 			continue
 		}
 
+		// Skip files that are too large
+		if attrs.Size > MaxFileSize {
+			fmt.Printf("Skipping large file %s: size %d bytes exceeds limit of %d bytes\n",
+				attrs.Name, attrs.Size, MaxFileSize)
+			p.lastProcessed = attrs.Name
+			continue
+		}
+
 		if err := p.processFile(attrs); err != nil {
 			return err
 		}
@@ -124,10 +138,18 @@ func (p *gcpFileProcessor) processFile(attrs *storage.ObjectAttrs) error {
 		return err
 	}
 
-	p.ch <- model.FileInfo{
+	// Try to send with timeout to prevent blocking
+	select {
+	case p.ch <- model.FileInfo{
 		Path:            attrs.Name,
 		Content:         content,
 		DirectoryPrefix: p.source.path,
+	}:
+		// Successfully sent
+	case <-time.After(ChannelTimeout):
+		return fmt.Errorf("timeout sending file %s to channel", attrs.Name)
+	case <-p.source.ctx.Done():
+		return context.Canceled
 	}
 
 	return nil
@@ -147,7 +169,8 @@ func (p *gcpFileProcessor) readFileContent(objectName string) ([]byte, error) {
 
 // readAllContent reads all content from the current reader
 func (p *gcpFileProcessor) readAllContent(objectName string) ([]byte, error) {
-	var content []byte
+	// Pre-allocate buffer with known size
+	content := make([]byte, 0, p.currentReader.Size())
 	buf := make([]byte, DefaultBufferSize)
 
 	for {
@@ -159,6 +182,11 @@ func (p *gcpFileProcessor) readAllContent(objectName string) ([]byte, error) {
 			break
 		}
 		content = append(content, buf[:n]...)
+
+		// Check if we've exceeded the maximum file size
+		if len(content) > MaxFileSize {
+			return nil, fmt.Errorf("file %s exceeds maximum size of %d bytes", objectName, MaxFileSize)
+		}
 	}
 
 	return content, nil

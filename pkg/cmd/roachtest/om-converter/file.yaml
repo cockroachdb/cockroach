@@ -1,6 +1,6 @@
 source:
   type: gcp
-  directory: artifacts/20250330
+  directory: artifacts/202503
   bucket: cockroach-nightly
   project: cockroach-ephemeral
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -50,6 +51,29 @@ func StartProcess(yamlContent []byte, numWorkers int, specs *[]registry.TestSpec
 // Start initializes and runs the conversion pipeline with the provided configuration.
 // It sets up the source, sink, and converter components and manages their lifecycle.
 func Start(config *model.Config, numWorkers int, specs *[]registry.TestSpec) (err error) {
+	// Setup CPU profiling
+	cpuFile, err := os.Create("cpu.prof")
+	if err != nil {
+		return errors.Wrap(err, "could not create CPU profile")
+	}
+	defer cpuFile.Close()
+	if err := pprof.StartCPUProfile(cpuFile); err != nil {
+		return errors.Wrap(err, "could not start CPU profile")
+	}
+	defer pprof.StopCPUProfile()
+
+	// Setup memory profiling
+	memFile, err := os.Create("mem.prof")
+	if err != nil {
+		return errors.Wrap(err, "could not create memory profile")
+	}
+	defer func() {
+		if err := pprof.WriteHeapProfile(memFile); err != nil {
+			fmt.Printf("could not write memory profile: %v\n", err)
+		}
+		memFile.Close()
+	}()
+
 	// If numWorkers is not specified, use a reasonable default based on CPU count
 	if numWorkers <= 0 {
 		numWorkers = 2
