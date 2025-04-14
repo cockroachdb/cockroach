@@ -164,6 +164,9 @@ func makeCompareCommand() *cobra.Command {
 			}
 			if hasLabel || suite.changeDetected() {
 				skipPermissionError := func(err error, action string) error {
+					if err == nil {
+						return nil
+					}
 					// If this is a permission error, we don't want to fail the build. This
 					// can happen if the GitHub token has read-only access, for example when
 					// testing the pull_request trigger from a fork.
