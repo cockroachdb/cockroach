@@ -653,6 +653,9 @@ message LocalOnlySessionData {
   // though it currently doesn't have Postgres-compatible 0-based indexing
   // behavior.
   bool allow_create_trigger_function_with_argv_references = 165;
+  // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
+  // transactions to inherit the admission header from the root transaction.
+  bool propagate_admission_header_to_leaf_transactions = 166;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
