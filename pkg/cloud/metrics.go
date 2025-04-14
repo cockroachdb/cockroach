@@ -42,6 +42,9 @@ type Metrics struct {
 
 	// NetMetrics tracks connection level metrics.
 	NetMetrics *cidr.NetMetrics
+
+	// ThrottlingErrors counts the number of cloud provider throttling errors encountered.
+	ThrottlingErrors *metric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
@@ -123,17 +126,25 @@ func MakeMetrics(cidrLookup *cidr.Lookup) metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+	throttlingErrors := metric.Metadata{
+		Name:        "cloud.throttling_errors",
+		Help:        "Number of cloud provider throttling errors encountered",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	return &Metrics{
-		CreatedReaders: metric.NewCounter(cloudReaders),
-		OpenReaders:    metric.NewGauge(cloudOpenReaders),
-		CreatedWriters: metric.NewCounter(cloudWriters),
-		OpenWriters:    metric.NewGauge(cloudOpenWriters),
-		Listings:       metric.NewCounter(listings),
-		ListingResults: metric.NewCounter(listingResults),
-		ConnsOpened:    metric.NewCounter(connsOpened),
-		ConnsReused:    metric.NewCounter(connsReused),
-		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
-		NetMetrics:     cidrLookup.MakeNetMetrics(cloudWriteBytes, cloudReadBytes, "cloud", "bucket", "client"),
+		CreatedReaders:   metric.NewCounter(cloudReaders),
+		OpenReaders:      metric.NewGauge(cloudOpenReaders),
+		CreatedWriters:   metric.NewCounter(cloudWriters),
+		OpenWriters:      metric.NewGauge(cloudOpenWriters),
+		Listings:         metric.NewCounter(listings),
+		ListingResults:   metric.NewCounter(listingResults),
+		ConnsOpened:      metric.NewCounter(connsOpened),
+		ConnsReused:      metric.NewCounter(connsReused),
+		TLSHandhakes:     metric.NewCounter(tlsHandhakes),
+		NetMetrics:       cidrLookup.MakeNetMetrics(cloudWriteBytes, cloudReadBytes, "cloud", "bucket", "client"),
+		ThrottlingErrors: metric.NewCounter(throttlingErrors),
 	}
 }
 
