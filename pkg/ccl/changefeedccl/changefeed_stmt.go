@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1211,6 +1213,15 @@ func validateAndNormalizeChangefeedExpression(
 
 type changefeedResumer struct {
 	job *jobs.Job
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats emitted by the processors.
+		perNodeAggregatorStats bulk.ComponentAggregatorStats
+
+		// TODO: feed into this in the metadatacallbackwriter, as in logicalReplicationResumer.ingest()
+	}
 }
 
 func (b *changefeedResumer) setJobStatusMessage(
@@ -1654,7 +1665,20 @@ func (b *changefeedResumer) OnFailOrCancel(
 }
 
 // CollectProfile is part of the jobs.Resumer interface.
-func (b *changefeedResumer) CollectProfile(_ context.Context, _ interface{}) error {
+func (b *changefeedResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+	var aggStatsCopy bulk.ComponentAggregatorStats
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+
+	if err := bulk.FlushTracingAggregatorStats(ctx, r.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy); err != nil {
+		return errors.Wrap(err, "failed to flush aggregator stats")
+	}
+
 	return nil
 }
 

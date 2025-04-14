@@ -1267,7 +1267,6 @@ func newChangeFrontierProcessor(
 				}
 				return nil
 			},
-			InputsToDrain: []execinfra.RowSource{cf.input},
 		},
 	); err != nil {
 		return nil, err
