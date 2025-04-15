@@ -2,6 +2,7 @@
 package parser
 
 import (
+  "math"
   "strconv"
 
   "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -106,6 +107,10 @@ func (u *jsonpathSymUnion) operationType() jsonpath.OperationType {
   return u.val.(jsonpath.OperationType)
 }
 
+func (u *jsonpathSymUnion) int() int {
+  return u.val.(int)
+}
+
 %}
 
 %{
@@ -134,6 +139,19 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
       "invalid regular expression")
   }
   return binaryOp(jsonpath.OpLikeRegex, left, r), nil
+}
+
+func makeAny(start, end int) jsonpath.Any {
+  if start < 0 {
+    start = math.MaxInt
+  }
+  if end < 0 {
+    end = math.MaxInt
+  }
+  return jsonpath.Any{
+    Start: start,
+    End: end,
+  }
 }
 
 %}
@@ -187,12 +205,14 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %type <jsonpath.Path> delimited_predicate
 %type <jsonpath.Path> starts_with_initial
 %type <jsonpath.Path> method
+%type <jsonpath.Path> any_path
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <jsonpath.OperationType> comp_op
 %type <str> key_name
 %type <str> any_identifier
 %type <str> unreserved_keyword
+%type <int> any_level
 %type <bool> mode
 
 %left OR
@@ -339,7 +359,7 @@ accessor_op:
   }
 | '.' any_path
   {
-    return unimplemented(jsonpathlex, ".**")
+    $$.val = $2.path()
   }
 | '.' DECIMAL '(' opt_csv_list ')'
   {
@@ -567,26 +587,31 @@ method:
 any_path:
   ANY
   {
-    // Unimplemented from .**.
+    $$.val = makeAny(0, -1)
   }
 | ANY '{' any_level '}'
   {
-    // Unimplemented from .**.
+    level := $3.int()
+    $$.val = makeAny(level, level)
   }
 | ANY '{' any_level TO any_level '}'
   {
-    // Unimplemented from .**.
+    $$.val = makeAny($3.int(), $5.int())
   }
 ;
 
 any_level:
   ICONST
   {
-    // Unimplemented from .**.
+    i, err := $1.numVal().AsInt64()
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = int(i)
   }
 | LAST
   {
-    // Unimplemented from .**.
+    $$.val = -1
   }
 ;
 

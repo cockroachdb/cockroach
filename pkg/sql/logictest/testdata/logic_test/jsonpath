@@ -196,9 +196,6 @@ statement error unimplemented
 SELECT '$.string()'::JSONPATH;
 
 statement error unimplemented
-SELECT '$.**'::JSONPATH;
-
-statement error unimplemented
 SELECT '$.decimal()'::JSONPATH;
 
 statement error unimplemented
