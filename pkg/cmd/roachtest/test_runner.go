@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -168,10 +167,6 @@ type testRunner struct {
 
 	// Counts cluster creation errors across all workers.
 	numClusterErrs int32
-
-	// sideEyeClient, if set, is the client used to communicate with the Side-Eye
-	// debugging service.
-	sideEyeClient *sideeyeclient.SideEyeClient
 }
 
 // newTestRunner constructs a testRunner.
@@ -221,9 +216,6 @@ type clustersOpt struct {
 
 	// Controls whether the cluster is cleaned up at the end of the test.
 	debugMode debugMode
-	// sideEyeToken, if not empty, is the token used to authenticate with the
-	// Side-Eye. If set, each node in the cluster will run the Side-Eye agent.
-	sideEyeToken string
 
 	// preAllocateClusterFn is a function called right before allocating a
 	// cluster. It allows the caller to e.g. inject errors for testing.
@@ -332,7 +324,7 @@ func (r *testRunner) Run(
 
 	clusterFactory := newClusterFactory(
 		clustersOpt.user, clustersOpt.clusterID, lopt.artifactsDir,
-		r.cr, numConcurrentClusterCreations(), r.sideEyeClient,
+		r.cr, numConcurrentClusterCreations(),
 	)
 
 	n := len(tests)
@@ -540,7 +532,6 @@ func (r *testRunner) allocateCluster(
 		username:     clustersOpt.user,
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
-		sideEyeToken: clustersOpt.sideEyeToken,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 }
@@ -775,21 +766,6 @@ func (r *testRunner) runWorker(
 
 		wStatus.SetCluster(c)
 
-		// If the Side-Eye integration is active, update the cluster's Side-Eye
-		// environment name to match the current test; this makes it easier to
-		// identify this cluster on app.side-eye.io.
-		if c != nil && r.sideEyeClient != nil {
-			testSuffix := ""
-			if testToRun.runCount > 1 {
-				testSuffix = fmt.Sprintf("#%d", testToRun.runNum)
-			}
-			envName := fmt.Sprintf("%s-%s%s", runID, testToRun.spec.Name, testSuffix)
-			err := c.UpdateSideEyeEnvironmentName(ctx, l, envName)
-			if err != nil {
-				l.ErrorfCtx(ctx, "failed to update Side-Eye environment name: %s", err)
-			}
-		}
-
 		// Prepare the test's logger. Always set this up with real files, using a
 		// temp dir if necessary. This simplifies testing.
 		artifactsRootDir := lopt.artifactsDir
@@ -848,7 +824,7 @@ func (r *testRunner) runWorker(
 
 			params := getTestParameters(t, github.cluster, github.vmCreateOpts)
 			logTestParameters(l, params)
-			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */, params); err != nil {
+			if _, err := github.MaybePost(t, l, t.failureMsg(), params); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -1112,10 +1088,6 @@ func (r *testRunner) runTest(
 		c.grafanaTags = []string{vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), vm.SanitizeLabel(c.Name())}
 	}
 
-	// sideEyeTimeoutSnapshotURL may be set during teardown to communicate to the
-	// deferred function below that a Side-Eye snapshot was taken for a timed out
-	// test.
-	sideEyeTimeoutSnapshotURL := ""
 	defer func() {
 		t.end = timeutil.Now()
 		if err := c.removeLabels([]string{VmLabelTestName, VmLabelTestOwner}); err != nil {
@@ -1179,7 +1151,7 @@ func (r *testRunner) runTest(
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 				params := getTestParameters(t, github.cluster, github.vmCreateOpts)
 				logTestParameters(l, params)
-				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL, params)
+				issue, err := github.MaybePost(t, l, output, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}
@@ -1403,15 +1375,8 @@ func (r *testRunner) runTest(
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
 	replaceLogger("test-teardown")
-	var err error
-	sideEyeTimeoutSnapshotURL, err = r.teardownTest(ctx, t, c, timedOut)
-	if err != nil {
+	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
-	}
-	// If we captured a Side-Eye snapshot during teardown, log it to the test's
-	// original logger (in addition to the teardown logger used in teardownTest).
-	if sideEyeTimeoutSnapshotURL != "" {
-		l.PrintfCtx(ctx, "A Side-Eye cluster snapshot was captured: %s", sideEyeTimeoutSnapshotURL)
 	}
 }
 
@@ -1563,12 +1528,9 @@ func (r *testRunner) postTestAssertions(
 
 // teardownTest is best effort and should not fail a test.
 // Errors during artifact collection will be propagated up.
-//
-// The string return value, if not empty, represents the URL of a Side-Eye
-// snapshot of the cluster taken before teardown.
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
-) (string, error) {
+) error {
 	defer func() {
 		// Terminate tasks to ensure that any stray tasks are cleaned up.
 		t.L().Printf("terminating tasks")
@@ -1576,11 +1538,6 @@ func (r *testRunner) teardownTest(
 	}()
 
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
-		snapURL := ""
-		if timedOut {
-			snapURL = c.CaptureSideEyeSnapshot(ctx)
-		}
-
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
@@ -1598,7 +1555,7 @@ func (r *testRunner) teardownTest(
 			}
 			t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
 		}
-		return snapURL, err
+		return err
 	}
 
 	// Test was successful. If we are collecting code coverage, copy the files now.
@@ -1628,7 +1585,7 @@ func (r *testRunner) teardownTest(
 		t.L().Printf("Retrieving pprof artifacts")
 		getCpuProfileArtifacts(ctx, c, t)
 	}
-	return "", nil
+	return nil
 }
 
 func (r *testRunner) collectArtifacts(
@@ -1870,10 +1827,6 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 			} else {
 				clusterBuilder.WriteString(clusterName)
 			}
-			sideEyeEnv := w.Cluster().sideEyeEnvName()
-			if sideEyeEnv != "" {
-				clusterBuilder.WriteString(fmt.Sprintf(" (<a href='%s'>Side-Eye</a>)", sideeyeclient.RecordingsURL(sideEyeEnv)))
-			}
 		}
 		t := w.Test()
 		testStatus := "N/A"
@@ -1945,30 +1898,6 @@ func (r *testRunner) getCompletedTests() []completedTestInfo {
 	res := make([]completedTestInfo, len(r.completedTestsMu.completed))
 	copy(res, r.completedTestsMu.completed)
 	return res
-}
-
-// maybeInitSideEyeClient initializes the test runner's Side-Eye client if
-// configured to do so. The API token to use for communicating with Side-Eye is
-// returned. Returns "" if the Side-Eye integration is not configured. All
-// errors are logged and swallowed.
-func (r *testRunner) maybeInitSideEyeClient(ctx context.Context, l *logger.Logger) string {
-	token := roachtestflags.SideEyeApiToken
-	if token == "" {
-		return ""
-	}
-	if roachtestflags.Local {
-		l.Printf("--side-eye-token is ignored in --local mode. The Side-Eye agents will not be started; " +
-			"you can run the agent manually.")
-		return ""
-	}
-
-	client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(token))
-	if err != nil {
-		l.Errorf("failed to create Side-Eye client: %s", err)
-	} else {
-		r.sideEyeClient = client
-	}
-	return token
 }
 
 // completedTestInfo represents information on a completed test run.
