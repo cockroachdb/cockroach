@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -3460,7 +3459,7 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 
 	var splitter span.Splitter
 	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
-		planCtx.ExtendedEvalCtx.TxnIsoLevel != isolation.Serializable {
+		joinReaderSpec.LockingDurability == descpb.ScanLockingDurability_GUARANTEED {
 		splitter = span.MakeSplitterForSideEffect(planInfo.fetch.desc, planInfo.fetch.index, fetchOrdinals)
 	} else {
 		splitter = span.MakeSplitter(planInfo.fetch.desc, planInfo.fetch.index, fetchOrdinals)
