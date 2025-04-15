@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -19,12 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -32,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/fatih/structs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +52,7 @@ func TestBackupCompaction(t *testing.T) {
 	defer tempDirCleanup()
 	st := cluster.MakeTestingClusterSettings()
 	backupinfo.WriteMetadataWithExternalSSTsEnabled.Override(ctx, &st.SV, true)
-	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
+	_, db, cleanupDB := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
@@ -92,7 +100,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 				t,
 				fmt.Sprintf(incBackupAostCmd, 1, end),
 			)
-			waitForSuccessfulJob(t, tc, startCompaction(1, backupPath, start, end))
+			jobutils.WaitForJobToSucceed(t, db, startCompaction(1, backupPath, start, end))
 			validateCompactedBackupForTables(
 				t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end, 2+i,
 			)
@@ -135,7 +143,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		)
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/2'").Scan(&backupPath)
-		waitForSuccessfulJob(t, tc, startCompaction(2, backupPath, start, end))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(2, backupPath, start, end))
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
@@ -149,7 +157,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(incBackupAostCmd, 2, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(2, backupPath, start, end))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(2, backupPath, start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup/2'")
@@ -179,7 +187,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		)
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/3'").Scan(&backupPath)
-		waitForSuccessfulJob(t, tc, startCompaction(3, backupPath, start, end))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(3, backupPath, start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -222,7 +230,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/4'").Scan(&backupPath)
-		waitForSuccessfulJob(t, tc, startCompaction(4, backupPath, start, end))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(4, backupPath, start, end))
 		validateCompactedBackupForTables(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end, 4,
 		)
@@ -253,7 +261,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/5'").Scan(&backupPath)
-		waitForSuccessfulJob(t, tc, startCompaction(5, backupPath, start, end))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(5, backupPath, start, end))
 		validateCompactedBackupForTables(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end, 2,
 		)
@@ -293,7 +301,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(
 				`SELECT crdb_internal.backup_compaction(
-ARRAY['nodelocal://1/backup/6'], 
+ARRAY['nodelocal://1/backup/6'],
 '%s',
 crdb_internal.json_to_pb(
 'cockroach.sql.jobs.jobspb.BackupEncryptionOptions',
@@ -306,7 +314,7 @@ crdb_internal.json_to_pb(
 			jobutils.WaitForJobToPause(t, db, jobID)
 			db.Exec(t, "RESUME JOB $1", jobID)
 		}
-		waitForSuccessfulJob(t, tc, jobID)
+		jobutils.WaitForJobToSucceed(t, db, jobID)
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, 2, opts,
 		)
@@ -333,7 +341,7 @@ crdb_internal.json_to_pb(
 		jobID := startCompaction(7, backupPath, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
-		waitForSuccessfulJob(t, tc, jobID)
+		jobutils.WaitForJobToSucceed(t, db, jobID)
 		validateCompactedBackupForTables(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/7'", start, end, 2,
 		)
@@ -368,11 +376,11 @@ crdb_internal.json_to_pb(
 		var jobID jobspb.JobID
 		db.QueryRow(t, fmt.Sprintf(
 			`SELECT crdb_internal.backup_compaction(
-        'BACKUP INTO LATEST IN ''nodelocal://1/backup/9'' WITH encryption_passphrase = ''correct-horse-battery-staple''', 
+        'BACKUP INTO LATEST IN ''nodelocal://1/backup/9'' WITH encryption_passphrase = ''correct-horse-battery-staple''',
         '%s', %d::DECIMAL, %d::DECIMAL
       )`, backupPath, start, end,
 		)).Scan(&jobID)
-		waitForSuccessfulJob(t, tc, jobID)
+		jobutils.WaitForJobToSucceed(t, db, jobID)
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, 2, opts,
 		)
@@ -406,10 +414,10 @@ crdb_internal.json_to_pb(
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/11'").Scan(&backupPath)
 		c1JobID := startCompaction(11, backupPath, mid, end)
-		waitForSuccessfulJob(t, tc, c1JobID)
+		jobutils.WaitForJobToSucceed(t, db, c1JobID)
 
 		c2JobID := startCompaction(11, backupPath, start, end)
-		waitForSuccessfulJob(t, tc, c2JobID)
+		jobutils.WaitForJobToSucceed(t, db, c2JobID)
 		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", mid, end, "")
 		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", start, end, "")
 	})
@@ -631,7 +639,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	const numAccounts = 1000
 	var manifestNumFiles atomic.Int32
 	manifestNumFiles.Store(-1) // -1 means we haven't seen the manifests yet.
-	tc, db, _, cleanup := backupRestoreTestSetupWithParams(
+	_, db, _, cleanup := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
@@ -695,7 +703,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	})
 	require.Greater(t, int(manifestNumFiles.Load()), 0, "expected non-zero number of files in manifest")
 
-	waitForSuccessfulJob(t, tc, jobID)
+	jobutils.WaitForJobToSucceed(t, db, jobID)
 	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end, 2)
 }
 
@@ -739,6 +747,191 @@ func TestToggleCompactionForRestore(t *testing.T) {
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
 	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
+}
+
+func TestCheckCompactionManifestFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// NOTE: Whenever a new field is added to the backup manifest, it will need to be
+	// added to the corresponding lists below.
+	inherited := []string{
+		"EndTime",
+		"Spans",
+		"CompleteDbs",
+		"NodeID",
+		"ClusterID",
+		"ClusterVersion",
+		"FormatVersion",
+		"BuildInfo",
+		"DescriptorCoverage",
+		"StatisticsFilenames",
+		"ElidedPrefix",
+	}
+	overridden := []string{
+		"ID",
+		"StartTime",
+		"IntroducedSpans",
+		"IsCompacted",
+	}
+	emptied := []string{
+		"Dir",
+		"DescriptorChanges",
+		"Files",
+		"EntryCounts",
+	}
+	// Ignored fields are fields that we do not check because either:
+	// 1. They are no longer used
+	// 2. There is a case-specific reason for not checking them
+	// 3. Compaction does not support these fields and there are safeguards
+	// against compaction running against such backups. The test is simpler if we
+	// ignore these fields.
+	ignored := []string{
+		"TenantsDeprecated",
+		"DeprecatedStatistics",
+		// HasExternalManifestSSTs is a unique case because it will be set to true
+		// for all manifests, except when creating a new manifest, it is always set
+		// to false until the manifest has been split up and written.
+		"HasExternalManifestSSTs",
+		// Descriptors is ignored because an actual backup manifest loaded from
+		// storage will have this field emptied due to using slim manifests whereas
+		// createCompactedManifest will have filled this out.
+		"Descriptors",
+		"Tenants",
+		"LocalityKVs",
+		"PartitionDescriptorFilenames",
+		"MVCCFilter",
+		"RevisionStartTime",
+	}
+
+	statisticsFilenames := make(map[descpb.ID]string)
+	statisticsFilenames[1] = "foo"
+	lastBackup := backuppb.BackupManifest{
+		StartTime:         hlc.Timestamp{WallTime: 2},
+		EndTime:           hlc.Timestamp{WallTime: 3},
+		RevisionStartTime: hlc.Timestamp{WallTime: 2},
+		Spans: []roachpb.Span{
+			{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+			{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+		},
+		IntroducedSpans: []roachpb.Span{
+			{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+		},
+		DescriptorChanges: []backuppb.BackupManifest_DescriptorRevision{
+			{},
+		},
+		Files: []backuppb.BackupManifest_File{{}},
+		Descriptors: []descpb.Descriptor{
+			{
+				Union: &descpb.Descriptor_Table{
+					Table: &descpb.TableDescriptor{
+						ID:   descpb.ID(1),
+						Name: "table",
+					},
+				},
+			},
+		},
+		CompleteDbs: []descpb.ID{1},
+		EntryCounts: roachpb.RowCount{
+			Rows: 1,
+		},
+		Dir: cloudpb.ExternalStorage{
+			Provider: cloudpb.ExternalStorageProvider_external,
+		},
+		FormatVersion: 1,
+		ClusterID:     uuid.MakeV4(),
+		NodeID:        1,
+		BuildInfo: build.Info{
+			Tag: "v1.0.0",
+		},
+		ClusterVersion:      roachpb.Version{Major: 1},
+		ID:                  uuid.MakeV4(),
+		StatisticsFilenames: statisticsFilenames,
+		DescriptorCoverage:  tree.AllDescriptors,
+		ElidedPrefix:        execinfrapb.ElidePrefix_TenantAndTable,
+		IsCompacted:         false,
+	}
+	lastBackupStruct := structs.New(lastBackup)
+
+	// Test that all fields in a backup manifest have been explicitly specified in
+	// this test. This ensures that if the backup manifest fields are ever
+	// updated, this test forces the developer to ensure the manifest creation for
+	// compacted backups is correct.
+	specifiedFields := make([]string, 0, len(ignored)+len(inherited)+len(overridden)+len(emptied))
+	specifiedFields = append(specifiedFields, ignored...)
+	specifiedFields = append(specifiedFields, inherited...)
+	specifiedFields = append(specifiedFields, overridden...)
+	specifiedFields = append(specifiedFields, emptied...)
+	for _, field := range lastBackupStruct.Names() {
+		if !slices.Contains(specifiedFields, field) {
+			t.Fatalf("field %s not specified in test", field)
+		}
+	}
+
+	// Ensuring that fields that are supposed to be inherited/emptied contain
+	// non-zero values in the original backup manifest. This avoids false
+	// positives such as the test reporting a field was properly emptied but only
+	// because the original backup already had it empty.
+	checkNotEmpty := make([]string, 0, len(inherited)+len(emptied))
+	checkNotEmpty = append(checkNotEmpty, inherited...)
+	checkNotEmpty = append(checkNotEmpty, emptied...)
+	for _, field := range checkNotEmpty {
+		require.Falsef(
+			t, lastBackupStruct.Field(field).IsZero(),
+			"field %s should not be empty to avoid false positives", field,
+		)
+	}
+
+	compactChain := compactionChain{
+		backupChain: []backuppb.BackupManifest{
+			// Create some additional backups such that IntroducedSpans for the
+			// compacted backup should be different from the last backup.
+			{
+				EndTime: hlc.Timestamp{WallTime: 1},
+				Spans: []roachpb.Span{
+					{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				},
+			},
+			{
+				StartTime: hlc.Timestamp{WallTime: 1},
+				EndTime:   hlc.Timestamp{WallTime: 2},
+				Spans: []roachpb.Span{
+					{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+				},
+				IntroducedSpans: []roachpb.Span{
+					{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+				},
+			},
+			lastBackup,
+		},
+		start:    hlc.Timestamp{WallTime: 1},
+		end:      hlc.Timestamp{WallTime: 3},
+		startIdx: 1,
+		endIdx:   3,
+	}
+
+	compactManifest, err := compactChain.createCompactionManifest(
+		context.Background(), jobspb.BackupDetails{},
+	)
+	require.NoError(t, err)
+	compactManifestStruct := structs.New(compactManifest)
+
+	for _, field := range inherited {
+		require.Equalf(
+			t, lastBackupStruct.Field(field).Value(), compactManifestStruct.Field(field).Value(),
+			"field %s should be inherited", field,
+		)
+	}
+	for _, field := range overridden {
+		require.NotEqualf(
+			t, lastBackupStruct.Field(field).Value(), compactManifestStruct.Field(field).Value(),
+			"field %s should be overridden", field,
+		)
+	}
+	for _, field := range emptied {
+		require.Truef(t, compactManifestStruct.Field(field).IsZero(), "field %s should be empty", field)
+	}
 }
 
 // validateCompactedBackupForTables is a wrapper around
@@ -800,8 +993,8 @@ func getNumBackupsInRestore(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.J
 	db.QueryRow(t, `SELECT crdb_internal.pb_to_json(
 		'cockroach.sql.jobs.jobspb.Payload',
 		value
-	)::JSONB->>'restore' 
-	FROM system.job_info 
+	)::JSONB->>'restore'
+	FROM system.job_info
 	WHERE job_id = $1
 	AND info_key = 'legacy_payload';
 	`, jobID).Scan(&detailsStr)
@@ -823,9 +1016,9 @@ func ensureBackupExists(
 	// nanosecond epoch because the backup time is stored in milliseconds, but timeutil.Now()
 	// will return a nanosecond-precise epoch.
 	times := db.Query(t,
-		fmt.Sprintf(`SELECT DISTINCT 
-		COALESCE(start_time::DECIMAL * 1e6, 0), 
-		COALESCE(end_time::DECIMAL * 1e6, 0) 
+		fmt.Sprintf(`SELECT DISTINCT
+		COALESCE(start_time::DECIMAL * 1e6, 0),
+		COALESCE(end_time::DECIMAL * 1e6, 0)
 		FROM [%s]`, showBackupQ),
 	)
 	defer times.Close()
