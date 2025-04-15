@@ -169,7 +169,8 @@ statement ok
 CREATE TABLE storage_params (
   a INT PRIMARY KEY,
   v VECTOR(3),
-  VECTOR INDEX (v) WITH (build_beam_size = 16)
+  VECTOR INDEX (v) WITH (build_beam_size = 16),
+  FAMILY (a, v)
 )
 
 statement ok
@@ -184,7 +185,7 @@ storage_params  CREATE TABLE public.storage_params (
                   CONSTRAINT storage_params_pkey PRIMARY KEY (a ASC),
                   VECTOR INDEX storage_params_v_idx (v) WITH (build_beam_size=16),
                   VECTOR INDEX storage_params_v_idx1 (v) WITH (min_partition_size=8, max_partition_size=64),
-                  FAMILY fam_0_v_a (v, a)
+                  FAMILY fam_0_a_v (a, v)
                 )
 
 statement ok
@@ -505,5 +506,33 @@ SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username
 
 statement ok
 DROP TABLE backfill_test
+
+subtest end
+
+#
+# vector_search_beam_size setting.
+#
+
+subtest vector_search_beam_size
+
+# Ensure that the vector_search_beam_size session setting is settable.
+query T
+SHOW vector_search_beam_size;
+----
+32
+
+statement ok
+SET vector_search_beam_size=8
+
+query T
+SHOW vector_search_beam_size;
+----
+8
+
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
+SET vector_search_beam_size=0
+
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
+SET vector_search_beam_size=513
 
 subtest end

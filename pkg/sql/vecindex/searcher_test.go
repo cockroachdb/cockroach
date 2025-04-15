@@ -116,8 +116,8 @@ func TestSearcher(t *testing.T) {
 
 	// Use the Searcher.
 	var searcher Searcher
-	searcher.Init(idx, tx)
-	require.NoError(t, searcher.Search(ctx, prefix, vector.T{1, 1}, 2))
+	searcher.Init(idx, tx, 8 /* baseBeamSize */, 2 /* maxResults */)
+	require.NoError(t, searcher.Search(ctx, prefix, vector.T{1, 1}))
 	res := searcher.NextResult()
 	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
 	res = searcher.NextResult()
