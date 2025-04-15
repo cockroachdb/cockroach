@@ -1,6 +1,6 @@
 source:
   type: gcp
-  directory: artifacts/20250205-18731442/tpccbench/nodes=3/cpu=16/run_1
+  directory: artifacts/20250107-18402801/tpccbench/nodes=9/cpu=4/multi-region/run_1/8.perf
   bucket: cockroach-nightly
   project: cockroach-ephemeral
 
@@ -11,6 +11,8 @@ sink:
   project: cockroach-testeng-infra
 
 metrics:
+  - name: restore/tpce
+    type: histogram
   - name: restore/online
     type: statsexporter
     labels:
