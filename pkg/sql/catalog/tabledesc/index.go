@@ -464,12 +464,7 @@ func (w index) CreatedAt() time.Time {
 	return timeutil.Unix(0, w.desc.CreatedAtNanos)
 }
 
-// IsTemporaryIndexForBackfill returns true iff the index is
-// an index being used as the temporary index being used by an
-// in-progress index backfill.
-//
-// TODO(ssd): This could be its own boolean or we could store the ID
-// of the index it is a temporary index for.
+// IsTemporaryIndexForBackfill implements the cat.Index interface.
 func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
