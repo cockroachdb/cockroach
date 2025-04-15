@@ -45,7 +45,7 @@ type mockReplica struct {
 	policy ctpb.RangeClosedTimestampPolicy
 }
 
-func (m *mockReplica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration) {
+func (m *mockReplica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration, _ *Metrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.conf.isGlobalRead {

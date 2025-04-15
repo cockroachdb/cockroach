@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -1340,7 +1341,9 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
 // span configurations and provided node round-trip latencies.
-func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
+func (r *Replica) RefreshPolicy(
+	latencies map[roachpb.NodeID]time.Duration, metrics *policyrefresher.Metrics,
+) {
 	computeNewPolicy := func(oldPolicy ctpb.RangeClosedTimestampPolicy) ctpb.RangeClosedTimestampPolicy {
 		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
@@ -1384,6 +1387,10 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 	r.cachedClosedTimestampPolicy.Store(int32(newPolicy))
 	if oldPolicy != newPolicy {
 		r.store.metrics.ClosedTimestampPolicyChange.Inc(1)
+		if metrics != nil {
+			metrics.PolicyCount[oldPolicy].Dec(1)
+			metrics.PolicyCount[newPolicy].Inc(1)
+		}
 	}
 }
 

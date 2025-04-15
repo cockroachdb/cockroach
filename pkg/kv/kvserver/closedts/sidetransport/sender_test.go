@@ -52,7 +52,9 @@ var _ Replica = &mockReplica{}
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
 
-func (m *mockReplica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
+func (m *mockReplica) RefreshPolicy(
+	latencies map[roachpb.NodeID]time.Duration, _ *policyrefresher.Metrics,
+) {
 	policy := func() ctpb.RangeClosedTimestampPolicy {
 		m.mu.Lock()
 		defer m.mu.Unlock()

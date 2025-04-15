@@ -686,6 +686,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		}
 		policyRefresher = policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
 			rpcContext.RemoteClocks.AllLatencies, knobs)
+		nodeRegistry.AddMetricStruct(policyRefresher.Metrics())
 	}
 
 	// The Executor will be further initialized later, as we create more

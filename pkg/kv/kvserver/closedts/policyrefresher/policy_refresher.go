@@ -7,13 +7,17 @@ package policyrefresher
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,6 +34,7 @@ type PolicyRefresher struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
 	knobs    *TestingKnobs
+	metrics  *Metrics
 
 	// getLeaseholderReplicas returns the set of replicas that are currently
 	// leaseholders of the node.
@@ -61,6 +66,26 @@ type PolicyRefresher struct {
 	}
 }
 
+type Metrics struct {
+	PolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
+}
+
+func newPolicyRefresherMetrics() *Metrics {
+	var policyGauges [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
+	for policy := ctpb.LAG_BY_CLUSTER_SETTING; policy < ctpb.MAX_CLOSED_TIMESTAMP_POLICY; policy++ {
+		meta := metric.Metadata{
+			Name:        fmt.Sprintf("kv.closed_timestamp.policy.%s", strings.ToLower(policy.String())),
+			Help:        fmt.Sprintf("Number of replicas with %s closed timestamp policy", policy.String()),
+			Measurement: "Replicas",
+			Unit:        metric.Unit_COUNT,
+		}
+		policyGauges[policy] = metric.NewGauge(meta)
+	}
+	return &Metrics{
+		PolicyCount: policyGauges,
+	}
+}
+
 func NewPolicyRefresher(
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
@@ -76,6 +101,7 @@ func NewPolicyRefresher(
 		stopper:                stopper,
 		settings:               settings,
 		knobs:                  knobs,
+		metrics:                newPolicyRefresherMetrics(),
 		getLeaseholderReplicas: getLeaseholderReplicas,
 		getNodeLatencies:       getNodeLatencies,
 		refreshNotificationCh:  make(chan struct{}, 1),
@@ -90,7 +116,12 @@ type Replica interface {
 	// to other nodes in the system by the PolicyRefresher may be supplied (or may
 	// be nil), in which case it may be used to correctly place a replica in its
 	// latency based global reads bucket.
-	RefreshPolicy(map[roachpb.NodeID]time.Duration)
+	RefreshPolicy(map[roachpb.NodeID]time.Duration, *Metrics)
+}
+
+// Metrics returns metrics tracking the policy refresher.
+func (pr *PolicyRefresher) Metrics() *Metrics {
+	return pr.metrics
 }
 
 // detachReplicas atomically retrieves and clears the list of replicas needing
@@ -151,7 +182,7 @@ func (pr *PolicyRefresher) getCurrentLatencies() map[roachpb.NodeID]time.Duratio
 func (pr *PolicyRefresher) refreshPolicies(leaseholders []Replica) {
 	latencies := pr.getCurrentLatencies()
 	for _, leaseholder := range leaseholders {
-		leaseholder.RefreshPolicy(latencies)
+		leaseholder.RefreshPolicy(latencies, pr.metrics)
 	}
 }
 

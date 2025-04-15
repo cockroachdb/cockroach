@@ -1210,7 +1210,7 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Refresh the policy with the current test case's latencies map.
-			repl.RefreshPolicy(tc.latencies)
+			repl.RefreshPolicy(tc.latencies, nil)
 
 			// Verify the policy is set correctly.
 			actualPolicy := repl.GetCachedClosedTimestampPolicyForTesting()
