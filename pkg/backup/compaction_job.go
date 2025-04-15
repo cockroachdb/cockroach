@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -254,12 +253,12 @@ func (b *backupResumer) ResumeCompaction(
 			return err
 		}
 		updatedDetails, err = updateCompactionBackupDetails(
-			ctx, compactChain, initialDetails, backupDest, baseEncryptionOpts, kmsEnv,
+			ctx, compactChain, initialDetails, backupDest, baseEncryptionOpts,
 		)
 		if err != nil {
 			return err
 		}
-		backupManifest, err = createCompactionManifest(ctx, execCtx, updatedDetails, compactChain)
+		backupManifest, err = compactChain.createCompactionManifest(ctx, updatedDetails)
 		if err != nil {
 			return err
 		}
@@ -405,7 +404,9 @@ type compactionChain struct {
 	// for a restore.
 	backupChain    []backuppb.BackupManifest
 	chainToCompact []backuppb.BackupManifest
-	// start refers to the start time of the first backup to be compacted.
+	// start refers to the start time of the first backup to be compacted. This
+	// will always be greater than 0 as a full backup is not a candidate for
+	// compaction.
 	// end refers to the end time of the last backup to be compacted.
 	start, end hlc.Timestamp
 	// Inclusive startIdx and exclusive endIdx of the sub-chain to compact.
@@ -483,7 +484,6 @@ func updateCompactionBackupDetails(
 	initialDetails jobspb.BackupDetails,
 	resolvedDest backupdest.ResolvedDestination,
 	baseEncryptOpts *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
 ) (jobspb.BackupDetails, error) {
 	if len(compactionChain.chainToCompact) == 0 {
 		return jobspb.BackupDetails{}, errors.New("no backup manifests to compact")
@@ -523,17 +523,46 @@ func updateCompactionBackupDetails(
 	return compactedDetails, nil
 }
 
-// compactIntroducedSpans takes a compacted backup manifest and the full chain of backups it belongs
-// to and computes the introduced spans for the compacted backup.
-func compactIntroducedSpans(
-	ctx context.Context, manifest backuppb.BackupManifest, chain compactionChain,
-) (roachpb.Spans, error) {
-	if err := checkCoverage(ctx, manifest.Spans, chain.backupChain); err != nil {
+// createCompactionManifest creates a new manifest for a compaction job and its
+// compacted chain. The details should have its targets resolved.
+func (c compactionChain) createCompactionManifest(
+	ctx context.Context, details jobspb.BackupDetails,
+) (*backuppb.BackupManifest, error) {
+	// TODO (kev-cao): Will need to update the SSTSinkKeyWriter to support
+	// range keys.
+	lastBackup := c.lastBackup()
+	if len(lastBackup.Tenants) != 0 {
+		return nil, errors.New("backup compactions does not yet support range keys")
+	}
+	introducedSpans, err := c.compactIntroducedSpans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cManifest := lastBackup
+	cManifest.StartTime = c.start
+	cManifest.EndTime = c.end
+	cManifest.Descriptors = details.ResolvedTargets
+	cManifest.CompleteDbs = details.ResolvedCompleteDbs
+	cManifest.IntroducedSpans = introducedSpans
+	cManifest.Files = nil
+	cManifest.DescriptorChanges = nil // Revision history is not supported.
+	cManifest.EntryCounts = roachpb.RowCount{}
+	cManifest.Dir = cloudpb.ExternalStorage{}
+	cManifest.HasExternalManifestSSTs = false
+	cManifest.PartitionDescriptorFilenames = nil // Locality aware backups not supported.
+	return &cManifest, nil
+}
+
+// compactIntroducedSpans computes the introduced spans for a compacted backup.
+// In the case of compaction, any span that is not included in the backup
+// *preceding* the compaction chain is considered introduced.
+func (c compactionChain) compactIntroducedSpans(ctx context.Context) (roachpb.Spans, error) {
+	if err := checkCoverage(ctx, c.lastBackup().Spans, c.backupChain); err != nil {
 		return roachpb.Spans{}, err
 	}
 	return filterSpans(
-			manifest.Spans,
-			chain.backupChain[chain.startIdx-1].Spans,
+			c.lastBackup().Spans,
+			c.backupChain[c.startIdx-1].Spans,
 		),
 		nil
 }
@@ -588,50 +617,8 @@ func resolveBackupDirs(
 	return resolvedBaseDirs, resolvedIncDirs, resolvedSubdir, nil
 }
 
-// createCompactionManifest creates a new manifest for a compaction job and its
-// compacted chain.
-func createCompactionManifest(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	details jobspb.BackupDetails,
-	compactChain compactionChain,
-) (*backuppb.BackupManifest, error) {
-	var tenantSpans []roachpb.Span
-	var tenantInfos []mtinfopb.TenantInfoWithUsage
-	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		tenantSpans, tenantInfos, err = getTenantInfo(ctx, execCtx.ExecCfg().Codec, txn, details)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	// TODO (kev-cao): Will need to update the SSTSinkKeyWriter to support
-	// range keys.
-	if len(tenantSpans) != 0 || len(tenantInfos) != 0 {
-		return nil, errors.New("backup compactions does not yet support range keys")
-	}
-	m, err := createBackupManifest(
-		ctx,
-		execCtx.ExecCfg(),
-		tenantSpans,
-		tenantInfos,
-		details,
-		compactChain.backupChain,
-		compactChain.allIters,
-	)
-	if err != nil {
-		return nil, err
-	}
-	m.IsCompacted = true
-	m.IntroducedSpans, err = compactIntroducedSpans(ctx, m, compactChain)
-	if err != nil {
-		return nil, err
-	}
-	return &m, nil
-}
-
 // getBackupChain fetches the current shortest chain of backups (and its
-// associated info) required to restore the to the end time specified in the details.
+// associated info) required to restore to the end time specified in the details.
 func getBackupChain(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
