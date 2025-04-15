@@ -7,7 +7,6 @@ package vecstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -36,10 +35,8 @@ type Txn struct {
 	codec partitionCodec
 
 	// Retained allocations to prevent excessive reallocation.
-	tmpChildKeys  []cspann.ChildKey
-	tmpValueBytes []cspann.ValueBytes
-	tmpSpans      []roachpb.Span
-	tmpSpanIDs    []int
+	tmpSpans   []roachpb.Span
+	tmpSpanIDs []int
 }
 
 var _ cspann.Txn = (*Txn)(nil)
@@ -63,34 +60,6 @@ func (tx *Txn) Init(store *Store, kv *kv.Txn) {
 	} else {
 		tx.lockDurability = kvpb.GuaranteedDurability
 	}
-}
-
-// GetPartition implements the Txn interface.
-func (tx *Txn) GetPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (*cspann.Partition, error) {
-	return nil, errors.AssertionFailedf("GetPartition is not implemented")
-}
-
-// SetRootPartition implements the Txn interface.
-func (tx *Txn) SetRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) error {
-	return errors.AssertionFailedf("SetRootPartition is not implemented")
-}
-
-// InsertPartition implements the Txn interface.
-func (tx *Txn) InsertPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) (cspann.PartitionKey, error) {
-	return cspann.InvalidKey, errors.AssertionFailedf("InsertPartition is not implemented")
-}
-
-// DeletePartition implements the Txn interface.
-func (tx *Txn) DeletePartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) error {
-	return errors.AssertionFailedf("DeletePartition is not implemented")
 }
 
 // GetPartitionMetadata implements the cspann.Txn interface.
@@ -311,44 +280,6 @@ func (tx *Txn) SearchPartitions(
 	}
 
 	return nil
-}
-
-// insertPartition creates a new partition with the given partition key and
-// inserts it into the store. If the partition already exists, the new
-// partition's metadata will overwrite the existing metadata, but existing
-// vectors will not be deleted. Vectors in the new partition will overwrite
-// existing vectors if child keys collide, but otherwise the resulting partition
-// will be a union of the two partitions.
-func (tx *Txn) insertPartition(
-	ctx context.Context,
-	treeKey cspann.TreeKey,
-	partitionKey cspann.PartitionKey,
-	partition *cspann.Partition,
-) error {
-	b := tx.kv.NewBatch()
-
-	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	metadata := *partition.Metadata()
-	encodedMetadata := vecencoding.EncodeMetadataValue(metadata)
-	b.Put(metadataKey, encodedMetadata)
-
-	// Cap the key so that appends allocate a new slice.
-	vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, partition.Level())
-	vectorKey = slices.Clip(vectorKey)
-	childKeys := partition.ChildKeys()
-	valueBytes := partition.ValueBytes()
-	for i := range partition.Count() {
-		// The child key gets appended to 'key' here.
-		k := vecencoding.EncodeChildKey(vectorKey, childKeys[i])
-		encodedValue, err := encodeVectorFromSet(partition.QuantizedSet(), i)
-		if err != nil {
-			return err
-		}
-		encodedValue = append(encodedValue, valueBytes[i]...)
-		b.Put(k, encodedValue)
-	}
-
-	return tx.kv.Run(ctx, b)
 }
 
 // getFullVectorsFromPK fills in refs that are specified by primary key. Refs
