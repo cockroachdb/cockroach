@@ -51,7 +51,7 @@ func (sc *storeCodec) GetVectorSet() quantize.QuantizedVectorSet {
 func (sc *storeCodec) DecodeVector(encodedVector []byte) ([]byte, error) {
 	switch sc.quantizer.(type) {
 	case *quantize.UnQuantizer:
-		return vecencoding.DecodeUnquantizedVectorToSet(
+		return vecencoding.DecodeUnquantizerVectorToSet(
 			encodedVector, sc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
 	case *quantize.RaBitQuantizer:
 		return vecencoding.DecodeRaBitQVectorToSet(

@@ -637,8 +637,6 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
-		// Always use new split/merge fixups in cspann tests.
-		UseNewFixups: true,
 	}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -969,7 +967,6 @@ func TestIndexConcurrency(t *testing.T) {
 			MaxPartitionSize: 8,
 			BaseBeamSize:     2,
 			QualitySamples:   4,
-			UseNewFixups:     true,
 		}
 		seed := int64(i)
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)

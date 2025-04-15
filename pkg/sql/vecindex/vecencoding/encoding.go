@@ -325,11 +325,11 @@ func DecodeRaBitQVectorToSet(
 	return encVector, nil
 }
 
-// DecodeUnquantizedVectorToSet decodes an Unquantizer vector entry into the
+// DecodeUnquantizerVectorToSet decodes an Unquantizer vector entry into the
 // given UnQuantizedVectorSet. The vector set must have been initialized with
 // the correct number of dimensions. It returns the remainder of the input
 // buffer.
-func DecodeUnquantizedVectorToSet(
+func DecodeUnquantizerVectorToSet(
 	encVector []byte, vectorSet *quantize.UnQuantizedVectorSet,
 ) ([]byte, error) {
 	encVector, centroidDistance, err := encoding.DecodeUntaggedFloat32Value(encVector)
