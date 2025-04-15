@@ -864,7 +864,9 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 // is true, check columns that do not reference mutation columns are not added
 // to checkColIDs, which allows pruning normalization rules to remove the
 // unnecessary projected column.
-func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
+func (mb *mutationBuilder) addCheckConstraintCols(
+	isUpdate bool, policyCmdScope cat.PolicyCommandScope, applySelectPolicies bool,
+) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -873,6 +875,9 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			check := mb.tab.Check(i)
+
+			referencedCols := &opt.ColSet{}
+			var scopeCol *scopeColumn
 
 			// For tables with RLS enabled, we create a synthetic check constraint
 			// to enforce the policies. Since this check varies based on the role
@@ -883,38 +888,28 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 					panic(errors.AssertionFailedf("a table should only have one RLS constraint"))
 				}
 				seenRLSConstraint = true
-				chkBuilder := optRLSConstraintBuilder{
-					tab:      mb.tab,
-					md:       mb.md,
-					tabMeta:  mb.md.TableMeta(mb.tabID),
-					oc:       mb.b.catalog,
-					user:     mb.b.checkPrivilegeUser,
-					isUpdate: isUpdate,
-				}
-				check = chkBuilder.Build(mb.b.ctx)
-			}
 
-			expr, err := parser.ParseExpr(check.Constraint())
-			if err != nil {
-				panic(err)
-			}
-
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-
-			// Use an anonymous name because the column cannot be referenced
-			// in other expressions.
-			colName := scopeColName("")
-			if check.IsRLSConstraint() {
-				colName = colName.WithMetadataName("rls")
+				var rlsScalar opt.ScalarExpr
+				rlsScalar, check = mb.buildRLSCheckConstraint(policyCmdScope, applySelectPolicies, referencedCols)
+				colName := scopeColName("").WithMetadataName("rls")
+				scopeCol = mb.b.synthesizeColumn(projectionsScope, colName, rlsScalar.DataType(), nil /* expr */, rlsScalar)
 			} else {
-				colName = colName.WithMetadataName(fmt.Sprintf("check%d", i+1))
-			}
-			scopeCol := projectionsScope.addColumn(colName, texpr)
+				expr, err := parser.ParseExpr(check.Constraint())
+				if err != nil {
+					panic(err)
+				}
 
-			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
-			// and instead use the constraints stored in the table metadata.
-			referencedCols := &opt.ColSet{}
-			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
+				texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
+
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := scopeColName("").WithMetadataName(fmt.Sprintf("check%d", i+1))
+				scopeCol = projectionsScope.addColumn(colName, texpr)
+
+				// TODO(ridwanmsharif): Maybe we can avoid building constraints here
+				// and instead use the constraints stored in the table metadata.
+				mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
+			}
 
 			// For non-UPDATE mutations, track the synthesized check columns in
 			// checkColIDs. For UPDATE mutations, track the check columns in two
@@ -970,6 +965,204 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// buildRLSCheckConstraint returns a RLS specific check constraint that is used
+// to enforce the policies on write.
+func (mb *mutationBuilder) buildRLSCheckConstraint(
+	cmdScope cat.PolicyCommandScope, applySelectPolicies bool, referencedCols *opt.ColSet,
+) (opt.ScalarExpr, *rlsCheckConstraint) {
+	tabMeta := mb.md.TableMeta(mb.tabID)
+	scalar := mb.buildRLSCheckExpr(tabMeta, cmdScope, applySelectPolicies, referencedCols)
+
+	// Build a CheckConstraint so the caller knows what columns were referenced.
+	check := rlsCheckConstraint{
+		colIDs: mb.b.getColIDsFromPoliciesUsed(tabMeta),
+		tab:    mb.tab,
+	}
+	return scalar, &check
+}
+
+// buildRLSCheckExpr builds the expression that will be used within the check
+// constraint built for RLS. The built expression is returned.
+func (mb *mutationBuilder) buildRLSCheckExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	applySelectPolicies bool,
+	referencedCols *opt.ColSet,
+) opt.ScalarExpr {
+	if mb.b.isExemptFromRLSPolicies(tabMeta, cmdScope) {
+		return memo.TrueSingleton
+	}
+
+	var scalar opt.ScalarExpr
+	switch cmdScope {
+	case cat.PolicyScopeInsert:
+		scalar = mb.b.factory.ConstructAnd(
+			mb.maybeGenPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols, applySelectPolicies),
+			mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeInsert, referencedCols),
+		)
+	case cat.PolicyScopeUpdate:
+		scalar = mb.b.factory.ConstructAnd(
+			mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
+			mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeUpdate, referencedCols),
+		)
+	case cat.PolicyScopeUpsert:
+		isNotConflict := mb.b.factory.ConstructIs(
+			mb.b.factory.ConstructVariable(mb.canaryColID),
+			memo.NullSingleton,
+		)
+		isConflict := mb.b.factory.ConstructNot(isNotConflict)
+		scalar = mb.b.factory.ConstructAnd(
+			mb.b.factory.ConstructAnd(
+				mb.b.factory.ConstructOr(
+					isNotConflict,
+					mb.b.factory.ConstructAnd(
+						mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.fetchScope, referencedCols),
+						mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeUpdate, mb.fetchScope, referencedCols),
+					),
+				),
+				mb.b.factory.ConstructOr(
+					isNotConflict,
+					mb.b.factory.ConstructAnd(
+						mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
+						mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeUpdate, referencedCols),
+					),
+				),
+			),
+			mb.b.factory.ConstructOr(
+				isConflict,
+				mb.b.factory.ConstructAnd(
+					mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
+					mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeInsert, referencedCols),
+				),
+			),
+		)
+	default:
+		panic(errors.AssertionFailedf("unsupported policy command scope for check expr: %v", cmdScope))
+	}
+
+	mb.b.factory.Metadata().GetRLSMeta().RefreshNoPoliciesAppliedForTable(tabMeta.MetaID)
+	return scalar
+}
+
+// genPolicyWithCheckExpr will build a WITH CHECK expression for the
+// given policy command. If no policy applies, then the 'false' expression is
+// returned.
+func (mb *mutationBuilder) genPolicyWithCheckExpr(
+	tabMeta *opt.TableMeta, cmdScope cat.PolicyCommandScope, referencedCols *opt.ColSet,
+) opt.ScalarExpr {
+	scalar := mb.genPolicyExpr(tabMeta, cmdScope, mb.outScope, referencedCols, false /* onlyUsingExpr */)
+	if scalar == nil {
+		return memo.FalseSingleton
+	}
+	return scalar
+}
+
+// genPolicyUsingExpr generates a USING expression for the given policy command.
+// If no applicable policies are found, it returns 'false'. Otherwise, it returns
+// the generated scalar expression.
+func (mb *mutationBuilder) genPolicyUsingExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+) opt.ScalarExpr {
+	scalar := mb.genPolicyExpr(tabMeta, cmdScope, exprScope, referencedCols, true /* onlyUsingExpr */)
+	if scalar == nil {
+		return memo.FalseSingleton
+	}
+	return scalar
+}
+
+// maybeGenPolicyUsingExpr conditionally generates a USING expression based on
+// the needPolicies flag. If no policies are needed, it returns 'true'. If policies
+// are needed but none apply, it returns 'false'. Otherwise, it returns the
+// appropriate scalar expression.
+func (mb *mutationBuilder) maybeGenPolicyUsingExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+	applyPolicies bool,
+) opt.ScalarExpr {
+	if !applyPolicies {
+		return memo.TrueSingleton
+	}
+	return mb.genPolicyUsingExpr(tabMeta, cmdScope, exprScope, referencedCols)
+}
+
+// genPolicyExpr will build an expression for the given policy command.
+func (mb *mutationBuilder) genPolicyExpr(
+	tabMeta *opt.TableMeta,
+	cmdScope cat.PolicyCommandScope,
+	exprScope *scope,
+	referencedCols *opt.ColSet,
+	onlyUsingExpr bool,
+) opt.ScalarExpr {
+	var scalar opt.ScalarExpr
+	var policiesUsed opt.PolicyIDSet
+	policies := tabMeta.Table.Policies()
+
+	// Create a closure to handle building the expression for one policy.
+	buildForPolicy := func(p cat.Policy, restrictive bool) {
+		if !p.AppliesToRole(mb.b.checkPrivilegeUser) || !policyAppliesToCommandScope(p, cmdScope) {
+			return
+		}
+		policiesUsed.Add(p.ID)
+
+		var expr string
+		// The USING expression is used in two scenarios:
+		// - When the WITH CHECK expression is not defined
+		// - When the caller explicitly requests only the USING expression (e.g.,
+		// during UPSERT)
+		//
+		// Note: If both expressions are missing, the policy does not apply and can
+		// be skipped.
+		if p.WithCheckExpr == "" || onlyUsingExpr {
+			if p.UsingExpr == "" {
+				return
+			}
+			expr = p.UsingExpr
+		} else {
+			expr = p.WithCheckExpr
+		}
+		pexpr, err := parser.ParseExpr(expr)
+		if err != nil {
+			panic(err)
+		}
+		texpr := exprScope.resolveAndRequireType(pexpr, types.Bool)
+		singleExprScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, referencedCols)
+
+		// Build up a scalar expression of all singleExprScalar's combined.
+		if scalar != nil {
+			if restrictive {
+				scalar = mb.b.factory.ConstructAnd(scalar, singleExprScalar)
+			} else {
+				scalar = mb.b.factory.ConstructOr(scalar, singleExprScalar)
+			}
+		} else {
+			scalar = singleExprScalar
+		}
+	}
+
+	for _, policy := range policies.Permissive {
+		buildForPolicy(policy, false /* restrictive */)
+	}
+	// If no permissive policies apply, then we will add a false check as
+	// nothing is allowed to be written.
+	if scalar == nil {
+		return memo.FalseSingleton
+	}
+	for _, policy := range policies.Restrictive {
+		buildForPolicy(policy, true /* restrictive */)
+	}
+
+	if scalar == nil {
+		panic(errors.AssertionFailedf("at least one applicable policy should have been included"))
+	}
+	mb.b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, false /* applyFilterExpr */)
+	return scalar
 }
 
 // getColumnFamilySet gets the set of column families represented in colOrdinals.
