@@ -892,6 +892,20 @@ func rewriteSchemaChangerState(
 					removeElementAtCurrentIdx()
 					continue
 				}
+			case *scpb.TriggerFunctionCall:
+				// If there is a missing function, then this was in middle of creating
+				// a trigger when the back-up was taken.
+				if el.FuncID == missingID {
+					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.TriggerDeps:
+				// If there is a missing function, then this was in middle of creating
+				// a trigger when the back-up was taken.
+				if catalog.MakeDescriptorIDSet(el.UsesRoutineIDs...).Contains(missingID) {
+					removeElementAtCurrentIdx()
+					continue
+				}
 			}
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
@@ -1175,6 +1189,9 @@ func FunctionDescs(
 					"cannot restore function %q because back referenced relation %d was not found",
 					fnDesc.Name, dep.ID)
 			}
+		}
+		if err := rewriteSchemaChangerState(fnDesc, descriptorRewrites); err != nil {
+			return err
 		}
 	}
 	return nil

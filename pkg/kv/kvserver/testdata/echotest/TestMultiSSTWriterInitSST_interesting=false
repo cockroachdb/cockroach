@@ -2,8 +2,8 @@
 # that does not see any inputs.
 echo
 ----
->> finishing sst
->> writeBytes=4760 sstSize=4623 dataSize=126
+>> finishing msstw
+>> sstSize=4623 estDataSize=4623
 >> sst0:
 rangedel: /Local/RangeID/100/{r""-s""}
 rangekeydel: /Local/RangeID/100/{r""-s""}

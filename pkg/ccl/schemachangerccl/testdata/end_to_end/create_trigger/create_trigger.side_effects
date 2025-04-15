@@ -25,7 +25,7 @@ write *eventpb.CreateTrigger to event log:
     user: root
   tableName: defaultdb.public.t
   triggerName: tr
-## StatementPhase stage 1 of 1 with 8 MutationType ops
+## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #104
   ...
      nextIndexId: 2
@@ -36,6 +36,7 @@ upsert descriptor #104
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
   +    dependsOn: []
@@ -81,8 +82,41 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
 upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": id
+  +        "2": name
+  +        "3": money
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON ‹defaultdb›.‹t› FOR EACH ROW EXECUTE FUNCTION ‹f›()
+  +        statement: CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f()
+  +        statementTag: CREATE TRIGGER
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
   ...
      nextIndexId: 2
      nextMutationId: 1
@@ -92,6 +126,7 @@ upsert descriptor #104
   ...
      replacementOf:
        time: {}
+  -  schemaLocked: true
   +  triggers:
   +  - actionTime: BEFORE
   +    dependsOn: []
@@ -120,6 +155,14 @@ upsert descriptor #104
   +  version: "2"
 upsert descriptor #105
    function:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: f
+  +    revertible: true
   +  dependedOnBy:
   +  - id: 104
   +    triggerIds:
@@ -133,5 +176,85 @@ upsert descriptor #105
   +  version: "2"
      volatility: VOLATILE
 persist all catalog changes to storage
+create job #1 (non-cancelable: false): "CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f()"
+  descriptor IDs: [104 105]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": id
+  -        "2": name
+  -        "3": money
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON ‹defaultdb›.‹t› FOR EACH ROW EXECUTE FUNCTION ‹f›()
+  -        statement: CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f()
+  -        statementTag: CREATE TRIGGER
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     triggers:
+     - actionTime: BEFORE
+  ...
+       name: tr
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: f
+  -    revertible: true
+     dependedOnBy:
+     - id: 104
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

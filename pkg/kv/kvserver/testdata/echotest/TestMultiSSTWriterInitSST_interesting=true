@@ -3,13 +3,13 @@
 echo
 ----
 >> rangekeyset [/Local/RangeID/100/r/AbortSpan/"00000000-0000-0000-0000-000000000000"-/Local/RangeID/100/r/AbortSpan/"6ba7b810-9dad-11d1-80b4-00c04fd430c8")
->> writeBytes=97 sstSize=0 dataSize=0
+>> sstSize=0 estDataSize=94
 >> rangekeyset [/Local/Range"d"/RangeDescriptor-/Local/Range"f"/RangeDescriptor)
->> writeBytes=1090 sstSize=1128 dataSize=371
+>> sstSize=1128 estDataSize=1160
 >> rangekeyset ["e"-"f")
->> writeBytes=4140 sstSize=4140 dataSize=581
->> finishing sst
->> writeBytes=5140 sstSize=5092 dataSize=585
+>> sstSize=4140 estDataSize=4140
+>> finishing msstw
+>> sstSize=5092 estDataSize=5096
 >> sst0:
 rangedel: /Local/RangeID/100/r{""-/AbortSpan/"00000000-0000-0000-0000-000000000000"}
 rangedel: /Local/RangeID/100/r/AbortSpan/"{00000000-0000-0000-0000-000000000000"-6ba7b810-9dad-11d1-80b4-00c04fd430c8"}

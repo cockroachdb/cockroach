@@ -654,6 +654,9 @@ message LocalOnlySessionData {
   // behavior.
   bool allow_create_trigger_function_with_argv_references = 165;
 
+  // CreateTableWithSchemaLocked, when true will create tables as schema_locked
+  // by default.
+  bool create_table_with_schema_locked = 166;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
