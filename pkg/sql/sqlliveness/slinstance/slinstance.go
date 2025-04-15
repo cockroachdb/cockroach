@@ -345,8 +345,6 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 		case <-ctx.Done():
 			return stop.ErrUnavailable
 		case <-t.C:
-			t.Read = true
-
 			var s *session
 			l.mu.Lock()
 			s = l.mu.s

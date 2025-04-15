@@ -287,7 +287,6 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
-			timer.Read = true
 			// Eagerly reset the timer, to avoid skewing the interval.
 			timer.Reset(CircuitBreakerProbeInterval.Get(&d.settings.SV))
 		case <-d.stopper.ShouldQuiesce():
@@ -919,7 +918,6 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 					done = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
-					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
 				case <-r.closedC:
 					// The circuit breaker has been GCed, exit. We could cancel the context

@@ -456,7 +456,6 @@ func waitForEmptyPrefix(
 		timer.Reset(EmptySpanPollInterval.Get(sv))
 		select {
 		case <-timer.C:
-			timer.Read = true
 			if empty, err := checkForEmptySpan(
 				ctx, db, prefix, prefix.PrefixEnd(),
 			); empty || err != nil {
@@ -600,7 +599,6 @@ func waitForWork(
 	wait := func() (done bool) {
 		select {
 		case <-markIdleTimer.Ch():
-			markIdleTimer.MarkRead()
 			markIdle(true)
 			markedIdle = true
 			return false
@@ -611,7 +609,6 @@ func waitForWork(
 			}
 
 		case <-workTimer.Ch():
-			workTimer.MarkRead()
 			if log.V(2) {
 				log.Info(ctx, "SchemaChangeGC workTimer triggered")
 			}

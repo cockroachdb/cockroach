@@ -208,8 +208,6 @@ func startLaggingRangesObserver(
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-timer.C:
-					timer.Read = true
-
 					var laggingCount, totalCount int64
 					thresholdTS := timeutil.Now().Add(-1 * threshold)
 					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {

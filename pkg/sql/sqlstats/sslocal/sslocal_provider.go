@@ -79,7 +79,6 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-timer.C:
-					timer.Read = true
 				}
 			}
 		}

@@ -2536,7 +2536,6 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			timer.Reset(until.Sub(now))
 			select {
 			case <-timer.C:
-				timer.Read = true
 				return nil
 			case <-interrupt:
 				return errInterrupted

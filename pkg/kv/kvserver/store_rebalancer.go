@@ -310,7 +310,6 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				timer.Read = true
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
 			if sr.disabled() {

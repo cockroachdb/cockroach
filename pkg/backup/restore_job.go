@@ -486,7 +486,6 @@ func restore(
 				}
 				timer.Reset(replanFrequency.Get(&execCtx.ExecCfg().Settings.SV))
 			case <-timer.C:
-				timer.Read = true
 				// Replan the restore job if it has been 10 minutes since the last
 				// processor completed working.
 				return errors.Mark(laggingRestoreProcErr, retryableRestoreProcError)

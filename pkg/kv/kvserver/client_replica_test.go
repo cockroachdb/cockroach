@@ -5495,7 +5495,6 @@ func TestOptimisticEvalRetry(t *testing.T) {
 			require.True(t, removedLocks)
 			done = true
 		case <-timer.C:
-			timer.Read = true
 			require.NoError(t, txn1.Commit(ctx))
 			removedLocks = true
 		}
