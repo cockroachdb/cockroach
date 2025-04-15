@@ -915,6 +915,43 @@ func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Durati
 	return g.AddInfo(key, bytes, ttl)
 }
 
+func (g *Gossip) TestingAddInfoProto(key string, msg protoutil.Message, ttl time.Duration, beforeCB func(), afterCB Callback) error {
+	bytes, err := protoutil.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for _, cb := range g.mu.is.callbacks {
+		if cb.matcher.MatchString(key) {
+			beforeCB()
+		}
+	}
+
+	if err := g.addInfoLocked(key, bytes, ttl); err != nil {
+		return err
+	}
+
+	for _, cb := range g.mu.is.callbacks {
+		if cb.matcher.MatchString(key) {
+			cb.cw.mu.Lock()
+			cb.cw.mu.workQueue = append(cb.cw.mu.workQueue, callbackWorkItem{
+				key:            key,
+				method:         afterCB,
+				schedulingTime: timeutil.Now(),
+			})
+			cb.cw.mu.Unlock()
+		}
+		
+		select {
+		case cb.cw.callbackCh <- struct{}{}:
+		default:
+		}
+	}
+	return nil
+}
+
 // AddInfoIfNotRedundant adds or updates an info object if it isn't already
 // present in the local infoStore with exactly the same value and with this
 // node as the source. Motivated by the node liveness range's desire to only
