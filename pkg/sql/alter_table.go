@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -101,7 +103,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// Disallow schema changes if this table's schema is locked, unless it is to
 	// set/reset the "schema_locked" storage parameter.
-	if err = checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err = checkSchemaChangeIsAllowed(tableDesc, n, p.ExecCfg().Settings); err != nil {
 		return nil, err
 	}
 
@@ -460,7 +462,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				for _, updated := range affected {
 					// Disallow schema change if the FK references a table whose schema is
 					// locked.
-					if err := checkSchemaChangeIsAllowed(updated, n.n); err != nil {
+					if err := checkSchemaChangeIsAllowed(updated, n.n, params.ExecCfg().Settings); err != nil {
 						return err
 					}
 					if err := params.p.writeSchemaChange(
@@ -2344,7 +2346,9 @@ func (p *planner) tryRemoveFKBackReferences(
 //     not modifying the value of schema_locked.
 //   - The table is referenced by logical data replication jobs, and the statement
 //     is not in the allow list of LDR schema changes.
-func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) (ret error) {
+func checkSchemaChangeIsAllowed(
+	desc catalog.TableDescriptor, n tree.Statement, settings *cluster.Settings,
+) (ret error) {
 	if desc == nil {
 		return nil
 	}
@@ -2358,9 +2362,9 @@ func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) 
 				virtualColNames = append(virtualColNames, col.GetName())
 			}
 		}
-		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+		kvWriterEnabled := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&settings.SV))
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames, kvWriterEnabled == sqlclustersettings.LDRWriterTypeLegacyKV) {
 			return sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(desc.GetName(), desc.TableDesc().LDRJobIDs)
-
 		}
 	}
 	return nil

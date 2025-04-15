@@ -1006,7 +1006,9 @@ func checkTableSchemaChangePrerequisites(
 			}).MustGetOneElement()
 			virtualColNames = append(virtualColNames, col.Name)
 		})
-		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+
+		kvWriterEnabled := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&b.ClusterSettings().SV))
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames, kvWriterEnabled == sqlclustersettings.LDRWriterTypeLegacyKV) {
 			_, _, ns := scpb.FindNamespace(tableElements)
 			if ns == nil {
 				panic(errors.AssertionFailedf("programming error: Namespace element not found"))
