@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // NB: These settings are SystemVisible because they need to be read by e.g.
@@ -86,6 +87,6 @@ var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
 		"furthest follower will be used to adjust closed timestamp policies for ranges"+
 		"ranges configured to serve global reads. "+
 		"kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.",
-	false,
+	metamorphic.ConstantWithTestBool("kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled", false),
 	settings.WithPublic,
 )
