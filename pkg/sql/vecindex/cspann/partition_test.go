@@ -54,7 +54,11 @@ func TestPartition(t *testing.T) {
 		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		childKeys := []ChildKey{childKey10, childKey20, childKey30}
 		valueBytes := []ValueBytes{valueBytes10, valueBytes20, valueBytes30}
-		metadata := PartitionMetadata{Level: 1, Centroid: quantizedSet.GetCentroid()}
+		metadata := PartitionMetadata{
+			Level:        1,
+			Centroid:     quantizedSet.GetCentroid(),
+			StateDetails: MakeReadyDetails(),
+		}
 		metadata.StateDetails.State = ReadyState
 		return NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 	}
@@ -66,6 +70,20 @@ func TestPartition(t *testing.T) {
 			require.Equal(t, expected[i], vectors.At(i))
 		}
 	}
+
+	t.Run("test Init", func(t *testing.T) {
+		// Validate that Init sets same values.
+		partition := newTestPartition()
+		var partition2 Partition
+		partition2.Init(
+			*partition.Metadata(),
+			partition.Quantizer(),
+			partition.QuantizedSet(),
+			partition.ChildKeys(),
+			partition.ValueBytes(),
+		)
+		require.Equal(t, *partition, partition2)
+	})
 
 	t.Run("test Clone", func(t *testing.T) {
 		partition := newTestPartition()
