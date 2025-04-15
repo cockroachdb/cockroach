@@ -27,7 +27,7 @@ var GlobalLabels []model.Label
 
 type CommitMapping map[string]string
 
-var pathPattern = regexp.MustCompile(`(\d+-+\d+)/(.*?)/run_\d+`)
+var pathPattern = regexp.MustCompile(`(\d+-+\d+)/(.*?)/(cpu_arch=\w+|run_\d+)`)
 
 // Global variable to store the commit mapping
 var commitMapping CommitMapping

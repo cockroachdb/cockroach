@@ -1,13 +1,13 @@
 source:
   type: gcp
-  directory: artifacts/20250107-18402801/tpccbench/nodes=9/cpu=4/multi-region/run_1/8.perf
+  directory: artifacts/20250106-18388554/decommissionBench/nodes=4/warehouses=1000/while-down/run_1/1.perf
   bucket: cockroach-nightly
   project: cockroach-ephemeral
 
 sink:
   type: gcp
-  directory: converter
-  bucket: cockroach-testeng-metrics
+  directory: gce
+  bucket: crl-artifacts-roachperf-openmetrics
   project: cockroach-testeng-infra
 
 metrics:
