@@ -4128,6 +4128,10 @@ func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val
 	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
 }
 
+func (m *sessionDataMutator) SetVectorSearchBeamSize(val int32) {
+	m.data.VectorSearchBeamSize = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

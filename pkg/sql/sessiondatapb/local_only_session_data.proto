@@ -653,7 +653,11 @@ message LocalOnlySessionData {
   // though it currently doesn't have Postgres-compatible 0-based indexing
   // behavior.
   bool allow_create_trigger_function_with_argv_references = 165;
-
+  // VectorSearchBeamSize controls the number of candidates examined during
+  // vector index searches. It represents the number of vector partitions that
+  // are considered at each level of the search tree. Higher values increase
+  // search accuracy but require more processing resources.
+  int32 vector_search_beam_size = 168;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

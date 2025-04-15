@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -3940,6 +3941,29 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`vector_search_beam_size`: {
+		GetStringVal: makeIntGetStringValFn(`vector_search_beam_size`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			if b < 1 || b > 512 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"vector_search_beam_size cannot be less than 1 or greater than 512")
+			}
+			m.SetVectorSearchBeamSize(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().VectorSearchBeamSize), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(vecindex.SearchBeamSizeSetting.Get(sv), 10)
+		},
 	},
 }
 
