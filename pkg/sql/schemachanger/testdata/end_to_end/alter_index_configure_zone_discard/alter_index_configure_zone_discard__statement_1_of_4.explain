@@ -13,16 +13,34 @@ Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pke
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
- │         └── 1 Mutation operation
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 2 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
-           └── 1 Mutation operation
-                └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 4 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

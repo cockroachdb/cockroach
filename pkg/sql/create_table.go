@@ -2567,6 +2567,17 @@ func newTableDesc(
 		}
 		ttl.ScheduleID = j.ScheduleID()
 	}
+
+	// For tables set schema_locked by default if it hasn't been set, and we
+	// aren't running under an internal executor.
+	if !ret.IsView() && !ret.IsSequence() &&
+		n.StorageParams.GetVal("schema_locked") == nil &&
+		!params.p.SessionData().Internal &&
+		params.p.SessionData().CreateTableWithSchemaLocked &&
+		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		ret.SchemaLocked = true
+	}
+
 	return ret, nil
 }
 

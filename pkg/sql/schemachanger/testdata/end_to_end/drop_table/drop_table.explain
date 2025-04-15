@@ -11,7 +11,7 @@ EXPLAIN (DDL) DROP TABLE db.sc.t;
 Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 36 elements transitioning toward ABSENT
+ │         ├── 37 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -47,8 +47,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         └── 46 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 107 (t-)}
+ │         └── 47 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
@@ -67,6 +68,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
+ │              ├── SetTableSchemaLocked {"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
@@ -97,7 +99,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 36 elements transitioning toward ABSENT
+ │    │    ├── 37 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 107 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -133,11 +135,12 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 107 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
- │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 107 (t-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 36 elements transitioning toward ABSENT
+ │         ├── 37 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (t-), Name: "t", ReferencedDescID: 104 (db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "admin"}
@@ -173,8 +176,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 1 (k-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107 (t-), ColumnID: 2 (v-), IndexID: 1 (t_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         └── 48 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 107 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 107 (t-)}
+ │         └── 49 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
@@ -193,6 +197,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":107}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
+ │              ├── SetTableSchemaLocked {"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}

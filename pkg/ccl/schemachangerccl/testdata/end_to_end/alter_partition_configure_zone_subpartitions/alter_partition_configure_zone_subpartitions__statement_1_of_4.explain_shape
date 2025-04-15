@@ -28,4 +28,4 @@ CREATE TABLE person (
 EXPLAIN (DDL, SHAPE) ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
 ----
 Schema change plan for ALTER PARTITION ‹australia› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹2›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

@@ -43,13 +43,11 @@ type multiSSTWriter struct {
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
-	// The total size of the key and value pairs (not the total size of the
-	// SSTs). Updated on SST finalization.
+	// The total size of the key and value pairs (not the total size of the SSTs),
+	// excluding currSST. Updated on SST finalization.
 	dataSize int64
-	// The total size of the SSTs.
+	// The total size of the SSTs, excluding currSST. Updated on SST finalization.
 	sstSize int64
-	// Incremental count of number of bytes written to disk.
-	writeBytes int64
 	// maxSSTSize is the maximum size to use for SSTs containing MVCC/user keys.
 	// Once the sstable writer reaches this size, it will be finalized and a new
 	// sstable will be created.
@@ -111,28 +109,24 @@ func newMultiSSTWriter(
 	return msstw, nil
 }
 
+// estimatedDataSize returns the approximation of the written bytes to SSTs
+// (including currSST).
+func (msstw *multiSSTWriter) estimatedDataSize() int64 {
+	return msstw.sstSize + msstw.currSST.DataSize
+}
+
 func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
-	wb := msstw.currSST.EstimatedSize()
 	for i := range key.Keys {
 		if err := msstw.currSST.PutInternalRangeKey(key.Start, key.End, key.Keys[i]); err != nil {
 			panic(fmt.Sprintf("failed to put range key in sst: %s", err))
 		}
 	}
-	// NB: this update is often zero in practice since currSST also has an
-	// internal fragmenter and EstimatedSize doesn't try to estimate for the keys
-	// buffered.
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - wb)
 }
 
 func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
-	wb := msstw.currSST.EstimatedSize()
 	if err := msstw.currSST.ClearRawEncodedRange(key.Start, key.End); err != nil {
 		panic(fmt.Sprintf("failed to put range del in sst: %s", err))
 	}
-	// NB: this update is often zero in practice since currSST also has an
-	// internal fragmenter and EstimatedSize doesn't try to estimate for the keys
-	// buffered.
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - wb)
 }
 
 // currentSpan returns the current user-provided span that
@@ -167,18 +161,18 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	// for it.
 	if !msstw.currSpanIsMVCCSpan() {
 		sp := msstw.currentSpan()
-		startKey := storage.EngineKey{Key: sp.Key}
-		endKey := storage.EngineKey{Key: sp.EndKey}
-		{
-			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-			s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
-			msstw.rangeKeyFrag.Add(s)
-		}
-		{
-			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete)
-			s := rangedel.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangedel.Key{{Trailer: trailer}}}
-			msstw.rangeDelFrag.Add(s)
-		}
+		startKey := storage.EngineKey{Key: sp.Key}.Encode()
+		endKey := storage.EngineKey{Key: sp.EndKey}.Encode()
+		msstw.rangeKeyFrag.Add(rangekey.Span{
+			Start: startKey, End: endKey, Keys: []rangekey.Key{{
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete),
+			}},
+		})
+		msstw.rangeDelFrag.Add(rangedel.Span{
+			Start: startKey, End: endKey, Keys: []rangedel.Key{{
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete),
+			}}},
+		)
 	}
 	return nil
 }
@@ -248,8 +242,6 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 				metaEndKey, nextKeyCopy)
 		}
 	}
-	// Account for any additional bytes written other than the KV data.
-	msstw.writeBytes += int64(msstw.currSST.Meta.Size) - msstw.currSST.DataSize
 	msstw.dataSize += msstw.currSST.DataSize
 	msstw.sstSize += int64(msstw.currSST.Meta.Size)
 	msstw.currSpan++
@@ -314,11 +306,9 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 	if err := msstw.rolloverSST(ctx, key, key); err != nil {
 		return err
 	}
-	prevWriteBytes := msstw.currSST.EstimatedSize()
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
 }
 
@@ -332,7 +322,6 @@ func (msstw *multiSSTWriter) PutInternalPointKey(
 	if err := msstw.rolloverSST(ctx, decodedKey, decodedKey); err != nil {
 		return err
 	}
-	prevWriteBytes := msstw.currSST.EstimatedSize()
 	var err error
 	switch kind {
 	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
@@ -345,7 +334,6 @@ func (msstw *multiSSTWriter) PutInternalPointKey(
 	if err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
 }
 

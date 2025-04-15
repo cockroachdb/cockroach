@@ -16,7 +16,10 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
  │         │    └── ABSENT → WRITE_ONLY  CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
- │         └── 5 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT      TableSchemaLocked:{DescID: 106 (tbl)}
+ │         └── 6 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":106}
  │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":106,"Validity":2}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
@@ -31,6 +34,8 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY  → ABSENT CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT      → PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -41,7 +46,10 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         ├── 1 element transitioning toward TRANSIENT_ABSENT
  │         │    └── ABSENT → WRITE_ONLY  CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
- │         └── 7 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT      TableSchemaLocked:{DescID: 106 (tbl)}
+ │         └── 8 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":106}
  │              ├── AddCheckConstraint {"CheckExpr":"CASE WHEN (crdb_...","ConstraintID":2,"TableID":106,"Validity":2}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
@@ -89,7 +97,10 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_ABSENT
            │    └── TRANSIENT_VALIDATED → TRANSIENT_ABSENT CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}
-           └── 3 Mutation operations
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT              → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":106}
                 ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -17,4 +17,4 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │    └── from table_regional_by_row@[3] into rbr_idx+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index rbr_idx+ in relation table_regional_by_row
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

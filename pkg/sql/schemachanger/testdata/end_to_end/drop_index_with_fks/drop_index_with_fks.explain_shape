@@ -17,4 +17,4 @@ CREATE TABLE t_ref(i INT PRIMARY KEY,
 EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
 ----
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
- └── execute 4 system table mutations transactions
+ └── execute 5 system table mutations transactions

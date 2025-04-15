@@ -9,4 +9,4 @@ CREATE POLICY "policy 2" on t1 AS PERMISSIVE FOR INSERT TO user1,user2 WITH CHEC
 EXPLAIN (DDL, SHAPE) DROP POLICY "policy 2" on t1;
 ----
 Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

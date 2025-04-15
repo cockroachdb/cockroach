@@ -11,18 +11,23 @@ EXPLAIN (DDL) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 4 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_16", ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
- │         └── 4 Mutation operations
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
  │              └── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 4 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
@@ -31,12 +36,15 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 4 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-), ReferencedColumnIDs: [3]}
  │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_16", ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
- │         └── 6 Mutation operations
+ │         └── 7 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
@@ -44,7 +52,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
       │    ├── 9 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → WRITE_ONLY  Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
       │    │    ├── PUBLIC    → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_16", ColumnID: 3 (crdb_internal_j_shard_16-)}
@@ -67,7 +75,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY  → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
       │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
@@ -78,13 +86,20 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 3 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
-           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), Usage: REGULAR}
-           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-), TypeName: "INT8"}
-           └── 4 Mutation operations
-                ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+      ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), Usage: REGULAR}
+      │    │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-), TypeName: "INT8"}
+      │    └── 4 Mutation operations
+      │         ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 4 of 4 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

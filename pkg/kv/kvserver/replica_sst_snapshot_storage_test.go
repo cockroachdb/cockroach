@@ -306,8 +306,10 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 
 	var buf redact.StringBuilder
 	logSize := func(buf io.Writer) {
-		_, _ = fmt.Fprintf(buf, ">> writeBytes=%d sstSize=%d dataSize=%d\n", msstw.writeBytes, msstw.sstSize,
-			msstw.dataSize)
+		// sstSize increases on SST flush and is the total size of all finished
+		// SSTs, estDataSize is the exact data size (think: sum of lengths of keys
+		// and values) of all writes to all SSTs, including the pending one.
+		_, _ = fmt.Fprintf(buf, ">> sstSize=%d estDataSize=%d\n", msstw.sstSize, msstw.estimatedDataSize())
 	}
 
 	var putSpans []roachpb.Span
@@ -345,6 +347,10 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 		// the same rangedel twice (as long as they're added in increasing seqno
 		// order), and we want to exercise the "tricky" case where pebble would
 		// complain about lack of proper fragmentation.
+		//
+		// NB: sometimes we have dataSize=estDataSize following a ranged write
+		// since the write gets hidden in fragmenters and only becomes visible
+		// in stats when the SST is flushed.
 		k := storage.EngineKey{Key: span.Key}.Encode()
 		ek := storage.EngineKey{Key: span.EndKey}.Encode()
 		require.NoError(t, msstw.PutInternalRangeDelete(ctx, k, ek))
@@ -356,7 +362,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 		logSize(&buf)
 	}
 
-	_, _ = fmt.Fprintln(&buf, ">> finishing sst")
+	_, _ = fmt.Fprintln(&buf, ">> finishing msstw")
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 

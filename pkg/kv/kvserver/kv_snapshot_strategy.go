@@ -128,7 +128,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	var sharedSSTs []pebble.SharedSSTMeta
 	var externalSSTs []pebble.ExternalFile
-	var prevWriteBytes int64
+	var prevBytesEstimate int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
@@ -170,12 +170,13 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
 
-				writeBytes := msstw.writeBytes - prevWriteBytes
+				bytesEstimate := msstw.estimatedDataSize()
+				delta := bytesEstimate - prevBytesEstimate
 				// Calling nil pacer is a noop.
-				if err := pacer.Pace(ctx, writeBytes, false /* final */); err != nil {
+				if err := pacer.Pace(ctx, delta, false /* final */); err != nil {
 					return noSnap, errors.Wrapf(err, "snapshot admission pacer")
 				}
-				prevWriteBytes = msstw.writeBytes
+				prevBytesEstimate = bytesEstimate
 
 				ek, err := batchReader.EngineKey()
 				if err != nil {
@@ -244,7 +245,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 			// Defensive call to account for any discrepancies. The SST sizes should
 			// have been updated upon closing.
-			additionalWrites := sstSize - msstw.writeBytes
+			additionalWrites := sstSize - prevBytesEstimate
 			if err := pacer.Pace(ctx, additionalWrites, true /* final */); err != nil {
 				return noSnap, errors.Wrapf(err, "snapshot admission pacer")
 			}

@@ -1,0 +1,29 @@
+/* setup */
+CREATE TABLE t(i int);
+
+/* test */
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 8;
+ALTER TABLE t CONFIGURE ZONE DISCARD;
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t CONFIGURE ZONE DISCARD; following ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = ‹7›, "gc.ttlseconds" = ‹10000›; ;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward PUBLIC
+      │    │    ├── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 0}
+      │    │    ├── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+      │    │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+      │    └── 5 Mutation operations
+      │         ├── AddTableZoneConfig {"TableID":104}
+      │         ├── AddTableZoneConfig {"TableID":104}
+      │         ├── AddTableZoneConfig {"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
