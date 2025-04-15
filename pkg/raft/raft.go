@@ -1342,7 +1342,41 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term)
+
+	// A special visit function to use the recorded hints and optimize the first
+	// round of MsgApp after becoming leader.
+	r.reset(r.Term, func(id pb.PeerID, pr *tracker.Progress) {
+		// next is set to r.raftLog.lastIndex() + 1 by default like in reset().
+		next := r.raftLog.lastIndex() + 1
+		// ConflictIdx is either a best guess on where the voter's log matches the
+		// leader's, or r.raftLog.lastIndex()
+		matchGuess, ok := r.electionTracker.GuessMatch(id)
+		conflictIdx := matchGuess.Index
+		isMatch := matchGuess.Match
+		// A conflictIdx is recorded and the voter voted during election.
+		if ok {
+			next = uint64(conflictIdx) + 1
+		}
+
+		*pr = tracker.Progress{
+			Match:       0,
+			MatchCommit: 0,
+			Next:        next,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
+		}
+
+		if isMatch {
+			// Follower's log matches the leader's log at next-1.
+			// Set the follower's state to StateReplicate early.
+			r.becomeReplicate(pr)
+			// NB: this is a bit of a hack, but we need to set the Next again since
+			// r.becomeReplicate sets pr.Next to match + 1.
+			// Where match is 0 in this case.
+			pr.Next = next
+		}
+	})
+
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
@@ -1365,11 +1399,14 @@ func (r *raft) becomeLeader() {
 			return
 		}
 		// All peer flows, except the leader's own, are initially in StateProbe.
+		// However, if discovered during voting that the follower's log matches the
+		// leader's, the follower is set to StateReplicate.
 		// Account the probe state entering in metrics here. All subsequent flow
 		// state changes, while we are the leader, are counted in the corresponding
 		// methods: becomeProbe, becomeReplicate, becomeSnapshot.
-		assertTrue(pr.State == tracker.StateProbe, "peers must be in StateProbe on leader step up")
-		r.metrics.FlowsEnteredStateProbe.Inc(1)
+		if pr.State == tracker.StateProbe {
+			r.metrics.FlowsEnteredStateProbe.Inc(1)
+		}
 	})
 
 	// Conservatively set the pendingConfIndex to the last index in the
