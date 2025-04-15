@@ -349,9 +349,20 @@ func openSSTs(
 	endTime hlc.Timestamp,
 ) (mergedSST, error) {
 	var dirs []cloud.ExternalStorage
+	cleanupDirs := func(dirsToClose []cloud.ExternalStorage) {
+		for _, dir := range dirsToClose {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed: %v", err)
+			}
+		}
+	}
+	// If we bail early due to an error, cleanup any external storage that was
+	// opened. Otherwise, leave it to the caller to perform cleanup.
+	defer cleanupDirs(dirs)
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
+		var dir cloud.ExternalStorage
 		dir, err := execCfg.DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
@@ -374,17 +385,15 @@ func openSSTs(
 	if err != nil {
 		return mergedSST{}, err
 	}
+	mergedSSTDirs := dirs
+	dirs = nil // set dirs to nil to prevent cleanupDirs from closing them
 	return mergedSST{
 		entry: entry,
 		iter:  compactionIter,
 		cleanup: func() {
 			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
-			for _, dir := range dirs {
-				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed: %v", err)
-				}
-			}
+			cleanupDirs(mergedSSTDirs)
 		},
 		completeUpTo: endTime,
 	}, nil
