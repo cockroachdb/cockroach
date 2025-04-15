@@ -1339,7 +1339,7 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 }
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
-// span configurations and provided node latencies.
+// span configurations and provided node round-trip latencies.
 func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 	policy := func() ctpb.RangeClosedTimestampPolicy {
 		desc, conf := r.DescAndSpanConfig()
