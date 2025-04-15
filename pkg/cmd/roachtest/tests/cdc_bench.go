@@ -111,17 +111,6 @@ func registerCDCBench(r registry.Registry) {
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Weekly),
 				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
-				PostProcessPerfMetrics: func(testName string, metric *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
-					return roachtestutil.AggregatedPerfMetrics{
-						&roachtestutil.AggregatedMetric{
-							Name:             fmt.Sprintf("%s_%s", testName, metric.Summaries[0].Name),
-							Value:            metric.Summaries[0].HighestTrackableValue,
-							Unit:             "rows/s",
-							IsHigherBetter:   true,
-							AdditionalLabels: nil,
-						},
-					}, nil
-				},
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
 				},
