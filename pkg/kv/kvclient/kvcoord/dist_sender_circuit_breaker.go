@@ -913,10 +913,10 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
-			for !timer.Read { // select until probe interval timer fires
+			for done := false; !done; { // select until probe interval timer fires
 				select {
 				case <-timer.C:
-					timer.Read = true
+					done = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
 					writeGraceTimer.Read = true

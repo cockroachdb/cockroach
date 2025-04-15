@@ -356,13 +356,14 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 
 			// Pull off as many queued requests as possible within batchDuration.
 			batchTimer.Reset(batchDuration)
-			for !batchTimer.Read {
+			for done := false; !done; {
 				select {
 				case msg = <-q.messages:
 					batch.Messages = append(batch.Messages, msg)
 					t.metrics.SendQueueSize.Dec(1)
 					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
 				case <-batchTimer.C:
+					done = true
 					batchTimer.Read = true
 				}
 			}
