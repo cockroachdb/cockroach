@@ -11,6 +11,17 @@ CREATE TABLE simple (
   FAMILY (a, vec1)
 )
 
+# Test guardrail for vector index creation.
+# TODO(mw5h): remove these two statements once online modifications are supported.
+statement ok
+SET sql_safe_updates = true
+
+statement error pgcode 01000 pq: rejected \(sql_safe_updates = true\): CREATE VECTOR INDEX will disable writes to the table while the index is being built
+CREATE VECTOR INDEX ON simple (vec1)
+
+statement ok
+SET sql_safe_updates = false
+
 statement ok
 CREATE VECTOR INDEX ON simple (vec1)
 
