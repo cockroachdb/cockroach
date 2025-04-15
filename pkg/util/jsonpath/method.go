@@ -5,7 +5,12 @@
 
 package jsonpath
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/errors"
+)
 
 type MethodType int
 
@@ -26,8 +31,13 @@ type Method struct {
 
 var _ Path = Method{}
 
-func (m Method) String() string {
-	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
+func (m Method) ToString(sb *strings.Builder, inKey, printBrackets bool) {
+	switch m.Type {
+	case SizeMethod, TypeMethod:
+		sb.WriteString(fmt.Sprintf(".%s()", MethodTypeStrings[m.Type]))
+	default:
+		panic(errors.AssertionFailedf("unhandled method type: %d", m.Type))
+	}
 }
 
 func (m Method) Validate(
