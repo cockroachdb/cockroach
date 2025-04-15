@@ -1,4 +1,15 @@
 send
+Query {"String": "SELECT ''::JSONPATH"}
+----
+
+until ignore=BindComplete
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42601"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "SELECT '$'::JSONPATH"}
 ----
 
@@ -10,80 +21,76 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Parse {"Query": "SELECT '$'::JSONPATH"}
+Bind {"ResultFormatCodes": [1]}
+Execute
+Sync
+----
 
-# send
-# Query {"String": "CREATE TABLE jsonpath_a (j JSONPATH)"}
-# ----
+# Binary format response: 0x01 0x27 0x24 0x27
+# - 0x01: JSONPath version number (1)
+# - 0x27: ASCII code for '
+# - 0x24: ASCII code for $
+# - 0x27: ASCII code for '
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"01272427"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
-# until
-# ReadyForQuery
-# ----
-# {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
+send
+Parse {"Query": "SELECT '$.abc'::JSONPATH"}
+Bind {"ResultFormatCodes": [0]}
+Execute
+Sync
+----
 
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"$.\"abc\""}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
-# send
-# Query {"String": "INSERT INTO jsonpath_a VALUES ('$.a'), ('$.b[*]')"}
-# ----
+send
+Parse {"Query": "SELECT '$.abc'::JSONPATH"}
+Bind {"ResultFormatCodes": [1]}
+Execute
+Sync
+----
 
-# until
-# ReadyForQuery
-# ----
-# {"Type":"CommandComplete","CommandTag":"INSERT 0 2"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
+# Binary format response: 0x01 0x27 0x24 0x2e 0x22 0x61 0x62 0x63 0x22 0x27
+# - 0x01: JSONPath version number (1)
+# - 0x27: ASCII code for '
+# - 0x24: ASCII code for $
+# - 0x2e: ASCII code for .
+# - 0x22: ASCII code for "
+# - 0x61 0x62 0x63: ASCII codes for abc
+# - 0x22: ASCII code for "
+# - 0x27: ASCII code for '
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"0127242e226162632227"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Query {"String": "SELECT jsonb_path_query('{\"a\": true}', '$.a')"}
+----
 
-# send
-# Parse {"Query": "SELECT * FROM jsonpath_a"}
-# Bind {"ResultFormatCodes": [0]}
-# Execute
-# Sync
-# ----
-
-# until crdb_only
-# ReadyForQuery
-# ----
-# {"Type":"ParseComplete"}
-# {"Type":"BindComplete"}
-# {"Type":"DataRow","Values":[{"text":"$.a"}]}
-# {"Type":"DataRow","Values":[{"text":"$.b[*]"}]}
-# {"Type":"CommandComplete","CommandTag":"SELECT 2"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
-
-# until noncrdb_only
-# ReadyForQuery
-# ----
-# {"Type":"ParseComplete"}
-# {"Type":"BindComplete"}
-# {"Type":"DataRow","Values":[{"text":"$.\"a\""}]}
-# {"Type":"DataRow","Values":[{"text":"$.\"b\"[*]"}]}
-# {"Type":"CommandComplete","CommandTag":"SELECT 2"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
-
-
-# send
-# Parse {"Query": "SELECT * FROM jsonpath_a"}
-# Bind {"ResultFormatCodes": [1]}
-# Execute
-# Sync
-# ----
-
-# until crdb_only
-# ReadyForQuery
-# ----
-# {"Type":"ParseComplete"}
-# {"Type":"BindComplete"}
-# {"Type":"DataRow","Values":[{"binary":"0127242e6127"}]}
-# {"Type":"DataRow","Values":[{"binary":"0127242e625b2a5d27"}]}
-# {"Type":"CommandComplete","CommandTag":"SELECT 2"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
-
-# until noncrdb_only
-# ReadyForQuery
-# ----
-# {"Type":"ParseComplete"}
-# {"Type":"BindComplete"}
-# {"Type":"DataRow","Values":[{"binary":"01242e226122"}]}
-# {"Type":"DataRow","Values":[{"binary":"01242e2262225b2a5d"}]}
-# {"Type":"CommandComplete","CommandTag":"SELECT 2"}
-# {"Type":"ReadyForQuery","TxStatus":"I"}
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"jsonb_path_query","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3802,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"true"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
