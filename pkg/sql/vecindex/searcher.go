@@ -7,6 +7,7 @@ package vecindex
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,8 +51,8 @@ func (s *Searcher) Search(
 	// An index-join + top-k operation will handle the re-ranking, so we skip
 	// doing it here.
 	options := cspann.SearchOptions{SkipRerank: true}
-	s.searchSet.MaxResults = maxResults
-	s.searchSet.MaxExtraResults = maxResults * cspann.RerankMultiplier
+	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
+	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
 	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, options)
 	if err != nil {
 		return err

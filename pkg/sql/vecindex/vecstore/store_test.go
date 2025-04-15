@@ -160,33 +160,25 @@ func TestStore(t *testing.T) {
 
 		var done atomic.Int64
 		getMetadata := func(treeKey cspann.TreeKey) {
-			var err error
-			tx, err := store.BeginTransaction(ctx)
-			require.NoError(t, err)
-			defer func() {
+			_ = store.RunTransaction(ctx, func(txn cspann.Txn) error {
+				// Enable stepping in the txn, which is what SQL does.
+				txn.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
+
+				_, err := txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
 				if err != nil {
-					err = store.AbortTransaction(ctx, tx)
+					// Returning the error will cause the transaction to abort.
+					require.ErrorContains(t, err, "WriteTooOldError")
+					done.Store(1)
+					return err
 				}
-			}()
 
-			// Enable stepping in the txn, which is what SQL does.
-			tx.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
-
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			if err != nil {
-				require.ErrorContains(t, err, "WriteTooOldError")
-				done.Store(1)
-				return
-			}
-
-			// Run GetPartitionMetadata again, to ensure that it succeeds, as a
-			// way of simulating multiple vectors being inserted in the same
-			// SQL statement.
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			require.NoError(t, err)
-
-			err = store.CommitTransaction(ctx, tx)
-			require.NoError(t, err)
+				// Run GetPartitionMetadata again, to ensure that it succeeds, as a
+				// way of simulating multiple vectors being inserted in the same
+				// SQL statement.
+				_, err = txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
+				require.NoError(t, err)
+				return nil
+			})
 		}
 
 		for i := range 100 {

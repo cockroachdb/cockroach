@@ -33,6 +33,8 @@ type PartitionToSearch struct {
 	// partition metadata is scanned, it is not known whether a root partition is
 	// a leaf partition.
 	ExcludeLeafVectors bool
+	// Level returns the partition's level in the K-means tree.
+	Level Level
 	// StateDetails returns the latest state information from the partition
 	// metadata. This is used by fixup workers to detect interference from other
 	// agents that are updating the partition.
@@ -50,18 +52,6 @@ type PartitionToSearch struct {
 // Store implementations must be thread-safe. There should typically be only one
 // Store instance in the process for each index.
 type Store interface {
-	// BeginTransaction creates a new transaction that can be used to read and
-	// write the store in a transactional context.
-	BeginTransaction(ctx context.Context) (Txn, error)
-
-	// CommitTransaction commits a transaction previously started by a call to
-	// Begin.
-	CommitTransaction(ctx context.Context, txn Txn) error
-
-	// AbortTransaction aborts a transaction previously started by a call to
-	// Begin.
-	AbortTransaction(ctx context.Context, txn Txn) error
-
 	// RunTransaction invokes the given function in the scope of a new
 	// transaction. If the function returns an error, the transaction is aborted,
 	// else it is committed.
@@ -266,16 +256,17 @@ type Txn interface {
 	// partition with the number of quantized vectors in that searched partition.
 	// This is used to determine if a partition needs to be split or merged.
 	//
-	// If one or more partitions cannot be found, SearchPartitions returns
-	// ErrPartitionNotFound, or ErrRestartOperation if the caller should retry
-	// the search operation that triggered this call.
+	// If a partition cannot be found, SearchPartitions returns InvalidLevel,
+	// MissingState, and Count=0 for it. SearchPartitions returns
+	// ErrRestartOperation if the caller should retry the search operation that
+	// triggered this call.
 	SearchPartitions(
 		ctx context.Context,
 		treeKey TreeKey,
 		toSearch []PartitionToSearch,
 		queryVector vector.T,
 		searchSet *SearchSet,
-	) (level Level, err error)
+	) error
 
 	// GetFullVectors fetches the original full-size vectors that are referenced
 	// by the given child keys and stores them in "refs". If a vector has been

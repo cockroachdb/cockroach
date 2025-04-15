@@ -124,6 +124,7 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 		}
 		fw.treeKey = next.TreeKey
 		fw.singleStep = next.SingleStep
+		fw.txn = nil
 
 		// Invoke the fixup function. Note that we do not hold the lock while
 		// processing the fixup.
@@ -178,72 +179,63 @@ func (fw *fixupWorker) oldSplitOrMergePartition(
 	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) (err error) {
 	// Run the split or merge within a transaction.
-	fw.txn, err = fw.index.store.BeginTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = fw.index.store.CommitTransaction(ctx, fw.txn)
-		}
-		if err != nil {
-			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
-		}
-	}()
+	return fw.index.store.RunTransaction(ctx, func(txn Txn) error {
+		fw.txn = txn
 
-	// Get the partition to be split or merged from the store.
-	partition, err := fw.txn.GetPartition(ctx, fw.treeKey, partitionKey)
-	if errors.Is(err, ErrPartitionNotFound) || errors.Is(err, ErrRestartOperation) {
-		log.VEventf(ctx, 2, "partition %d no longer exists, do not split or merge", partitionKey)
-		return nil
-	} else if err != nil {
-		return errors.Wrapf(err, "getting partition %d to split or merge", partitionKey)
-	}
-
-	// Re-check the size of the partition now that it's locked, using a consistent
-	// scan, so that we are not acting based on stale information.
-	split := partition.Count() > fw.index.options.MaxPartitionSize
-	merge := partitionKey != RootKey && partition.Count() < fw.index.options.MinPartitionSize
-	if !split && !merge {
-		log.VEventf(ctx, 2, "partition %d size is within bounds, do not split or merge", partitionKey)
-		return nil
-	}
-
-	// Load the parent of the partition to split or merge.
-	var parentPartition *Partition
-	if parentPartitionKey != InvalidKey {
-		parentPartition, err = fw.txn.GetPartition(ctx, fw.treeKey, parentPartitionKey)
+		// Get the partition to be split or merged from the store.
+		partition, err := fw.txn.GetPartition(ctx, fw.treeKey, partitionKey)
 		if errors.Is(err, ErrPartitionNotFound) || errors.Is(err, ErrRestartOperation) {
-			log.VEventf(ctx, 2,
-				"parent partition %d of partition %d no longer exists, do not split or merge",
-				parentPartitionKey, partitionKey)
+			log.VEventf(ctx, 2, "partition %d no longer exists, do not split or merge", partitionKey)
 			return nil
 		} else if err != nil {
-			return errors.Wrapf(err, "getting parent %d of partition %d to split or merge",
-				parentPartitionKey, partitionKey)
+			return errors.Wrapf(err, "getting partition %d to split or merge", partitionKey)
 		}
 
-		// Don't split or merge the partition if no longer a child of the parent.
-		if parentPartition.Find(ChildKey{PartitionKey: partitionKey}) == -1 {
-			log.VEventf(ctx, 2, "partition %d is no longer child of partition %d, do not split or merge",
-				partitionKey, parentPartitionKey)
+		// Re-check the size of the partition now that it's locked, using a consistent
+		// scan, so that we are not acting based on stale information.
+		split := partition.Count() > fw.index.options.MaxPartitionSize
+		merge := partitionKey != RootKey && partition.Count() < fw.index.options.MinPartitionSize
+		if !split && !merge {
+			log.VEventf(ctx, 2, "partition %d size is within bounds, do not split or merge", partitionKey)
 			return nil
 		}
-	}
 
-	// Get the full vectors for the splitting or merging partition's children.
-	vectors, err := fw.getFullVectorsForPartition(ctx, partitionKey, partition)
-	if err != nil {
-		return errors.Wrapf(
-			err, "getting full vectors for split or merge of partition %d", partitionKey)
-	}
+		// Load the parent of the partition to split or merge.
+		var parentPartition *Partition
+		if parentPartitionKey != InvalidKey {
+			parentPartition, err = fw.txn.GetPartition(ctx, fw.treeKey, parentPartitionKey)
+			if errors.Is(err, ErrPartitionNotFound) || errors.Is(err, ErrRestartOperation) {
+				log.VEventf(ctx, 2,
+					"parent partition %d of partition %d no longer exists, do not split or merge",
+					parentPartitionKey, partitionKey)
+				return nil
+			} else if err != nil {
+				return errors.Wrapf(err, "getting parent %d of partition %d to split or merge",
+					parentPartitionKey, partitionKey)
+			}
 
-	if split {
-		return fw.oldSplitPartition(
+			// Don't split or merge the partition if no longer a child of the parent.
+			if parentPartition.Find(ChildKey{PartitionKey: partitionKey}) == -1 {
+				log.VEventf(ctx, 2, "partition %d is no longer child of partition %d, do not split or merge",
+					partitionKey, parentPartitionKey)
+				return nil
+			}
+		}
+
+		// Get the full vectors for the splitting or merging partition's children.
+		vectors, err := fw.getFullVectorsForPartition(ctx, partitionKey, partition)
+		if err != nil {
+			return errors.Wrapf(
+				err, "getting full vectors for split or merge of partition %d", partitionKey)
+		}
+
+		if split {
+			return fw.oldSplitPartition(
+				ctx, parentPartitionKey, parentPartition, partitionKey, partition, vectors)
+		}
+		return fw.mergePartition(
 			ctx, parentPartitionKey, parentPartition, partitionKey, partition, vectors)
-	}
-	return fw.mergePartition(
-		ctx, parentPartitionKey, parentPartition, partitionKey, partition, vectors)
+	})
 }
 
 // splitPartition splits the given partition by separating its vectors into one
@@ -583,14 +575,9 @@ func (fw *fixupWorker) linkNearbyVectors(
 	// TODO(andyk): Add way to filter search set in order to skip vectors deeper
 	// down in the search rather than afterwards.
 	idxCtx := fw.reuseIndexContext(fw.txn, fw.treeKey)
-	idxCtx.options = SearchOptions{ReturnVectors: true}
+	idxCtx.options = SearchOptions{}
 	idxCtx.level = partition.Level()
 	idxCtx.randomized = partition.Centroid()
-
-	// Ensure that the search never returns the last remaining vector in a
-	// non-leaf partition, in order to avoid moving it and creating an empty
-	// non-leaf partition, which is not allowed by a balanced K-means tree.
-	idxCtx.ignoreLonelyVector = partition.Level() != LeafLevel
 
 	// Don't link more vectors than the number of remaining slots in the split
 	// partition, to avoid triggering another split.
@@ -740,54 +727,48 @@ func (fw *fixupWorker) deleteVector(
 	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
 ) (err error) {
 	// Run the deletion within a transaction.
-	fw.txn, err = fw.index.store.BeginTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = fw.index.store.CommitTransaction(ctx, fw.txn)
+	return fw.index.store.RunTransaction(ctx, func(txn Txn) error {
+		fw.txn = txn
+		log.VEventf(ctx, 2, "deleting dangling vector from partition %d", partitionKey)
+
+		// Verify that the vector is still missing from the primary index. This guards
+		// against a race condition where a row is created and deleted repeatedly with
+		// the same primary key.
+		childKey := ChildKey{KeyBytes: vectorKey}
+		fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, 1)
+		fw.tempVectorsWithKeys[0] = VectorWithKey{Key: childKey}
+		if err = fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys); err != nil {
+			return errors.Wrap(err, "getting full vector")
 		}
-		if err != nil {
-			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
-		}
-	}()
-
-	log.VEventf(ctx, 2, "deleting dangling vector from partition %d", partitionKey)
-
-	// Verify that the vector is still missing from the primary index. This guards
-	// against a race condition where a row is created and deleted repeatedly with
-	// the same primary key.
-	childKey := ChildKey{KeyBytes: vectorKey}
-	fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, 1)
-	fw.tempVectorsWithKeys[0] = VectorWithKey{Key: childKey}
-	if err = fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys); err != nil {
-		return errors.Wrap(err, "getting full vector")
-	}
-	if fw.tempVectorsWithKeys[0].Vector != nil {
-		log.VEventf(ctx, 2, "primary key row exists, do not delete vector")
-		return nil
-	}
-
-	// If removing from a root partition, check that its level is LeafLevel. It
-	// might not be if it was recently split.
-	if partitionKey == RootKey {
-		metadata, err := fw.txn.GetPartitionMetadata(
-			ctx, fw.treeKey, partitionKey, false /* forUpdate */)
-		if metadata.Level != LeafLevel {
-			// Root partition's level has been updated, so just abort.
+		if fw.tempVectorsWithKeys[0].Vector != nil {
+			log.VEventf(ctx, 2, "primary key row exists, do not delete vector")
 			return nil
-		} else if err != nil {
-			return errors.Wrapf(err, "getting root partition's level")
 		}
-	}
 
-	err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, partitionKey, LeafLevel, childKey)
-	if errors.Is(err, ErrPartitionNotFound) {
-		log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
-		return nil
-	}
-	return err
+		// If removing from a root partition, check that its level is LeafLevel. It
+		// might not be if it was recently split.
+		if partitionKey == RootKey {
+			metadata, err := fw.txn.GetPartitionMetadata(
+				ctx, fw.treeKey, partitionKey, false /* forUpdate */)
+			if metadata.Level != LeafLevel {
+				// Root partition's level has been updated, so just abort.
+				return nil
+			} else if err != nil {
+				if errors.Is(err, ErrPartitionNotFound) {
+					log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
+					return nil
+				}
+				return errors.Wrapf(err, "getting root partition's level")
+			}
+		}
+
+		err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, partitionKey, LeafLevel, childKey)
+		if errors.Is(err, ErrPartitionNotFound) {
+			log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
+			return nil
+		}
+		return err
+	})
 }
 
 // getFullVectorsForPartition fetches the full-size vectors (potentially
@@ -798,66 +779,65 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 ) (vectors vector.Set, err error) {
 	const format = "getting %d full vectors for partition %d"
 
-	func() {
+	defer func() {
 		err = errors.Wrapf(err, format, partition.Count(), partitionKey)
 	}()
 
 	log.VEventf(ctx, 2, format, partition.Count(), partitionKey)
 
-	// Create transaction if one hasn't yet been created.
-	// TODO(andyk): Convert this to not use transactions once we've moved to the
-	// new fixups.
-	if fw.txn == nil {
-		fw.txn, err = fw.index.store.BeginTransaction(ctx)
+	run := func() error {
+		childKeys := partition.ChildKeys()
+		fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, len(childKeys))
+		for i := range childKeys {
+			fw.tempVectorsWithKeys[i] = VectorWithKey{Key: childKeys[i]}
+		}
+		err = fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys)
 		if err != nil {
-			return vector.Set{}, err
+			return err
 		}
-		defer func() {
-			if err == nil {
-				err = fw.index.store.CommitTransaction(ctx, fw.txn)
+
+		// Remove dangling vector references.
+		for i := 0; i < len(fw.tempVectorsWithKeys); i++ {
+			if fw.tempVectorsWithKeys[i].Vector != nil {
+				continue
 			}
-			if err != nil {
-				err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
+
+			// Move last reference to current location and reduce size of slice.
+			count := len(fw.tempVectorsWithKeys) - 1
+			fw.tempVectorsWithKeys[i] = fw.tempVectorsWithKeys[count]
+			fw.tempVectorsWithKeys = fw.tempVectorsWithKeys[:count]
+			partition.ReplaceWithLast(i)
+			i--
+		}
+
+		vectors = vector.MakeSet(fw.index.quantizer.GetDims())
+		vectors.AddUndefined(len(fw.tempVectorsWithKeys))
+		for i := range fw.tempVectorsWithKeys {
+			// Leaf vectors from the primary index need to be randomized.
+			if partition.Level() == LeafLevel {
+				fw.index.RandomizeVector(fw.tempVectorsWithKeys[i].Vector, vectors.At(i))
+			} else {
+				copy(vectors.At(i), fw.tempVectorsWithKeys[i].Vector)
 			}
-		}()
-	}
-
-	childKeys := partition.ChildKeys()
-	fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, len(childKeys))
-	for i := range childKeys {
-		fw.tempVectorsWithKeys[i] = VectorWithKey{Key: childKeys[i]}
-	}
-	err = fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys)
-	if err != nil {
-		return vector.Set{}, err
-	}
-
-	// Remove dangling vector references.
-	for i := 0; i < len(fw.tempVectorsWithKeys); i++ {
-		if fw.tempVectorsWithKeys[i].Vector != nil {
-			continue
 		}
 
-		// Move last reference to current location and reduce size of slice.
-		count := len(fw.tempVectorsWithKeys) - 1
-		fw.tempVectorsWithKeys[i] = fw.tempVectorsWithKeys[count]
-		fw.tempVectorsWithKeys = fw.tempVectorsWithKeys[:count]
-		partition.ReplaceWithLast(i)
-		i--
+		return nil
 	}
 
-	vectors = vector.MakeSet(fw.index.quantizer.GetDims())
-	vectors.AddUndefined(len(fw.tempVectorsWithKeys))
-	for i := range fw.tempVectorsWithKeys {
-		// Leaf vectors from the primary index need to be randomized.
-		if partition.Level() == LeafLevel {
-			fw.index.RandomizeVector(fw.tempVectorsWithKeys[i].Vector, vectors.At(i))
-		} else {
-			copy(vectors.At(i), fw.tempVectorsWithKeys[i].Vector)
-		}
+	// Run in a transaction if not already.
+	if fw.txn == nil {
+		err = fw.index.store.RunTransaction(ctx, func(txn Txn) error {
+			fw.txn = txn
+			defer func() {
+				fw.txn = nil
+			}()
+			return run()
+		})
+	} else {
+		err = run()
 	}
 
-	return vectors, nil
+	return vectors, err
 }
 
 // reuseIndexContext initializes the reusable operation context, including

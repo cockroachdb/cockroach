@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -28,6 +29,7 @@ import (
 // Store implements the cspann.Store interface for KV backed vector indices.
 type Store struct {
 	db descs.DB // Used to generate new partition IDs
+	kv *kv.DB
 
 	// Used for generating prefixes and reading from the PK to get full length
 	// vectors.
@@ -67,6 +69,7 @@ func NewWithColumnID(
 ) (ps *Store, err error) {
 	ps = &Store{
 		db:             db,
+		kv:             db.KV(),
 		codec:          codec,
 		tableID:        tableDesc.GetID(),
 		indexID:        indexID,
@@ -133,51 +136,30 @@ func (s *Store) SetMinimumConsistency(consistency kvpb.ReadConsistencyType) {
 	s.minConsistency = consistency
 }
 
-// BeginTransaction is part of the cspann.Store interface. It creates a new
-// KV transaction on behalf of the user and prepares it to operate on the vector
-// store.
-func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
-	var txn Txn
-	txn.Init(s, s.db.KV().NewTxn(ctx, "cspann.Store begin transaction"))
-	return &txn, nil
-}
-
-// CommitTransaction is part of the cspann.Store interface. It commits the
-// underlying KV transaction wrapped by the cspann.Txn passed in.
-func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
-	return txn.(*Txn).kv.Commit(ctx)
-}
-
-// AbortTransaction is part of the cspann.Store interface. It causes the
-// underlying KV transaction wrapped by the passed cspann.Txn to roll back.
-func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
-	return txn.(*Txn).kv.Rollback(ctx)
-}
-
 // RunTransaction is part of the cspann.Store interface. It runs a function in
 // the context of a transaction.
 func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
-	var txn cspann.Txn
-	txn, err = s.BeginTransaction(ctx)
+	var txn Txn
+	txn.Init(s, s.kv.NewTxn(ctx, "vecstore.Store transaction"))
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = s.CommitTransaction(ctx, txn)
+			err = txn.kv.Commit(ctx)
 		}
 		if err != nil {
-			err = errors.CombineErrors(err, s.AbortTransaction(ctx, txn))
+			err = errors.CombineErrors(err, txn.kv.Rollback(ctx))
 		}
 	}()
 
-	return fn(txn)
+	return fn(&txn)
 }
 
 // MakePartitionKey is part of the cspann.Store interface. It allocates a new
 // unique partition key.
 func (s *Store) MakePartitionKey() cspann.PartitionKey {
-	instanceID := s.db.KV().Context().NodeID.SQLInstanceID()
+	instanceID := s.kv.Context().NodeID.SQLInstanceID()
 	return cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 }
 
@@ -195,7 +177,7 @@ func (s *Store) EstimatePartitionCount(
 	// stale results are not a concern in practice. If we ever find evidence that
 	// it is, we can fall back to a consistent scan if the inconsistent scan
 	// returns results that are too old.
-	b := s.db.KV().NewBatch()
+	b := s.kv.NewBatch()
 	b.Header.ReadConsistency = s.minConsistency
 
 	// Count the number of rows in the partition after the metadata row.
@@ -205,7 +187,7 @@ func (s *Store) EstimatePartitionCount(
 	b.Scan(startKey, endKey)
 
 	// Execute the batch and count the rows in the response.
-	if err := s.db.KV().Run(ctx, b); err != nil {
+	if err := s.kv.Run(ctx, b); err != nil {
 		return 0, errors.Wrap(err, "estimating partition count")
 	}
 	if err := b.Results[0].Err; err != nil {
