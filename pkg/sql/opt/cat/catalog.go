@@ -153,6 +153,10 @@ type Catalog interface {
 	// be safely copied or used across goroutines.
 	ResolveSchema(ctx context.Context, flags Flags, name *SchemaName) (Schema, SchemaName, error)
 
+	// ResolveSchemaByID is similar to ResolveSchema, except that it locates a
+	// schema by its StableID. See the comment for StableID for more details.
+	ResolveSchemaByID(ctx context.Context, flags Flags, id StableID) (Schema, error)
+
 	// GetAllSchemaNamesForDB Gets all the SchemaNames for a database.
 	GetAllSchemaNamesForDB(ctx context.Context, dbName string) ([]SchemaName, error)
 
