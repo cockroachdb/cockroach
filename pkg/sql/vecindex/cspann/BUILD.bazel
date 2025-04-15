@@ -55,7 +55,6 @@ go_test(
         "cspannpb_test.go",
         "fixup_processor_test.go",
         "fixup_split_test.go",
-        "fixup_worker_test.go",
         "index_stats_test.go",
         "index_test.go",
         "kmeans_test.go",

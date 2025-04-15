@@ -113,7 +113,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					case *quantize.UnQuantizedVectorSet:
 						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedMetadata.Centroid)
 						for range set.Count {
-							remainder, err = vecencoding.DecodeUnquantizedVectorToSet(
+							remainder, err = vecencoding.DecodeUnquantizerVectorToSet(
 								remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
 							)
 							require.NoError(t, err)
@@ -138,7 +138,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 						StateDetails: decodedMetadata.StateDetails,
 					}
 					decodedPartition := cspann.NewPartition(
-						metadata, quantizer, decodedSet, childKeys, valueBytes)
+						decodedMetadata, quantizer, decodedSet, childKeys, valueBytes)
 					testingAssertPartitionsEqual(t, originalPartition, decodedPartition)
 				})
 			}

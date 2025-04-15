@@ -65,34 +65,6 @@ func (tx *Txn) Init(store *Store, kv *kv.Txn) {
 	}
 }
 
-// GetPartition implements the Txn interface.
-func (tx *Txn) GetPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (*cspann.Partition, error) {
-	return nil, errors.AssertionFailedf("GetPartition is not implemented")
-}
-
-// SetRootPartition implements the Txn interface.
-func (tx *Txn) SetRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) error {
-	return errors.AssertionFailedf("SetRootPartition is not implemented")
-}
-
-// InsertPartition implements the Txn interface.
-func (tx *Txn) InsertPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) (cspann.PartitionKey, error) {
-	return cspann.InvalidKey, errors.AssertionFailedf("InsertPartition is not implemented")
-}
-
-// DeletePartition implements the Txn interface.
-func (tx *Txn) DeletePartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) error {
-	return errors.AssertionFailedf("DeletePartition is not implemented")
-}
-
 // GetPartitionMetadata implements the cspann.Txn interface.
 func (tx *Txn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,
