@@ -108,7 +108,15 @@ WHERE
 
 	indexName := fmt.Sprintf("add_index_op_%d", rng.Uint32())
 	o.Status(fmt.Sprintf("adding index to column %s in table %s.%s %s", colName, dbName, tableName, predicateClause))
-	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s) %s", indexName, dbName, tableName, colName, predicateClause)
+	createIndexStmt := fmt.Sprintf("CREATE INDEX %s ON %s.%s %s(%s) %s",
+		indexName,
+		dbName,
+		tableName,
+		map[bool]string{true: "USING HASH ", false: ""}[rng.Intn(2) == 0],
+		colName,
+		predicateClause,
+	)
+
 	_, err = conn.ExecContext(ctx, createIndexStmt)
 	if err != nil {
 		o.Fatal(err)
