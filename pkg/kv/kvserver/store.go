@@ -3310,6 +3310,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageWriteBytesPerSecond     float64
 		averageCPUNanosPerSecond       float64
 
+		totalRaftLogSize int64
+		maxRaftLogSize   int64
+
 		rangeCount                int64
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
@@ -3434,6 +3437,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		s.metrics.RecentReplicaCPUNanosPerSecond.RecordValue(replicaCPUNanosPerSecond)
 		s.metrics.RecentReplicaQueriesPerSecond.RecordValue(loadStats.QueriesPerSecond)
 
+		totalRaftLogSize += metrics.RaftLogSize
+		maxRaftLogSize = max(maxRaftLogSize, metrics.RaftLogSize)
+
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
 		locksWithWaitQueues += metrics.LockTableMetrics.LocksWithWaitQueues
@@ -3470,6 +3476,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	for state, cnt := range raftFlowStateCounts {
 		s.metrics.RaftFlowStateCounts[state].Update(cnt)
 	}
+	s.metrics.RaftLogTotalSize.Update(totalRaftLogSize)
+	s.metrics.RaftLogMaxSize.Update(maxRaftLogSize)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
 	s.metrics.AverageRequestsPerSecond.Update(averageRequestsPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
