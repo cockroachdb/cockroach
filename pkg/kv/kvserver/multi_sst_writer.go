@@ -110,7 +110,7 @@ func newMultiSSTWriter(
 }
 
 // estimatedDataSize returns the approximation of the written bytes to SSTs
-// (including currSST). Must not be called after Finish.
+// (including currSST).
 func (msstw *multiSSTWriter) estimatedDataSize() int64 {
 	return msstw.sstSize + msstw.currSST.DataSize
 }
