@@ -5083,13 +5083,25 @@ func TestFileIOLimits(t *testing.T) {
 }
 
 func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id jobspb.JobID) {
+	t.Helper()
 	// Force newly created job to be adopted and verify it succeeds.
 	tc.ApplicationLayer(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 	testutils.SucceedsSoon(t, func() error {
 		var unused int64
-		return tc.ServerConn(0).QueryRow(
-			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
-			id, jobs.StateSucceeded).Scan(&unused)
+		var status, err string
+		row := tc.ServerConn(0).QueryRow(
+			"SELECT job_id, status, error FROM [SHOW JOBS] WHERE job_id = $1",
+			id)
+		if row.Err() != nil {
+			return row.Err()
+		}
+		if err := row.Scan(&unused, &status, &err); err != nil {
+			return err
+		}
+		if status != string(jobs.StateSucceeded) {
+			return errors.Errorf("job %d status is %s: %s", id, status, err)
+		}
+		return nil
 	})
 }
 
