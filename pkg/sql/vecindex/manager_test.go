@@ -88,7 +88,13 @@ func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTable
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				EncodingType:        catenumpb.SecondaryIndexEncoding,
 				Version:             descpb.LatestIndexDescriptorVersion,
-				VecConfig:           vecpb.Config{Dims: 2, Seed: 342},
+				VecConfig: vecpb.Config{
+					Dims:             2,
+					Seed:             342,
+					MinPartitionSize: 2,
+					MaxPartitionSize: 8,
+					BuildBeamSize:    4,
+				},
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
@@ -149,6 +155,14 @@ func TestVectorManager(t *testing.T) {
 
 	settings := srv.ApplicationLayer().ClusterSettings()
 	vectorMgr := vecindex.NewManager(ctx, stopper, &settings.SV, codec, internalDB)
+
+	t.Run("test index options", func(t *testing.T) {
+		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
+		require.NoError(t, err)
+		require.Equal(t, idx.Options().MinPartitionSize, 2)
+		require.Equal(t, idx.Options().MaxPartitionSize, 8)
+		require.Equal(t, idx.Options().BaseBeamSize, 4)
+	})
 
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
