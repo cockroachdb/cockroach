@@ -385,9 +385,9 @@ Messages:
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->2 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
+4->5 MsgApp Term:3 Log:3/12 Commit:11
+4->6 MsgApp Term:3 Log:3/12 Commit:11
+4->7 MsgApp Term:3 Log:3/12 Commit:11
 OnSync:
 4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 
