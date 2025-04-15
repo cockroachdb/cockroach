@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -80,6 +81,7 @@ type TenantStreamingClustersArgs struct {
 	EnableReaderTenant             bool
 	TestingKnobs                   *sql.StreamingTestingKnobs
 	TenantCapabilitiesTestingKnobs *tenantcapabilities.TestingKnobs
+	ServerKnobs                    *server.TestingKnobs
 
 	MultitenantSingleClusterNumNodes    int
 	MultiTenantSingleClusterTestRegions []string
@@ -416,6 +418,10 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 			MaxRetries:     TestingMaxDistSQLRetries,
 		}
 	}
+	if args.ServerKnobs == nil {
+		// Prevents panics in cluster startup.
+		args.ServerKnobs = &server.TestingKnobs{}
+	}
 	return base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
@@ -430,6 +436,7 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 				// easy-to-predict IDs when we create a tenant after a drop.
 				EnableTenantIDReuse: true,
 			},
+			Server: args.ServerKnobs,
 		},
 		ExternalIODir: args.ExternalIODir,
 	}

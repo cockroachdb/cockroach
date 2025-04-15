@@ -30,6 +30,7 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigkvaccessor",
