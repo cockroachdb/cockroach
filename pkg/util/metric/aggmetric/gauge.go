@@ -421,7 +421,7 @@ func (sg *SQLGauge) Inspect(f func(interface{})) {
 // Gauge and updates it. Update increments parent metrics
 // irrespective of labelConfig.
 func (sg *SQLGauge) Update(val int64, db, app string) {
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(*sg.GetType(), db, app)
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
 
 	// If the label configuration is either LabelConfigDisabled or unrecognised,
 	// then only update aggregated gauge value.
@@ -446,7 +446,7 @@ func (sg *SQLGauge) Update(val int64, db, app string) {
 func (sg *SQLGauge) Inc(i int64, db, app string) {
 	sg.g.Inc(i)
 
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(*sg.GetType(), db, app)
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
@@ -460,11 +460,17 @@ func (sg *SQLGauge) Inc(i int64, db, app string) {
 func (sg *SQLGauge) Dec(i int64, db, app string) {
 	sg.g.Dec(i)
 
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(*sg.GetType(), db, app)
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
 	childMetric.(*SQLChildGauge).Dec(i)
+}
+
+func (sg *SQLGauge) createChildGauge(labelValues labelValuesSlice) ChildMetric {
+	return &SQLChildGauge{
+		labelValuesSlice: labelValues,
+	}
 }
 
 // SQLChildGauge is a child of a SQLGauge. When metrics are collected by prometheus,

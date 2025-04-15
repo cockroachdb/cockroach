@@ -141,7 +141,7 @@ func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return a.h.ToPrometheusMetric()
 }
 
-// AddChild adds a Counter to this AggHistogram. This method panics if a Counter
+// AddChild adds a Histogram to this AggHistogram. This method panics if a Histogram
 // already exists for this set of labelVals.
 func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	child := &Histogram{
@@ -151,37 +151,6 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	}
 	a.add(child)
 	return child
-}
-
-// RecordValue adds the given value to the histogram for the given label values. If a
-// histogram with the given label values doesn't exist yet, it creates a new
-// histogram and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this histogram.
-// Recording a value in excess of the configured maximum value for that histogram
-// results in recording the maximum value instead.
-func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
-	if len(a.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(a.labels), a.labels))
-	}
-
-	// If the child already exists, update it.
-	if child, ok := a.get(labelVals...); ok {
-		child.(*Histogram).RecordValue(v)
-		return
-	}
-
-	// Otherwise, create a new child and update it.
-	child := a.AddChild(labelVals...)
-	child.RecordValue(v)
-}
-
-// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
-// does not exist for this set of labelVals.
-func (g *AggHistogram) RemoveChild(labelVals ...string) {
-	key := &Histogram{labelValuesSlice: labelValuesSlice(labelVals)}
-	g.remove(key)
 }
 
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the
@@ -217,4 +186,169 @@ func (g *Histogram) RecordValue(v int64) {
 	defer g.parent.ticker.RUnlock()
 	g.h.RecordValue(v)
 	g.parent.h.RecordValue(v)
+}
+
+// SQLHistogram maintains a histogram as the sum of its children. The histogram will
+// report to crdb-internal time series only the aggregate sum of all of its
+// children, while its children are additionally exported to prometheus via the
+// PrometheusIterable interface. SQLHistogram differs from AggHistogram in that
+// a SQLHistogram creates child metrics dynamically while AggHistogram needs the
+// child creation up front.
+type SQLHistogram struct {
+	h      metric.IHistogram
+	create func() metric.IHistogram
+	*SQLMetric
+	ticker struct {
+		// We use a RWMutex, because we don't want child histograms to contend when
+		// recording values, unless we're rotating histograms for the parent & children.
+		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
+		// are all the child histograms recording their values.
+		syncutil.RWMutex
+		*tick.Ticker
+	}
+}
+
+var _ metric.Iterable = (*SQLHistogram)(nil)
+var _ metric.PrometheusIterable = (*SQLHistogram)(nil)
+var _ metric.PrometheusExportable = (*SQLHistogram)(nil)
+var _ metric.WindowedHistogram = (*SQLHistogram)(nil)
+var _ metric.CumulativeHistogram = (*SQLHistogram)(nil)
+
+func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
+	create := func() metric.IHistogram {
+		return metric.NewHistogram(opts)
+	}
+	s := &SQLHistogram{
+		h:      create(),
+		create: create,
+	}
+	s.SQLMetric = NewSQLMetric(LabelConfigDisabled)
+	s.ticker.Ticker = tick.NewTicker(
+		now(),
+		opts.Duration/metric.WindowedHistogramWrapNum,
+		func() {
+			// Atomically rotate the histogram window for the
+			// parent histogram, and all the child histograms.
+			s.h.Tick()
+			s.apply(func(childMetric ChildMetric) {
+				childHist, ok := childMetric.(*SQLChildHistogram)
+				if !ok {
+					panic(errors.AssertionFailedf(
+						"unable to assert type of child for histogram %q when rotating histogram windows",
+						opts.Metadata.Name))
+				}
+				childHist.h.Tick()
+			})
+		})
+	return s
+}
+
+// apply applies the given applyFn to every item in children
+func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.mu.children.Do(func(e interface{}) {
+		applyFn(sh.mu.children.GetChildMetric(e).(*SQLChildHistogram))
+	})
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (sh *SQLHistogram) GetType() *prometheusgo.MetricType {
+	return sh.h.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (sh *SQLHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
+	return sh.h.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (sh *SQLHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	return sh.h.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (sh *SQLHistogram) GetName(useStaticLabels bool) string {
+	return sh.h.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (sh *SQLHistogram) GetHelp() string {
+	return sh.h.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (sh *SQLHistogram) GetMeasurement() string {
+	return sh.h.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (sh *SQLHistogram) GetUnit() metric.Unit {
+	return sh.h.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (sh *SQLHistogram) GetMetadata() metric.Metadata {
+	return sh.h.GetMetadata()
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (sh *SQLHistogram) Inspect(f func(interface{})) {
+	f(sh)
+}
+
+// RecordValue records the Histogram value for the given label values. If a
+// Histogram with the given label values doesn't exist yet, it creates a new
+// Histogram and record against it. RecordValue records value in parent metrics
+// irrespective of labelConfig.
+func (sh *SQLHistogram) RecordValue(v int64, db, app string) {
+	childMetric, isChildMetricEnabled := sh.getChildByLabelConfig(sh.createChildHistogram, db, app)
+	sh.ticker.RLock()
+	defer sh.ticker.RUnlock()
+
+	sh.h.RecordValue(v)
+	if !isChildMetricEnabled {
+		return
+	}
+	childMetric.(*SQLChildHistogram).RecordValue(v)
+}
+
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (sh *SQLHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return sh.h.CumulativeSnapshot()
+}
+
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+func (sh *SQLHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return sh.h.WindowedSnapshot()
+}
+
+func (sh *SQLHistogram) createChildHistogram(labelValues labelValuesSlice) ChildMetric {
+	return &SQLChildHistogram{
+		h:                sh.create(),
+		labelValuesSlice: labelValues,
+	}
+}
+
+// SQLChildHistogram is a child of a SQLHistogram. When metrics are collected by prometheus,
+// each of the children will appear with a distinct label, however, when cockroach
+// internally collects metrics, only the parent is collected.
+type SQLChildHistogram struct {
+	labelValuesSlice
+	h metric.IHistogram
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this Histogram.
+func (sch *SQLChildHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	return sch.h.ToPrometheusMetric()
+}
+
+// RecordValue sets the histogram's value.
+func (sch *SQLChildHistogram) RecordValue(v int64) {
+	sch.h.RecordValue(v)
+}
+
+// Value returns the SQLChildHistogram's current gauge.
+func (sch *SQLChildHistogram) Value() metric.HistogramSnapshot {
+	return sch.h.CumulativeSnapshot()
 }
