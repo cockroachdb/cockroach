@@ -1,5 +1,0 @@
-echo
-----
-foo_gauge 23
-foo_gauge{tenant_id="1"} 15
-foo_gauge{tenant_id="2"} 8
