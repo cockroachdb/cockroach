@@ -23,6 +23,16 @@ import (
 
 const seed = 42
 
+// MemSearchState holds prepared search state.
+type MemSearchState struct {
+	beamSize   int
+	maxResults int
+}
+
+// Close is a no-op for the MemProvider.
+func (s *MemSearchState) Close() {
+}
+
 // MemProvider implements VectorProvider using an in-memory store.
 type MemProvider struct {
 	stopper          *stop.Stopper
@@ -124,16 +134,24 @@ func (m *MemProvider) InsertVectors(
 	})
 }
 
+// SetupSearch implements the VectorProvider interface.
+func (m *MemProvider) SetupSearch(
+	ctx context.Context, maxResults int, beamSize int,
+) (SearchState, error) {
+	return &MemSearchState{maxResults: maxResults, beamSize: beamSize}, nil
+}
+
 // Search implements the VectorProvider interface.
 func (m *MemProvider) Search(
-	ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
+	ctx context.Context, state SearchState, vec vector.T, stats *cspann.SearchStats,
 ) (keys []cspann.KeyBytes, err error) {
+	memState := state.(*MemSearchState)
 	err = m.store.RunTransaction(ctx, func(txn cspann.Txn) error {
 		// Search the store.
 		var idxCtx cspann.Context
 		idxCtx.Init(txn)
-		searchSet := cspann.SearchSet{MaxResults: maxResults}
-		searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
+		searchSet := cspann.SearchSet{MaxResults: memState.maxResults}
+		searchOptions := cspann.SearchOptions{BaseBeamSize: memState.beamSize}
 		err = m.index.Search(ctx, &idxCtx, nil /* treeKey */, vec, &searchSet, searchOptions)
 		if err != nil {
 			return err
