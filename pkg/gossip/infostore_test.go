@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -629,4 +630,57 @@ func TestRegisterCallback(t *testing.T) {
 	if expKeys := []string{"key1", "key2"}; !reflect.DeepEqual(actKeys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
+}
+
+// TestCallbacksCalledSequentially verifies that callbacks are called in a
+// sequential order. Meaning that if there is update1 followed by update2, the
+// callback will be called for update1 before update2. This is a property that
+// the gossip package guarantees.
+func TestCallbacksCalledSequentially(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	is, stopper := newTestInfoStore()
+	defer stopper.Stop(context.Background())
+
+	// Create a large number of updates to test the sequential order of callbacks.
+	const numUpdates = 10000
+
+	// Create a wait group to wait for all the callbacks to finish at the end of
+	// the test.
+	wg := &sync.WaitGroup{}
+
+	// Create a callback generator that will generate a callback that will
+	// assert that the keys are in sequential order.
+	callbackGenerator := func() func(key string, _ roachpb.Value) {
+		// Add the number of updates to the wait group.
+		wg.Add(numUpdates)
+		// Initially, the expected next key is 0.
+		expectedNextKey := 0
+
+		// Return a callback that will assert the key is in sequential order.
+		return func(key string, _ roachpb.Value) {
+			// Convert key to int and assert it matches the expected value.
+			keyInt, err := strconv.Atoi(key)
+			require.NoError(t, err)
+			require.Equal(t, expectedNextKey, keyInt)
+			// Increment the expected next key.
+			expectedNextKey++
+			wg.Done()
+		}
+	}
+
+	// Register three callbacks. We will unregister the second callback
+	// halfway through the test to assert that it doesn't impact the
+	// sequential order of the other callbacks.
+	is.registerCallback(".*", callbackGenerator())
+	unregister := is.registerCallback(".*", func(key string, _ roachpb.Value) {})
+	is.registerCallback(".*", callbackGenerator())
+
+	for i := range numUpdates {
+		require.NoError(t, is.addInfo(fmt.Sprintf("%d", i), is.newInfo(nil, time.Second)))
+		if i == numUpdates/2 {
+			// Unregister the callback at the halfway point.
+			unregister()
+		}
+	}
+	wg.Wait()
 }
