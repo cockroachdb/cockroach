@@ -1337,7 +1337,8 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdM
 
 	// In some simple cases we can push the locking down into the input operation
 	// instead of adding what would be a redundant lookup join. We only apply
-	// these optimizations for single-column-family tables.
+	// these optimizations when all needed column families would be locked by the
+	// input operation.
 	//
 	// TODO(michae2): To optimize more complex cases, such as a Project on top of
 	// a Scan, or multiple Lock ops, etc, we need to do something similar to
@@ -1345,29 +1346,37 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdM
 	// make various operators provide the physical property, with a
 	// locking-semi-LookupJoin as the enforcer of last resort.
 	tab := b.mem.Metadata().Table(lock.Table)
-	if tab.FamilyCount() == 1 {
-		switch input := lock.Input.(type) {
-		case *memo.ScanExpr:
-			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex {
-				// Make a shallow copy of the scan to avoid mutating the original.
-				scan := *input
-				scan.Locking = scan.Locking.Max(locking)
-				return b.buildRelational(&scan)
-			}
-		case *memo.IndexJoinExpr:
-			if input.Table == lock.KeySource {
-				// Make a shallow copy of the join to avoid mutating the original.
-				join := *input
-				join.Locking = join.Locking.Max(locking)
-				return b.buildRelational(&join)
-			}
-		case *memo.LookupJoinExpr:
-			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
-				(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
-				!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
-				// We con't push the locking down if the lookup join has additional on
-				// predicates that will filter out rows after the join.
-				len(input.On) == 0 {
+	lockedFamilies := familiesForCols(tab, lock.LockCols)
+	switch input := lock.Input.(type) {
+	case *memo.ScanExpr:
+		if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
+			// Check that all needed column families would be locked.
+			colsNeedAllLockedFamilies(tab, input.Cols, lockedFamilies) {
+			// Make a shallow copy of the scan to avoid mutating the original.
+			scan := *input
+			scan.Locking = scan.Locking.Max(locking)
+			return b.buildRelational(&scan)
+		}
+	case *memo.IndexJoinExpr:
+		if input.Table == lock.KeySource &&
+			// Check that all needed column families would be locked.
+			colsNeedAllLockedFamilies(tab, input.Cols, lockedFamilies) {
+			// Make a shallow copy of the join to avoid mutating the original.
+			join := *input
+			join.Locking = join.Locking.Max(locking)
+			return b.buildRelational(&join)
+		}
+	case *memo.LookupJoinExpr:
+		if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
+			(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
+			!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
+			// We con't push the locking down if the lookup join has additional on
+			// predicates that will filter out rows after the join.
+			len(input.On) == 0 {
+			// Check that all needed column families would be locked.
+			joinInputCols := input.Input.Relational().OutputCols
+			lookupCols := input.Cols.Difference(joinInputCols)
+			if colsNeedAllLockedFamilies(tab, lookupCols, lockedFamilies) {
 				// Make a shallow copy of the join to avoid mutating the original.
 				join := *input
 				join.Locking = join.Locking.Max(locking)
@@ -1391,6 +1400,29 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdM
 	}
 	join.CopyGroup(lock)
 	return b.buildLookupJoin(join)
+}
+
+// colsNeedAllLockedFamilies checks that the families needed for cols include
+// all of the locked families.
+func colsNeedAllLockedFamilies(tab cat.Table, cols opt.ColSet, lockedFamilies intsets.Fast) bool {
+	if tab.FamilyCount() == 1 {
+		return true
+	}
+	families := familiesForCols(tab, cols)
+	return lockedFamilies.SubsetOf(families)
+}
+
+func familiesForCols(tab cat.Table, cols opt.ColSet) (families intsets.Fast) {
+	for i, n := 0, tab.FamilyCount(); i < n; i++ {
+		family := tab.Family(i)
+		for j, m := 0, family.ColumnCount(); j < m; j++ {
+			if cols.Contains(opt.ColumnID(family.Column(j).ColID())) {
+				families.Add(i)
+				break
+			}
+		}
+	}
+	return families
 }
 
 func (b *Builder) setMutationFlags(e memo.RelExpr) {
