@@ -688,8 +688,6 @@ func TestCallbacksCalledSequentially(t *testing.T) {
 // BenchmarkCallbackParallelism benchmarks the parallelism of the callback
 // worker. It registers multiple callbacks, and executes a fake workload
 // that sleeps for a short duration to simulate work done in the callback.
-// If we implement a parallel execution of the callback workers, we should
-// see a significant speedup.
 func BenchmarkCallbackParallelism(b *testing.B) {
 	ctx := context.Background()
 	is, stopper := newTestInfoStore()
