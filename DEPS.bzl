@@ -4160,10 +4160,10 @@ def go_deps():
         name = "com_github_google_btree",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/btree",
-        sha256 = "9b9f66ca4eb36bb1867b5ff9134fb2eb9fe9717d44e28836f2e977f9c03b4128",
-        strip_prefix = "github.com/google/btree@v1.0.1",
+        sha256 = "11b736bc8252b52fecdf346d3707ccf3a2b6d458ba21b4f843616fc12eeb30b2",
+        strip_prefix = "github.com/google/btree@v1.1.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/btree/com_github_google_btree-v1.0.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/btree/com_github_google_btree-v1.1.3.zip",
         ],
     )
     go_repository(
