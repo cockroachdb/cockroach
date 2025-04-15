@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/google/btree"
 )
 
 // ReplicaPlaceholder represents a "lock" of a part of the keyspace on a given

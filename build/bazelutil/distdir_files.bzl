@@ -206,6 +206,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/PuerkitoBio/purell/com_github_puerkitobio_purell-v1.1.1.zip": "59e636760d7f2ab41c2f80c1784b1c73d381d44888d1999228dedd634ddcf5ed",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/PuerkitoBio/urlesc/com_github_puerkitobio_urlesc-v0.0.0-20170810143723-de5bf2ad4578.zip": "1793124273dd94e7089e95716d40529bcf70b9e87162d60218f68dde4d6aeb9d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/com_github_raduberinde_axisds-v0.0.0-20250405232732-ecb85bedf677.zip": "53a2821f7d7cc76e91278e457d5f58bc5a856c7968d4170435dac86f2d003a87",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/btree/com_github_raduberinde_btree-v1.0.2-0.20250415192849-8beea01764ce.zip": "1c845dc6e77f27888fa66c8521df4d1d30f3ccf6892e8c1ba0aab4db24e717c1",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/SAP/go-hdb/com_github_sap_go_hdb-v0.14.1.zip": "273de28a254c39e9f24293b864c1d664488e4a5d44d535755a5e5b68ae7eed8d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/goreferrer/com_github_shopify_goreferrer-v0.0.0-20220729165902-8cddb4f5de06.zip": "280a2f55812e8b475cfd9d467a3b3d5859315788e68592a8fc5d6cedadc0503f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/logrus-bugsnag/com_github_shopify_logrus_bugsnag-v0.0.0-20171204204709-577dee27f20d.zip": "a4cc3fa4b7b493b36b96ea035caa7afcf7307b0c4efc5e523a46597e171b95ce",

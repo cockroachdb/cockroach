@@ -6,8 +6,8 @@
 package nstree
 
 import (
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/google/btree"
 )
 
 // Set is a set of namespace keys. Safe for use without initialization.
