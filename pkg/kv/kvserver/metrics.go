@@ -2432,6 +2432,14 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	// Closed timestamp policy change metrics.
+	metaClosedTimestampPolicyChange = metric.Metadata{
+		Name:        "kv.closed_timestamp.policy_change",
+		Help:        "Number of times closed timestamp policy change occurred on ranges",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
@@ -3032,6 +3040,9 @@ type StoreMetrics struct {
 
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
+
+	// Closed timestamp policy change on ranges metrics.
+	ClosedTimestampPolicyChange *metric.Counter
 
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
@@ -3849,6 +3860,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
+
+		ClosedTimestampPolicyChange: metric.NewCounter(metaClosedTimestampPolicyChange),
 	}
 	sm.categoryIterMetrics.init(storeRegistry)
 
