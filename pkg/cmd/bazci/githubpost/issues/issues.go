@@ -252,12 +252,6 @@ type TemplateData struct {
 	ArtifactsURL string
 	// URL is the link to the failing build.
 	URL string
-	// SideEyeSnapshotURL is the URL for accessing a Side-Eye snapshot associated
-	// with this test failure. Empty if no such snapshot exists.
-	SideEyeSnapshotURL string
-	// SideEyeSnapshotMsg is a message to prepend to the link to the SideEye
-	// snapshot. Empty if SideEyeSnapshotURL is empty.
-	SideEyeSnapshotMsg string
 	// Issues that match this one, except they're on other branches.
 	RelatedIssues []github.Issue
 	// InternalLog contains information about non-critical issues encountered
@@ -557,12 +551,6 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// SideEyeSnapshotURL is the URL for accessing a Side-Eye snapshot associated
-	// with this test failure. Empty if no such snapshot exists.
-	SideEyeSnapshotURL string
-	// SideEyeSnapshotMsg is a message to prepend to the link to the SideEye
-	// snapshot. Empty if SideEyeSnapshotURL is empty.
-	SideEyeSnapshotMsg string
 	// MentionOnCreate is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message when creating a new issue. These are
 	// *not* mentioned when posting to an existing issue.
