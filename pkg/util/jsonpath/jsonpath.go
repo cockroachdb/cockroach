@@ -5,17 +5,20 @@
 
 package jsonpath
 
+import "strings"
+
 type Jsonpath struct {
 	Strict bool
 	Path   Path
 }
 
 func (j Jsonpath) String() string {
-	var mode string
+	var sb strings.Builder
 	if j.Strict {
-		mode = "strict "
+		sb.WriteString("strict ")
 	}
-	return mode + j.Path.String()
+	j.Path.ToString(&sb, false /* inKey */, true /* printBrackets */)
+	return sb.String()
 }
 
 // Validate walks the Jsonpath AST. It returns an error if the AST is invalid

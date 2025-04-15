@@ -7,8 +7,10 @@ package jsonpath
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 type ScalarType int
@@ -30,11 +32,17 @@ type Scalar struct {
 
 var _ Path = Scalar{}
 
-func (s Scalar) String() string {
-	if s.Type == ScalarVariable {
-		return fmt.Sprintf("$%q", s.Variable)
+func (s Scalar) ToString(sb *strings.Builder, _, _ bool) {
+	switch s.Type {
+	case ScalarInt, ScalarFloat, ScalarString, ScalarBool, ScalarNull:
+		sb.WriteString(s.Value.String())
+		return
+	case ScalarVariable:
+		sb.WriteString(fmt.Sprintf("$%q", s.Variable))
+		return
+	default:
+		panic(errors.AssertionFailedf("unhandled scalar type: %d", s.Type))
 	}
-	return s.Value.String()
 }
 
 func (s Scalar) Validate(nestingLevel int, insideArraySubscript bool) error {

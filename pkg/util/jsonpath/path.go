@@ -21,7 +21,10 @@ var (
 )
 
 type Path interface {
-	fmt.Stringer
+	// ToString appends the string representation of the path to the given
+	// strings.Builder. This implementation matches
+	// postgres/src/backend/utils/adt/jsonpath.c:printJsonPathItem().
+	ToString(sb *strings.Builder, inKey, printBrackets bool)
 
 	// Validate returns an error if there is a semantic error in the path, and
 	// collects all variable names in a map with a strictly increasing index,
@@ -34,7 +37,9 @@ type Root struct{}
 
 var _ Path = &Root{}
 
-func (r Root) String() string { return "$" }
+func (r Root) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString("$")
+}
 
 func (r Root) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
@@ -44,8 +49,11 @@ type Key string
 
 var _ Path = Key("")
 
-func (k Key) String() string {
-	return fmt.Sprintf(".%q", string(k))
+func (k Key) ToString(sb *strings.Builder, inKey, _ bool) {
+	if inKey {
+		sb.WriteString(".")
+	}
+	sb.WriteString(fmt.Sprintf("%q", string(k)))
 }
 
 func (k Key) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -56,7 +64,9 @@ type Wildcard struct{}
 
 var _ Path = &Wildcard{}
 
-func (w Wildcard) String() string { return "[*]" }
+func (w Wildcard) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString("[*]")
+}
 
 func (w Wildcard) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
@@ -66,12 +76,10 @@ type Paths []Path
 
 var _ Path = &Paths{}
 
-func (p Paths) String() string {
-	var sb strings.Builder
-	for _, i := range p {
-		sb.WriteString(i.String())
+func (p Paths) ToString(sb *strings.Builder, _, _ bool) {
+	for _, path := range p {
+		path.ToString(sb, true /* inKey */, true /* printBrackets */)
 	}
-	return sb.String()
 }
 
 func (p Paths) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -90,8 +98,10 @@ type ArrayIndexRange struct {
 
 var _ Path = ArrayIndexRange{}
 
-func (a ArrayIndexRange) String() string {
-	return fmt.Sprintf("%s to %s", a.Start, a.End)
+func (a ArrayIndexRange) ToString(sb *strings.Builder, _, _ bool) {
+	a.Start.ToString(sb, false /* inKey */, false /* printBrackets */)
+	sb.WriteString(" to ")
+	a.End.ToString(sb, false /* inKey */, false /* printBrackets */)
 }
 
 func (a ArrayIndexRange) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -108,17 +118,15 @@ type ArrayList []Path
 
 var _ Path = ArrayList{}
 
-func (a ArrayList) String() string {
-	var sb strings.Builder
+func (a ArrayList) ToString(sb *strings.Builder, _, _ bool) {
 	sb.WriteString("[")
-	for i, p := range a {
+	for i, path := range a {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		sb.WriteString(p.String())
+		path.ToString(sb, false /* inKey */, false /* printBrackets */)
 	}
 	sb.WriteString("]")
-	return sb.String()
 }
 
 func (a ArrayList) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -134,7 +142,9 @@ type Last struct{}
 
 var _ Path = Last{}
 
-func (l Last) String() string { return "last" }
+func (l Last) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString("last")
+}
 
 func (l Last) Validate(nestingLevel int, insideArraySubscript bool) error {
 	if !insideArraySubscript {
@@ -149,8 +159,10 @@ type Filter struct {
 
 var _ Path = Filter{}
 
-func (f Filter) String() string {
-	return fmt.Sprintf("?(%s)", f.Condition)
+func (f Filter) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString("?(")
+	f.Condition.ToString(sb, false /* inKey */, false /* printBrackets */)
+	sb.WriteString(")")
 }
 
 func (f Filter) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -161,7 +173,9 @@ type Current struct{}
 
 var _ Path = Current{}
 
-func (c Current) String() string { return "@" }
+func (c Current) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString("@")
+}
 
 func (c Current) Validate(nestingLevel int, insideArraySubscript bool) error {
 	if nestingLevel <= 0 {
@@ -176,8 +190,8 @@ type Regex struct {
 
 var _ Path = Regex{}
 
-func (r Regex) String() string {
-	return fmt.Sprintf("%q", r.Regex)
+func (r Regex) ToString(sb *strings.Builder, _, _ bool) {
+	sb.WriteString(fmt.Sprintf("%q", r.Regex))
 }
 
 func (r Regex) Validate(nestingLevel int, insideArraySubscript bool) error {
@@ -193,7 +207,12 @@ type AnyKey struct{}
 
 var _ Path = AnyKey{}
 
-func (a AnyKey) String() string { return ".*" }
+func (a AnyKey) ToString(sb *strings.Builder, inKey, _ bool) {
+	if inKey {
+		sb.WriteString(".")
+	}
+	sb.WriteString("*")
+}
 
 func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil

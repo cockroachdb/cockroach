@@ -101,54 +101,54 @@ SELECT bpchar('$.   abc    [*]':::JSONPATH::JSONPATH)::BPCHAR FROM t ORDER BY 1 
 $."abc"[*]
 
 query T
-SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH;
 ----
-$."a"[*]?(((@."b" == 1) && (@."c" != 1)))
+$."a"[*]?(@."b" == 1 && @."c" != 1)
 
 query T
-SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b != 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" != 1))
+$."a"[*]?(@."b" != 1)
 
 query T
-SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b < 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" < 1))
+$."a"[*]?(@."b" < 1)
 
 query T
-SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" <= 1))
+$."a"[*]?(@."b" <= 1)
 
 query T
-SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b > 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" > 1))
+$."a"[*]?(@."b" > 1)
 
 query T
-SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" >= 1))
+$."a"[*]?(@."b" >= 1)
 
 query T
-SELECT '$.a ? ($.b == 1)'::JSONPATH
+SELECT '$.a ? ($.b == 1)'::JSONPATH;
 ----
-$."a"?(($."b" == 1))
+$."a"?($."b" == 1)
 
 query T
-SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 query T
-SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 query T
-SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 statement error pgcode 2201B pq: could not parse .* invalid regular expression: error parsing regexp: missing closing \)
 SELECT '$ ? (@ like_regex "(invalid pattern")'::JSONPATH
