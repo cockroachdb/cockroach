@@ -1295,7 +1295,6 @@ func (g *Gossip) bootstrap(rpcContext *rpc.Context) {
 			log.Eventf(ctx, "sleeping %s until bootstrap", g.bootstrapInterval)
 			select {
 			case <-bootstrapTimer.C:
-				bootstrapTimer.Read = true
 				// continue
 			case <-g.server.stopper.ShouldQuiesce():
 				return
@@ -1341,7 +1340,6 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 			case <-g.tighten:
 				g.tightenNetwork(ctx, rpcContext)
 			case <-cullTimer.C:
-				cullTimer.Read = true
 				cullTimer.Reset(jitteredInterval(g.cullInterval))
 				func() {
 					g.mu.Lock()
@@ -1372,7 +1370,6 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 					g.mu.Unlock()
 				}()
 			case <-stallTimer.C:
-				stallTimer.Read = true
 				stallTimer.Reset(jitteredInterval(g.stallInterval))
 				func() {
 					g.mu.Lock()

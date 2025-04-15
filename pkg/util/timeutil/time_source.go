@@ -28,10 +28,6 @@ type TimerI interface {
 	// Ch returns the channel which will be notified when the timer reaches its
 	// time.
 	Ch() <-chan time.Time
-
-	// MarkRead should be called when a value is read from the Ch() channel.
-	// If MarkRead is not called, the resetting the timer is less efficient.
-	MarkRead()
 }
 
 // TickerI is an interface wrapping Ticker.
@@ -88,10 +84,6 @@ func (t *timer) Stop() bool {
 
 func (t *timer) Ch() <-chan time.Time {
 	return t.C
-}
-
-func (t *timer) MarkRead() {
-	t.Read = true
 }
 
 type ticker time.Ticker

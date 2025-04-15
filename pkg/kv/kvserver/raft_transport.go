@@ -799,7 +799,6 @@ func (t *RaftTransport) processQueue(
 			return nil
 
 		case <-raftIdleTimer.C:
-			raftIdleTimer.Read = true
 			return nil
 
 		case err := <-errCh:
@@ -869,7 +868,6 @@ func (t *RaftTransport) processQueue(
 			clearRequestBatch(batch)
 
 		case <-dispatchPendingFlowTokensCh:
-			dispatchPendingFlowTokensTimer.Read = true
 			dispatchPendingFlowTokensTimer.Reset(kvadmission.FlowTokenDispatchInterval.Get(&t.st.SV))
 
 			if disableFn := t.knobs.DisableFallbackFlowTokenDispatch; disableFn != nil && disableFn() {
@@ -1123,7 +1121,6 @@ func (t *RaftTransport) startDroppingFlowTokensForDisconnectedNodes(ctx context.
 				}
 				select {
 				case <-timer.C:
-					timer.Read = true
 					t.dropFlowTokensForDisconnectedNodes()
 					continue
 

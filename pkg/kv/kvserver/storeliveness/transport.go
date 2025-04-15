@@ -345,7 +345,6 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 			return nil
 
 		case <-idleTimer.C:
-			idleTimer.Read = true
 			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
@@ -364,7 +363,6 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
 				case <-batchTimer.C:
 					done = true
-					batchTimer.Read = true
 				}
 			}
 

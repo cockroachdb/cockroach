@@ -149,7 +149,6 @@ func (m *Manager) run(ctx context.Context) {
 		case <-jobCheckCh:
 			checkJob()
 		case <-timer.C:
-			timer.Read = true
 			checkJob()
 		case <-m.stopper.ShouldQuiesce():
 			return
