@@ -395,7 +395,7 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 	for key, value := range meanMetrics {
 		aggregatedMeanMetrics = append(aggregatedMeanMetrics, &roachtestutil.AggregatedMetric{
 			Name:             fmt.Sprintf("%s_%s_mean", test, key),
-			Value:            value,
+			Value:            value / 1e6,
 			Unit:             "score(ms)",
 			IsHigherBetter:   false,
 			AdditionalLabels: nil,
