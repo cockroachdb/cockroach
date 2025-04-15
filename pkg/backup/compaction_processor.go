@@ -8,6 +8,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -25,10 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -261,6 +266,26 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			logClose(ctx, sink, "SST sink")
 		}
 	}()
+	// Passing a nil pacer is effectively a noop if CPU control is disabled.
+	var pacer *admission.Pacer
+	clusterSettings := p.FlowCtx.Cfg.Settings
+	if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+		pacer = p.FlowCtx.Cfg.AdmissionPacerFactory.NewPacer(
+			100*time.Millisecond,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+	// It is safe to close a nil pacer.
+	defer pacer.Close()
 
 	for {
 		select {
@@ -280,7 +305,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 				return errors.Wrap(err, "opening SSTs")
 			}
 
-			if err := compactSpanEntry(ctx, sstIter, sink); err != nil {
+			if err := compactSpanEntry(ctx, sstIter, sink, pacer); err != nil {
 				return errors.Wrap(err, "compacting span entry")
 			}
 		}
@@ -385,7 +410,7 @@ func openSSTs(
 }
 
 func compactSpanEntry(
-	ctx context.Context, sstIter mergedSST, sink *backupsink.SSTSinkKeyWriter,
+	ctx context.Context, sstIter mergedSST, sink *backupsink.SSTSinkKeyWriter, pacer *admission.Pacer,
 ) error {
 	defer sstIter.cleanup()
 	entry := sstIter.entry
@@ -404,6 +429,9 @@ func compactSpanEntry(
 	scratch = append(scratch, prefix...)
 	iter := sstIter.iter
 	for iter.SeekGE(trimmedStart); ; iter.NextKey() {
+		if err := pacer.Pace(ctx); err != nil {
+			return err
+		}
 		var key storage.MVCCKey
 		if ok, err := iter.Valid(); err != nil {
 			return err
