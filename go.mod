@@ -159,6 +159,7 @@ require (
 	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
 	github.com/fatih/color v1.9.0
+	github.com/fatih/structs v1.1.0
 	github.com/felixge/fgprof v0.9.5
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.27.0
@@ -327,7 +328,6 @@ require (
 	github.com/eapache/go-resiliency v1.6.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/fatih/structs v1.1.0 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
