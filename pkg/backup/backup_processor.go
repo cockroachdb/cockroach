@@ -444,23 +444,9 @@ func runBackupProcessor(
 
 		readTime := spec.BackupEndTime.GoTime()
 
-		// Passing a nil pacer is effectively a noop if CPU control is disabled.
-		var pacer *admission.Pacer = nil
-		if fileSSTSinkElasticCPUControlEnabled.Get(&clusterSettings.SV) {
-			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
-			if !ok {
-				tenantID = roachpb.SystemTenantID
-			}
-			pacer = flowCtx.Cfg.AdmissionPacerFactory.NewPacer(
-				100*time.Millisecond,
-				admission.WorkInfo{
-					TenantID:        tenantID,
-					Priority:        admissionpb.BulkNormalPri,
-					CreateTime:      timeutil.Now().UnixNano(),
-					BypassAdmission: false,
-				},
-			)
-		}
+		pacer := newBackupPacer(
+			ctx, flowCtx.Cfg.AdmissionPacerFactory, clusterSettings,
+		)
 		// It is safe to close a nil pacer.
 		defer pacer.Close()
 
@@ -772,6 +758,30 @@ func logClose(ctx context.Context, c io.Closer, desc string) {
 	if err := c.Close(); err != nil {
 		log.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
 	}
+}
+
+// newBackupPacer creates a new AC pacer for backup. It may return nil if CPU
+// control is disabled, which is effectively a noop.
+func newBackupPacer(
+	ctx context.Context, factory admission.PacerFactory, settings *cluster.Settings,
+) *admission.Pacer {
+	var pacer *admission.Pacer
+	if fileSSTSinkElasticCPUControlEnabled.Get(&settings.SV) {
+		tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+		if !ok {
+			tenantID = roachpb.SystemTenantID
+		}
+		pacer = factory.NewPacer(
+			100*time.Millisecond,
+			admission.WorkInfo{
+				TenantID:        tenantID,
+				Priority:        admissionpb.BulkNormalPri,
+				CreateTime:      timeutil.Now().UnixNano(),
+				BypassAdmission: false,
+			},
+		)
+	}
+	return pacer
 }
 
 func init() {
