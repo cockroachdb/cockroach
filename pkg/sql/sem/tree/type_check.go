@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -74,6 +75,9 @@ type SemaContext struct {
 	// UnsupportedTypeChecker is used to determine whether a builtin data type is
 	// supported by the current cluster version. It may be unset.
 	UnsupportedTypeChecker UnsupportedTypeChecker
+
+	// SessionData is the session data for the current query.
+	SessionData *sessiondata.SessionData
 }
 
 // SemaProperties is a holder for required and derived properties

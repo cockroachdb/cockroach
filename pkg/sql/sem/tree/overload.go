@@ -919,6 +919,10 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// assumes AnyElement behavior for untyped parameters.
 	for i := range s.params {
 		if vt, ok := s.params[i].(VariadicType); ok && vt.VarType == types.Any {
+			if semaCtx.SessionData != nil && semaCtx.SessionData.LocalOnlySessionData.UsePre_25_2VariadicBuiltins {
+				vt.VarType = types.AnyElement
+				continue
+			}
 			if numOverloads > 1 {
 				return errors.AssertionFailedf(
 					"only one overload can have VariadicType {types.Any} parameters")

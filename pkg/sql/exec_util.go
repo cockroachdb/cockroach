@@ -761,6 +761,14 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 		"if new created tables will have schema_locked set",
 	false)
 
+var UsePre_25_2VariadicBuiltins = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.use_pre_25_2_variadic_builtins",
+	"default value for use_pre_25_2_variadic_builtins; "+
+		"default value for the use_pre_25_2_variadic_builtins session setting; controls "+
+		"if variadic builtins will use types.AnyElement instead of types.Any",
+	false)
+
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
@@ -4171,6 +4179,10 @@ func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val
 
 func (m *sessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
 	m.data.CreateTableWithSchemaLocked = val
+}
+
+func (m *sessionDataMutator) SetUsePre_25_2VariadicBuiltins(val bool) {
+	m.data.UsePre_25_2VariadicBuiltins = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

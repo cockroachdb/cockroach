@@ -918,6 +918,7 @@ func (p *planner) resetPlanner(
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
+	p.semaCtx.SessionData = sd
 
 	p.autoCommit = false
 
