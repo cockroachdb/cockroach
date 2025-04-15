@@ -657,6 +657,10 @@ message LocalOnlySessionData {
   // CreateTableWithSchemaLocked, when true will create tables as schema_locked
   // by default.
   bool create_table_with_schema_locked = 166;
+
+  // UsePre_25_2VariadicBuiltins, when true, will treat variadic builtins with a
+  // types.Any variadic argument as types.AnyElement (the pre-25.2 behavior)
+  bool use_pre_25_2_variadic_builtins = 167;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
