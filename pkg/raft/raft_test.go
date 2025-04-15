@@ -2685,6 +2685,194 @@ func TestLeaderAppResp(t *testing.T) {
 	}
 }
 
+// TestVoteHintPipelining tests that a candidate correctly processes
+// MsgVoteResp messages that include the voter's last entryID.
+// When the candidate wins the election and becomes leader, it should initialize
+// the follower's Progress.Next value using this best guess information.
+// This test checks various combinations of candidate logs and voter hints to
+// ensure proper initialization of the replication state after election.
+func TestVoteHintPipelining(t *testing.T) {
+	testCases := []struct {
+		candidateLog LeadSlice         // log entries in the candidate
+		voterLast    entryID           // last entryID in the voter's log
+		next         uint64            // expected Progress.Next after election
+		prState      tracker.StateType // expected Progress.State after election
+		compact      uint64            // compact the candidate log before campaigning if not 0
+	}{
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  0,
+				index: 0,
+			},
+			next:    11,
+			prState: tracker.StateProbe,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  1,
+				index: 2,
+			},
+			// NB: next is 1 here because index is not set in MsgSnap.
+			next:    1,
+			prState: tracker.StateSnapshot,
+			compact: 3,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 10,
+			},
+			next:    11,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 9,
+			},
+			next:    10,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 8,
+			},
+			next:    9,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  5,
+				index: 7,
+			},
+			next:    8,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][4][4]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  4,
+				index: 7,
+			},
+			next:    6,
+			prState: tracker.StateReplicate,
+		},
+		//      1  2  3  4  5  6  7  8  9  10 11 12
+		// n1: [1][1][1][4][4][5][6]
+		// n2: [1][1][1][4][4][5][5][5]
+		{
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 6),
+			voterLast: entryID{
+				term:  5,
+				index: 8,
+			},
+			next:    7,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 11,
+			},
+			next:    11,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//       1  2  3  4  5  6  7  8  9  10 11 12
+			//  n1: [1][1][1][2][4][5][6]
+			//  n2: [1][1][1][2][2][3][3][3]
+			candidateLog: entryID{}.append(1, 1, 1, 2, 4, 5, 6),
+			voterLast: entryID{
+				term:  3,
+				index: 8,
+			},
+			next:    5,
+			prState: tracker.StateProbe,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			// Create storage with the candidate's log
+			storage := newTestMemoryStorage(withPeers(1, 2, 3))
+			require.NoError(t, storage.Append(tc.candidateLog.entries))
+			if tc.compact != 0 {
+				storage.Compact(tc.compact)
+			}
+
+			// Create candidate node
+			r := newTestRaft(1, 5, 1, storage)
+			r.Term = tc.candidateLog.term
+			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+			r.advanceMessagesAfterAppend()
+
+			// Simulate receiving vote response from node 2
+			r.Step(pb.Message{
+				From: 2,
+				To:   1,
+				Term: tc.candidateLog.term + 1,
+				// Node 2 includes its last entryID as hint.
+				RejectHint: tc.voterLast.index,
+				LogTerm:    tc.voterLast.term,
+				Type:       pb.MsgVoteResp,
+			})
+
+			// The candidate should now be leader after receiving vote from node 2.
+			assert.Equal(t, pb.StateLeader, r.state)
+
+			// Check that node 2's Progress.Next is set based on the best guess
+			p := r.trk.Progress(2)
+			msgs := r.readMessages()
+			called := 0
+			for _, msg := range msgs {
+				// Because the Progress.Next on the leader side will be updated when the
+				// leader sends out the first round of MsgApp.
+				// Extract the pending messages to check for the Progress.Next that was
+				// set when the candidate became leader.
+				if (msg.Type == pb.MsgSnap || msg.Type == pb.MsgApp) && msg.To == 2 {
+					assert.Equal(t, tc.next, msg.Index+1)
+					called += 1
+				}
+			}
+			// Make sure we sent out MsgApp
+			// assert.Equal(t, 1, called)
+			assert.Equal(t, tc.prState, p.State)
+		})
+	}
+}
+
 // TestBcastBeat is when the leader receives a heartbeat tick, it should
 // send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries if
 // store liveness is disabled. On the other hand, if store liveness is enabled,

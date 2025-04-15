@@ -1342,7 +1342,43 @@ func (r *raft) becomeLeader() {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
-	r.reset(r.Term, nil)
+
+	// A special visit function to use the recorded hints and optimize the first
+	// round of MsgApp after becoming leader.
+	r.reset(r.Term, func(id pb.PeerID, pr *tracker.Progress) {
+		// matchGuess would only be recorded if the voter voted for this candidate.
+		matchGuess, voted := r.electionTracker.MatchGuess(id)
+		if !voted {
+			matchGuess = tracker.MatchGuess{Index: r.raftLog.lastIndex()}
+		}
+
+		*pr = tracker.Progress{
+			Match:       0,
+			MatchCommit: 0,
+			Next:        matchGuess.Index + 1,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
+			// Since the voter voted for us(not during pre-election), we can set
+			// RecentActive to true.
+			// (We set RecentActive to true for every MsgAppResp, so we treat
+			// MsgVoteResp(non-reject) the same in this case)
+			// In the case that Progress.Next <= r.raftLog.storage.Compacted(),
+			// RecentActive needs to be true in order to send out a snapshot
+			// immediately after becoming leader.
+			RecentActive: voted,
+		}
+
+		if matchGuess.Match {
+			// Follower's log matches the leader's log at next-1.
+			// Set the follower's state to StateReplicate early.
+			r.becomeReplicate(pr)
+			// NB: this is a bit of a hack, but we need to set the Next again since
+			// r.becomeReplicate sets pr.Next to match + 1.
+			// Where match is 0 in this case.
+			pr.Next = matchGuess.Index + 1
+		}
+	})
+
 	// NB: The fortificationTracker holds state from a peer's leadership stint
 	// that's acted upon after it has stepped down. We reset it right before
 	// stepping up to become leader again, but not when stepping down as leader
@@ -1365,11 +1401,14 @@ func (r *raft) becomeLeader() {
 			return
 		}
 		// All peer flows, except the leader's own, are initially in StateProbe.
+		// However, if discovered during voting that the follower's log matches the
+		// leader's, the follower is set to StateReplicate.
 		// Account the probe state entering in metrics here. All subsequent flow
 		// state changes, while we are the leader, are counted in the corresponding
 		// methods: becomeProbe, becomeReplicate, becomeSnapshot.
-		assertTrue(pr.State == tracker.StateProbe, "peers must be in StateProbe on leader step up")
-		r.metrics.FlowsEnteredStateProbe.Inc(1)
+		if pr.State == tracker.StateProbe {
+			r.metrics.FlowsEnteredStateProbe.Inc(1)
+		}
 	})
 
 	// Conservatively set the pendingConfIndex to the last index in the
@@ -2355,11 +2394,98 @@ func (r *raft) handleVoteResp(m pb.Message, myVoteRespType pb.MessageType) {
 	// this candidate wins election, the voter's log will not change until the
 	// first MsgApp from this or later leader.
 	// (See section 5.2 & 5.4 of the Raft paper for more details.)
-	//
-	// Avoid scanning the whole leader log in findConflictByTerm if the voter
-	// did not attach a hint for any reason.
-	if myVoteRespType == pb.MsgVoteResp && !m.Reject && voterLast.term > 0 && voterLast.index > 0 {
-		index, term := r.raftLog.findConflictByTerm(voterLast.index, voterLast.term)
+	if myVoteRespType == pb.MsgVoteResp && !m.Reject &&
+		// Avoid scanning the whole leader log in findConflictByTerm if the voter
+		// did not attach a hint for any reason.
+		voterLast.term > 0 && voterLast.index > 0 {
+		// Special Case:
+		// If the voter has a longer log tail, with lower term than the candidate,
+		// it would still vote for the candidate.
+		// Specifically:
+		//   voterLast.index > r.raftLog.lastIndex()
+		//   voterLast.term < r.raftLog.lastEntryID().term
+		//
+		// In this case, the index passed into findConflictByTerm is
+		// index: min(voterLast.index, r.raftLog.lastIndex())
+		//
+		// See the following scenarios for the reason to do this.
+		// Example Scenarios:
+		// ***********************************************************************
+		// SCENARIO 1:
+		// n1 is the candidate, with term 7
+		// n2 is the voter
+		//
+		// n2 has a longer log tail, but lower term(5) than n1(7)
+		// n2 votes for n1, with voterLast{index=8, term=5}
+		//       1  2  3  4  5  6  7  8  9  10 11 12
+		//  n1: [1][1][1][4][4][5][6]
+		//  n2: [1][1][1][4][4][5][5][5]
+		// candidate passes in index: 7, term: 5 into findConflictByTerm
+		// The result is: index: 6, term: 5
+		//
+		// match is set to true because term == voterLast.term
+		//
+		// ***********************************************************************
+		// SCENARIO 2:
+		// n1 is the candidate, with term 7
+		// n2 is the voter
+		//
+		// n2 has a longer log tail, but lower term(6) than n1(7)
+		// n2 votes for n1, with voterLast{index=8, term=6}
+		//       1  2  3  4  5  6  7  8  9  10 11 12
+		//  n1: [1][1][1][4][4][5][6]
+		//  n2: [1][1][1][4][4][5][6][6]
+		// candidate passes in index: 7, term: 6 into findConflictByTerm
+		// The result is: index: 7, term: 6
+
+		// match is set to true because term == voterLast.term
+		//
+		// ***********************************************************************
+		// SCENARIO 3:
+		// n1 is the candidate, with term 7
+		// n2 is the voter
+		//
+		// n2 has a longer log tail, but lower term(3) than n1(7)
+		// n2 votes for n1, with voterLast{index=8, term=3}
+		//       1  2  3  4  5  6  7  8  9  10 11 12
+		//  n1: [1][1][1][2][4][5][6]
+		//  n2: [1][1][1][2][2][3][3][3]
+		// candidate passes in index: 7, term: 3 into findConflictByTerm
+		//
+		// The result is: index: 4, term: 2
+		//
+		// ***********************************************************************
+		// SCENARIO 4:
+		// n1 is the candidate, with term 7
+		// n2 is the voter
+		//
+		// n2 has a longer log tail, but lower term(3) than n1(7)
+		// n2 votes for n1, with voterLast{index=8, term=3}
+		//       1  2  3  4  5  6  7  8  9  10 11 12
+		//  n1: [1][1][1][2][4][5][6]
+		//  n2: [1][1][1][2][2][2][2][3]
+		// candidate passes in index: 7, term: 3 into findConflictByTerm
+		// Important Note, in this scenario, the voter's log at index 7, is actually
+		// term 2, not term 3. But this is ok.
+		//
+		// The result is: index: 4, term: 2
+		//
+		// ***********************************************************************
+		// Can we wrongly set match to true? The answer is no.
+		// SCENARIO 5: (NOT POSSIBLE)
+		// n1 is the candidate, with term 4
+		// n2 votes for n1, with voterLast{index=8, term=3}
+		//       1  2  3  4  5  6  7  8  9  10 11 12
+		//  n1: [1][1][1][2][2][2][3]
+		//  n2: [1][1][1][2][2][2][2][3]
+		// n2 votes for n1, with voterLast{index=8, term=3}
+		// candidate passes in index: 7, term: 3 into findConflictByTerm
+		// The result is: index: 7, term: 3
+		//
+		// match is wrongly set to true because term == voterLast.term
+		// But this is NOT POSSIBLE, because the candidate's log at index 7 is
+		// because the 2 raft logs violates Raft invariants.
+		index, term := r.raftLog.findConflictByTerm(min(voterLast.index, r.raftLog.lastIndex()), voterLast.term)
 		matchGuess = tracker.MatchGuess{
 			// NB: index <= voterLast.index.
 			// Also, raftLog.term(index) <= voterLast.term, or the entry at
