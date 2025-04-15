@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -651,6 +653,22 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	rand.Shuffle(len(failureSmokeTests), func(i, j int) {
 		failureSmokeTests[i], failureSmokeTests[j] = failureSmokeTests[j], failureSmokeTests[i]
 	})
+
+	// For testing new failure modes, it may be useful to run only a subset of
+	// tests to increase iteration speed.
+	if regex := os.Getenv("FAILURE_INJECTION_SMOKE_TEST_FILTER"); regex != "" {
+		filter, err := regexp.Compile(regex)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var filteredTests []failureSmokeTest
+		for _, test := range failureSmokeTests {
+			if filter.MatchString(test.testName) {
+				filteredTests = append(filteredTests, test)
+			}
+		}
+		failureSmokeTests = filteredTests
+	}
 
 	for _, test := range failureSmokeTests {
 		t.L().Printf("\n=====running %s test=====", test.testName)
