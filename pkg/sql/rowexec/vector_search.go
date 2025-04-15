@@ -60,7 +60,9 @@ func newVectorSearchProcessor(
 	if err != nil {
 		return nil, err
 	}
-	v.searcher.Init(idx, flowCtx.Txn)
+	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
+	maxResults := int(v.targetCount)
+	v.searcher.Init(idx, flowCtx.Txn, searchBeamSize, maxResults)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -131,7 +133,7 @@ func (v *vectorSearchProcessor) maybeSearch() (ok bool, err error) {
 		v.currPrefix = v.prefixKeys[v.searchIdx]
 	}
 	v.searchIdx++
-	err = v.searcher.Search(v.Ctx(), v.currPrefix, v.queryVector, int(v.targetCount))
+	err = v.searcher.Search(v.Ctx(), v.currPrefix, v.queryVector)
 	if err != nil {
 		return false, err
 	}
