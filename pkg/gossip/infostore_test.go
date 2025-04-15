@@ -684,3 +684,37 @@ func TestCallbacksCalledSequentially(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// BenchmarkCallbackParallelism benchmarks the parallelism of the callback
+// worker. It registers multiple callbacks, and executes a fake workload
+// that sleeps for a short duration to simulate work done in the callback.
+// If we implement a parallel execution of the callback workers, we should
+// see a significant speedup.
+func BenchmarkCallbackParallelism(b *testing.B) {
+	ctx := context.Background()
+	is, stopper := newTestInfoStore()
+	defer stopper.Stop(ctx)
+	wg := &sync.WaitGroup{}
+
+	callback := func(key string, val roachpb.Value) {
+		// Sleep for a short duration to simulate work done in callback.
+		time.Sleep(time.Millisecond)
+		wg.Done()
+	}
+
+	// Register 5 callbacks.
+	numCallbacks := 5
+	callbacks := make([]func(), numCallbacks)
+	for i := range numCallbacks {
+		callbacks[i] = is.registerCallback("key.*", callback)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		wg.Add(numCallbacks)
+		require.NoError(b, is.addInfo(fmt.Sprintf("key%d", i), is.newInfo(nil, time.Second)))
+		// Wait for all the callback executions to finish before the next iteration.
+		wg.Wait()
+	}
+}
