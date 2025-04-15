@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -2779,7 +2780,7 @@ func TestGetWriterType(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
 	t.Run("immediate-mode-pre-25.2", func(t *testing.T) {
@@ -2790,7 +2791,7 @@ func TestGetWriterType(t *testing.T) {
 		)
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeLegacyKV, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeLegacyKV, wt)
 	})
 
 	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
@@ -2799,14 +2800,14 @@ func TestGetWriterType(t *testing.T) {
 			clusterversion.PreviousRelease.Version(),
 			true, /* initializeVersion */
 		)
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeSQL))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeLegacyKV))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeLegacyKV, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 }
