@@ -88,7 +88,11 @@ export const useTableIndexStats = ({
           stat?.statistics?.stats?.total_rows_read?.toNumber() ?? 0,
         indexRecs:
           data?.index_recommendations
-            ?.filter(rec => rec?.type != null)
+            ?.filter(
+              rec =>
+                rec?.type != null &&
+                rec.index_id === stat.statistics?.key?.index_id,
+            )
             .map(formatIndexRecsProto) ?? [],
       };
     });
