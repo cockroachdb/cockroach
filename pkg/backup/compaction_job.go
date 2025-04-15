@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -523,17 +524,14 @@ func updateCompactionBackupDetails(
 	return compactedDetails, nil
 }
 
-// compactIntroducedSpans takes a compacted backup manifest and the full chain of backups it belongs
-// to and computes the introduced spans for the compacted backup.
-func compactIntroducedSpans(
-	ctx context.Context, manifest backuppb.BackupManifest, chain compactionChain,
-) (roachpb.Spans, error) {
-	if err := checkCoverage(ctx, manifest.Spans, chain.backupChain); err != nil {
+// compactIntroducedSpans computes the introduced spans for a compacted backup.
+func (c compactionChain) compactIntroducedSpans(ctx context.Context) (roachpb.Spans, error) {
+	if err := checkCoverage(ctx, c.lastBackup().Spans, c.backupChain); err != nil {
 		return roachpb.Spans{}, err
 	}
 	return filterSpans(
-			manifest.Spans,
-			chain.backupChain[chain.startIdx-1].Spans,
+			c.lastBackup().Spans,
+			c.backupChain[c.startIdx-1].Spans,
 		),
 		nil
 }
@@ -589,7 +587,7 @@ func resolveBackupDirs(
 }
 
 // createCompactionManifest creates a new manifest for a compaction job and its
-// compacted chain.
+// compacted chain. The details should have its targets resolved.
 func createCompactionManifest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -610,24 +608,28 @@ func createCompactionManifest(
 	if len(tenantSpans) != 0 || len(tenantInfos) != 0 {
 		return nil, errors.New("backup compactions does not yet support range keys")
 	}
-	m, err := createBackupManifest(
-		ctx,
-		execCtx.ExecCfg(),
-		tenantSpans,
-		tenantInfos,
-		details,
-		compactChain.backupChain,
-		compactChain.allIters,
-	)
+	lastBackup := compactChain.lastBackup()
+	introducedSpans, err := compactChain.compactIntroducedSpans(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m.IsCompacted = true
-	m.IntroducedSpans, err = compactIntroducedSpans(ctx, m, compactChain)
-	if err != nil {
-		return nil, err
-	}
-	return &m, nil
+	return &backuppb.BackupManifest{
+		StartTime:           details.StartTime,
+		EndTime:             details.EndTime,
+		MVCCFilter:          lastBackup.MVCCFilter,
+		Descriptors:         details.ResolvedTargets,
+		Tenants:             tenantInfos,
+		CompleteDbs:         lastBackup.CompleteDbs,
+		Spans:               lastBackup.Spans,
+		IntroducedSpans:     introducedSpans,
+		FormatVersion:       backupinfo.BackupFormatDescriptorTrackingVersion,
+		BuildInfo:           build.GetInfo(),
+		ClusterVersion:      execCtx.ExecCfg().Settings.Version.ActiveVersion(ctx).Version,
+		ClusterID:           execCtx.ExecCfg().NodeInfo.LogicalClusterID(),
+		StatisticsFilenames: lastBackup.StatisticsFilenames,
+		DescriptorCoverage:  lastBackup.DescriptorCoverage,
+		ElidedPrefix:        lastBackup.ElidedPrefix,
+	}, nil
 }
 
 // getBackupChain fetches the current shortest chain of backups (and its
