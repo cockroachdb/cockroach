@@ -431,7 +431,7 @@ func (tx *Txn) SearchPartitions(
 	toSearch []cspann.PartitionToSearch,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
-) (cspann.Level, error) {
+) error {
 	b := tx.kv.NewBatch()
 
 	for i := range toSearch {
@@ -450,35 +450,24 @@ func (tx *Txn) SearchPartitions(
 	}
 
 	if err := tx.kv.Run(ctx, b); err != nil {
-		return cspann.InvalidLevel, err
+		return err
 	}
 
-	level := cspann.InvalidLevel
 	for i := range toSearch {
 		partition, err := tx.decodePartition(
 			treeKey, toSearch[i].Key, &b.Results[i*2], &b.Results[i*2+1])
 		if err != nil {
-			return cspann.InvalidLevel, err
+			return err
 		}
 
-		searchLevel, partitionCount := partition.Search(
-			&tx.workspace, toSearch[i].Key, queryVector, searchSet)
-		if i == 0 {
-			level = searchLevel
-		} else if level != searchLevel {
-			// Callers should only search for partitions at the same level.
-			panic(errors.AssertionFailedf(
-				"caller already searched a partition at level %d, cannot search at level %d",
-				level, searchLevel))
-		}
-
+		toSearch[i].Level = partition.Level()
 		// TODO(andyk): Set this to the actual partition state once that's
 		// implemented in vecstore.
 		toSearch[i].StateDetails = cspann.MakeReadyDetails()
-		toSearch[i].Count = partitionCount
+		toSearch[i].Count = partition.Search(&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 	}
 
-	return level, nil
+	return nil
 }
 
 // getFullVectorsFromPK fills in refs that are specified by primary key. Refs
@@ -543,6 +532,8 @@ func (tx *Txn) getFullVectorsFromPK(
 			}
 			if v, ok := tree.AsDPGVector(data[0]); ok {
 				refs[refIdx].Vector = v.T
+			} else {
+				refs[refIdx].Vector = nil
 			}
 		}
 	}
@@ -585,10 +576,11 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 		if result.Rows[0].ValueBytes() == nil {
 			// If this is the root partition, then the metadata row is missing;
 			// it is only created when the first split of the root happens.
-			if refs[idx].Key.PartitionKey != cspann.RootKey {
-				return 0, cspann.ErrPartitionNotFound
+			if refs[idx].Key.PartitionKey == cspann.RootKey {
+				refs[idx].Vector = tx.store.emptyVec
+			} else {
+				refs[idx].Vector = nil
 			}
-			refs[idx].Vector = tx.store.emptyVec
 		} else {
 			// Get the centroid from the partition metadata.
 			metadata, err := vecencoding.DecodeMetadataValue(result.Rows[0].ValueBytes())

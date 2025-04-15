@@ -156,12 +156,15 @@ vec6: (4, 9)
     └───• vec2 (4, 9)
 
 # Ensure that search result returns multiple keys.
+# NOTE: 4 results are returned because MaxExtraResults is > 0 and vec4 has the
+# same distance as other results (i.e. within error bound of zero).
 search max-results=3
 (5, 10)
 ----
 vec1: 2 (centroid=0)
 vec2: 2 (centroid=0)
 vec3: 2 (centroid=0)
+vec4: 2 (centroid=0)
 4 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
 
 # ----------------------------------------------------------------------

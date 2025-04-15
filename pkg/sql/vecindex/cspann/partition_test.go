@@ -175,10 +175,10 @@ func TestPartition(t *testing.T) {
 		// Search empty partition.
 		metadata := PartitionMetadata{Level: LeafLevel, Centroid: vector.T{4, 3}}
 		partition := CreateEmptyPartition(quantizer, metadata)
+		require.Equal(t, Level(1), partition.Level())
 
 		searchSet := SearchSet{MaxResults: 1}
-		level, count := partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
-		require.Equal(t, Level(1), level)
+		count := partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		require.Equal(t, 0, count)
 		results := roundResults(searchSet.PopResults(), 4)
 		require.Equal(t, SearchResults(nil), results)
@@ -193,8 +193,7 @@ func TestPartition(t *testing.T) {
 		partition.AddSet(&workspace, vectors, childKeys, valueBytes, false /* overwrite */)
 
 		searchSet = SearchSet{MaxResults: 3}
-		level, count = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
-		require.Equal(t, Level(1), level)
+		count = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		require.Equal(t, 5, count)
 		result1 := SearchResult{
 			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 3.2830, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}

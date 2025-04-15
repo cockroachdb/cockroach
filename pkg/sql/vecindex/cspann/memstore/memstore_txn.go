@@ -36,12 +36,6 @@ type memTxn struct {
 	// lifetime of the transaction.
 	updated bool
 
-	// unbalanced, if non-nil, records a non-leaf partition that had all of its
-	// vectors removed during the transaction. If, by the end of the transaction,
-	// the partition is still empty, the store will panic, since this violates
-	// the constraint that the K-means tree is always fully balanced.
-	unbalanced *memPartition
-
 	// ownedLocks contains all exclusive partition locks that have been obtained
 	// during the transaction. These will be released at the end of the
 	// transaction.
@@ -159,7 +153,9 @@ func (tx *memTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	if level != partition.Level() {
-		return cspann.ErrRestartOperation
+		return errors.Wrapf(cspann.ErrRestartOperation,
+			"adding to partition %d (expected: %d, actual: %d)",
+			partitionKey, level, partition.Level())
 	}
 
 	if partition.Add(&tx.workspace, vec, childKey, valueBytes, true /* overwrite */) {
@@ -213,13 +209,6 @@ func (tx *memTxn) RemoveFromPartition(
 		memPart.count.Add(-1)
 	}
 
-	if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
-		// A non-leaf partition has zero vectors. If this is still true at the
-		// end of the transaction, the K-means tree will be unbalanced, which
-		// violates a key constraint.
-		tx.unbalanced = memPart
-	}
-
 	tx.updated = true
 	return nil
 }
@@ -231,19 +220,21 @@ func (tx *memTxn) SearchPartitions(
 	toSearch []cspann.PartitionToSearch,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
-) (level cspann.Level, err error) {
+) error {
 	for i := range toSearch {
-		var searchLevel cspann.Level
-
 		memPart, ok := tx.store.getPartition(treeKey, toSearch[i].Key)
 		if !ok {
 			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
-				searchLevel = cspann.LeafLevel
+				toSearch[i].Level = cspann.LeafLevel
 				toSearch[i].StateDetails = cspann.MakeReadyDetails()
 				toSearch[i].Count = 0
 			} else {
-				return cspann.InvalidLevel, cspann.ErrPartitionNotFound
+				// Partition does not exist, so return InvalidLevel, MissingState
+				// and Count=0.
+				toSearch[i].Level = cspann.InvalidLevel
+				toSearch[i].StateDetails = cspann.PartitionStateDetails{}
+				toSearch[i].Count = 0
 			}
 		} else {
 			// Acquire shared lock on partition and search it. Note that we don't
@@ -255,23 +246,14 @@ func (tx *memTxn) SearchPartitions(
 				defer memPart.lock.ReleaseShared()
 
 				partition := memPart.lock.partition
+				toSearch[i].Level = partition.Level()
 				toSearch[i].StateDetails = partition.Metadata().StateDetails
-				searchLevel, toSearch[i].Count = partition.Search(
-					&tx.workspace, toSearch[i].Key, queryVector, searchSet)
+				toSearch[i].Count = partition.Search(&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 			}()
-		}
-
-		if i == 0 {
-			level = searchLevel
-		} else if level != searchLevel {
-			// Callers should only search for partitions at the same level.
-			panic(errors.AssertionFailedf(
-				"caller already searched a partition at level %d, cannot search at level %d",
-				level, searchLevel))
 		}
 	}
 
-	return level, nil
+	return nil
 }
 
 // GetFullVectors implements the Txn interface.
@@ -286,14 +268,13 @@ func (tx *memTxn) GetFullVectors(
 		if ref.Key.PartitionKey != cspann.InvalidKey {
 			// Get the partition's centroid.
 			memPart, ok := tx.store.getPartitionLocked(treeKey, ref.Key.PartitionKey)
-			if !ok {
-				return errors.Wrapf(cspann.ErrPartitionNotFound,
-					"getting partition %d centroid", ref.Key.PartitionKey)
+			if ok {
+				// Don't need to acquire lock to call the Centroid method, since it
+				// is immutable and thread-safe.
+				ref.Vector = memPart.lock.partition.Centroid()
+			} else {
+				ref.Vector = nil
 			}
-
-			// Don't need to acquire lock to call the Centroid method, since it
-			// is immutable and thread-safe.
-			ref.Vector = memPart.lock.partition.Centroid()
 		} else {
 			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
 			if ok {
@@ -341,10 +322,13 @@ func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartiti
 	return memPart, nil
 }
 
-// lockPartition acquires a shared or exclusive lock of the given partition.
-// If the partition does not exist, it returns ErrPartitionNotFound. If the
-// partition was deleted by a concurrent transaction, it pushes the
-// transaction's forward and returns ErrRestartOperation.
+// lockPartition acquires a shared or exclusive lock of the given partition. If
+// the partition does not exist, it returns ErrPartitionNotFound. Unlike
+// Store.lockPartition, this method takes the timestamp of the transaction into
+// account. For example, if the partition has been deleted before the
+// transaction's creation time, it returns ErrPartitionNotFound. Or if the root
+// partition's level has been updated since the transaction's creation time, it
+// returns ErrRestartOperation.
 func (tx *memTxn) lockPartition(
 	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, isExclusive bool,
 ) (*memPartition, error) {
@@ -359,9 +343,22 @@ func (tx *memTxn) lockPartition(
 		memPart.lock.AcquireShared(tx.id)
 	}
 
-	// If the partition is deleted, then this transaction conflicted with another
-	// transaction and needs to be restarted.
-	if !memPart.isVisibleLocked(tx.current) {
+	if memPart.lock.deleted != 0 && tx.current > memPart.lock.deleted {
+		if isExclusive {
+			memPart.lock.Release()
+		} else {
+			memPart.lock.ReleaseShared()
+		}
+
+		return nil, errors.Wrapf(cspann.ErrPartitionNotFound,
+			"partition (created=%d, deleted=%d) is not visible to txn %d (current=%d)",
+			memPart.lock.created, memPart.lock.deleted, tx.id, tx.current)
+	}
+
+	// If the root partition's level was updated after the transaction was
+	// started, then treat it as if it was deleted and re-created. Instruct the
+	// caller to restart the operation with a later time.
+	if partitionKey == cspann.RootKey && tx.current < memPart.lock.created {
 		// Release the partition lock.
 		if isExclusive {
 			memPart.lock.Release()
@@ -369,13 +366,13 @@ func (tx *memTxn) lockPartition(
 			memPart.lock.ReleaseShared()
 		}
 
-		// Push forward transaction's current time in case the root partition was
-		// deleted as part of being replaced. The restarted operation needs to
-		// see the new root partition.
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
+		prevCurrent := tx.current
 		tx.current = tx.store.tickLocked()
-		return nil, cspann.ErrRestartOperation
+		return nil, errors.Wrapf(cspann.ErrRestartOperation,
+			"root partition (created=%d) is not visible to txn %d (current=%d)",
+			memPart.lock.created, tx.id, prevCurrent)
 	}
 
 	return memPart, nil
