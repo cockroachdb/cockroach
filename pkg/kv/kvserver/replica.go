@@ -1341,7 +1341,7 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
 // span configurations and provided node round-trip latencies.
 func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
-	policy := func() ctpb.RangeClosedTimestampPolicy {
+	computeNewPolicy := func(oldPolicy ctpb.RangeClosedTimestampPolicy) ctpb.RangeClosedTimestampPolicy {
 		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
@@ -1374,12 +1374,17 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 			maxLatency = max(maxLatency, peerLatency)
 		}
 		return closedts.FindBucketBasedOnNetworkRTTWithDampening(
-			ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load()),
+			oldPolicy,
 			maxLatency,
 			closedts.PolicySwitchWhenLatencyExceedsBucketFraction.Get(&r.store.GetStoreConfig().Settings.SV),
 		)
 	}
-	r.cachedClosedTimestampPolicy.Store(int32(policy()))
+	oldPolicy := ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	newPolicy := computeNewPolicy(oldPolicy)
+	r.cachedClosedTimestampPolicy.Store(int32(newPolicy))
+	if oldPolicy != newPolicy {
+		r.store.metrics.ClosedTimestampPolicyChange.Inc(1)
+	}
 }
 
 // NodeID returns the ID of the node this replica belongs to.
