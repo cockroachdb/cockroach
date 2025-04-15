@@ -4173,6 +4173,10 @@ func (m *sessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
 	m.data.CreateTableWithSchemaLocked = val
 }
 
+func (m *sessionDataMutator) SetUsePre_25_2VariadicBuiltins(val bool) {
+	m.data.UsePre_25_2VariadicBuiltins = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
