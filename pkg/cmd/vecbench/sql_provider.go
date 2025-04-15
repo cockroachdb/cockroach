@@ -24,6 +24,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// SQLSearchState holds an open connection and a prepared statement to run on
+// that connection in repeated calls to Search.
+type SQLSearchState struct {
+	conn  *pgxpool.Conn
+	query string
+}
+
+// Close releases the connection back to the pool.
+func (s *SQLSearchState) Close() {
+	if s.conn != nil {
+		s.conn.Release()
+		s.conn = nil
+	}
+}
+
 // SQLProvider implements VectorProvider using a SQL database connection to a
 // CockroachDB instance.
 type SQLProvider struct {
@@ -135,7 +150,7 @@ func (s *SQLProvider) InsertVectors(
 			batch := &pgx.Batch{}
 
 			// Insert vectors in batches.
-			for i := 0; i < vectors.Count; i++ {
+			for i := range vectors.Count {
 				batch.Queue(fmt.Sprintf(
 					"INSERT INTO %s (id, embedding) VALUES ($1, $2)",
 					s.tableName),
@@ -165,20 +180,54 @@ func (s *SQLProvider) InsertVectors(
 	}
 }
 
-// Search implements the VectorProvider interface.
-func (s *SQLProvider) Search(
-	ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
-) ([]cspann.KeyBytes, error) {
-	// Construct a query that searches for similar vectors.
+// SetupSearch implements the VectorProvider interface.
+func (s *SQLProvider) SetupSearch(
+	ctx context.Context, maxResults int, beamSize int,
+) (SearchState, error) {
+	// Acquire a connection from the pool.
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "acquiring connection from pool")
+	}
+	defer func() {
+		if conn != nil {
+			conn.Release()
+		}
+	}()
+
+	// Set the vector_search_beam_size session variable.
+	_, err = conn.Exec(ctx, fmt.Sprintf("SET vector_search_beam_size = %d", beamSize))
+	if err != nil {
+		return nil, errors.Wrap(err, "setting vector_search_beam_size")
+	}
+
+	// Construct the query for vector search.
 	query := fmt.Sprintf(`
 		SELECT id
 		FROM %s
 		ORDER BY embedding <-> $1
-		LIMIT $2
-	`, s.tableName)
+		LIMIT %d
+	`, s.tableName, maxResults)
 
-	// Execute the query.
-	rows, err := s.pool.Query(ctx, query, vec, maxResults)
+	state := &SQLSearchState{
+		conn:  conn,
+		query: query,
+	}
+	conn = nil
+	return state, nil
+}
+
+// Search implements the VectorProvider interface.
+func (s *SQLProvider) Search(
+	ctx context.Context, state SearchState, vec vector.T, stats *cspann.SearchStats,
+) ([]cspann.KeyBytes, error) {
+	sqlState, ok := state.(*SQLSearchState)
+	if !ok {
+		return nil, errors.New("invalid search state type")
+	}
+
+	// Execute the prepared statement.
+	rows, err := sqlState.conn.Query(ctx, sqlState.query, vec)
 	if err != nil {
 		return nil, errors.Wrap(err, "executing search query")
 	}

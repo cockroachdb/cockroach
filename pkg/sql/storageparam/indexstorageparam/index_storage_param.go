@@ -211,7 +211,7 @@ func (po *Setter) RunPostChecks() error {
 
 	if po.IndexDesc.Type == idxtype.VECTOR {
 		cfg := &po.IndexDesc.VecConfig
-		if cfg.MaxPartitionSize < cfg.MinPartitionSize * 4 {
+		if cfg.MaxPartitionSize < cfg.MinPartitionSize*4 {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
 				"max_partition_size (%d) must be at least four times the value of min_partition_size (%d)",

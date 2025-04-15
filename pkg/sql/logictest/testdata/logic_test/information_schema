@@ -4104,6 +4104,7 @@ unconstrained_non_covering_index_scan_enabled              off
 unsafe_allow_triggers_modifying_cascades                   off
 use_cputs_on_non_unique_indexes                            off
 variable_inequality_lookup_join_enabled                    on
+vector_search_beam_size                                    32
 xmloption                                                  content
 
 # information_schema can be used with the anonymous database.
