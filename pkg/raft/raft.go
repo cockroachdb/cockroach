@@ -2218,22 +2218,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
-		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
-		switch res {
-		case quorum.VoteWon:
-			if r.state == pb.StatePreCandidate {
-				r.campaign(campaignElection)
-			} else {
-				r.becomeLeader()
-				r.bcastFortify()
-				r.bcastAppend()
-			}
-		case quorum.VoteLost:
-			// pb.MsgPreVoteResp contains future term of pre-candidate
-			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, None)
-		}
+		r.handleVoteResp(m)
 	}
 	return nil
 }
@@ -2359,6 +2344,25 @@ func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
 			prev:    entryID{term: m.LogTerm, index: m.Index},
 			entries: m.Entries,
 		},
+	}
+}
+
+func (r *raft) handleVoteResp(m pb.Message) {
+	gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
+	r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
+	switch res {
+	case quorum.VoteWon:
+		if r.state == pb.StatePreCandidate {
+			r.campaign(campaignElection)
+		} else {
+			r.becomeLeader()
+			r.bcastFortify()
+			r.bcastAppend()
+		}
+	case quorum.VoteLost:
+		// pb.MsgPreVoteResp contains future term of pre-candidate
+		// m.Term > r.Term; reuse r.Term
+		r.becomeFollower(r.Term, None)
 	}
 }
 
