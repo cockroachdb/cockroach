@@ -7,6 +7,7 @@ package backfill_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -54,16 +55,18 @@ func TestVectorColumnAndIndexBackfill(t *testing.T) {
 	sqlDB.Exec(t, `
 		CREATE TABLE vectors (
 			id INT PRIMARY KEY,
-			vec VECTOR(3)
+			vec VECTOR(3),
+			data INT
 		)
 	`)
 
 	// Insert 200 rows with random vector data
 	sqlDB.Exec(t, `
-		INSERT INTO vectors (id, vec)
+		INSERT INTO vectors (id, vec, data)
 		SELECT 
 			generate_series(1, 200) as id,
-			ARRAY[random(), random(), random()]::vector(3) as vec
+			ARRAY[random(), random(), random()]::vector(3) as vec,
+			generate_series(1, 200) as data
 	`)
 
 	// Create a vector index on the vector column
@@ -87,4 +90,88 @@ func TestVectorColumnAndIndexBackfill(t *testing.T) {
 	// I chose 190 as a low water mark to prevent test flakes, but it should really
 	// be 200 in most cases.
 	require.Greater(t, matchCount, 190, "Expected to find at least 190 similar vectors")
+}
+
+func TestConcurrentOperationsDuringVectorIndexCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Channel to block the backfill process
+	blockBackfill := make(chan struct{})
+	backfillBlocked := make(chan struct{})
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				// Block the backfill process after the first batch
+				RunAfterBackfillChunk: func() {
+					backfillBlocked <- struct{}{}
+					<-blockBackfill
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Create a table with a vector column
+	sqlDB.Exec(t, `
+		CREATE TABLE vectors (
+			id INT PRIMARY KEY,
+			vec VECTOR(3),
+			data INT
+		)
+	`)
+
+	// Insert some initial data
+	sqlDB.Exec(t, `
+		INSERT INTO vectors (id, vec, data) VALUES
+		(1, '[1, 2, 3]', 100),
+		(2, '[4, 5, 6]', 200),
+		(3, '[7, 8, 9]', 300)
+	`)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	// Start creating the vector index in a goroutine
+	var createIndexErr error
+	go func() {
+		defer wg.Done()
+		_, createIndexErr = db.ExecContext(ctx, `CREATE VECTOR INDEX vec_idx ON vectors (vec)`)
+	}()
+
+	// Wait for the backfill to be blocked
+	<-backfillBlocked
+
+	// Attempt concurrent operations while the index is being created
+	// These should fail with the appropriate error
+	_, err := db.ExecContext(ctx, `UPDATE vectors SET vec = '[10, 11, 12]', data = 150 WHERE id = 1`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Cannot write to a vector index while it is being built")
+
+	_, err = db.ExecContext(ctx, `INSERT INTO vectors (id, vec, data) VALUES (4, '[13, 14, 15]', 400)`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Cannot write to a vector index while it is being built")
+
+	_, err = db.ExecContext(ctx, `DELETE FROM vectors WHERE id = 2`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Cannot write to a vector index while it is being built")
+
+	// This update should succeed since it only modifies the data column
+	_, err = db.ExecContext(ctx, `UPDATE vectors SET data = 250 WHERE id = 2`)
+	require.NoError(t, err, "Updating only the data column should succeed during index creation")
+
+	// Unblock the backfill process
+	close(blockBackfill)
+
+	wg.Wait()
+	// Wait for the index creation to complete
+	require.NoError(t, createIndexErr)
+
+	// Verify the index was created successfully
+	var id int
+	sqlDB.QueryRow(t, `SELECT id FROM vectors@vec_idx ORDER BY vec <-> '[1, 2, 3]' LIMIT 1`).Scan(&id)
+	require.Equal(t, 1, id)
 }
