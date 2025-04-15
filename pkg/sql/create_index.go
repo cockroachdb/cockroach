@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -249,8 +250,7 @@ func makeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		indexDesc.VecConfig.Dims = column.GetType().Width()
-		indexDesc.VecConfig.Seed = params.extendedEvalCtx.GetRNG().Int63()
+		indexDesc.VecConfig = vecindex.MakeVecConfig(params.EvalContext(), column.GetType())
 	}
 
 	if n.Sharded != nil {
