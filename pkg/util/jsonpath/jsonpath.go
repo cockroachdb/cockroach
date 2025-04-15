@@ -5,7 +5,10 @@
 
 package jsonpath
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 type Jsonpath struct {
 	Strict bool
@@ -13,11 +16,12 @@ type Jsonpath struct {
 }
 
 func (j Jsonpath) String() string {
-	var mode string
+	var sb strings.Builder
 	if j.Strict {
-		mode = "strict "
+		sb.WriteString("strict ")
 	}
-	return mode + j.Path.String()
+	j.Path.ToString(&sb, false /* inKey */, true /* printBrackets */)
+	return sb.String()
 }
 
 // ValidateAndCollectVariables walks the Jsonpath AST and collects all variable
