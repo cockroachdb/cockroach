@@ -178,7 +178,7 @@ func TestCreatePostRequest(t *testing.T) {
 				params := getTestParameters(ti, github.cluster, github.vmCreateOpts)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
-					message, "https://app.side-eye.io/snapshots/1", roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
+					message, roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -262,14 +262,12 @@ func TestCreatePostRequest(t *testing.T) {
 // to open the issue in Github.
 func formatPostRequest(req issues.PostRequest) (string, error) {
 	data := issues.TemplateData{
-		PostRequest:        req,
-		Parameters:         req.ExtraParams,
-		SideEyeSnapshotMsg: req.SideEyeSnapshotMsg,
-		SideEyeSnapshotURL: req.SideEyeSnapshotURL,
-		CondensedMessage:   issues.CondensedMessage(req.Message),
-		Branch:             "test_branch",
-		Commit:             "test_SHA",
-		PackageNameShort:   strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
+		PostRequest:      req,
+		Parameters:       req.ExtraParams,
+		CondensedMessage: issues.CondensedMessage(req.Message),
+		Branch:           "test_branch",
+		Commit:           "test_SHA",
+		PackageNameShort: strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
 	}
 
 	formatter := issues.UnitTestFormatter

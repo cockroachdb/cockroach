@@ -44,22 +44,9 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		data.Commit,
 		data.CommitURL,
 	)
-	if data.SideEyeSnapshotURL != "" {
-		r.Escaped(`. `)
-		msg := "A Side-Eye cluster snapshot was captured: "
-		if data.SideEyeSnapshotMsg != "" {
-			msg = data.SideEyeSnapshotMsg
-		}
-		r.Escaped(msg)
-		r.A(data.SideEyeSnapshotURL, data.SideEyeSnapshotURL)
-		r.Escaped(`.
+	r.Escaped(`:
 
 `)
-	} else {
-		r.Escaped(`:
-
-`)
-	}
 	if fop, ok := data.CondensedMessage.FatalOrPanic(50); ok {
 		if fop.Error != "" {
 			r.Escaped("Fatal error:")
