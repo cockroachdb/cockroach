@@ -7754,32 +7754,6 @@ table's zone configuration this will return NULL.`,
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.reset_insights_tables": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				if evalCtx.SQLStatsController == nil {
-					return nil, errors.AssertionFailedf("sql stats controller not set")
-				}
-				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(true), nil
-			},
-			Info:       `This function is used to clear the statement and transaction insights statistics.`,
-			Volatility: volatility.Volatile,
-		},
-	),
 	// Deletes the underlying spans backing a table, only
 	// if the user provides explicit acknowledgement of the
 	// form "I acknowledge this will irrevocably delete all revisions

@@ -78,16 +78,6 @@ func (s *Controller) ResetActivityTables(ctx context.Context) error {
 	return s.resetSysTableStats(ctx, "system.transaction_activity")
 }
 
-// ResetInsightsTables implements the tree.SQLStatsController interface. This
-// method reset the {statement|transaction}_execution_insights tables.
-func (s *Controller) ResetInsightsTables(ctx context.Context) error {
-	if err := s.resetSysTableStats(ctx, "system.statement_execution_insights"); err != nil {
-		return err
-	}
-
-	return s.resetSysTableStats(ctx, "system.transaction_execution_insights")
-}
-
 func (s *Controller) resetSysTableStats(ctx context.Context, tableName string) (err error) {
 	ex := s.db.Executor()
 	_, err = ex.ExecEx(

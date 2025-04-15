@@ -2470,7 +2470,8 @@ var builtinOidsArray = []string{
 	2507: `text(refcursor: refcursor) -> string`,
 	2508: `varchar(refcursor: refcursor) -> varchar`,
 	2509: `crdb_internal.unsafe_revert_tenant_to_timestamp(tenant_name: string, ts: decimal) -> decimal`,
-	2510: `crdb_internal.reset_insights_tables() -> bool`,
+	// Previously crdb_internal.reset_insights_tables() -> bool.
+	2510: ``,
 	2511: `merge_stats_metadata(arg1: jsonb) -> jsonb`,
 	2512: `merge_statement_stats(arg1: jsonb) -> jsonb`,
 	2513: `merge_transaction_stats(arg1: jsonb) -> jsonb`,
