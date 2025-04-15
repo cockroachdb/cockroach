@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -71,29 +70,12 @@ type HistogramConverter struct {
 // NewHistogramConverter creates a new histogram converter instance
 func NewHistogramConverter(sink sink.Sink, specs *[]registry.TestSpec) *HistogramConverter {
 	hc := &HistogramConverter{
-		sink:            sink,
-		specs:           specs,
-		maxWareHouse:    make(map[string]float64),
-		lastCleanupTime: time.Now(), // Initialize to avoid immediate cleanup
+		sink:         sink,
+		specs:        specs,
+		maxWareHouse: make(map[string]float64), // Initialize to avoid immediate cleanup
 	}
 
 	return hc
-}
-
-// shouldRunCleanup determines if we should run cleanup based on time elapsed
-func (hc *HistogramConverter) shouldRunCleanup() bool {
-	hc.mu.RLock()
-	defer hc.mu.RUnlock()
-
-	// Run cleanup if enough time has passed or maxWareHouse map is getting large
-	return time.Since(hc.lastCleanupTime) > CleanupInterval || len(hc.maxWareHouse) > 100000
-}
-
-// updateCleanupTime updates the last cleanup time
-func (hc *HistogramConverter) updateCleanupTime() {
-	hc.mu.Lock()
-	defer hc.mu.Unlock()
-	hc.lastCleanupTime = time.Now()
 }
 
 // Convert processes histogram data and converts it to OpenMetrics format
@@ -101,24 +83,6 @@ func (hc *HistogramConverter) Convert(labels []model.Label, src model.FileInfo) 
 
 	// Extract test information
 	runDate, testName := getTestDateAndName(src)
-
-	// Run cleanup if needed
-	if hc.shouldRunCleanup() {
-		//runDate, _ := getTestDateAndName(src)
-		if runDate != "" && len(runDate) >= 8 {
-			// Parse runDate to use for cleanup
-			dateStr := strings.Split(runDate, "-")[0]
-			if len(dateStr) == 8 { // Make sure it's a valid YYYYMMDD format
-				parsedDate, err := time.Parse("20060102", dateStr)
-				if err == nil {
-					// Run cleanup with parsedDate as reference time
-					hc.cleanupOldEntries(parsedDate)
-					// Update the last cleanup time
-					hc.updateCleanupTime()
-				}
-			}
-		}
-	}
 	postProcessFn := hc.getTestPostProcessFunction(testName)
 
 	// Get buffers from pool instead of creating new ones
@@ -465,41 +429,4 @@ func (hc *HistogramConverter) getTestPostProcessFunction(
 		}
 	}
 	return nil
-}
-
-// cleanupOldEntries removes entries older than MaxEntryAge
-func (hc *HistogramConverter) cleanupOldEntries(referenceTime time.Time) {
-	hc.mu.Lock()
-	defer hc.mu.Unlock()
-
-	// Find old keys to remove
-	var keysToRemove []string
-	for key := range hc.maxWareHouse {
-		// Parse the date from the key format "YYYYMMDD-ID-testname"
-		parts := strings.SplitN(key, "-", 2)
-		if len(parts) < 2 || len(parts[0]) != 8 { // Ensure date format is YYYYMMDD (8 chars)
-			continue
-		}
-
-		dateStr := parts[0]
-		entryDate, err := time.Parse("20060102", dateStr)
-		if err != nil {
-			continue // Skip invalid dates silently
-		}
-
-		// If the entry is older than MaxEntryAge, mark it for removal
-		if referenceTime.Sub(entryDate) > MaxEntryAge {
-			keysToRemove = append(keysToRemove, key)
-		}
-	}
-
-	// Remove old entries
-	for _, key := range keysToRemove {
-		delete(hc.maxWareHouse, key)
-	}
-
-	// If we removed a significant number of entries, force garbage collection
-	if len(keysToRemove) > 100 {
-		debug.FreeOSMemory()
-	}
 }
