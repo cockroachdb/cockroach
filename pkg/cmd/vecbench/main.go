@@ -439,7 +439,6 @@ func newVectorProvider(
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
-		UseNewFixups:     true,
 	}
 
 	if *flagMemStore {
