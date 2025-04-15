@@ -53,7 +53,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n, p.ExecCfg().Settings); err != nil {
 		return nil, err
 	}
 
