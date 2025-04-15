@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -59,6 +60,7 @@ import (
 type Sender struct {
 	stopper *stop.Stopper
 	st      *cluster.Settings
+	metrics *SenderMetrics
 	clock   *hlc.Clock
 	nodeID  roachpb.NodeID
 	// connFactory is used to establish new connections.
@@ -90,6 +92,25 @@ type Sender struct {
 	connsMu struct {
 		syncutil.Mutex
 		conns map[roachpb.NodeID]conn
+	}
+}
+
+type SenderMetrics struct {
+	PolicyChange *metric.Counter
+}
+
+var (
+	metaClosedTimestampPolicyChange = metric.Metadata{
+		Name:        "kv.closed_timestamp.side_transport_range_update",
+		Help:        "Number of ranges updated by the side transport",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func newSenderMetrics() *SenderMetrics {
+	return &SenderMetrics{
+		PolicyChange: metric.NewCounter(metaClosedTimestampPolicyChange),
 	}
 }
 
@@ -211,6 +232,7 @@ func newSenderWithConnFactory(
 	s := &Sender{
 		stopper:     stopper,
 		st:          st,
+		metrics:     newSenderMetrics(),
 		clock:       clock,
 		connFactory: connFactory,
 		buf:         newUpdatesBuf(),
@@ -220,6 +242,10 @@ func newSenderWithConnFactory(
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connsMu.conns = make(map[roachpb.NodeID]conn)
 	return s
+}
+
+func (s *Sender) Metrics() *SenderMetrics {
+	return s.metrics
 }
 
 // Run starts a goroutine that periodically closes new timestamps for all the
@@ -482,6 +508,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// Publish the new message to all connections.
 	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
+	s.metrics.PolicyChange.Inc(int64(len(msg.AddedOrUpdated)))
 
 	// Return the publication time, for tests.
 	return now
