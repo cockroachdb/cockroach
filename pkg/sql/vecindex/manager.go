@@ -176,7 +176,8 @@ func (m *Manager) GetWithDesc(
 				return nil, err
 			}
 
-			return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, m.getIndexOptions(), m.stopper)
+			return cspann.NewIndex(
+				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
 		},
 	)
 }
@@ -206,14 +207,17 @@ func (m *Manager) Get(
 			// passed to cspann.NewIndex, and we don't want that to be the context of
 			// the Get call.
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(), m.stopper)
+				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
 		},
 	)
 }
 
-func (m *Manager) getIndexOptions() *cspann.IndexOptions {
+func (m *Manager) getIndexOptions(config vecpb.Config) *cspann.IndexOptions {
 	// Hook up the StalledOpTimeout callback to the cluster setting.
 	return &cspann.IndexOptions{
+		MinPartitionSize: int(config.MinPartitionSize),
+		MaxPartitionSize: int(config.MaxPartitionSize),
+		BaseBeamSize:     int(config.BuildBeamSize),
 		StalledOpTimeout: func() time.Duration {
 			return StalledOpTimeoutSetting.Get(m.sv)
 		},
