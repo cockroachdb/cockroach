@@ -104,16 +104,13 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		bindTo = "localhost"
 	}
 
-	sideEyeToken := runner.maybeInitSideEyeClient(context.Background(), l)
-
 	opt := clustersOpt{
 		typ:         clusterType,
 		clusterName: roachtestflags.ClusterNames,
 		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
-		user:         getUser(roachtestflags.Username),
-		cpuQuota:     roachtestflags.CPUQuota,
-		clusterID:    roachtestflags.ClusterID,
-		sideEyeToken: sideEyeToken,
+		user:      getUser(roachtestflags.Username),
+		cpuQuota:  roachtestflags.CPUQuota,
+		clusterID: roachtestflags.ClusterID,
 	}
 	switch {
 	case roachtestflags.DebugAlways:
