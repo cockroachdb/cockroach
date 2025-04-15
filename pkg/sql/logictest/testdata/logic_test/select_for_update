@@ -750,3 +750,82 @@ ROLLBACK
 
 statement ok
 RESET enable_durable_locking_for_serializable
+
+# Ensure that we lock all column families of a multi-family table when using
+# durable locking.
+
+statement ok
+CREATE TABLE abc (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  PRIMARY KEY (a),
+  INDEX (b),
+  FAMILY f0 (a),
+  FAMILY f1 (b),
+  FAMILY f2 (c)
+)
+
+statement ok
+INSERT INTO abc VALUES (6, 7, 8)
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = on
+
+statement ok
+SET enable_durable_locking_for_serializable = on
+
+statement ok
+SET distsql = off
+
+# A scan where we normally skip reading family 0.
+query T kvtrace
+SELECT * FROM abc WHERE a = 6
+----
+Scan /Table/113/1/6/{1/1-2/2}
+
+# But with FOR UPDATE we must read all families.
+query T kvtrace
+SELECT * FROM abc WHERE a = 6 FOR UPDATE
+----
+Scan /Table/113/1/{6-7} lock Exclusive (Block, Replicated)
+
+# An index join where we normally skip reading family 0.
+query T kvtrace
+SELECT * FROM abc WHERE b = 7
+----
+Scan /Table/113/2/{7-8}
+Scan /Table/113/1/6/{1/1-2/2}
+
+# But with FOR UPDATE we must read all families.
+query T kvtrace
+SELECT * FROM abc WHERE b = 7 FOR UPDATE
+----
+Scan /Table/113/2/{7-8}
+Scan /Table/113/1/{6-7} lock Exclusive (Block, Replicated)
+
+statement ok
+INSERT INTO t129145 VALUES (6, 7)
+
+# A lookup join where we normally skip reading family 0.
+query T kvtrace
+SELECT * FROM t129145 INNER LOOKUP JOIN abc ON abc.a = t129145.a
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/1/1/{1/1-2/2}, /Table/113/1/6/{1/1-2/2}
+
+# But with FOR UPDATE we must read all families.
+query T kvtrace
+SELECT * FROM t129145 INNER LOOKUP JOIN abc ON abc.a = t129145.a FOR UPDATE OF abc
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/1/{1-2}, /Table/113/1/{6-7} lock Exclusive (Block, Replicated)
+
+statement ok
+RESET distsql
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable
