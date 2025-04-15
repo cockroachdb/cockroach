@@ -798,6 +798,7 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 		// TODO(radu): remove this field entirely.
 		MinExpirationSupported: true,
 		RangeLeaseDuration:     r.store.cfg.RangeLeaseDuration,
+		LeaderLeaseDuration:    r.store.cfg.StoreLivenessSupportDuration,
 	}
 }
 
