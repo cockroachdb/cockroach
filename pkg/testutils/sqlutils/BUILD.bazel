@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/protoutil",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
