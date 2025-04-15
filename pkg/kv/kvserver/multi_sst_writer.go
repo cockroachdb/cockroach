@@ -166,8 +166,8 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 		msstw.rangeKeyFrag.Add(rangekey.Span{
 			Start: startKey, End: endKey, Keys: []rangekey.Key{{
 				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete),
-			}}},
-		)
+			}},
+		})
 		msstw.rangeDelFrag.Add(rangedel.Span{
 			Start: startKey, End: endKey, Keys: []rangedel.Key{{
 				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete),
