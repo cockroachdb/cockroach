@@ -347,8 +347,23 @@ func openSSTs(
 	entry execinfrapb.RestoreSpanEntry,
 	encryptionOptions *kvpb.FileEncryptionOptions,
 	endTime hlc.Timestamp,
-) (mergedSST, error) {
+) (ssts mergedSST, err error) {
 	var dirs []cloud.ExternalStorage
+	cleanupDirs := func() {
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed: %v", err)
+			}
+		}
+	}
+	// If we bail early due to an error, cleanup any external storage that was
+	// opened. Otherwise, leave it to the caller to perform cleanup.
+	defer func() {
+		if err != nil {
+			cleanupDirs()
+		}
+	}()
+
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
@@ -380,11 +395,7 @@ func openSSTs(
 		cleanup: func() {
 			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
-			for _, dir := range dirs {
-				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed: %v", err)
-				}
-			}
+			cleanupDirs()
 		},
 		completeUpTo: endTime,
 	}, nil
