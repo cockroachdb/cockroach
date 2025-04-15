@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -184,6 +186,8 @@ func (ctx *jsonpathCtx) eval(
 		return ctx.evalLast()
 	case jsonpath.Method:
 		return ctx.evalMethod(path, jsonValue)
+	case jsonpath.Any:
+		return ctx.evalAny(path, jsonValue)
 	default:
 		return nil, errUnimplemented
 	}
@@ -212,26 +216,43 @@ func (ctx *jsonpathCtx) unwrapCurrentTargetAndEval(
 	if jsonValue.Type() != json.ArrayJSONType {
 		return nil, errors.AssertionFailedf("unwrapCurrentTargetAndEval can only be applied to an array")
 	}
-	return ctx.executeAnyItem(jsonPath, jsonValue, unwrapNext)
+	return ctx.executeAnyItem(jsonPath, jsonValue, unwrapNext,
+		1 /* level */, 1 /* first */, 1 /* last */)
+}
+
+func isBinary(jsonValue json.JSON) bool {
+	return jsonValue.Type() == json.ArrayJSONType || jsonValue.Type() == json.ObjectJSONType
 }
 
 func (ctx *jsonpathCtx) executeAnyItem(
-	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool, level, first, last int,
 ) ([]json.JSON, error) {
 	if jsonValue.Len() == 0 {
 		return nil, nil
 	}
+	if level > last {
+		return nil, nil
+	}
 	var agg []json.JSON
 	processItem := func(item json.JSON) error {
-		if jsonPath == nil {
-			agg = append(agg, item)
-			return nil
+		if level >= first || (first == math.MaxInt && last == math.MaxInt && !isBinary(item)) {
+			if jsonPath == nil {
+				agg = append(agg, item)
+			} else {
+				evalResults, err := ctx.eval(jsonPath, item, unwrapNext)
+				if err != nil {
+					return err
+				}
+				agg = append(agg, evalResults...)
+			}
 		}
-		evalResults, err := ctx.eval(jsonPath, item, unwrapNext)
-		if err != nil {
-			return err
+		if level < last && isBinary(item) {
+			evalResults, err := ctx.executeAnyItem(jsonPath, item, unwrapNext, level+1, first, last)
+			if err != nil {
+				return err
+			}
+			agg = append(agg, evalResults...)
 		}
-		agg = append(agg, evalResults...)
 		return nil
 	}
 	switch jsonValue.Type() {

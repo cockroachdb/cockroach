@@ -1640,3 +1640,235 @@ query T
 SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
 ----
 {"a": 10}
+
+query T
+SELECT jsonb_path_query('null', '$.**');
+----
+null
+
+query T
+SELECT jsonb_path_query('true', '$.**');
+----
+true
+
+query T
+SELECT jsonb_path_query('false', '$.**');
+----
+false
+
+query T
+SELECT jsonb_path_query('1', '$.**');
+----
+1
+
+query T
+SELECT jsonb_path_query('"hello"', '$.**');
+----
+"hello"
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3]', '$.**');
+----
+[1, 2, 3]
+1
+2
+3
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, [4, 5, 6]]', '$.**');
+----
+[1, 2, 3, [4, 5, 6]]
+1
+2
+3
+[4, 5, 6]
+4
+5
+6
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, [4, 5, 6, [true, null, "hello"]]]', '$.**');
+----
+[1, 2, 3, [4, 5, 6, [true, null, "hello"]]]
+1
+2
+3
+[4, 5, 6, [true, null, "hello"]]
+4
+5
+6
+[true, null, "hello"]
+true
+null
+"hello"
+
+query T rowsort
+SELECT jsonb_path_query('{"a": 1, "b": true, "c": null}', '$.**');
+----
+{"a": 1, "b": true, "c": null}
+1
+true
+null
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": {"c": {"d": [1, 2, 3, [4, 5, 6, [true, null, "e"]]]}}}, "f": false}', '$.**');
+----
+{"a": {"b": {"c": {"d": [1, 2, 3, [4, 5, 6, [true, null, "e"]]]}}}, "f": false}
+{"b": {"c": {"d": [1, 2, 3, [4, 5, 6, [true, null, "e"]]]}}}
+{"c": {"d": [1, 2, 3, [4, 5, 6, [true, null, "e"]]]}}
+{"d": [1, 2, 3, [4, 5, 6, [true, null, "e"]]]}
+[1, 2, 3, [4, 5, 6, [true, null, "e"]]]
+1
+2
+3
+[4, 5, 6, [true, null, "e"]]
+4
+5
+6
+[true, null, "e"]
+true
+null
+"e"
+false
+
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1, [true]], "b": null}', '$.**.**');
+----
+{"a": [1, [true]], "b": null}
+[1, [true]]
+1
+[true]
+true
+null
+[1, [true]]
+1
+[true]
+true
+1
+[true]
+true
+true
+null
+
+query T
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{0}');
+----
+{"a": {"b": true}, "c": [1, 2]}
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{1}');
+----
+{"b": true}
+[1, 2]
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{2}');
+----
+true
+1
+2
+
+query empty
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{3}');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{last}');
+----
+true
+1
+2
+
+query T
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{0 to 0}');
+----
+{"a": {"b": true}, "c": [1, 2]}
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{0 to 1}');
+----
+{"a": {"b": true}, "c": [1, 2]}
+{"b": true}
+[1, 2]
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{1 to last}');
+----
+{"b": true}
+true
+[1, 2]
+1
+2
+
+query empty
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**{2 to 1}');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', 'strict $.**', '{}', true);
+----
+{"a": {"b": true}, "c": [1, 2]}
+{"b": true}
+true
+[1, 2]
+1
+2
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', 'strict $.**', '{}', false);
+----
+{"a": {"b": true}, "c": [1, 2]}
+{"b": true}
+true
+[1, 2]
+1
+2
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**', '{}', true);
+----
+{"a": {"b": true}, "c": [1, 2]}
+{"b": true}
+true
+[1, 2]
+1
+2
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": true}, "c": [1, 2]}', '$.**', '{}', false);
+----
+{"a": {"b": true}, "c": [1, 2]}
+{"b": true}
+true
+[1, 2]
+1
+2
+
+# Test cases called out from the Postgres docs.
+query T rowsort
+SELECT jsonb_path_query('{"track": {"segments": [{"location":   [ 47.763, 13.4034 ], "start time": "2018-10-14 10:05:14", "HR": 73}, {"location":   [ 47.706, 13.2635 ], "start time": "2018-10-14 10:39:21", "HR": 135}]}}', 'lax $.**.HR');
+----
+73
+135
+73
+135
+
+# query T rowsort
+# SELECT jsonb_path_query('{"track": {"segments": [{"location":   [ 47.763, 13.4034 ], "start time": "2018-10-14 10:05:14", "HR": 73}, {"location":   [ 47.706, 13.2635 ], "start time": "2018-10-14 10:39:21", "HR": 135}]}}', 'strict $.**.HR');
+# ----
+# 73
+# 135
+
+query T rowsort
+SELECT jsonb_path_query('{"track": {"segments": [{"location":   [ 47.763, 13.4034 ], "start time": "2018-10-14 10:05:14", "HR": 73}, {"location":   [ 47.706, 13.2635 ], "start time": "2018-10-14 10:39:21", "HR": 135}]}}', 'lax $.track.segments[*].location ?(@[*] > 15)');
+----
+47.763
+47.706
+
+query T rowsort
+SELECT jsonb_path_query('{"track": {"segments": [{"location":   [ 47.763, 13.4034 ], "start time": "2018-10-14 10:05:14", "HR": 73}, {"location":   [ 47.706, 13.2635 ], "start time": "2018-10-14 10:39:21", "HR": 135}]}}', 'strict $.track.segments[*].location ?(@[*] > 15)');
+----
+[47.763, 13.4034]
+[47.706, 13.2635]
+
+query empty
+SELECT jsonb_path_query('{}', 'strict $.size()', '{}', true);

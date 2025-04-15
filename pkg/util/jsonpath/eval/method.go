@@ -25,6 +25,9 @@ func (ctx *jsonpathCtx) evalMethod(
 		if err != nil {
 			return nil, err
 		}
+		if size == -1 {
+			return nil, nil
+		}
 		return []json.JSON{json.FromInt(size)}, nil
 	case jsonpath.TypeMethod:
 		t := ctx.evalType(jsonValue)
@@ -37,7 +40,7 @@ func (ctx *jsonpathCtx) evalMethod(
 func (ctx *jsonpathCtx) evalSize(jsonValue json.JSON) (int, error) {
 	if jsonValue.Type() != json.ArrayJSONType {
 		if ctx.strict {
-			return -1, errEvalSizeNotArray
+			return -1, maybeThrowError(ctx, errEvalSizeNotArray)
 		}
 		return 1, nil
 	}
