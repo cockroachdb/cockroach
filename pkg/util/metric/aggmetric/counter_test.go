@@ -46,7 +46,7 @@ func TestAggCounter(t *testing.T) {
 	c := NewSQLCounter(metric.Metadata{
 		Name: "foo_counter",
 	})
-	c.labelConfig.Store(LabelConfigAppAndDB)
+	c.sqlMetric.labelConfig.Store(LabelConfigAppAndDB)
 	r.AddMetric(c)
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
@@ -54,7 +54,7 @@ func TestAggCounter(t *testing.T) {
 			return size > 10
 		},
 	})
-	c.mu.children = &UnorderedCacheWrapper{
+	c.sqlMetric.mu.children = &UnorderedCacheWrapper{
 		cache: cacheStorage,
 	}
 

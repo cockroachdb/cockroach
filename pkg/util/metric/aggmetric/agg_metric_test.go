@@ -297,7 +297,7 @@ func TestAggMetricClear(t *testing.T) {
 		Name: "bar_counter",
 	})
 	r.AddMetric(d)
-	d.labelConfig.Store(LabelConfigAppAndDB)
+	d.sqlMetric.labelConfig.Store(LabelConfigAppAndDB)
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
@@ -309,7 +309,7 @@ func TestAggMetricClear(t *testing.T) {
 	})
 
 	c.clear()
-	d.mu.children.Clear()
+	d.sqlMetric.mu.children.Clear()
 
 	t.Run("post clear", func(t *testing.T) {
 		testFile := "aggMetric_post_clear.txt"

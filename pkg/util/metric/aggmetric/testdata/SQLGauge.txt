@@ -1,0 +1,5 @@
+echo
+----
+foo_gauge 23
+foo_gauge{database="1",application_name="1"} 15
+foo_gauge{database="2",application_name="2"} 8
