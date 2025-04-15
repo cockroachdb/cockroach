@@ -108,7 +108,7 @@ go_library(
         "//pkg/sql/storageparam",
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex/vecpb",
+        "//pkg/sql/vecindex",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/eventpb",
