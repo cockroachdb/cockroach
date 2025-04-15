@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -252,54 +251,8 @@ func (g *CounterFloat64) UpdateIfHigher(i float64) {
 // a SQLCounter creates child metrics dynamically while AggCounter needs the
 // child creation up front.
 type SQLCounter struct {
-	g           metric.Counter
-	labelConfig atomic.Uint64
-	mu          struct {
-		syncutil.Mutex
-		children ChildrenStorage
-	}
-}
-
-func (c *SQLCounter) Each(
-	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
-) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.mu.children.Do(func(e interface{}) {
-		cm := c.mu.children.GetChildMetric(e)
-		pm := cm.ToPrometheusMetric()
-
-		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+2)
-		childLabels = append(childLabels, labels...)
-		lvs := cm.labelValues()
-		dbLabel := dbLabel
-		appLabel := appLabel
-		switch c.labelConfig.Load() {
-		case LabelConfigDB:
-			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
-				Name:  &dbLabel,
-				Value: &lvs[0],
-			})
-		case LabelConfigApp:
-			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
-				Name:  &appLabel,
-				Value: &lvs[0],
-			})
-		case LabelConfigAppAndDB:
-			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
-				Name:  &dbLabel,
-				Value: &lvs[0],
-			})
-			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
-				Name:  &appLabel,
-				Value: &lvs[1],
-			})
-		default:
-		}
-		pm.Label = childLabels
-		f(pm)
-	})
+	g metric.Counter
+	*SQLMetric
 }
 
 var _ metric.Iterable = (*SQLCounter)(nil)
@@ -311,30 +264,8 @@ func NewSQLCounter(metadata metric.Metadata) *SQLCounter {
 	c := &SQLCounter{
 		g: *metric.NewCounter(metadata),
 	}
-	c.mu.children = &UnorderedCacheWrapper{
-		cache: getCacheStorage(),
-	}
-	c.labelConfig.Store(LabelConfigDisabled)
+	c.SQLMetric = NewSQLMetric(LabelConfigDisabled)
 	return c
-}
-
-// getOrAddChild returns the child metric for the given label values. If the child
-// doesn't exist, it creates a new one and adds it to the collection.
-func (c *SQLCounter) getOrAddChild(labelValues ...string) ChildMetric {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// If the child already exists, return it.
-	if child, ok := c.mu.children.Get(labelValues...); ok {
-		return child
-	}
-
-	// Otherwise, create a new child and return it.
-	child := &SQLChildCounter{
-		labelValuesSlice: labelValuesSlice(labelValues),
-	}
-	c.mu.children.Add(child)
-	return child
 }
 
 // GetType is part of the metric.PrometheusExportable interface.
@@ -389,17 +320,11 @@ func (c *SQLCounter) Inspect(f func(interface{})) {
 func (c *SQLCounter) Inc(i int64, db, app string) {
 	c.g.Inc(i)
 
-	var childMetric ChildMetric
-	switch c.labelConfig.Load() {
-	case LabelConfigDB:
-		childMetric = c.getOrAddChild(db)
-	case LabelConfigApp:
-		childMetric = c.getOrAddChild(app)
-	case LabelConfigAppAndDB:
-		childMetric = c.getOrAddChild(db, app)
-	default:
+	childMetric, isChildMetricEnabled := c.getChildByLabelConfig(*c.GetType(), db, app)
+	if !isChildMetricEnabled {
 		return
 	}
+
 	childMetric.(*SQLChildCounter).Inc(i)
 }
 

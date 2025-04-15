@@ -11,6 +11,7 @@ package aggmetric
 import (
 	"hash/fnv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -166,6 +167,128 @@ func (cs *childSet) clear() {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.mu.children.Clear()
+}
+
+type SQLMetric struct {
+	labelConfig atomic.Uint64
+	mu          struct {
+		syncutil.Mutex
+		children ChildrenStorage
+	}
+}
+
+func NewSQLMetric(labelConfig uint64) *SQLMetric {
+	sm := &SQLMetric{}
+	sm.labelConfig.Store(labelConfig)
+	sm.mu.children = &UnorderedCacheWrapper{
+		cache: getCacheStorage(),
+	}
+	return sm
+}
+
+func (sm *SQLMetric) Each(
+	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	sm.mu.children.Do(func(e interface{}) {
+		cm := sm.mu.children.GetChildMetric(e)
+		pm := cm.ToPrometheusMetric()
+
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+2)
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		dbLabel := dbLabel
+		appLabel := appLabel
+		switch sm.labelConfig.Load() {
+		case LabelConfigDB:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &dbLabel,
+				Value: &lvs[0],
+			})
+		case LabelConfigApp:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &appLabel,
+				Value: &lvs[0],
+			})
+		case LabelConfigAppAndDB:
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &dbLabel,
+				Value: &lvs[0],
+			})
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &appLabel,
+				Value: &lvs[1],
+			})
+		default:
+		}
+		pm.Label = childLabels
+		f(pm)
+	})
+}
+
+func (sm *SQLMetric) get(labelVals ...string) (ChildMetric, bool) {
+	return sm.mu.children.Get(labelVals...)
+}
+
+func (sm *SQLMetric) add(metric ChildMetric) {
+	sm.mu.children.Add(metric)
+}
+
+// getOrAddChild returns the child metric for the given label values. If the child
+// doesn't exist, it creates a new one and adds it to the collection.
+func (sm *SQLMetric) getOrAddChild(
+	metricType io_prometheus_client.MetricType, labelValues ...string,
+) ChildMetric {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// If the child already exists, return it.
+	if child, ok := sm.get(labelValues...); ok {
+		return child
+	}
+
+	// Otherwise, create a new child, add and return it.
+	var child ChildMetric
+	switch metricType {
+	case io_prometheus_client.MetricType_COUNTER:
+		child = &SQLChildCounter{
+			labelValuesSlice: labelValuesSlice(labelValues),
+		}
+	case io_prometheus_client.MetricType_GAUGE:
+		child = &SQLChildGauge{
+			labelValuesSlice: labelValuesSlice(labelValues),
+		}
+	default:
+		panic(errors.AssertionFailedf("unrecognised metric type %v", metricType))
+	}
+
+	sm.add(child)
+	return child
+}
+
+// getChildByLabelConfig returns the child metric based on the label configuration.
+// It returns the child metric and a boolean indicating if the child was found.
+// If the label configuration is either LabelConfigDisabled or unrecognised, it returns
+// ChildMetric as nil and false.
+func (sm *SQLMetric) getChildByLabelConfig(
+	metricType io_prometheus_client.MetricType, db string, app string,
+) (ChildMetric, bool) {
+	var childMetric ChildMetric
+	switch sm.labelConfig.Load() {
+	case LabelConfigDB:
+		childMetric = sm.getOrAddChild(metricType, db)
+		return childMetric, true
+	case LabelConfigApp:
+		childMetric = sm.getOrAddChild(metricType, app)
+		return childMetric, true
+	case LabelConfigAppAndDB:
+		childMetric = sm.getOrAddChild(metricType, db, app)
+		return childMetric, true
+	default:
+		return nil, false
+	}
 }
 
 type MetricItem interface {
