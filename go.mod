@@ -34,7 +34,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
-	github.com/google/btree v1.1.3
+	github.com/google/btree v1.1.3 // indirect
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
@@ -103,6 +103,7 @@ require (
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
+	github.com/RaduBerinde/btree v1.0.2-0.20250415192849-8beea01764ce
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9

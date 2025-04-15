@@ -8,11 +8,11 @@ package scgraph
 import (
 	"sync"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 // edgeTreeOrder order in which the edge tree is sorted,
