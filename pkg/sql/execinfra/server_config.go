@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -258,6 +259,10 @@ type TestingKnobs struct {
 	// processor pushes the spans for which it has successfully backfilled the
 	// indexes.
 	IndexBackfillProgressReportInterval time.Duration
+
+	// RunDuringReencodeVectorIndexEntry is called during vector index entry backfill to
+	// simulate a transaction error.
+	RunDuringReencodeVectorIndexEntry func(txn *kv.Txn) error
 
 	// ForceDiskSpill forces any processors/operators that can fall back to disk
 	// to fall back to disk immediately.
