@@ -485,17 +485,19 @@ type VectorIndexHelper struct {
 // context of the provided transaction. This lookup then gives the leaf partition
 // where the index entry is to be inserted and the unquantized vector can then be
 // re-encoded to get the properly quantized vector with the new partition's
-// centroid.
+// centroid. The new key is then returned in the outputEntry. The inputEntry is
+// not overwritten in case the transaction has to be retried.
 func (vih *VectorIndexHelper) ReEncodeVector(
-	ctx context.Context, txn *kv.Txn, keyBytes []byte, entry *rowenc.IndexEntry,
+	ctx context.Context, txn *kv.Txn, inputEntry rowenc.IndexEntry, outputEntry *rowenc.IndexEntry,
 ) (*rowenc.IndexEntry, error) {
+	keyBytes := inputEntry.Key[len(vih.indexPrefix):]
 	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols)
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
 
 	// Decode vector and suffix bytes from the entry value.
-	valueBytes, err := entry.Value.GetBytes()
+	valueBytes, err := inputEntry.Value.GetBytes()
 	if err != nil {
 		return &rowenc.IndexEntry{}, err
 	}
@@ -517,16 +519,16 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 		panic("expected encoded vector to be of type DBytes")
 	}
 
-	entry.Key = entry.Key[:0]
-	entry.Key = append(entry.Key, vih.indexPrefix...)
-	entry.Key = key.Encode(entry.Key)
+	outputEntry.Key = append(outputEntry.Key[:0], vih.indexPrefix...)
+	outputEntry.Key = key.Encode(outputEntry.Key)
+
 	entryValueLen := vecencoding.EncodedVectorValueLen(quantizedVector.UnsafeBytes(), suffix)
-	buf := entry.Value.AllocBytes(entryValueLen)[:0]
+	buf := outputEntry.Value.AllocBytes(entryValueLen)[:0]
 	vecencoding.EncodeVectorValue(buf, quantizedVector.UnsafeBytes(), suffix)
 
-	// entry.Family is left unchanged from the entry we received, originally encoded by rowenc.EncodeSecondaryIndexes()
+	outputEntry.Family = inputEntry.Family
 
-	return entry, nil
+	return outputEntry, nil
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
