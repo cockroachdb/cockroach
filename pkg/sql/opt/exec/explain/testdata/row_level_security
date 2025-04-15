@@ -421,3 +421,94 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
           table: t2@t2_pkey
           spans: FULL SCAN
           policies: t2_pol_1
+
+# Show that policies are shown for UPSERT (and its variations).
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE ups (pk int not null primary key, comment text);
+----
+
+exec-ddl
+ALTER TABLE ups OWNER TO rls_accessor
+----
+
+exec-ddl
+ALTER TABLE ups ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY p_ins ON ups FOR INSERT USING (comment = 'insert');
+----
+
+exec-ddl
+CREATE POLICY p_sel ON ups FOR SELECT USING (comment = 'select');
+----
+
+exec-ddl
+CREATE POLICY p_upd ON ups FOR UPDATE USING (comment = 'update');
+----
+
+plan
+UPSERT INTO ups VALUES (1, 'first value');
+----
+• upsert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel, p_upd
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              table: ups@ups_pkey
+              spans: 1+ spans
+              locking strength: for update
+
+plan
+INSERT INTO ups VALUES (1, 'first value') ON CONFLICT (pk) DO UPDATE SET comment = 'second value';
+----
+• upsert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel, p_upd
+│
+└── • render
+    │
+    └── • render
+        │
+        └── • cross join (left outer)
+            │
+            ├── • values
+            │     size: 2 columns, 1 row
+            │
+            └── • scan
+                  table: ups@ups_pkey
+                  spans: 1+ spans
+                  locking strength: for update
+
+plan
+INSERT INTO ups VALUES (1, 'first value') ON CONFLICT (pk) DO NOTHING;
+----
+• insert
+│ into: ups(pk, comment)
+│ auto commit
+│ arbiter indexes: ups_pkey
+│ policies: p_ins, p_sel
+│
+└── • render
+    │
+    └── • cross join (anti)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              table: ups@ups_pkey
+              spans: 1+ spans
