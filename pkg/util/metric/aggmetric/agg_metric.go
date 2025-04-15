@@ -236,11 +236,11 @@ func (sm *SQLMetric) add(metric ChildMetric) {
 	sm.mu.children.Add(metric)
 }
 
+type createChildMetricFunc func(labelValues labelValuesSlice) ChildMetric
+
 // getOrAddChild returns the child metric for the given label values. If the child
 // doesn't exist, it creates a new one and adds it to the collection.
-func (sm *SQLMetric) getOrAddChild(
-	metricType io_prometheus_client.MetricType, labelValues ...string,
-) ChildMetric {
+func (sm *SQLMetric) getOrAddChild(f createChildMetricFunc, labelValues ...string) ChildMetric {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -249,20 +249,7 @@ func (sm *SQLMetric) getOrAddChild(
 		return child
 	}
 
-	// Otherwise, create a new child, add and return it.
-	var child ChildMetric
-	switch metricType {
-	case io_prometheus_client.MetricType_COUNTER:
-		child = &SQLChildCounter{
-			labelValuesSlice: labelValuesSlice(labelValues),
-		}
-	case io_prometheus_client.MetricType_GAUGE:
-		child = &SQLChildGauge{
-			labelValuesSlice: labelValuesSlice(labelValues),
-		}
-	default:
-		panic(errors.AssertionFailedf("unrecognised metric type %v", metricType))
-	}
+	child := f(labelValues)
 
 	sm.add(child)
 	return child
@@ -273,18 +260,18 @@ func (sm *SQLMetric) getOrAddChild(
 // If the label configuration is either LabelConfigDisabled or unrecognised, it returns
 // ChildMetric as nil and false.
 func (sm *SQLMetric) getChildByLabelConfig(
-	metricType io_prometheus_client.MetricType, db string, app string,
+	f createChildMetricFunc, db string, app string,
 ) (ChildMetric, bool) {
 	var childMetric ChildMetric
 	switch sm.labelConfig.Load() {
 	case LabelConfigDB:
-		childMetric = sm.getOrAddChild(metricType, db)
+		childMetric = sm.getOrAddChild(f, db)
 		return childMetric, true
 	case LabelConfigApp:
-		childMetric = sm.getOrAddChild(metricType, app)
+		childMetric = sm.getOrAddChild(f, app)
 		return childMetric, true
 	case LabelConfigAppAndDB:
-		childMetric = sm.getOrAddChild(metricType, db, app)
+		childMetric = sm.getOrAddChild(f, db, app)
 		return childMetric, true
 	default:
 		return nil, false
