@@ -1876,12 +1876,16 @@ func (s *fakeKafkaSinkV2) Dial() error {
 				})
 			}
 
-			s.feedCh <- &sarama.ProducerMessage{
+			select {
+			case <-ctx.Done():
+				return kgo.ProduceResults{kgo.ProduceResult{Err: ctx.Err()}}
+			case s.feedCh <- &sarama.ProducerMessage{
 				Topic:     m.Topic,
 				Key:       key,
 				Value:     sarama.ByteEncoder(m.Value),
 				Partition: m.Partition,
 				Headers:   headers,
+			}:
 			}
 		}
 		return nil
