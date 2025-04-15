@@ -161,21 +161,27 @@ func (b *Benchmark) run() error {
 
 	// Concat profiles.
 	for _, profileType := range []ProfileType{ProfileCPU, ProfileMemory, ProfileMutex} {
-		err := b.concatProfile(profileType, tries*b.Count)
-		if err != nil {
-			return errors.Wrapf(err, "failed to concat %s profiles", profileType)
+		for try := range tries {
+			err := b.concatProfile(profileType, try, b.Count)
+			if err != nil {
+				return errors.Wrapf(err, "failed to concat %s profiles", profileType)
+			}
 		}
 	}
 	return nil
 }
 
-func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
+// concatProfile concatenates the profiles for the given profile type and
+// revision. Start is the try number, and count is the number of iterations
+// per try.
+func (b *Benchmark) concatProfile(profileType ProfileType, start, count int) error {
+	offset := start * b.Count
 	for _, revision := range []Revision{New, Old} {
 		profiles := make([]*profile.Profile, 0, b.Count)
-		deleteProfiles := make([]func() error, 0)
+		deleteProfiles := make([]string, 0)
 		for i := 1; i <= count; i++ {
 			profilePath := path.Join(suite.artifactsDir(revision),
-				b.profile(profileType, fmt.Sprintf("%d", i)))
+				b.profile(profileType, fmt.Sprintf("%d", offset+i)))
 			profileData, err := os.ReadFile(profilePath)
 			if err != nil {
 				return err
@@ -185,15 +191,13 @@ func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
 				return err
 			}
 			profiles = append(profiles, p)
-			deleteProfiles = append(deleteProfiles, func() error {
-				return os.Remove(profilePath)
-			})
+			deleteProfiles = append(deleteProfiles, profilePath)
 		}
 		merged, err := profile.Merge(profiles)
 		if err != nil {
 			return err
 		}
-		mergedPath := path.Join(suite.artifactsDir(revision), b.profile(profileType, "merged"))
+		mergedPath := path.Join(suite.artifactsDir(revision), b.profile(profileType, fmt.Sprintf("merged_%d", start+1)))
 		f, err := os.Create(mergedPath)
 		if err != nil {
 			return err
@@ -205,8 +209,8 @@ func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
 		if err = f.Close(); err != nil {
 			return err
 		}
-		for _, deleteProfile := range deleteProfiles {
-			if err = deleteProfile(); err != nil {
+		for _, path := range deleteProfiles {
+			if err = os.Remove(path); err != nil {
 				return err
 			}
 		}
