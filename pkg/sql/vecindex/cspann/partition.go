@@ -69,6 +69,23 @@ func NewPartition(
 	}
 }
 
+// Init initializes an existing partition's data, overwriting any existing data.
+func (p *Partition) Init(
+	metadata PartitionMetadata,
+	quantizer quantize.Quantizer,
+	quantizedSet quantize.QuantizedVectorSet,
+	childKeys []ChildKey,
+	valueBytes []ValueBytes,
+) {
+	*p = Partition{
+		metadata:     metadata,
+		quantizer:    quantizer,
+		quantizedSet: quantizedSet,
+		childKeys:    childKeys,
+		valueBytes:   valueBytes,
+	}
+}
+
 // Clone makes a deep copy of this partition. Changes to the original or clone
 // do not affect the other.
 func (p *Partition) Clone() *Partition {

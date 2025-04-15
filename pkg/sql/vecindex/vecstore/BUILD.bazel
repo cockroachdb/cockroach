@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "vecstore",
     srcs = [
+        "codec.go",
         "store.go",
         "store_txn.go",
     ],
@@ -30,12 +31,14 @@ go_library(
         "//pkg/util/unique",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pkg_errors//:errors",
     ],
 )
 
 go_test(
     name = "vecstore_test",
     srcs = [
+        "codec_test.go",
         "main_test.go",
         "store_test.go",
     ],
@@ -57,6 +60,7 @@ go_test(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/commontest",
         "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/vecencoding",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/encoding",
