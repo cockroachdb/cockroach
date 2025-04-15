@@ -88,6 +88,11 @@ type TenantStreamingClustersArgs struct {
 	ExternalIODir                   string
 
 	RoutingMode streamclient.RoutingMode
+
+	// If set, the host virtual cluster will be initialized with these, unlike
+	// DestClusterSettings and SrcClusterSettings, which are set after the cluster
+	// spins up.
+	InitSettings *cluster.Settings
 }
 
 var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
@@ -432,6 +437,7 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 			},
 		},
 		ExternalIODir: args.ExternalIODir,
+		Settings:      args.InitSettings,
 	}
 }
 
