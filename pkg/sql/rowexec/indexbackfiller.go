@@ -181,7 +181,7 @@ func (ib *indexBackfiller) constructIndexEntries(
 	return nil
 }
 
-func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
+func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 	ctx context.Context, tmpEntry *rowenc.IndexEntry, indexEntry *rowenc.IndexEntry,
 ) (bool, error) {
 	indexID, _, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
@@ -271,12 +271,13 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	// When the bulk adder flushes, the spans which were previously marked as
 	// "added" can now be considered "completed", and be sent back to the
 	// coordinator node as part of the next progress report.
-	adder.SetOnFlush(func(_ kvpb.BulkOpSummary) {
+	flushAddedSpans := func(_ kvpb.BulkOpSummary) {
 		mu.Lock()
 		defer mu.Unlock()
 		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
 		mu.addedSpans = nil
-	})
+	}
+	adder.SetOnFlush(flushAddedSpans)
 
 	pushProgress := func() {
 		mu.Lock()
@@ -320,9 +321,9 @@ func (ib *indexBackfiller) ingestIndexEntries(
 				// TODO(mw5h): batch up multiple index entries into a single batch.
 				// As is, we insert a single vector per batch, which is very slow.
 				if len(ib.VectorIndexes) > 0 {
-					isVectorIndex, err := ib.maybeReencodeVectorIndexEntry(ctx, &vectorInputEntry, &indexEntry)
+					isVectorIndex, err := ib.maybeReencodeAndWriteVectorIndexEntry(ctx, &vectorInputEntry, &indexEntry)
 					if err != nil {
-						return err
+						return ib.wrapDupError(ctx, err)
 					} else if isVectorIndex {
 						continue
 					}
@@ -372,10 +373,10 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 	// If there are only vector indexes, we push the completed spans manually so that
 	// progress reporting works.
+	// TODO(mw5h): this is a hack to get progress reporting to work for vector only
+	// backfills. We should remove this once we have a more permanent solution.
 	if ib.VectorOnly {
-		mu.Lock()
-		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
-		mu.Unlock()
+		flushAddedSpans(kvpb.BulkOpSummary{})
 	}
 	if err := adder.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
