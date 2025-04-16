@@ -277,16 +277,16 @@ func TestIndexForDisplay(t *testing.T) {
 			tableName:   descpb.AnonymousTable,
 			partition:   "",
 			displayMode: IndexDisplayDefOnly,
-			expected:    "VECTOR INDEX baz (a)",
-			pgExpected:  "INDEX baz USING cspann (a)",
+			expected:    "VECTOR INDEX baz (a vector_l2_ops)",
+			pgExpected:  "INDEX baz USING cspann (a vector_l2_ops)",
 		},
 		{
 			index:       vectorIndex,
 			tableName:   tableName,
 			partition:   "",
 			displayMode: IndexDisplayShowCreate,
-			expected:    "CREATE VECTOR INDEX baz ON foo.public.bar (a)",
-			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING cspann (a)",
+			expected:    "CREATE VECTOR INDEX baz ON foo.public.bar (a vector_l2_ops)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING cspann (a vector_l2_ops)",
 		},
 	}
 

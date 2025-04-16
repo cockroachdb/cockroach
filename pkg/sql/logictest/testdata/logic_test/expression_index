@@ -29,7 +29,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 )
 
@@ -48,7 +48,7 @@ CREATE TABLE public.t (
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3))),
+  VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
 )
 
@@ -528,7 +528,7 @@ CREATE TABLE public.copy_indexes (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)))
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -557,7 +557,7 @@ CREATE TABLE public.copy_all (
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)))
+  VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
