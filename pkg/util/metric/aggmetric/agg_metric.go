@@ -13,11 +13,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -86,8 +86,21 @@ type childSet struct {
 
 func (cs *childSet) initWithBTreeStorageType(labels []string) {
 	cs.labels = labels
+	lessFn := func(a, b MetricItem) bool {
+		ov, lv := a.labelValues(), b.labelValues()
+		if len(ov) != len(lv) {
+			panic(errors.AssertionFailedf("mismatch in label values lengths %v vs %v", ov, lv))
+		}
+		for i := range ov {
+			if cmp := strings.Compare(lv[i], ov[i]); cmp != 0 {
+				return cmp < 0
+			}
+		}
+		return false
+	}
+
 	cs.mu.children = &BtreeWrapper{
-		tree: btree.New(8),
+		tree: btree.NewG[MetricItem](8, lessFn),
 	}
 }
 
@@ -293,11 +306,6 @@ type MetricItem interface {
 	labelValuer
 }
 
-type BtreeMetricItem interface {
-	btree.Item
-	MetricItem
-}
-
 type CacheMetricItem interface {
 	MetricItem
 }
@@ -377,34 +385,33 @@ func (ucw *UnorderedCacheWrapper) Clear() {
 }
 
 type BtreeWrapper struct {
-	tree *btree.BTree
+	tree *btree.BTreeG[MetricItem]
 }
 
 func (b BtreeWrapper) Get(labelVals ...string) (ChildMetric, bool) {
 	key := labelValuesSlice(labelVals)
-	cm := b.tree.Get(&key)
-	if cm == nil {
+	cm, ok := b.tree.Get(&key)
+	if !ok {
 		return nil, false
 	}
 	return cm.(ChildMetric), true
 }
 
 func (b BtreeWrapper) Add(metric ChildMetric) {
-	if b.tree.Has(metric.(BtreeMetricItem)) {
+	if b.tree.Has(metric) {
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
-	b.tree.ReplaceOrInsert(metric.(BtreeMetricItem))
+	b.tree.ReplaceOrInsert(metric)
 }
 
 func (b BtreeWrapper) Del(metric ChildMetric) {
-	if existing := b.tree.Delete(metric.(btree.Item)); existing == nil {
-		panic(errors.AssertionFailedf(
-			"child %v does not exists", metric.labelValues()))
+	if _, ok := b.tree.Delete(metric); !ok {
+		panic(errors.AssertionFailedf("child %v does not exist", metric.labelValues()))
 	}
 }
 
 func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
-	b.tree.Ascend(func(i btree.Item) bool {
+	b.tree.Ascend(func(i MetricItem) bool {
 		f(i.(ChildMetric))
 		return true
 	})
@@ -412,18 +419,4 @@ func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 
 func (b BtreeWrapper) Clear() {
 	b.tree.Clear(false)
-}
-
-func (lv *labelValuesSlice) Less(o btree.Item) bool {
-	ov := o.(labelValuer).labelValues()
-	if len(ov) != len(*lv) {
-		panic(errors.AssertionFailedf("mismatch in label values lengths %v vs %v",
-			ov, *lv))
-	}
-	for i := range ov {
-		if cmp := strings.Compare((*lv)[i], ov[i]); cmp != 0 {
-			return cmp < 0
-		}
-	}
-	return false // eq
 }
