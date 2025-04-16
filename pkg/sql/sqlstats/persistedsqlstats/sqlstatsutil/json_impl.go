@@ -344,6 +344,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
 		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
 		{"failureCount", (*jsonInt)(&s.FailureCount)},
+		{"genericCount", (*jsonInt)(&s.GenericCount)},
 	}
 }
 

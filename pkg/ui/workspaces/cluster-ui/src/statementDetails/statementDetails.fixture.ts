@@ -30,6 +30,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
     stats: {
       count: new Long(0),
       failure_count: new Long(0),
+      generic_count: new Long(0),
       first_attempt_count: new Long(0),
       max_retries: new Long(0),
       legacy_last_err: "",
@@ -86,6 +87,7 @@ const statementDetailsData: StatementDetailsResponse = {
     stats: {
       count: new Long(5),
       failure_count: new Long(2),
+      generic_count: new Long(1),
       first_attempt_count: new Long(5),
       max_retries: new Long(0),
       legacy_last_err: "",

@@ -38,6 +38,7 @@ const cx = classNames.bind(styles);
 const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
   avgRowsRead: "Average Rows Read",
+  generic: "Generic Query Plan",
   distSQL: "Distributed",
   execCount: "Execution Count",
   fullScan: "Full Scan",
@@ -154,6 +155,17 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
         content={"If the Explain Plan executed a full scan."}
       >
         {planDetailsColumnLabels.fullScan}
+      </Tooltip>
+    );
+  },
+  generic: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If the Explain Plan was generic."}
+      >
+        {planDetailsColumnLabels.generic}
       </Tooltip>
     );
   },
@@ -366,6 +378,14 @@ export function makeExplainPlanColumns(
       cell: (item: PlanHashStats) =>
         formatNumberForDisplay(item.stats.latency_info.max, duration),
       sort: (item: PlanHashStats) => item.stats.latency_info.max,
+    },
+    {
+      name: "generic",
+      title: planDetailsTableTitles.generic(),
+      cell: (item: PlanHashStats) =>
+        RenderCount(item.stats.generic_count, item.stats.count),
+      sort: (item: PlanHashStats) =>
+        RenderCount(item.stats.generic_count, item.stats.count),
     },
     {
       name: "distSQL",

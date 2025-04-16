@@ -190,6 +190,10 @@ function ExplainPlan({
               )}
             />
             <SummaryCardItem
+              label="Generic Query Plan"
+              value={RenderCount(plan.stats.generic_count, plan.stats.count)}
+            />
+            <SummaryCardItem
               label="Distributed"
               value={RenderCount(
                 plan.metadata.dist_sql_count,
