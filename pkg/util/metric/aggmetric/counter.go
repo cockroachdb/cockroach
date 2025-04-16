@@ -320,12 +320,18 @@ func (c *SQLCounter) Inspect(f func(interface{})) {
 func (c *SQLCounter) Inc(i int64, db, app string) {
 	c.g.Inc(i)
 
-	childMetric, isChildMetricEnabled := c.getChildByLabelConfig(*c.GetType(), db, app)
+	childMetric, isChildMetricEnabled := c.getChildByLabelConfig(c.createChildCounter, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
 
 	childMetric.(*SQLChildCounter).Inc(i)
+}
+
+func (c *SQLCounter) createChildCounter(labelValues labelValuesSlice) ChildMetric {
+	return &SQLChildCounter{
+		labelValuesSlice: labelValues,
+	}
 }
 
 // SQLChildCounter is a child of a SQLCounter. When metrics are collected by prometheus,
