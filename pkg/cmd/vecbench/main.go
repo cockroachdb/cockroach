@@ -250,7 +250,7 @@ func (vb *vectorBench) SearchIndex() {
 	doSearch := func(beamSize int) {
 		// Prepare to search.
 		maxResults := *flagMaxResults
-		state, err := vb.provider.PrepareSearch(vb.ctx, maxResults, beamSize)
+		state, err := vb.provider.SetupSearch(vb.ctx, maxResults, beamSize)
 		if err != nil {
 			panic(err)
 		}

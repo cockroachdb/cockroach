@@ -75,6 +75,7 @@ feature.import.enabled	boolean	true	set to true to enable imports, false to disa
 feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	application
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	application
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	application
+feature.vector_index.enabled	boolean	false	set to true to enable vector indexes, false to disable; default is false	application
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	application
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	system-visible
 kv.closed_timestamp.follower_reads.enabled (alias: kv.closed_timestamp.follower_reads_enabled)	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible

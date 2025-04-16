@@ -38,6 +38,9 @@ func TestVecindexConcurrency(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	mgr := srv.ExecutorConfig().(sql.ExecutorConfig).VecIndexManager
 
+	// Enable vector indexes.
+	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
 	// Construct the table.
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")
 
