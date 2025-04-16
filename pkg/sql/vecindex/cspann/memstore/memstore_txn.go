@@ -53,34 +53,6 @@ type memTxn struct {
 	}
 }
 
-// GetPartition implements the Txn interface.
-func (tx *memTxn) GetPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (*cspann.Partition, error) {
-	return nil, errors.AssertionFailedf("GetPartition is not implemented")
-}
-
-// SetRootPartition implements the Txn interface.
-func (tx *memTxn) SetRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) error {
-	return errors.AssertionFailedf("SetRootPartition is not implemented")
-}
-
-// InsertPartition implements the Txn interface.
-func (tx *memTxn) InsertPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) (cspann.PartitionKey, error) {
-	return cspann.InvalidKey, errors.AssertionFailedf("InsertPartition is not implemented")
-}
-
-// DeletePartition implements the Txn interface.
-func (tx *memTxn) DeletePartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) error {
-	return errors.AssertionFailedf("DeletePartition is not implemented")
-}
-
 // GetPartitionMetadata implements the Txn interface.
 func (tx *memTxn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,

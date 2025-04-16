@@ -63,10 +63,6 @@ type IndexOptions struct {
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
 	MaxWorkers int
-	// UseNewFixups specifies that the background fixup processor should use new
-	// split and merge fixup implementations that avoid the use of transactions.
-	// TODO(andyk): Remove this once we've fully converted to the new fixups.
-	UseNewFixups bool
 	// StalledOpTimeout can be called to determine how long a split/merge
 	// operation can stay in the same state before another worker may attempt to
 	// assist. If this is nil, then a default value is used.

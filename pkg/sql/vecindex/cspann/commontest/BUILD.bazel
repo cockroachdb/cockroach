@@ -12,8 +12,6 @@ go_library(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
-        "//pkg/sql/vecindex/cspann/workspace",
-        "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
