@@ -4,13 +4,14 @@
 // included in the /LICENSE file.
 
 import moment from "moment/moment";
-import { useEffect, useCallback, useRef, useContext } from "react";
+import { useEffect, useCallback, useRef, useContext, useState } from "react";
 import useSWR, { SWRConfiguration, SWRResponse } from "swr";
 import { Arguments, Fetcher } from "swr/_internal";
 import useSWRImmutable from "swr/immutable";
 import useSWRMutation, { SWRMutationConfiguration } from "swr/mutation";
 
 import { ClusterDetailsContext } from "../contexts";
+import { ISortedTablePagination } from "../sortedtable";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -192,4 +193,29 @@ export const useSwrMutationWithClusterId = <
 ) => {
   const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
   return useSWRMutation(keyWithClusterId, fetcher, config);
+};
+
+export const usePagination = (
+  defaultPage: number,
+  defaultPageSize: number,
+): [
+  ISortedTablePagination,
+  (current: number, pageSize: number) => void,
+  () => void,
+] => {
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: defaultPage,
+    pageSize: defaultPageSize,
+  });
+  const updatePagination = (current: number, pageSize: number) => {
+    setPagination({
+      ...pagination,
+      current,
+      pageSize,
+    });
+  };
+  const resetPagination = () => {
+    updatePagination(defaultPage, defaultPageSize);
+  };
+  return [pagination, updatePagination, resetPagination];
 };
