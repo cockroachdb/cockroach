@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
@@ -18,6 +20,7 @@ CREATE VECTOR INDEX ON simple (vec1)
 statement ok
 CREATE INDEX ON simple USING cspann (vec1 ASC);
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -30,6 +33,20 @@ simple  CREATE TABLE public.simple (
           VECTOR INDEX simple_vec1_idx2 (vec1),
           FAMILY fam_0_a_vec1 (a, vec1)
         )
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE simple
+----
+simple  CREATE TABLE public.simple (
+          a INT8 NOT NULL,
+          vec1 VECTOR(3) NULL,
+          CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
+          VECTOR INDEX simple_vec1_idx (vec1),
+          VECTOR INDEX simple_vec1_idx1 (vec1),
+          VECTOR INDEX simple_vec1_idx2 (vec1),
+          FAMILY fam_0_a_vec1 (a, vec1)
+        ) WITH (schema_locked = true)
 
 statement ok
 SHOW INDEX FROM simple
@@ -81,6 +98,7 @@ CREATE TABLE multiple_indexes (
   FAMILY (a, vec1, vec2)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE multiple_indexes
 ----
@@ -93,6 +111,20 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     VECTOR INDEX multiple_indexes_vec2_idx (vec2),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
                   )
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE multiple_indexes
+----
+multiple_indexes  CREATE TABLE public.multiple_indexes (
+                    a INT8 NOT NULL,
+                    vec1 VECTOR(3) NULL,
+                    vec2 VECTOR(1000) NULL,
+                    CONSTRAINT multiple_indexes_pkey PRIMARY KEY (a ASC),
+                    VECTOR INDEX multiple_indexes_vec1_idx (vec1),
+                    VECTOR INDEX multiple_indexes_vec2_idx (vec2),
+                    FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
+                  ) WITH (schema_locked = true)
 
 statement ok
 DROP INDEX multiple_indexes_vec1_idx;
@@ -117,6 +149,7 @@ CREATE TABLE prefix_cols (
 statement ok
 CREATE VECTOR INDEX another_index ON prefix_cols (b, c DESC, vec1)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE prefix_cols
 ----
@@ -130,6 +163,21 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                VECTOR INDEX another_index (b ASC, c DESC, vec1),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              )
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE prefix_cols
+----
+prefix_cols  CREATE TABLE public.prefix_cols (
+               a INT8 NOT NULL,
+               b INT8 NULL,
+               c INT8 NULL,
+               vec1 VECTOR(3) NULL,
+               CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1),
+               VECTOR INDEX another_index (b ASC, c DESC, vec1),
+               FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
+             ) WITH (schema_locked = true)
 
 statement ok
 DROP TABLE prefix_cols
@@ -242,6 +290,7 @@ CREATE TABLE alter_test (
 statement ok
 ALTER TABLE alter_test ALTER PRIMARY KEY USING COLUMNS (b)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE alter_test
 ----
@@ -254,6 +303,20 @@ alter_test  CREATE TABLE public.alter_test (
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
             )
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE alter_test
+----
+alter_test  CREATE TABLE public.alter_test (
+              a INT8 NOT NULL,
+              b INT8 NOT NULL,
+              vec1 VECTOR(3) NULL,
+              CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
+              VECTOR INDEX alter_test_vec1_idx (vec1),
+              UNIQUE INDEX alter_test_a_key (a ASC),
+              FAMILY fam_0_a_b_vec1 (a, b, vec1)
+            ) WITH (schema_locked = true)
 
 statement ok
 DROP TABLE alter_test

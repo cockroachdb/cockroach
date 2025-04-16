@@ -40,7 +40,8 @@ ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('diff_db.test_seq')
 statement ok
 SELECT nextval('diff_db.test_seq')
 
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
@@ -51,7 +52,8 @@ foo  CREATE TABLE public.foo (
        CONSTRAINT foo_pkey PRIMARY KEY (i ASC)
      ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
@@ -142,7 +144,8 @@ statement ok
 ALTER SEQUENCE s2 RENAME TO new_s2
 
 # Verify that the sequence rename is reflected.
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
@@ -153,7 +156,8 @@ bar  CREATE TABLE public.bar (
        FAMILY fam_0_i_j_k (i, j, k)
      ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
@@ -210,7 +214,8 @@ statement ok
 ALTER DATABASE other_db RENAME TO new_other_db
 
 # Verify that the database rename is reflected.
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE new_other_db.t
 ----
 new_other_db.public.t  CREATE TABLE public.t (
@@ -221,7 +226,8 @@ new_other_db.public.t  CREATE TABLE public.t (
                          FAMILY fam_0_i_j_rowid (i, j, rowid)
                        ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE new_other_db.t
 ----
 new_other_db.public.t  CREATE TABLE public.t (
@@ -285,7 +291,8 @@ statement ok
 ALTER SEQUENCE sc_s2 SET SCHEMA test_schema
 
 # Verify that the schema change is reflected.
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE tb
 ----
 tb  CREATE TABLE public.tb (
@@ -296,7 +303,8 @@ tb  CREATE TABLE public.tb (
       FAMILY fam_0_i_j_k (i, j, k)
     ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE tb
 ----
 tb  CREATE TABLE public.tb (
@@ -351,7 +359,8 @@ statement ok
 ALTER SCHEMA test_schema RENAME to new_test_schema
 
 # Verify that the schema rename is reflected.
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE new_test_schema.foo
 ----
 new_test_schema.foo  CREATE TABLE new_test_schema.foo (
@@ -362,7 +371,8 @@ new_test_schema.foo  CREATE TABLE new_test_schema.foo (
                        FAMILY fam_0_i_j_k (i, j, k)
                      ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE new_test_schema.foo
 ----
 new_test_schema.foo  CREATE TABLE new_test_schema.foo (
@@ -428,7 +438,8 @@ CREATE TABLE t2 (
 statement ok
 ALTER SEQUENCE s5 RENAME TO s5_new
 
-query TT onlyif config local-schema-locked
+onlyif config local-schema-locked
+query TT
 SHOW CREATE TABLE t2
 ----
 t2  CREATE TABLE public.t2 (
@@ -439,7 +450,8 @@ t2  CREATE TABLE public.t2 (
       FAMILY fam_0_i_j_rowid (i, j, rowid)
     ) WITH (schema_locked = true)
 
-query TT skipif config local-schema-locked
+skipif config local-schema-locked
+query TT
 SHOW CREATE TABLE t2
 ----
 t2  CREATE TABLE public.t2 (

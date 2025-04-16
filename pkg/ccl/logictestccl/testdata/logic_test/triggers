@@ -4016,7 +4016,7 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
 # Verify we log to the event log.
 query T retry
-select "eventType" from system.eventlog order by timestamp desc limit 1;
+select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_change' order by timestamp desc limit 1;
 ----
 create_trigger
 

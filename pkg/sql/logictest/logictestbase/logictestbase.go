@@ -616,6 +616,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist-disk",
 		"local-mixed-24.3",
 		"local-mixed-25.1",
+		"local-schema-locked",
 	),
 
 	// Special alias for all 5 node configs.

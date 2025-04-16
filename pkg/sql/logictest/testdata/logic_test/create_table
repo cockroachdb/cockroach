@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 subtest regression_42858
 
 statement ok

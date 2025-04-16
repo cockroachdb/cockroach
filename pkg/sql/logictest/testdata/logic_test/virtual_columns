@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Test that we don't allow FAMILY constraints with virtual columns.
 statement error virtual computed column "v" cannot be part of a family
 CREATE TABLE t (

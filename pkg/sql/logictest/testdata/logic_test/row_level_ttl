@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 subtest ttl_expire_after_must_be_interval
 
 statement error value of "ttl_expire_after" must be an interval
