@@ -497,7 +497,6 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController eval.SQLStatsController
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
 	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
@@ -505,9 +504,7 @@ func internalExtendedEvalCtx(
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
-			sqlStatsController = ief.server.sqlStatsController
 			schemaTelemetryController = ief.server.schemaTelemetryController
-			indexUsageStatsController = ief.server.indexUsageStatsController
 			sqlStatsProvider = ief.server.sqlStats
 			localSqlStatsProvider = ief.server.localSqlStats
 		} else {
@@ -517,7 +514,6 @@ func internalExtendedEvalCtx(
 			indexUsageStats = idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 				Setting: execCfg.Settings,
 			})
-			sqlStatsController = &persistedsqlstats.Controller{}
 			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
 			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
@@ -534,7 +530,7 @@ func internalExtendedEvalCtx(
 			TestingKnobs:                   evalContextTestingKnobs,
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,
-			SQLStatsController:             sqlStatsController,
+			SQLStatsController:             sqlStatsProvider,
 			SchemaTelemetryController:      schemaTelemetryController,
 			IndexUsageStatsController:      indexUsageStatsController,
 			ConsistencyChecker:             execCfg.ConsistencyChecker,

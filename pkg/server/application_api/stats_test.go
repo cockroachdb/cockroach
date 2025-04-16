@@ -63,8 +63,8 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	sqlServer := s.SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
 	// are unaffected by the calls to report diagnostics.
@@ -178,8 +178,8 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	// Execute some queries against the sqlDB to build up some stats.
 	// As we are scrubbing the stats, we want to make sure the app name
@@ -213,7 +213,7 @@ func TestSQLStatCollection(t *testing.T) {
 
 	// Reset the SQL statistics, which will dump stats into the
 	// reported statistics pool.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Query the reported statistics.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
@@ -271,7 +271,7 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 
 	// Flush the SQL stats again.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Find our statement stat from the reported stats pool.
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
@@ -396,8 +396,8 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 	// Flush stats at the beginning of the test.
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
-	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
 
 	hashedAppName := "hashed app name"
 	sqlRunner.Exec(t, `SET application_name = $1;`, hashedAppName)
@@ -409,13 +409,13 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlRunner.Exec(t, `DELETE FROM t.test WHERE x=5`)
 
 	// verify that with low limit, number of stats is within that limit
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	stats, err := sqlServer.GetScrubbedReportingStats(ctx, 5, true)
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(stats), 5)
 
 	// verify that with high limit, the number of	queries is as much as the above
-	sqlServer.GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
 	stats, err = sqlServer.GetScrubbedReportingStats(ctx, 1000, true)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(stats), 7)

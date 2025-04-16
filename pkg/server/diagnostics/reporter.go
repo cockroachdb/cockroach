@@ -281,7 +281,10 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)
 		return
 	}
-	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	err = r.SQLServer.GetReportedSQLStatsProvider().Reset(ctx)
+	if err != nil {
+		log.Warningf(ctx, "failed to reset SQL stats: %s", err)
+	}
 }
 
 // GetLastSuccessfulTelemetryPing will return the timestamp of when we last got
