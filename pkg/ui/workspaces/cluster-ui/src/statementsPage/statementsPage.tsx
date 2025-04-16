@@ -402,11 +402,11 @@ export class StatementsPage extends React.Component<
     this.props.dismissAlertMessage();
   }
 
-  onChangePage = (current: number): void => {
+  onChangePage = (current: number, pageSize: number): void => {
     const { pagination } = this.state;
     this.setState(prevState => ({
       ...prevState,
-      pagination: { ...pagination, current },
+      pagination: { ...pagination, current, pageSize },
     }));
     if (this.props.onPageChanged) {
       this.props.onPageChanged(current);
@@ -700,6 +700,7 @@ export class StatementsPage extends React.Component<
           current={pagination.current}
           total={data.length}
           onChange={this.onChangePage}
+          onShowSizeChange={this.onChangePage}
         />
       </>
     );

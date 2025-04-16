@@ -7,10 +7,7 @@ import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
 import { useHistory } from "react-router-dom";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
@@ -34,6 +31,7 @@ import {
 import { ActiveStatementsSection } from "../activeExecutions/activeStatementsSection";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
+import { usePagination } from "../util";
 import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
 import { Pagination } from "src/pagination";
 import { InlineAlert } from "@cockroachlabs/ui-components";
@@ -87,10 +85,10 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   lastUpdated,
   onManualRefresh,
 }: ActiveStatementsViewProps) => {
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: PAGE_SIZE,
-  });
+  const [pagination, updatePagination, resetPagination] = usePagination(
+    1,
+    PAGE_SIZE,
+  );
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, ACTIVE_STATEMENT_SEARCH_PARAM),
@@ -188,13 +186,6 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     search,
   ]);
 
-  const resetPagination = () => {
-    setPagination({
-      pageSize: PAGE_SIZE,
-      current: 1,
-    });
-  };
-
   const onSortClick = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
@@ -243,13 +234,6 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
-
-  const onChangePage = (page: number) => {
-    setPagination({
-      ...pagination,
-      current: page,
-    });
-  };
 
   return (
     <div className={cx("root")}>
@@ -322,7 +306,8 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             pageSize={pagination.pageSize}
             current={pagination.current}
             total={filteredStatements?.length}
-            onChange={onChangePage}
+            onChange={updatePagination}
+            onShowSizeChange={updatePagination}
           />
           {maxSizeApiReached && (
             <InlineAlert

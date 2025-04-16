@@ -227,9 +227,9 @@ export class SessionsPage extends React.Component<
     );
   };
 
-  onChangePage = (current: number): void => {
+  onChangePage = (current: number, pageSize: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
+    this.setState({ pagination: { ...pagination, current, pageSize } });
     if (this.props.onPageChanged) {
       this.props.onPageChanged(current);
     }
@@ -437,6 +437,7 @@ export class SessionsPage extends React.Component<
           current={pagination.current}
           total={sessionsToDisplay.length}
           onChange={this.onChangePage}
+          onShowSizeChange={this.onChangePage}
         />
       </>
     );

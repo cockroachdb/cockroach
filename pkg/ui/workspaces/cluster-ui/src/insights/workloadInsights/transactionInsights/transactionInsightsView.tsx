@@ -6,10 +6,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
@@ -46,7 +43,7 @@ import { TxnInsightsRequest } from "src/api";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
-import { useScheduleFunction } from "src/util/hooks";
+import { useScheduleFunction, usePagination } from "src/util/hooks";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
@@ -102,10 +99,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     maxSizeApiReached,
   } = props;
 
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: 10,
-  });
+  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
@@ -166,20 +160,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     sortSetting.columnTitle,
     search,
   ]);
-
-  const onChangePage = (current: number): void => {
-    setPagination({
-      current: current,
-      pageSize: 10,
-    });
-  };
-
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: 10,
-    });
-  };
 
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
@@ -300,7 +280,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredTransactions?.length}
-              onChange={onChangePage}
+              onChange={updatePagination}
+              onShowSizeChange={updatePagination}
             />
             {maxSizeApiReached && (
               <InlineAlert

@@ -6,10 +6,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
@@ -53,7 +50,7 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
 import { useScheduleFunction } from "src/util/hooks";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
+import { insights, usePagination } from "src/util";
 import { Anchor } from "src/anchor";
 
 const cx = classNames.bind(styles);
@@ -107,10 +104,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   dropDownSelect,
   maxSizeApiReached,
 }: StatementInsightsViewProps) => {
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: 10,
-  });
+  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_STMT_SEARCH_PARAM),
@@ -175,20 +169,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     sortSetting.columnTitle,
     search,
   ]);
-
-  const onChangePage = (current: number): void => {
-    setPagination({
-      current: current,
-      pageSize: 10,
-    });
-  };
-
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: 10,
-    });
-  };
 
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
@@ -329,7 +309,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredStatements?.length}
-              onChange={onChangePage}
+              onChange={updatePagination}
+              onShowSizeChange={updatePagination}
             />
             {maxSizeApiReached && (
               <InlineAlert

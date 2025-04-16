@@ -291,9 +291,9 @@ export class TransactionsPage extends React.Component<
     );
   };
 
-  onChangePage = (current: number): void => {
+  onChangePage = (current: number, pageSize: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
+    this.setState({ pagination: { ...pagination, current, pageSize } });
   };
 
   resetPagination = (): void => {
@@ -648,6 +648,7 @@ export class TransactionsPage extends React.Component<
           current={current}
           total={transactionsToDisplay.length}
           onChange={this.onChangePage}
+          onShowSizeChange={this.onChangePage}
         />
       </>
     );

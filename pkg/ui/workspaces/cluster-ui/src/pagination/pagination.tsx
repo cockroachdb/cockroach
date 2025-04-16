@@ -14,7 +14,7 @@ const cx = classNames.bind(styles);
 
 export type PaginationProps = Pick<
   AntPaginationProps,
-  "pageSize" | "current" | "total" | "onChange"
+  "pageSize" | "current" | "total" | "onChange" | "onShowSizeChange"
 >;
 
 export const Pagination: React.FC<PaginationProps> = props => {
