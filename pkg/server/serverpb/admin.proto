@@ -650,8 +650,8 @@ message HealthRequest {
 message HealthResponse {
 }
 
-message DrainPlanBatch {
-  repeated roachpb.NodeDescriptor drainCohort = 1;
+message RestartPlanBatch {
+  repeated roachpb.NodeDescriptor batch = 1;
   bool moreBatches = 2;
 }
 
