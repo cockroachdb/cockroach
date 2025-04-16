@@ -135,6 +135,9 @@ message StatementStatistics {
   // follower replicas.
   optional bool used_follower_read = 35 [(gogoproto.nullable) = false];
 
+  // generic_count is the count of executions that used a generic query plan.
+  optional int64 generic_count = 36 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
