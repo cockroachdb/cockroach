@@ -244,6 +244,11 @@ func (hi *hypotheticalIndex) Partition(i int) cat.Partition {
 	return nil
 }
 
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
+func (hi *hypotheticalIndex) IsTemporaryIndexForBackfill() bool {
+	return false
+}
+
 // hasSameExplicitCols checks whether the given existing index has identical
 // explicit columns as the hypothetical index. To be identical, they need to
 // have the exact same list, length, and order. If the index is inverted, it

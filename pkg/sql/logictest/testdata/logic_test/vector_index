@@ -2,14 +2,29 @@
 # CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
 
+# Test guardrail for vector index creation.
+# TODO(mw5h): remove these two statements once online modifications are supported.
+statement ok
+SET sql_safe_updates = true
+
 # Simple vector index.
 statement ok
 CREATE TABLE simple (
   a INT PRIMARY KEY,
+  b INT NOT NULL,
   vec1 VECTOR(3),
   VECTOR INDEX (vec1),
   FAMILY (a, vec1)
 )
+
+statement error pgcode 01000 pq: rejected \(sql_safe_updates = true\): CREATE VECTOR INDEX will disable writes to the table while the index is being built
+CREATE VECTOR INDEX ON simple (vec1)
+
+statement error pgcode 01000 pq: rejected \(sql_safe_updates = true\): ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt
+ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
+
+statement ok
+SET sql_safe_updates = false
 
 statement ok
 CREATE VECTOR INDEX ON simple (vec1)
@@ -23,12 +38,13 @@ SHOW CREATE TABLE simple
 ----
 simple  CREATE TABLE public.simple (
           a INT8 NOT NULL,
+          b INT8 NOT NULL,
           vec1 VECTOR(3) NULL,
           CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
           VECTOR INDEX simple_vec1_idx (vec1),
           VECTOR INDEX simple_vec1_idx1 (vec1),
           VECTOR INDEX simple_vec1_idx2 (vec1),
-          FAMILY fam_0_a_vec1 (a, vec1)
+          FAMILY fam_0_a_vec1_b (a, vec1, b)
         )
 
 statement ok

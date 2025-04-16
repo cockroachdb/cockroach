@@ -1918,6 +1918,10 @@ func (oi *optIndex) Partition(i int) cat.Partition {
 	return &oi.partitions[i]
 }
 
+func (oi *optIndex) IsTemporaryIndexForBackfill() bool {
+	return oi.idx.IsTemporaryIndexForBackfill()
+}
+
 // optPartition implements cat.Partition and represents a PARTITION BY LIST
 // partition of an index.
 type optPartition struct {
@@ -2896,6 +2900,11 @@ func (oi *optVirtualIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 	return nil
+}
+
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsTemporaryIndexForBackfill() bool {
+	return false
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

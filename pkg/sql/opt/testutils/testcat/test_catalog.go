@@ -1452,6 +1452,10 @@ func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
 }
 
+func (ti *Index) IsTemporaryIndexForBackfill() bool {
+	return false
+}
+
 // SetPartitions manually sets the partitions.
 func (ti *Index) SetPartitions(partitions []Partition) {
 	ti.partitions = partitions
