@@ -7,7 +7,6 @@ package vecstore
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -17,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -34,92 +31,15 @@ type Txn struct {
 	// Locking durability required by transaction isolation level.
 	lockDurability kvpb.KeyLockingDurabilityType
 
-	// Quantizer specific encoding and decoding for the root partition and everyone
-	// else.
-	rootCodec storeCodec
-	codec     storeCodec
+	// codec is used to decode KV rows and encode vectors.
+	codec partitionCodec
 
 	// Retained allocations to prevent excessive reallocation.
-	workspace     workspace.T
-	tmpChildKeys  []cspann.ChildKey
-	tmpValueBytes []cspann.ValueBytes
-	tmpSpans      []roachpb.Span
-	tmpSpanIDs    []int
+	tmpSpans   []roachpb.Span
+	tmpSpanIDs []int
 }
 
 var _ cspann.Txn = (*Txn)(nil)
-
-// storeCodec abstracts quantizer specific encode/decode operations from the
-// rest of the store.
-type storeCodec struct {
-	quantizer    quantize.Quantizer
-	tmpVectorSet quantize.QuantizedVectorSet
-}
-
-// makeStoreCodec creates a new StoreCodec wrapping the provided quantizer.
-func makeStoreCodec(quantizer quantize.Quantizer) storeCodec {
-	return storeCodec{
-		quantizer: quantizer,
-	}
-}
-
-// clear resets the codec's internal vector set to start a new encode / decode
-// operation.
-func (sc *storeCodec) clear(minCapacity int, centroid vector.T) {
-	if sc.tmpVectorSet == nil {
-		sc.tmpVectorSet = sc.quantizer.NewQuantizedVectorSet(minCapacity, centroid)
-	} else {
-		sc.tmpVectorSet.Clear(centroid)
-	}
-}
-
-// getVectorSet returns the internal vector set cache. These will be invalidated
-// when the clear method is called.
-func (sc *storeCodec) getVectorSet() quantize.QuantizedVectorSet {
-	return sc.tmpVectorSet
-}
-
-// decodeVector decodes a single vector to the codec's internal vector set. It
-// returns the remainder of the input buffer.
-func (sc *storeCodec) decodeVector(encodedVector []byte) ([]byte, error) {
-	switch sc.quantizer.(type) {
-	case *quantize.UnQuantizer:
-		return vecencoding.DecodeUnquantizedVectorToSet(
-			encodedVector, sc.tmpVectorSet.(*quantize.UnQuantizedVectorSet))
-	case *quantize.RaBitQuantizer:
-		return vecencoding.DecodeRaBitQVectorToSet(
-			encodedVector, sc.tmpVectorSet.(*quantize.RaBitQuantizedVectorSet))
-	}
-	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
-}
-
-// encodeVector encodes a single vector. This method invalidates the internal
-// vector set.
-func (sc *storeCodec) encodeVector(w *workspace.T, v vector.T, centroid vector.T) ([]byte, error) {
-	sc.clear(1, centroid)
-	input := v.AsSet()
-	sc.quantizer.QuantizeInSet(w, sc.tmpVectorSet, input)
-	return sc.encodeVectorFromSet(sc.tmpVectorSet, 0 /* idx */)
-}
-
-// encodeVectorFromSet encodes the vector indicated by 'idx' from an external
-// vector set.
-func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx int) ([]byte, error) {
-	switch t := vs.(type) {
-	case *quantize.UnQuantizedVectorSet:
-		return vecencoding.EncodeUnquantizerVector(
-			[]byte{}, t.CentroidDistances[idx], t.Vectors.At(idx))
-	case *quantize.RaBitQuantizedVectorSet:
-		return vecencoding.EncodeRaBitQVector(
-			[]byte{},
-			t.CodeCounts[idx],
-			t.CentroidDistances[idx],
-			t.DotProducts[idx],
-			t.Codes.At(idx),
-		), nil
-	}
-	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
-}
 
 // Init sets initial values for the transaction, wrapping it around a kv
 // transaction for use with the cspann.Store API. The Init pattern is used
@@ -128,8 +48,7 @@ func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx in
 func (tx *Txn) Init(store *Store, kv *kv.Txn) {
 	tx.kv = kv
 	tx.store = store
-	tx.codec = makeStoreCodec(store.quantizer)
-	tx.rootCodec = makeStoreCodec(store.rootQuantizer)
+	tx.codec = makePartitionCodec(store.rootQuantizer, store.quantizer)
 
 	// TODO (mw5h): This doesn't take into account session variables that control
 	// lock durability. This doesn't matter for partition maintenance operations
@@ -141,163 +60,6 @@ func (tx *Txn) Init(store *Store, kv *kv.Txn) {
 	} else {
 		tx.lockDurability = kvpb.GuaranteedDurability
 	}
-}
-
-// getCodecForPartitionKey returns the correct codec to use for interacting with
-// the partition indicated. This will be the unquantized codec for the root
-// partition, the codec for the quantizer indicated when the store was created
-// otherwise.
-func (tx *Txn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *storeCodec {
-	// We always store the full sized vectors in the root partition
-	if partitionKey == cspann.RootKey {
-		return &tx.rootCodec
-	} else {
-		return &tx.codec
-	}
-}
-
-// decodePartition decodes the metadata and data KV results into an ephemeral
-// partition. This partition will become invalid when the codec is next reset,
-// so it needs to be cloned if it will be used outside of the store.
-func (tx *Txn) decodePartition(
-	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, metaResult, dataResult *kv.Result,
-) (*cspann.Partition, error) {
-	metadata, err := tx.getMetadataFromKVResult(partitionKey, metaResult)
-	if err != nil {
-		return nil, err
-	}
-
-	if dataResult.Err != nil {
-		return nil, dataResult.Err
-	}
-	vectorEntries := dataResult.Rows
-
-	// Clear and ensure storage for the vector entries, child keys, and value
-	// bytes.
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	codec.clear(len(vectorEntries), metadata.Centroid)
-	if cap(tx.tmpChildKeys) < len(vectorEntries) {
-		tx.tmpChildKeys = make([]cspann.ChildKey, len(vectorEntries))
-	}
-	tx.tmpChildKeys = tx.tmpChildKeys[:len(vectorEntries)]
-	if cap(tx.tmpValueBytes) < len(vectorEntries) {
-		tx.tmpValueBytes = make([]cspann.ValueBytes, len(vectorEntries))
-	}
-	tx.tmpValueBytes = tx.tmpValueBytes[:len(vectorEntries)]
-
-	// Determine the length of the prefix of vector data records.
-	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	prefixLen := vecencoding.EncodedPrefixVectorKeyLen(metadataKey, metadata.Level)
-	for i, entry := range vectorEntries {
-		childKey, err := vecencoding.DecodeChildKey(entry.Key[prefixLen:], metadata.Level)
-		if err != nil {
-			return nil, err
-		}
-		tx.tmpChildKeys[i] = childKey
-
-		tx.tmpValueBytes[i], err = codec.decodeVector(entry.ValueBytes())
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return cspann.NewPartition(
-		metadata, codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes), nil
-}
-
-// GetPartition is part of the cspann.Txn interface. Read the partition
-// indicated by `partitionKey` and build a Partition data structure, which is
-// returned.
-func (tx *Txn) GetPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) (*cspann.Partition, error) {
-	b := tx.kv.NewBatch()
-
-	// GetPartition is used by fixup to split and merge partitions, so we want to
-	// block concurrent writes.
-	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	startKey := vecencoding.EncodeStartVectorKey(metadataKey)
-	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
-	b.GetForUpdate(metadataKey, tx.lockDurability)
-	b.Scan(startKey, endKey)
-	err := tx.kv.Run(ctx, b)
-	if err != nil {
-		return nil, err
-	}
-
-	partition, err := tx.decodePartition(treeKey, partitionKey, &b.Results[0], &b.Results[1])
-	if err != nil {
-		return nil, err
-	}
-	return partition.Clone(), nil
-}
-
-// Insert a partition with the given partition key into the store. If the
-// partition already exists, the new partition's metadata will overwrite the
-// existing metadata, but existing vectors will not be deleted. Vectors in the
-// new partition will overwrite existing vectors if child keys collide, but
-// otherwise the resulting partition will be a union of the two partitions.
-func (tx *Txn) insertPartition(
-	ctx context.Context,
-	treeKey cspann.TreeKey,
-	partitionKey cspann.PartitionKey,
-	partition *cspann.Partition,
-) error {
-	b := tx.kv.NewBatch()
-
-	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	meta := vecencoding.EncodeMetadataValue(*partition.Metadata())
-	b.Put(metadataKey, meta)
-
-	// Cap the key so that appends allocate a new slice.
-	vectorKey := vecencoding.EncodePrefixVectorKey(metadataKey, partition.Level())
-	vectorKey = slices.Clip(vectorKey)
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	childKeys := partition.ChildKeys()
-	valueBytes := partition.ValueBytes()
-	for i := 0; i < partition.QuantizedSet().GetCount(); i++ {
-		// The child key gets appended to 'key' here.
-		k := vecencoding.EncodeChildKey(vectorKey, childKeys[i])
-		encodedValue, err := codec.encodeVectorFromSet(partition.QuantizedSet(), i)
-		if err != nil {
-			return err
-		}
-		encodedValue = append(encodedValue, valueBytes[i]...)
-		b.Put(k, encodedValue)
-	}
-
-	return tx.kv.Run(ctx, b)
-}
-
-// SetRootPartition implements the cspann.Txn interface.
-func (tx *Txn) SetRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) error {
-	if err := tx.DeletePartition(ctx, treeKey, cspann.RootKey); err != nil {
-		return err
-	}
-	return tx.insertPartition(ctx, treeKey, cspann.RootKey, partition)
-}
-
-// InsertPartition implements the cspann.Txn interface.
-func (tx *Txn) InsertPartition(
-	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
-) (cspann.PartitionKey, error) {
-	partitionID := tx.store.MakePartitionKey()
-	return partitionID, tx.insertPartition(ctx, treeKey, partitionID, partition)
-}
-
-// DeletePartition implements the cspann.Txn interface.
-func (tx *Txn) DeletePartition(
-	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) error {
-	b := tx.kv.NewBatch()
-
-	// Delete the metadata record and all vector records in the partition.
-	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	endKey := vecencoding.EncodeEndVectorKey(metadataKey)
-	b.DelRange(metadataKey, endKey, false /* returnKeys */)
-	return tx.kv.Run(ctx, b)
 }
 
 // GetPartitionMetadata implements the cspann.Txn interface.
@@ -354,7 +116,21 @@ func (tx *Txn) GetPartitionMetadata(
 		return tx.createRootPartition(ctx, metadataKey)
 	}
 
-	return tx.getMetadataFromKVResult(partitionKey, &b.Results[0])
+	metadata, err := tx.store.getMetadataFromKVResult(partitionKey, &b.Results[0])
+	if err != nil {
+		return cspann.PartitionMetadata{},
+			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
+	}
+
+	// Do not allow updates to the partition if the state doesn't allow it.
+	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
+		err = cspann.NewConditionFailedError(metadata)
+		return cspann.PartitionMetadata{}, errors.Wrapf(err,
+			"getting partition metadata %d (state=%s)",
+			partitionKey, metadata.StateDetails.State.String())
+	}
+
+	return metadata, nil
 }
 
 // AddToPartition implements the cspann.Txn interface.
@@ -370,16 +146,32 @@ func (tx *Txn) AddToPartition(
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
-	// Get partition metadata, needed to quantize the vector.
+	// Get partition metadata, needed to quantize the vector. Lock the metadata
+	// key in order to prevent splits/merges from interfering.
 	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
-	b.Get(metadataKey)
+	b.GetForShare(metadataKey, tx.lockDurability)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
 		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
-	metadata, err := tx.getMetadataFromKVResult(partitionKey, &b.Results[0])
+
+	// If we're preparing to update the root partition, then lazily create its
+	// metadata if it does not yet exist.
+	var metadata cspann.PartitionMetadata
+	if partitionKey == cspann.RootKey && b.Results[0].Rows[0].Value == nil {
+		metadata, err = tx.createRootPartition(ctx, metadataKey)
+	} else {
+		metadata, err = tx.store.getMetadataFromKVResult(partitionKey, &b.Results[0])
+	}
 	if err != nil {
 		return err
+	}
+
+	// Do not allow vectors to be added to the partition if the state doesn't
+	// allow it.
+	if !metadata.StateDetails.State.AllowAddOrRemove() {
+		return errors.Wrapf(cspann.NewConditionFailedError(metadata),
+			"adding to partition %d (state=%s)", partitionKey, metadata.StateDetails.State.String())
 	}
 
 	entryKey := vecencoding.EncodePrefixVectorKey(metadataKey, level)
@@ -387,8 +179,7 @@ func (tx *Txn) AddToPartition(
 
 	// Quantize the vector and add it to the partition with a Put command.
 	b = tx.kv.NewBatch()
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	encodedValue, err := codec.encodeVector(&tx.workspace, vec, metadata.Centroid)
+	encodedValue, err := tx.codec.EncodeVector(partitionKey, vec, metadata.Centroid)
 	if err != nil {
 		return err
 	}
@@ -410,9 +201,31 @@ func (tx *Txn) RemoveFromPartition(
 	level cspann.Level,
 	childKey cspann.ChildKey,
 ) error {
+	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
 	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
+
+	// Get partition metadata, needed to quantize the vector. Lock the metadata
+	// key in order to prevent splits/merges from interfering.
+	b.GetForShare(metadataKey, tx.lockDurability)
+	if err := tx.kv.Run(ctx, b); err != nil {
+		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
+	}
+
+	metadata, err := tx.store.getMetadataFromKVResult(partitionKey, &b.Results[0])
+	if err != nil {
+		return err
+	}
+
+	// Do not allow vectors to be removed from the partition if the state doesn't
+	// allow it.
+	if !metadata.StateDetails.State.AllowAddOrRemove() {
+		return errors.Wrapf(cspann.NewConditionFailedError(metadata),
+			"removing from partition %d (state=%s)", partitionKey, metadata.StateDetails.State.String())
+	}
+
+	b = tx.kv.NewBatch()
 	entryKey := vecencoding.EncodePrefixVectorKey(metadataKey, level)
 	entryKey = vecencoding.EncodeChildKey(entryKey, childKey)
 	b.Del(entryKey)
@@ -454,17 +267,16 @@ func (tx *Txn) SearchPartitions(
 	}
 
 	for i := range toSearch {
-		partition, err := tx.decodePartition(
-			treeKey, toSearch[i].Key, &b.Results[i*2], &b.Results[i*2+1])
+		partition, err := tx.store.decodePartition(
+			treeKey, toSearch[i].Key, &tx.codec, &b.Results[i*2], &b.Results[i*2+1])
 		if err != nil {
 			return err
 		}
 
 		toSearch[i].Level = partition.Level()
-		// TODO(andyk): Set this to the actual partition state once that's
-		// implemented in vecstore.
-		toSearch[i].StateDetails = cspann.MakeReadyDetails()
-		toSearch[i].Count = partition.Search(&tx.workspace, toSearch[i].Key, queryVector, searchSet)
+		toSearch[i].StateDetails = partition.Metadata().StateDetails
+		toSearch[i].Count = partition.Search(
+			&tx.codec.workspace, toSearch[i].Key, queryVector, searchSet)
 	}
 
 	return nil
@@ -641,36 +453,5 @@ func (tx *Txn) QuantizeAndEncode(
 	partitionKey cspann.PartitionKey, centroid, randomizedVec vector.T,
 ) (quantized []byte, err error) {
 	// Quantize and encode the randomized vector.
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	return codec.encodeVector(&tx.workspace, randomizedVec, centroid)
-}
-
-// getMetadataFromKVResult returns the partition metadata row from the KV
-// result, returning the partition's K-means tree level and centroid.
-func (tx *Txn) getMetadataFromKVResult(
-	partitionKey cspann.PartitionKey, result *kv.Result,
-) (cspann.PartitionMetadata, error) {
-	if result.Err != nil {
-		return cspann.PartitionMetadata{}, result.Err
-	}
-
-	// If the value of the first result row is nil and this is a root partition,
-	// then it must be a root partition without a metadata record (a nil result
-	// happens when Get is used to fetch the metadata row).
-	value := result.Rows[0].ValueBytes()
-	if value == nil {
-		if partitionKey != cspann.RootKey {
-			return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
-		}
-
-		// Construct synthetic metadata.
-		metadata := cspann.PartitionMetadata{
-			Level:        cspann.LeafLevel,
-			Centroid:     tx.store.emptyVec,
-			StateDetails: cspann.MakeReadyDetails(),
-		}
-		return metadata, nil
-	}
-
-	return vecencoding.DecodeMetadataValue(value)
+	return tx.codec.EncodeVector(partitionKey, randomizedVec, centroid)
 }

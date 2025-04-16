@@ -108,7 +108,7 @@ func TestSearcher(t *testing.T) {
 	// Validate that search vector was correctly encoded and quantized.
 	encodedVec := mutator.EncodedVector()
 	vecSet := quantize.UnQuantizedVectorSet{Vectors: vector.MakeSet(2)}
-	remainder, err := vecencoding.DecodeUnquantizedVectorToSet(
+	remainder, err := vecencoding.DecodeUnquantizerVectorToSet(
 		[]byte(*encodedVec.(*tree.DBytes)), &vecSet)
 	require.NoError(t, err)
 	require.Empty(t, remainder)
