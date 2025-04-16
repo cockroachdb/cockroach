@@ -6163,6 +6163,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 
 type testTelemetryLogger struct {
 	telemetryLogger
+	id                      int32
 	afterIncEmittedCounters func(numMessages int, numBytes int)
 }
 
@@ -6171,6 +6172,18 @@ var _ telemetryLogger = (*testTelemetryLogger)(nil)
 func (t *testTelemetryLogger) incEmittedCounters(numMessages int, numBytes int) {
 	t.telemetryLogger.incEmittedCounters(numMessages, numBytes)
 	t.afterIncEmittedCounters(numMessages, numBytes)
+}
+
+func (t *testTelemetryLogger) maybeFlushLogs() {
+	if t.id == 1 {
+		t.telemetryLogger.maybeFlushLogs()
+	}
+}
+
+func (t *testTelemetryLogger) close() {
+	if t.id == 1 {
+		t.telemetryLogger.close()
+	}
 }
 
 func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
@@ -6190,6 +6203,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 			}
 			return nil
 		}
+		var numPeriodicTelemetryLogger atomic.Int32
 		// Synchronization to prevent a race between the changefeed closing
 		// and the telemetry logger getting emitted counts after messages
 		// have been emitted to the sink.
@@ -6202,6 +6216,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 						seen.Store(true)
 					}
 				},
+				id: numPeriodicTelemetryLogger.Add(1),
 			}
 		}
 
@@ -6228,7 +6243,14 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 
 		// Close the changefeed and ensure logs were created after closing.
 		require.NoError(t, foo.Close())
-		verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
+
+		if numPeriodicTelemetryLogger.Load() > 1 {
+			t.Log("transient error")
+		}
+
+		verifyLogsWithEmittedBytesAndMessages(
+			t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true, /* closing */
+		)
 	}
 
 	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
