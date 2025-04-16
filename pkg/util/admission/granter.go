@@ -52,12 +52,12 @@ func (sg *slotGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (sg *slotGranter) tryGet(count int64) bool {
-	return sg.coord.tryGet(sg.workKind, count, 0 /*arbitrary*/)
+func (sg *slotGranter) tryGet(_ getterKind, count int64) bool {
+	return sg.coord.tryGet(0, sg.workKind, count, 0 /*arbitrary*/)
 }
 
 // tryGetLocked implements granterWithLockedCalls.
-func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
+func (sg *slotGranter) tryGetLocked(_ getterKind, count int64, _ int8) grantResult {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
@@ -120,13 +120,13 @@ func (sg *slotGranter) continueGrantChain(grantChainID grantChainID) {
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
-func (sg *slotGranter) requesterHasWaitingRequests() bool {
+func (sg *slotGranter) requesterHasWaitingRequests() getterKind {
 	return sg.requester.hasWaitingRequests()
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
-func (sg *slotGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
-	res := sg.tryGetLocked(1, 0 /*arbitrary*/)
+func (sg *slotGranter) tryGrantLocked(_ getterKind, grantChainID grantChainID) grantResult {
+	res := sg.tryGetLocked(0, 1, 0 /*arbitrary*/)
 	if res == grantSuccess {
 		slots := sg.requester.granted(grantChainID)
 		if slots == 0 {
@@ -166,9 +166,15 @@ func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
 }
 
 type slotAndCPUTimeTokenGranter struct {
-	sg            slotGranter
-	tokensEnabled bool
-	cpuTimeTokens int64
+	sg               slotGranter
+	tokensEnabled    bool
+	cpuTimeTokensOne int64
+	cpuTimeTokensTwo int64
+
+	exhaustedOneStart                 time.Time
+	exhaustedTwoStart                 time.Time
+	cpuTimeTokensExhaustedDurationOne *metric.Counter
+	cpuTimeTokensExhaustedDurationTwo *metric.Counter
 
 	intTokensUsed         int64
 	intUncontrolledTokens int64
@@ -177,15 +183,21 @@ type slotAndCPUTimeTokenGranter struct {
 var _ granterWithLockedCalls = &slotAndCPUTimeTokenGranter{}
 var _ granter = &slotAndCPUTimeTokenGranter{}
 
-func (stg *slotAndCPUTimeTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
-	// Deduct tokens first since that is where the bottleneck will likely be.
-	if stg.tokensEnabled && stg.cpuTimeTokens <= 0 {
+func (stg *slotAndCPUTimeTokenGranter) tryGetLocked(
+	getter getterKind, count int64, demuxHandle int8,
+) grantResult {
+	if stg.tokensEnabled &&
+		(stg.cpuTimeTokensOne <= 0 || (getter == getterKindTwo && stg.cpuTimeTokensTwo <= 0)) {
 		// Don't throttle the small amount of SQL work run by the system tenant.
 		return grantFailLocal
 	}
-	result := stg.sg.tryGetLocked(1, demuxHandle)
+	result := stg.sg.tryGetLocked(0, 1, demuxHandle)
 	if result == grantSuccess {
-		stg.cpuTimeTokens -= count
+		if stg.cpuTimeTokensTwo <= 0 {
+			stg.intUncontrolledTokens += count
+		}
+		stg.addToOne(-count, false)
+		stg.addToTwo(-count, false)
 		stg.intTokensUsed += count
 	}
 	return result
@@ -195,24 +207,74 @@ func (stg *slotAndCPUTimeTokenGranter) tryGetLocked(count int64, demuxHandle int
 // always being returned.
 func (stg *slotAndCPUTimeTokenGranter) returnGrantLocked(count int64, demuxHandle int8) {
 	stg.sg.returnGrantLocked(1, demuxHandle)
-	stg.cpuTimeTokens += count
+	stg.addToOne(count, false)
+	stg.addToTwo(count, false)
 	stg.intTokensUsed -= count
+}
+
+func (stg *slotAndCPUTimeTokenGranter) addToOne(delta int64, progress bool) {
+	wasExhausted := stg.cpuTimeTokensOne <= 0
+	stg.cpuTimeTokensOne += delta
+	isExhausted := stg.cpuTimeTokensOne <= 0
+	if wasExhausted && !isExhausted {
+		now := timeutil.Now()
+		if stg.cpuTimeTokensExhaustedDurationOne != nil {
+			stg.cpuTimeTokensExhaustedDurationOne.Inc(now.Sub(stg.exhaustedOneStart).Nanoseconds())
+		}
+	} else if !wasExhausted && isExhausted {
+		stg.exhaustedOneStart = timeutil.Now()
+	} else if isExhausted && progress {
+		if !wasExhausted {
+			panic("!wasExhausted")
+		}
+		now := timeutil.Now()
+		if stg.cpuTimeTokensExhaustedDurationOne != nil {
+			stg.cpuTimeTokensExhaustedDurationOne.Inc(now.Sub(stg.exhaustedOneStart).Nanoseconds())
+		}
+		stg.exhaustedOneStart = now
+	}
+}
+
+func (stg *slotAndCPUTimeTokenGranter) addToTwo(delta int64, progress bool) {
+	wasExhausted := stg.cpuTimeTokensTwo <= 0
+	stg.cpuTimeTokensTwo += delta
+	isExhausted := stg.cpuTimeTokensTwo <= 0
+	if wasExhausted && !isExhausted {
+		now := timeutil.Now()
+		if stg.cpuTimeTokensExhaustedDurationTwo != nil {
+			stg.cpuTimeTokensExhaustedDurationTwo.Inc(now.Sub(stg.exhaustedTwoStart).Nanoseconds())
+		}
+	} else if !wasExhausted && isExhausted {
+		stg.exhaustedTwoStart = timeutil.Now()
+	} else if isExhausted && progress {
+		if !wasExhausted {
+			panic("!wasExhausted")
+		}
+		now := timeutil.Now()
+		if stg.cpuTimeTokensExhaustedDurationTwo != nil {
+			stg.cpuTimeTokensExhaustedDurationTwo.Inc(now.Sub(stg.exhaustedTwoStart).Nanoseconds())
+		}
+		stg.exhaustedTwoStart = now
+	}
 }
 
 func (stg *slotAndCPUTimeTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
 	stg.sg.tookWithoutPermissionLocked(1, demuxHandle)
-	if count > 0 && stg.cpuTimeTokens < 0 {
+	if count > 0 && stg.cpuTimeTokensTwo <= 0 {
 		stg.intUncontrolledTokens += count
 	}
-	stg.cpuTimeTokens -= count
+	stg.addToOne(-count, false)
+	stg.addToTwo(-count, false)
 	stg.intTokensUsed += count
 }
 
-func (stg *slotAndCPUTimeTokenGranter) requesterHasWaitingRequests() bool {
+func (stg *slotAndCPUTimeTokenGranter) requesterHasWaitingRequests() getterKind {
 	return stg.sg.requesterHasWaitingRequests()
 }
 
-func (stg *slotAndCPUTimeTokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+func (stg *slotAndCPUTimeTokenGranter) tryGrantLocked(
+	getter getterKind, grantChainID grantChainID,
+) grantResult {
 	haveSlots := false
 	if stg.sg.usedSlots < stg.sg.totalSlots || stg.sg.skipSlotEnforcement {
 		haveSlots = true
@@ -220,7 +282,8 @@ func (stg *slotAndCPUTimeTokenGranter) tryGrantLocked(grantChainID grantChainID)
 	if !haveSlots {
 		return grantFailDueToSharedResource
 	}
-	if stg.tokensEnabled && stg.cpuTimeTokens <= 0 {
+	if stg.tokensEnabled &&
+		(stg.cpuTimeTokensOne <= 0 || (getter == getterKindTwo && stg.cpuTimeTokensTwo <= 0)) {
 		return grantFailLocal
 	}
 	tokens := stg.sg.requester.granted(grantChainID)
@@ -236,8 +299,8 @@ func (stg *slotAndCPUTimeTokenGranter) grantKind() grantKind {
 	return stg.sg.grantKind()
 }
 
-func (stg *slotAndCPUTimeTokenGranter) tryGet(count int64) (granted bool) {
-	return stg.sg.coord.tryGet(stg.sg.workKind, count, 0 /*arbitrary*/)
+func (stg *slotAndCPUTimeTokenGranter) tryGet(getter getterKind, count int64) (granted bool) {
+	return stg.sg.coord.tryGet(getter, stg.sg.workKind, count, 0 /*arbitrary*/)
 }
 
 func (stg *slotAndCPUTimeTokenGranter) returnGrant(count int64) {
@@ -290,12 +353,12 @@ func (tg *tokenGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (tg *tokenGranter) tryGet(count int64) bool {
-	return tg.coord.tryGet(tg.workKind, count, 0 /*arbitrary*/)
+func (tg *tokenGranter) tryGet(_ getterKind, count int64) bool {
+	return tg.coord.tryGet(0, tg.workKind, count, 0 /*arbitrary*/)
 }
 
 // tryGetLocked implements granterWithLockedCalls.
-func (tg *tokenGranter) tryGetLocked(count int64, _ int8) grantResult {
+func (tg *tokenGranter) tryGetLocked(_ getterKind, count int64, _ int8) grantResult {
 	if tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
@@ -335,13 +398,13 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
-func (tg *tokenGranter) requesterHasWaitingRequests() bool {
+func (tg *tokenGranter) requesterHasWaitingRequests() getterKind {
 	return tg.requester.hasWaitingRequests()
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
-func (tg *tokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
-	res := tg.tryGetLocked(1, 0 /*arbitrary*/)
+func (tg *tokenGranter) tryGrantLocked(_ getterKind, grantChainID grantChainID) grantResult {
+	res := tg.tryGetLocked(0, 1, 0 /*arbitrary*/)
 	if res == grantSuccess {
 		tokens := tg.requester.granted(grantChainID)
 		if tokens == 0 {
@@ -435,7 +498,7 @@ func (cg *kvStoreTokenChildGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (cg *kvStoreTokenChildGranter) tryGet(count int64) bool {
+func (cg *kvStoreTokenChildGranter) tryGet(_ getterKind, count int64) bool {
 	return cg.parent.tryGet(cg.workType, count)
 }
 
@@ -477,11 +540,13 @@ func (cg *kvStoreTokenChildGranter) storeReplicatedWorkAdmittedLocked(
 }
 
 func (sg *kvStoreTokenGranter) tryGet(workType admissionpb.StoreWorkType, count int64) bool {
-	return sg.coord.tryGet(KVWork, count, int8(workType))
+	return sg.coord.tryGet(0, KVWork, count, int8(workType))
 }
 
 // tryGetLocked implements granterWithLockedCalls.
-func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
+func (sg *kvStoreTokenGranter) tryGetLocked(
+	_ getterKind, count int64, demuxHandle int8,
+) grantResult {
 	wt := admissionpb.StoreWorkType(demuxHandle)
 	// NB: ideally if regularRequester.hasWaitingRequests() returns true and
 	// wc==elasticWorkClass we should reject this request, since it means that
@@ -686,14 +751,20 @@ func (sg *kvStoreTokenGranter) subtractTokensLockedForWorkClass(
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
-func (sg *kvStoreTokenGranter) requesterHasWaitingRequests() bool {
-	return sg.regularRequester.hasWaitingRequests() ||
-		sg.elasticRequester.hasWaitingRequests() ||
-		sg.snapshotRequester.hasWaitingRequests()
+func (sg *kvStoreTokenGranter) requesterHasWaitingRequests() getterKind {
+	gk := sg.regularRequester.hasWaitingRequests()
+	if gk != getterKindNone {
+		return gk
+	}
+	gk = sg.elasticRequester.hasWaitingRequests()
+	if gk != getterKindNone {
+		return gk
+	}
+	return sg.snapshotRequester.hasWaitingRequests()
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
-func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+func (sg *kvStoreTokenGranter) tryGrantLocked(_ getterKind, grantChainID grantChainID) grantResult {
 	// NB: We grant work in the following priority order: regular, snapshot
 	// ingest, elastic work. Snapshot ingests are a special type of elastic work.
 	// They queue separately in the SnapshotQueue and get priority over other
@@ -706,8 +777,8 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 		} else if admissionpb.StoreWorkType(wt) == admissionpb.SnapshotIngestStoreWorkType {
 			req = sg.snapshotRequester
 		}
-		if req.hasWaitingRequests() {
-			res := sg.tryGetLocked(1, int8(wt))
+		if req.hasWaitingRequests() != getterKindNone {
+			res := sg.tryGetLocked(0, 1, int8(wt))
 			if res == grantSuccess {
 				tookTokenCount := req.granted(grantChainID)
 				if tookTokenCount == 0 {
@@ -966,29 +1037,41 @@ var (
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
 	}
-	kvCPUTimeTokens = metric.Metadata{
-		Name:        "admission.granter.cpu_time_tokens.kv",
+	kvCPUTimeTokensOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens1.kv",
 		Help:        "Total CPU time tokens (gauge)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	kvCPUTimeTokensAdded = metric.Metadata{
-		Name:        "admission.granter.cpu_time_tokens_added.kv",
-		Help:        "CPU time tokens added (by adjustment or tick)",
+	kvCPUTimeTokensTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens2.kv",
+		Help:        "Total CPU time tokens (gauge)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	kvCPUTimeTokensRemoved = metric.Metadata{
-		Name:        "admission.granter.cpu_time_tokens_removed.kv",
-		Help:        "CPU time tokens removed (by adjustment or tick)",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	kvCPUTimeTokensRate = metric.Metadata{
-		Name:        "admission.granter.cpu_time_tokens_rate.kv",
+	kvCPUTimeTokensRateOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_rate1.kv",
 		Help:        "Rate of CPU time tokens (gauge)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRateTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_rate2.kv",
+		Help:        "Rate of CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensExhaustedDurationOne = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens1.exhausted_duration.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUTimeTokensExhaustedDurationTwo = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens2.exhausted_duration.kv",
+		Help:        "Total duration when KV CPU time tokens were exhausted, in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_COUNT,
 	}
 	kvTenantCPUTimeTokensRate = metric.Metadata{
 		Name:        "admission.granter.tenant_cpu_time_tokens_rate.kv",

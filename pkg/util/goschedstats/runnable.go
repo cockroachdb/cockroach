@@ -14,7 +14,7 @@ import (
 
 // Supported is true if the system has access to the internal goroutine statistics
 // (i.e. if CockroachDB was built using our Go fork).
-const Supported = supported
+const Supported = true
 
 // CumulativeNormalizedRunnableGoroutines returns the sum (over all seconds
 // since the program started) of the average number of runnable goroutines per

@@ -554,17 +554,22 @@ func makeRegularGrantCoordinator(
 	var gwb granterWithBoth
 	var ctta *cpuTimeTokenAdjuster
 	if coord.isCPUTimeTokenGranter {
-		stg = &slotAndCPUTimeTokenGranter{}
+		stg = &slotAndCPUTimeTokenGranter{
+			exhaustedOneStart:                 timeutil.Now(),
+			exhaustedTwoStart:                 timeutil.Now(),
+			cpuTimeTokensExhaustedDurationOne: metrics.KVCPUTimeTokensExhaustedDurationOne,
+			cpuTimeTokensExhaustedDurationTwo: metrics.KVCPUTimeTokensExhaustedDurationTwo,
+		}
 		kvg = &stg.sg
 		gwb = stg
 		ctta = &cpuTimeTokenAdjuster{
 			settings:                  st,
 			granter:                   stg,
 			tenantTokensRequester:     nil,
-			kvCPUTimeTokens:           metrics.KVCPUTimeTokens,
-			kvCPUTimeTokensAdded:      metrics.KVCPUTimeTokensAdded,
-			kvCPUTimeTokensRemoved:    metrics.KVCPUTimeTokensRemoved,
-			kvCPUTimeTokensRate:       metrics.KVCPUTimeTokensRate,
+			kvCPUTimeTokensOne:        metrics.KVCPUTimeTokensOne,
+			kvCPUTimeTokensTwo:        metrics.KVCPUTimeTokensTwo,
+			kvCPUTimeTokensRateOne:    metrics.KVCPUTimeTokensRateOne,
+			kvCPUTimeTokensRateTwo:    metrics.KVCPUTimeTokensRateTwo,
 			kvTenantCPUTimeTokensRate: metrics.KVTenantCPUTimeTokensRate,
 			kvTokensToCPUMultiplier:   metrics.KVTokensToCPUMultiplier,
 		}
@@ -797,7 +802,7 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 
 // tryGet is called by granter.tryGet with the WorkKind.
 func (coord *GrantCoordinator) tryGet(
-	workKind WorkKind, count int64, demuxHandle int8,
+	getter getterKind, workKind WorkKind, count int64, demuxHandle int8,
 ) (granted bool) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
@@ -805,7 +810,7 @@ func (coord *GrantCoordinator) tryGet(
 	// to this workKind. So it may be more reasonable to queue. But we have some
 	// concerns about incurring the delay of multiple goroutine context switches
 	// so we ignore this case.
-	res := coord.granters[workKind].tryGetLocked(count, demuxHandle)
+	res := coord.granters[workKind].tryGetLocked(getter, count, demuxHandle)
 	switch res {
 	case grantSuccess:
 		// Grant chain may be active, but it did not get in the way of this grant,
@@ -834,7 +839,7 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64, demux
 	coord.granters[workKind].returnGrantLocked(count, demuxHandle)
 	if coord.mu.grantChainActive {
 		if coord.mu.grantChainIndex > workKind &&
-			coord.granters[workKind].requesterHasWaitingRequests() {
+			coord.granters[workKind].requesterHasWaitingRequests() != getterKindNone {
 			// There are waiting requests that will not be served by the grant chain.
 			// Better to terminate it and start afresh.
 			if !coord.tryTerminateGrantChain() {
@@ -950,12 +955,12 @@ OuterLoop:
 			// remaining will be nil.
 			continue
 		}
-		for granter.requesterHasWaitingRequests() && !localDone {
+		for gk := granter.requesterHasWaitingRequests(); gk != getterKindNone && !localDone; gk = granter.requesterHasWaitingRequests() {
 			chainID := noGrantChain
 			if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
 				chainID = coord.mu.grantChainID
 			}
-			res := granter.tryGrantLocked(chainID)
+			res := granter.tryGrantLocked(gk, chainID)
 			switch res {
 			case grantSuccess:
 				grantBurstCount++
@@ -1020,8 +1025,9 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *slotAndCPUTimeTokenGranter:
-				s.Printf("%s%s: tokens: used: %d remaining: %d slots: used: %d, total: %d",
-					curSep, kind, g.intTokensUsed, g.cpuTimeTokens, g.sg.usedSlots, g.sg.totalSlots)
+				s.Printf("%s%s: tokens: used: %d remaining: %d,%d slots: used: %d, total: %d",
+					curSep, kind, g.intTokensUsed, g.cpuTimeTokensOne, g.cpuTimeTokensTwo, g.sg.usedSlots,
+					g.sg.totalSlots)
 			case *kvStoreTokenGranter:
 				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
 					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
@@ -1054,11 +1060,13 @@ type GrantCoordinatorMetrics struct {
 	KVSlotAdjusterIncrements     *metric.Counter
 	KVSlotAdjusterDecrements     *metric.Counter
 
-	KVCPUTimeTokens           *metric.Gauge
-	KVCPUTimeTokensAdded      *metric.Counter
-	KVCPUTimeTokensRemoved    *metric.Counter
-	KVCPUTimeTokensRate       *metric.Gauge
-	KVTenantCPUTimeTokensRate *metric.Gauge
+	KVCPUTimeTokensOne                  *metric.Gauge
+	KVCPUTimeTokensTwo                  *metric.Gauge
+	KVCPUTimeTokensRateOne              *metric.Gauge
+	KVCPUTimeTokensRateTwo              *metric.Gauge
+	KVCPUTimeTokensExhaustedDurationOne *metric.Counter
+	KVCPUTimeTokensExhaustedDurationTwo *metric.Counter
+	KVTenantCPUTimeTokensRate           *metric.Gauge
 
 	KVTokensToCPUMultiplier *metric.Gauge
 }
@@ -1076,12 +1084,14 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
 		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
 
-		KVCPUTimeTokens:           metric.NewGauge(kvCPUTimeTokens),
-		KVCPUTimeTokensAdded:      metric.NewCounter(kvCPUTimeTokensAdded),
-		KVCPUTimeTokensRemoved:    metric.NewCounter(kvCPUTimeTokensRemoved),
-		KVCPUTimeTokensRate:       metric.NewGauge(kvCPUTimeTokensRate),
-		KVTenantCPUTimeTokensRate: metric.NewGauge(kvTenantCPUTimeTokensRate),
-		KVTokensToCPUMultiplier:   metric.NewGauge(kvTokensToCPUMultiplier),
+		KVCPUTimeTokensOne:                  metric.NewGauge(kvCPUTimeTokensOne),
+		KVCPUTimeTokensTwo:                  metric.NewGauge(kvCPUTimeTokensTwo),
+		KVCPUTimeTokensRateOne:              metric.NewGauge(kvCPUTimeTokensRateOne),
+		KVCPUTimeTokensRateTwo:              metric.NewGauge(kvCPUTimeTokensRateTwo),
+		KVCPUTimeTokensExhaustedDurationOne: metric.NewCounter(kvCPUTimeTokensExhaustedDurationOne),
+		KVCPUTimeTokensExhaustedDurationTwo: metric.NewCounter(kvCPUTimeTokensExhaustedDurationTwo),
+		KVTenantCPUTimeTokensRate:           metric.NewGauge(kvTenantCPUTimeTokensRate),
+		KVTokensToCPUMultiplier:             metric.NewGauge(kvTokensToCPUMultiplier),
 	}
 }
 

@@ -134,16 +134,15 @@ type cpuTimeTokenAdjuster struct {
 	granter               *slotAndCPUTimeTokenGranter
 	tenantTokensRequester tenantTokensRequester
 
-	kvCPUTimeTokens           *metric.Gauge
-	kvCPUTimeTokensAdded      *metric.Counter
-	kvCPUTimeTokensRemoved    *metric.Counter
-	kvCPUTimeTokensRate       *metric.Gauge
+	kvCPUTimeTokensOne        *metric.Gauge
+	kvCPUTimeTokensTwo        *metric.Gauge
+	kvCPUTimeTokensRateOne    *metric.Gauge
+	kvCPUTimeTokensRateTwo    *metric.Gauge
 	kvTenantCPUTimeTokensRate *metric.Gauge
 	kvTokensToCPUMultiplier   *metric.Gauge
 
 	lastSampleTime           time.Time
 	totalCPUTimeMillis       int64
-	lastTokensInBucket       int64
 	lastCPUTimeTokensEnabled bool
 
 	ticks int64
@@ -153,17 +152,21 @@ type cpuTimeTokenAdjuster struct {
 	// tokenBucketRate is also the burst budget. And since adjust is called
 	// every 1s, this is also the total tokens to give out until the next call
 	// to adjust.
-	tokenBucketRate       int64
-	tokensAllocated       int64
+	tokenBucketRateOne    int64
+	tokensAllocatedOne    int64
+	tokenBucketRateTwo    int64
+	tokensAllocatedTwo    int64
 	tenantTokenBucketRate int64
 	tenantTokensAllocated int64
 	init                  bool
 }
 
 func (ctta *cpuTimeTokenAdjuster) setGaugeMetrics() {
-	if ctta.kvCPUTimeTokens != nil {
-		ctta.kvCPUTimeTokens.Update(ctta.granter.cpuTimeTokens)
-		ctta.kvCPUTimeTokensRate.Update(ctta.tokenBucketRate)
+	if ctta.kvCPUTimeTokensOne != nil {
+		ctta.kvCPUTimeTokensOne.Update(ctta.granter.cpuTimeTokensOne)
+		ctta.kvCPUTimeTokensTwo.Update(ctta.granter.cpuTimeTokensTwo)
+		ctta.kvCPUTimeTokensRateOne.Update(ctta.tokenBucketRateOne)
+		ctta.kvCPUTimeTokensRateTwo.Update(ctta.tokenBucketRateTwo)
 		ctta.kvTenantCPUTimeTokensRate.Update(ctta.tenantTokenBucketRate)
 		ctta.kvTokensToCPUMultiplier.Update(int64(ctta.tokenToCPUTimeMultiplier * 100))
 	}
@@ -173,25 +176,24 @@ func (ctta *cpuTimeTokenAdjuster) setGaugeMetrics() {
 func (ctta *cpuTimeTokenAdjuster) adjust(
 	now time.Time, totalCPUTimeMillis int64, cpuCapacity float64,
 ) {
-	goalUtil := KVCPUTimeUtilGoal.Get(&ctta.settings.SV)
+	goalUtilTwo := KVCPUTimeUtilGoal.Get(&ctta.settings.SV)
+	goalUtilOne := goalUtilTwo + 0.05
 	cpuTimeTokensEnabled := KVCPUTimeTokensEnabled.Get(&ctta.settings.SV)
 	if !ctta.init {
 		ctta.init = true
 		ctta.lastSampleTime = now
 		ctta.totalCPUTimeMillis = totalCPUTimeMillis
 		ctta.tokenToCPUTimeMultiplier = 1.0
-		ctta.tokenBucketRate = int64(cpuCapacity * float64(time.Second) * goalUtil)
-		ctta.lastTokensInBucket = ctta.tokenBucketRate
+		ctta.tokenBucketRateOne = int64(cpuCapacity * float64(time.Second) * goalUtilOne)
+		ctta.tokenBucketRateTwo = int64(cpuCapacity * float64(time.Second) * goalUtilTwo)
 		ctta.lastCPUTimeTokensEnabled = cpuTimeTokensEnabled
-		ctta.granter.cpuTimeTokens = ctta.tokenBucketRate
+		ctta.granter.addToOne(ctta.tokenBucketRateOne, true)
+		ctta.granter.addToTwo(ctta.tokenBucketRateTwo, true)
 		ctta.granter.tokensEnabled = cpuTimeTokensEnabled
-		ctta.tenantTokenBucketRate = ctta.tokenBucketRate
+		ctta.tenantTokenBucketRate = ctta.tokenBucketRateTwo / 4
 		ctta.tenantTokensRequester.setTenantCPUTokensBurstLimit(
-			ctta.tokenBucketRate, cpuTimeTokensEnabled)
+			ctta.tenantTokenBucketRate, cpuTimeTokensEnabled)
 		ctta.setGaugeMetrics()
-		if ctta.kvCPUTimeTokensAdded != nil {
-			ctta.kvCPUTimeTokensAdded.Inc(ctta.tokenBucketRate)
-		}
 		return
 	}
 	dur := now.Sub(ctta.lastSampleTime)
@@ -237,86 +239,50 @@ func (ctta *cpuTimeTokenAdjuster) adjust(
 		ctta.tokenToCPUTimeMultiplier =
 			alpha*tokenToCPUTimeMultiplier + (1-alpha)*ctta.tokenToCPUTimeMultiplier
 	}
-	tokenBucketRate :=
-		int64((cpuCapacity * float64(time.Second) * goalUtil) / ctta.tokenToCPUTimeMultiplier)
-	intUnderUtilizationOfTokens := ctta.granter.cpuTimeTokens > ctta.tokenBucketRate/8
-	// Ignoring the fact that tokens are capped to the burst.
-	intAddedTokens := int64(float64(ctta.tokenBucketRate) * (float64(dur) / float64(time.Second)))
-	tokenBucketRateDelta := tokenBucketRate - ctta.tokenBucketRate
-	prevTenantToTokenBucketRatio := float64(ctta.tenantTokenBucketRate) / float64(ctta.tokenBucketRate)
-	ctta.tokenBucketRate = tokenBucketRate
-	ctta.tenantTokenBucketRate = int64(prevTenantToTokenBucketRatio * float64(ctta.tokenBucketRate))
-
-	cpuTimeTokens := ctta.granter.cpuTimeTokens + tokenBucketRateDelta
-	if cpuTimeTokens > ctta.tokenBucketRate ||
+	tokenBucketRateOne :=
+		int64((cpuCapacity * float64(time.Second) * goalUtilOne) / ctta.tokenToCPUTimeMultiplier)
+	tokenBucketRateTwo :=
+		int64((cpuCapacity * float64(time.Second) * goalUtilTwo) / ctta.tokenToCPUTimeMultiplier)
+	tenantTokenBucketRate := tokenBucketRateTwo / 4
+	tokenBucketRateOneDelta := tokenBucketRateOne - ctta.tokenBucketRateOne
+	tokenBucketRateTwoDelta := tokenBucketRateTwo - ctta.tokenBucketRateTwo
+	ctta.tokenBucketRateOne = tokenBucketRateOne
+	ctta.tokenBucketRateTwo = tokenBucketRateTwo
+	ctta.tenantTokenBucketRate = tenantTokenBucketRate
+	cpuTimeTokensOne := ctta.granter.cpuTimeTokensOne + tokenBucketRateOneDelta
+	if cpuTimeTokensOne > ctta.tokenBucketRateOne ||
 		(cpuTimeTokensEnabled && !ctta.lastCPUTimeTokensEnabled) {
-		cpuTimeTokens = ctta.tokenBucketRate
-	} else if cpuTimeTokens < 0 {
-		cpuTimeTokens = 0
+		cpuTimeTokensOne = ctta.tokenBucketRateOne
+	} else if cpuTimeTokensOne < 0 {
+		cpuTimeTokensOne = 0
 	}
-	change := cpuTimeTokens - ctta.granter.cpuTimeTokens
-	ctta.granter.cpuTimeTokens = cpuTimeTokens
+	cpuTimeTokensTwo := ctta.granter.cpuTimeTokensTwo + tokenBucketRateTwoDelta
+	minCPUTimeTokensTwo := ctta.tokenBucketRateTwo - ctta.tokenBucketRateOne
+	if minCPUTimeTokensTwo >= 0 {
+		panic("minCPUTimeTokensTwo must be negative")
+	}
+	if cpuTimeTokensTwo > ctta.tokenBucketRateTwo ||
+		(cpuTimeTokensEnabled && !ctta.lastCPUTimeTokensEnabled) {
+		cpuTimeTokensTwo = ctta.tokenBucketRateTwo
+	} else if cpuTimeTokensTwo < minCPUTimeTokensTwo {
+		cpuTimeTokensTwo = minCPUTimeTokensTwo
+	}
+	ctta.granter.addToOne(cpuTimeTokensOne-ctta.granter.cpuTimeTokensOne, true)
+	ctta.granter.addToTwo(cpuTimeTokensTwo-ctta.granter.cpuTimeTokensTwo, true)
 	ctta.granter.tokensEnabled = cpuTimeTokensEnabled
-	if ctta.kvCPUTimeTokensAdded != nil {
-		if change > 0 {
-			ctta.kvCPUTimeTokensAdded.Inc(change)
-		} else if change < 0 {
-			ctta.kvCPUTimeTokensRemoved.Inc(-change)
-		}
-	}
-
-	intMaxControlledTokensAvailable := ctta.lastTokensInBucket + intAddedTokens
-	intMinControlledTokensAvailable := min(intMaxControlledTokensAvailable, intAddedTokens)
-	excessTokens := intRegularTokensUsed - intMaxControlledTokensAvailable
-	if excessTokens < 0 {
-		excessTokens = 0
-	}
-	underUsage := intMinControlledTokensAvailable - intRegularTokensUsed
-	ctta.lastTokensInBucket = ctta.granter.cpuTimeTokens
-	if true {
-		if intUnderUtilizationOfTokens || (cpuTimeTokensEnabled && !ctta.lastCPUTimeTokensEnabled) {
-			ctta.tenantTokenBucketRate = ctta.tokenBucketRate
-		} else {
-			toDeductFromTenantTokens := excessTokens
-			// Some tenants are taking more than we want. We need to restrict per-tenant
-			// cpu-time tokens.
-			ctta.tenantTokenBucketRate -= toDeductFromTenantTokens
-			// Don't let the tenant token rate fall below 10%. This means each tenant
-			// can consume 2.5% of goal without being controlled. So if overload due to
-			// many small tenants, performance isolation will suffer. We deem this
-			// acceptable since we are trying to avoid queueing for small tenants in
-			// general.
-			if ctta.tenantTokenBucketRate < ctta.tokenBucketRate/10 {
-				ctta.tenantTokenBucketRate = ctta.tokenBucketRate / 10
-			}
-		}
-	} else {
-		toDeduct := max(excessTokens, intUncontrolledTokensUsed)
-		ctta.tenantTokenBucketRate -= toDeduct
-		if ctta.tenantTokenBucketRate < ctta.tokenBucketRate/10 {
-			ctta.tenantTokenBucketRate = ctta.tokenBucketRate / 10
-		}
-		if underUsage > 0 {
-			// We are under-utilizing the aggregate tokens. We need to
-			// increase the tenant burst tokens.
-			ctta.tenantTokenBucketRate += underUsage
-			if ctta.tenantTokenBucketRate > ctta.tokenBucketRate {
-				ctta.tenantTokenBucketRate = ctta.tokenBucketRate
-			}
-		}
-	}
 	log.Infof(context.Background(),
-		"%s: rates=%s,%s, allocated=%s,%s, last-tokens=%s(underutil=%t,%s) excess=%s uncontrolled=%s mutiplier=%.1f ticks=%d",
-		now.String(),
-		time.Duration(ctta.tokenBucketRate), time.Duration(ctta.tenantTokenBucketRate),
-		time.Duration(ctta.tokensAllocated), time.Duration(ctta.tenantTokensAllocated),
-		time.Duration(ctta.lastTokensInBucket), intUnderUtilizationOfTokens, time.Duration(underUsage),
-		time.Duration(excessTokens), time.Duration(intUncontrolledTokensUsed),
+		"rates=%s,%s,%s allocated=%s,%s,%s used=%s, uncontrolled=%s mutiplier=%.1f ticks=%d",
+		time.Duration(ctta.tokenBucketRateOne),
+		time.Duration(ctta.tokenBucketRateTwo), time.Duration(ctta.tenantTokenBucketRate),
+		time.Duration(ctta.tokensAllocatedOne), time.Duration(ctta.tokensAllocatedTwo),
+		time.Duration(ctta.tenantTokensAllocated),
+		time.Duration(intRegularTokensUsed), time.Duration(intUncontrolledTokensUsed),
 		ctta.tokenToCPUTimeMultiplier, ctta.ticks)
 	ctta.ticks = 0
 	ctta.tenantTokensRequester.setTenantCPUTokensBurstLimit(
 		ctta.tenantTokenBucketRate, cpuTimeTokensEnabled)
-	ctta.tokensAllocated = 0
+	ctta.tokensAllocatedOne = 0
+	ctta.tokensAllocatedTwo = 0
 	ctta.tenantTokensAllocated = 0
 	ctta.lastCPUTimeTokensEnabled = cpuTimeTokensEnabled
 }
@@ -336,36 +302,33 @@ func (ctta *cpuTimeTokenAdjuster) allocateTokensTick(remainingTicks int64) {
 		}
 		return toAllocate
 	}
-	toAllocateTokens := allocateFunc(ctta.tokenBucketRate, ctta.tokensAllocated, remainingTicks)
-	ctta.tokensAllocated += toAllocateTokens
-	cpuTimeTokens := ctta.granter.cpuTimeTokens + toAllocateTokens
-	if cpuTimeTokens > ctta.tokenBucketRate {
-		cpuTimeTokens = ctta.tokenBucketRate
-	}
-	delta := cpuTimeTokens - ctta.granter.cpuTimeTokens
-	if ctta.kvCPUTimeTokensAdded != nil {
-		if delta > 0 {
-			ctta.kvCPUTimeTokensAdded.Inc(delta)
-		} else if delta < 0 {
-			ctta.kvCPUTimeTokensRemoved.Inc(-delta)
+	{
+		toAllocateTokensOne := allocateFunc(ctta.tokenBucketRateOne, ctta.tokensAllocatedOne, remainingTicks)
+		ctta.tokensAllocatedOne += toAllocateTokensOne
+		cpuTimeTokensOne := ctta.granter.cpuTimeTokensOne + toAllocateTokensOne
+		if cpuTimeTokensOne > ctta.tokenBucketRateOne {
+			cpuTimeTokensOne = ctta.tokenBucketRateOne
 		}
+		ctta.granter.addToOne(cpuTimeTokensOne-ctta.granter.cpuTimeTokensOne, false)
 	}
-	ctta.granter.cpuTimeTokens = cpuTimeTokens
+	{
+		toAllocateTokensTwo := allocateFunc(ctta.tokenBucketRateTwo, ctta.tokensAllocatedTwo, remainingTicks)
+		ctta.tokensAllocatedTwo += toAllocateTokensTwo
+		cpuTimeTokensTwo := ctta.granter.cpuTimeTokensTwo + toAllocateTokensTwo
+		if cpuTimeTokensTwo > ctta.tokenBucketRateTwo {
+			cpuTimeTokensTwo = ctta.tokenBucketRateTwo
+		}
+		ctta.granter.addToTwo(cpuTimeTokensTwo-ctta.granter.cpuTimeTokensTwo, false)
+	}
 
 	toAllocateTenantTokens := allocateFunc(
 		ctta.tenantTokenBucketRate, ctta.tenantTokensAllocated, remainingTicks)
 	ctta.tenantTokensAllocated += toAllocateTenantTokens
-	withoutPermissionTokens := ctta.tenantTokensRequester.tenantCPUTokensTick(toAllocateTenantTokens)
-	for _, tokens := range withoutPermissionTokens {
-		if tokens < 0 {
-			panic("negative withoutPermissionTokens")
-		}
-		ctta.granter.tookWithoutPermissionLocked(tokens, 0)
-	}
+	ctta.tenantTokensRequester.tenantCPUTokensTick(toAllocateTenantTokens)
 	ctta.setGaugeMetrics()
 }
 
 type tenantTokensRequester interface {
-	tenantCPUTokensTick(tokensToAdd int64) (withoutPermissionTokens []int64)
+	tenantCPUTokensTick(tokensToAdd int64)
 	setTenantCPUTokensBurstLimit(tokens int64, enabled bool)
 }

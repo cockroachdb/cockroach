@@ -467,6 +467,9 @@ func TestGrantCoordinatorCPUTimeToken(t *testing.T) {
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
 			coord = coords.Regular
+			coord.mu.Lock()
+			coord.mu.ctta.granter.tokensEnabled = true
+			coord.mu.Unlock()
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -486,7 +489,13 @@ func TestGrantCoordinatorCPUTimeToken(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanWorkKind(t, d)].tryGet(int64(v))
+			workKind := scanWorkKind(t, d)
+			if d.HasArg("getter") {
+				var g int
+				d.ScanArgs(t, "getter", &g)
+				requesters[workKind].getter = getterKind(g)
+			}
+			requesters[workKind].tryGet(int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -569,6 +578,7 @@ type testRequester struct {
 	buf          *strings.Builder
 
 	waitingRequests        bool
+	getter                 getterKind
 	returnValueFromGranted int64
 	grantChainID           grantChainID
 }
@@ -576,8 +586,11 @@ type testRequester struct {
 var _ requester = &testRequester{}
 var _ tenantTokensRequester = &testRequester{}
 
-func (tr *testRequester) hasWaitingRequests() bool {
-	return tr.waitingRequests
+func (tr *testRequester) hasWaitingRequests() getterKind {
+	if tr.waitingRequests {
+		return tr.getter
+	}
+	return getterKindNone
 }
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
@@ -591,7 +604,7 @@ func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 func (tr *testRequester) close() {}
 
 func (tr *testRequester) tryGet(count int64) {
-	rv := tr.granter.tryGet(count)
+	rv := tr.granter.tryGet(tr.getter, count)
 	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }
@@ -614,10 +627,9 @@ func (tr *testRequester) continueGrantChain() {
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
-func (tr *testRequester) tenantCPUTokensTick(tokensToAdd int64) (withoutPermissionTokens []int64) {
+func (tr *testRequester) tenantCPUTokensTick(tokensToAdd int64) {
 	fmt.Fprintf(tr.buf, "%s%s: tenantCPUTokensTick(%d)\n", tr.workKind,
 		tr.additionalID, tokensToAdd)
-	return nil
 }
 
 func (tr *testRequester) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
@@ -1494,7 +1506,7 @@ func TestMultiTenantUncontrolled3CPUTokenSim(t *testing.T) {
 
 	simulateIntervalMillis := 12 * 1000
 	lastTotalTokensUsed := 0
-	const printPerTick = true
+	const printPerTick = false
 	for i := 0; i <= simulateIntervalMillis; i++ {
 		// Pop work that finished
 		{

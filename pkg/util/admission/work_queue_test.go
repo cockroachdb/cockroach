@@ -74,8 +74,8 @@ func (tg *testGranter) grantKind() grantKind {
 	return tg.gk
 }
 
-func (tg *testGranter) tryGet(count int64) bool {
-	tg.buf.printf("tryGet%s %d: returning %t", tg.name, count, tg.returnValueFromTryGet)
+func (tg *testGranter) tryGet(getter getterKind, count int64) bool {
+	tg.buf.printf("tryGet%s g%d %d: returning %t", tg.name, getter, count, tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }
 
@@ -204,6 +204,7 @@ func TestWorkQueueBasic(t *testing.T) {
 						opts.disableEpochClosingGoroutine = true
 						opts.disableGCTenantsAndResetUsed = true
 						st = cluster.MakeTestingClusterSettings()
+						SystemTenantBypassesCPUAdmission.Override(context.Background(), &st.SV, true)
 						q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 							KVWork, tg, st, metrics, opts).(*WorkQueue)
 						if d.HasArg("cpu-time-token") {
@@ -331,10 +332,7 @@ func TestWorkQueueBasic(t *testing.T) {
 					case "tenant-cpu-tokens-tick":
 						var tokens int64
 						d.ScanArgs(t, "tokens", &tokens)
-						withoutPermissionTokens := q.tenantCPUTokensTick(tokens)
-						for _, wpt := range withoutPermissionTokens {
-							tg.tookWithoutPermission(wpt)
-						}
+						q.tenantCPUTokensTick(tokens)
 						// Need deterministic output, and this is racing with the goroutine
 						// which is trying to get admitted. Retry to let it get scheduled.
 						maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)

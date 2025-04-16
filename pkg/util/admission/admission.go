@@ -124,6 +124,7 @@
 package admission
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -138,7 +139,7 @@ import (
 type requester interface {
 	// hasWaitingRequests returns whether there are any waiting/queued requests
 	// of this WorkKind.
-	hasWaitingRequests() bool
+	hasWaitingRequests() getterKind
 	// granted is called by a granter to grant admission to a single queued
 	// request. It returns > 0 if the grant was accepted, else returns 0. A
 	// grant may not be accepted if the grant raced with request cancellation
@@ -151,6 +152,15 @@ type requester interface {
 	close()
 }
 
+type getterKind uint8
+
+const (
+	// TODO: why is this called getterKindOne when the value is 0?
+	getterKindOne getterKind = iota
+	getterKindTwo
+	getterKindNone getterKind = math.MaxUint8
+)
+
 // granter is paired with a requester in that a requester for a particular
 // WorkKind will interact with a granter. See admission.go for an overview of
 // how this fits into the overall structure.
@@ -161,7 +171,7 @@ type granter interface {
 	// avoids queueing in the requester.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
-	tryGet(count int64) (granted bool)
+	tryGet(getter getterKind, count int64) (granted bool)
 	// returnGrant is called for:
 	// - returning slots after use.
 	// - returning either slots or tokens when the grant raced with the work
@@ -231,7 +241,7 @@ type granterWithLockedCalls interface {
 	// tryGetLocked is the real implementation of tryGet from the granter
 	// interface. demuxHandle is an opaque handle that was passed into the
 	// GrantCoordinator.
-	tryGetLocked(count int64, demuxHandle int8) grantResult
+	tryGetLocked(getter getterKind, count int64, demuxHandle int8) grantResult
 	// returnGrantLocked is the real implementation of returnGrant from the
 	// granter interface. demuxHandle is an opaque handle that was passed into
 	// the GrantCoordinator.
@@ -245,9 +255,9 @@ type granterWithLockedCalls interface {
 
 	// requesterHasWaitingRequests returns whether some requester associated
 	// with the granter has waiting requests.
-	requesterHasWaitingRequests() bool
+	requesterHasWaitingRequests() getterKind
 	// tryGrantLocked is used to attempt to grant to waiting requests.
-	tryGrantLocked(grantChainID grantChainID) grantResult
+	tryGrantLocked(getter getterKind, grantChainID grantChainID) grantResult
 }
 
 type granterWithBoth interface {

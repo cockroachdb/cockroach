@@ -1,32 +1,32 @@
-init-grant-coordinator min-cpu=1 max-cpu=3
+init-grant-coordinator min-cpu=1 max-cpu=6
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 try-get work=kv
 ----
 kv: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 set-return-value-from-granted work=kv v=200000000
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 0) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 cpu-load runnable=0 procs=1
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 SlotAdjuster metrics: slots: 1, duration (short, long) millis: (1, 0), inc: 0, dec: 0
 
@@ -34,42 +34,42 @@ try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 9999
+(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 9999
 sql-sql-response: avail: 10000
 
 try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 9999
+(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 9999
 sql-sql-response: avail: 9999
 
 cpu-load runnable=0 procs=1
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 0,0 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 SlotAdjuster metrics: slots: 1, duration (short, long) millis: (2, 0), inc: 0, dec: 0
 
 cpu-time-token-adjust time-millis=1000 cpu-time-millis=1000 procs=1
 ----
-kv: setTenantCPUTokensBurstLimit(800000000)
+kv: setTenantCPUTokensBurstLimit(200000000, true)
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 800000000 slots: used: 0, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 3) kv: tokens: used: 0 remaining: 850000000,800000000 slots: used: 0, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 try-get work=kv v=500000000
 ----
 kv: tryGet(500000000) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 3) kv: tokens: used: 500000000 remaining: 300000000 slots: used: 1, total: 1 sql-kv-response: avail: 10000
+(chain: id: 1 active: false index: 3) kv: tokens: used: 500000000 remaining: 350000000,300000000 slots: used: 1, total: 1 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 cpu-load runnable=0 procs=1
 ----
 kv: granted in chain 1, and returning 200000000
 GrantCoordinator:
-(chain: id: 1 active: true index: 0) kv: tokens: used: 700000000 remaining: 100000000 slots: used: 2, total: 2 sql-kv-response: avail: 10000
+(chain: id: 1 active: true index: 0) kv: tokens: used: 700000000 remaining: 150000000,100000000 slots: used: 2, total: 2 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 SlotAdjuster metrics: slots: 2, duration (short, long) millis: (3, 0), inc: 1, dec: 0
 
@@ -77,34 +77,48 @@ cpu-load runnable=0 procs=1
 ----
 kv: granted in chain 2, and returning 200000000
 GrantCoordinator:
-(chain: id: 2 active: true index: 0) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 3, total: 3 sql-kv-response: avail: 10000
+(chain: id: 2 active: true index: 0) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 3, total: 3 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 SlotAdjuster metrics: slots: 3, duration (short, long) millis: (4, 0), inc: 2, dec: 0
+
+cpu-load runnable=0 procs=1
+----
+GrantCoordinator:
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+SlotAdjuster metrics: slots: 4, duration (short, long) millis: (5, 0), inc: 3, dec: 0
+
+continue-grant-chain work=kv
+----
+kv: continueGrantChain
+GrantCoordinator:
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
 
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 2 active: true index: 0) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 3, total: 3 sql-kv-response: avail: 10000
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 3, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 continue-grant-chain work=kv
 ----
 kv: continueGrantChain
 GrantCoordinator:
-(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 3, total: 3 sql-kv-response: avail: 10000
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 3, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 return-grant work=kv v=0
 ----
 kv: returnGrant(0)
 GrantCoordinator:
-(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 3 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 return-grant work=kv v=200000000
@@ -112,20 +126,20 @@ return-grant work=kv v=200000000
 kv: returnGrant(200000000)
 kv: granted in chain 3, and returning 200000000
 GrantCoordinator:
-(chain: id: 3 active: true index: 0) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 3 active: true index: 0) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 continue-grant-chain work=kv
 ----
 kv: continueGrantChain
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 set-return-value-from-granted work=kv v=0
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: tokens: used: 900000000 remaining: -100000000 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 900000000 remaining: -50000000,-100000000 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 return-grant work=kv v=200000000
@@ -133,40 +147,224 @@ return-grant work=kv v=200000000
 kv: returnGrant(200000000)
 kv: granted in chain 4, and returning 0
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: tokens: used: 700000000 remaining: 100000000 slots: used: 1, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 700000000 remaining: 150000000,100000000 slots: used: 1, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: tokens: used: 700000001 remaining: 99999999 slots: used: 2, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 700000001 remaining: 149999999,99999999 slots: used: 2, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: tokens: used: 700000002 remaining: 99999998 slots: used: 3, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 700000002 remaining: 149999998,99999998 slots: used: 3, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 return-grant work=sql-sql-response
 ----
 sql-sql-response: returnGrant(1)
+kv: granted in chain 4, and returning 0
 GrantCoordinator:
-(chain: id: 4 active: false index: 0) kv: tokens: used: 700000002 remaining: 99999998 slots: used: 3, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 700000002 remaining: 149999998,99999998 slots: used: 3, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 took-without-permission work=kv v=100000000
 ----
 kv: tookWithoutPermission(100000000)
 GrantCoordinator:
-(chain: id: 4 active: false index: 0) kv: tokens: used: 800000002 remaining: -2 slots: used: 4, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 4, total: 4 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000
 
 try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 4 active: false index: 0) kv: tokens: used: 800000002 remaining: -2 slots: used: 4, total: 3 sql-kv-response: avail: 10000
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 4, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+set-has-waiting-requests work=kv v=false
+----
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 4, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+try-get work=kv v=5 getter=1
+----
+kv: tryGet(5) returned false
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000002 remaining: 49999998,-2 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+try-get work=kv v=5 getter=0
+----
+kv: tryGet(5) returned true
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+set-has-waiting-requests work=kv v=true
+----
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+try-get work=kv v=5 getter=1
+----
+kv: tryGet(5) returned false
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+set-return-value-from-granted work=kv v=50000000
+----
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+cpu-load runnable=0 procs=1
+----
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 800000007 remaining: 49999993,-7 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+SlotAdjuster metrics: slots: 4, duration (short, long) millis: (6, 0), inc: 3, dec: 0
+
+cpu-time-token-adjust time-millis=2000 cpu-time-millis=2000 procs=1
+----
+kv: setTenantCPUTokensBurstLimit(177777778, true)
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 0 remaining: 0,-44444445 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+cpu-time-token-tick remaining-ticks=900
+----
+kv: tenantCPUTokensTick(197531)
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 0 remaining: 839507,-43654321 slots: used: 2, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+try-get work=kv v=5 getter=0
+----
+kv: tryGet(5) returned true
+GrantCoordinator:
+(chain: id: 4 active: false index: 3) kv: tokens: used: 5 remaining: 839502,-43654326 slots: used: 3, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+cpu-load runnable=0 procs=1
+----
+kv: granted in chain 4, and returning 50000000
+GrantCoordinator:
+(chain: id: 4 active: true index: 0) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 4, total: 4 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+SlotAdjuster metrics: slots: 4, duration (short, long) millis: (7, 0), inc: 3, dec: 0
+
+cpu-load runnable=0 procs=1
+----
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 4, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+SlotAdjuster metrics: slots: 5, duration (short, long) millis: (8, 0), inc: 4, dec: 0
+
+try-get work=kv v=5 getter=0
+----
+kv: tryGet(5) returned false
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 4, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+try-get work=kv v=5 getter=1
+----
+kv: tryGet(5) returned false
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 4, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 3, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 2, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: -49160498,-93654326 slots: used: 1, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+cpu-time-token-tick remaining-ticks=1
+----
+kv: tenantCPUTokensTick(177580247)
+GrantCoordinator:
+(chain: id: 5 active: false index: 3) kv: tokens: used: 50000005 remaining: 705555554,616666664 slots: used: 1, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+return-grant work=kv v=0
+----
+kv: returnGrant(0)
+kv: granted in chain 5, and returning 50000000
+GrantCoordinator:
+(chain: id: 5 active: true index: 0) kv: tokens: used: 100000005 remaining: 655555554,566666664 slots: used: 1, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+continue-grant-chain work=kv
+----
+kv: continueGrantChain
+kv: granted in chain 5, and returning 50000000
+GrantCoordinator:
+(chain: id: 5 active: true index: 0) kv: tokens: used: 150000005 remaining: 605555554,516666664 slots: used: 2, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+set-return-value-from-granted work=kv v=500000000
+----
+GrantCoordinator:
+(chain: id: 5 active: true index: 0) kv: tokens: used: 150000005 remaining: 605555554,516666664 slots: used: 2, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+continue-grant-chain work=kv
+----
+kv: continueGrantChain
+kv: granted in chain 5, and returning 500000000
+GrantCoordinator:
+(chain: id: 5 active: true index: 0) kv: tokens: used: 650000005 remaining: 105555554,16666664 slots: used: 3, total: 5 sql-kv-response: avail: 10000
+sql-sql-response: avail: 10000
+
+continue-grant-chain work=kv
+----
+kv: continueGrantChain
+kv: granted in chain 5, and returning 500000000
+GrantCoordinator:
+(chain: id: 5 active: true index: 0) kv: tokens: used: 1150000005 remaining: -394444446,-483333336 slots: used: 4, total: 5 sql-kv-response: avail: 10000
 sql-sql-response: avail: 10000

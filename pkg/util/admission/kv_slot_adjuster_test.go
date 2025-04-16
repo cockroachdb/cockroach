@@ -27,9 +27,8 @@ func toMillisString(nanos int64) string {
 	return fmt.Sprintf("%.1f millis", float64(nanos)/1e6)
 }
 
-func (tttr *testTenantTokensRequester) tenantCPUTokensTick(tokensToAdd int64) []int64 {
+func (tttr *testTenantTokensRequester) tenantCPUTokensTick(tokensToAdd int64) {
 	fmt.Fprintf(tttr.b, "  tenantCPUTokensTick(%s)\n", toMillisString(tokensToAdd))
-	return nil
 }
 
 func (tttr *testTenantTokensRequester) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
@@ -42,17 +41,20 @@ func TestCPUTimeTokenAdjuster(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	st := cluster.MakeTestingClusterSettings()
 	KVCPUTimeTokensEnabled.Override(context.Background(), &st.SV, true)
+	KVCPUTimeUtilGoal.Override(context.Background(), &st.SV, 0.8)
 	var ctta *cpuTimeTokenAdjuster
 	var b strings.Builder
 	printCTTA := func() {
-		fmt.Fprintf(&b, "CTTA t=%s: total-cpu=%s, last-tokens=%s, mult=%.1f\n",
+		fmt.Fprintf(&b, "CTTA t=%s: total-cpu=%s, mult=%.1f\n",
 			toMillisString(ctta.lastSampleTime.UnixNano()),
-			toMillisString(ctta.totalCPUTimeMillis*1e6), toMillisString(ctta.lastTokensInBucket),
+			toMillisString(ctta.totalCPUTimeMillis*1e6),
 			ctta.tokenToCPUTimeMultiplier)
-		fmt.Fprintf(&b, "  tokens: %s, %s, tenant: %s, %s\n",
-			toMillisString(ctta.tokenBucketRate), toMillisString(ctta.tokensAllocated),
+		fmt.Fprintf(&b, "  tokens (alloc): %s(%s) %s(%s), tenant (alloc): %s(%s)\n",
+			toMillisString(ctta.tokenBucketRateOne), toMillisString(ctta.tokensAllocatedOne),
+			toMillisString(ctta.tokenBucketRateTwo), toMillisString(ctta.tokensAllocatedTwo),
 			toMillisString(ctta.tenantTokenBucketRate), toMillisString(ctta.tenantTokensAllocated))
-		fmt.Fprintf(&b, "  granter: tokens: %s\n", toMillisString(ctta.granter.cpuTimeTokens))
+		fmt.Fprintf(&b, "  granter: tokens: %s %s\n", toMillisString(ctta.granter.cpuTimeTokensOne),
+			toMillisString(ctta.granter.cpuTimeTokensTwo))
 		fmt.Fprintf(&b, "\n")
 	}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_adjuster"),
@@ -78,7 +80,12 @@ func TestCPUTimeTokenAdjuster(t *testing.T) {
 				if d.HasArg("cur-tokens-in-bucket") {
 					var curTokensInBucket int64
 					d.ScanArgs(t, "cur-tokens-in-bucket", &curTokensInBucket)
-					ctta.granter.cpuTimeTokens = curTokensInBucket * 1e6
+					ctta.granter.cpuTimeTokensTwo = curTokensInBucket * 1e6
+					mult := 1.05
+					if curTokensInBucket < 0 {
+						mult = 0.95
+					}
+					ctta.granter.cpuTimeTokensOne = int64(float64(curTokensInBucket) * 1e6 * mult)
 				}
 
 				ctta.adjust(parseAdjustParams(t, d))

@@ -6,28 +6,28 @@ adjust time-millis=500 cpu-millis=1000 cpu-count=2
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1600.0 millis, true)
-CTTA t=500.0 millis: total-cpu=1000.0 millis, last-tokens=1600.0 millis, mult=1.0
-  tokens: 1600.0 millis, 0.0 millis, tenant: 1600.0 millis, 0.0 millis
-  granter: tokens: 1600.0 millis
+  setTenantCPUTokensBurstLimit(400.0 millis, true)
+CTTA t=500.0 millis: total-cpu=1000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(0.0 millis) 1600.0 millis(0.0 millis), tenant (alloc): 400.0 millis(0.0 millis)
+  granter: tokens: 1700.0 millis 1600.0 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=500.0 millis: total-cpu=1000.0 millis, last-tokens=1600.0 millis, mult=1.0
-  tokens: 1600.0 millis, 1.6 millis, tenant: 1600.0 millis, 1.6 millis
-  granter: tokens: 1600.0 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=500.0 millis: total-cpu=1000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(1.7 millis) 1600.0 millis(1.6 millis), tenant (alloc): 400.0 millis(0.4 millis)
+  granter: tokens: 1700.0 millis 1600.0 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=500.0 millis: total-cpu=1000.0 millis, last-tokens=1600.0 millis, mult=1.0
-  tokens: 1600.0 millis, 3.2 millis, tenant: 1600.0 millis, 3.2 millis
-  granter: tokens: 1600.0 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=500.0 millis: total-cpu=1000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(3.4 millis) 1600.0 millis(3.2 millis), tenant (alloc): 400.0 millis(0.8 millis)
+  granter: tokens: 1700.0 millis 1600.0 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=500.0 millis: total-cpu=1000.0 millis, last-tokens=1600.0 millis, mult=1.0
-  tokens: 1600.0 millis, 1600.0 millis, tenant: 1600.0 millis, 1600.0 millis
-  granter: tokens: 1600.0 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=500.0 millis: total-cpu=1000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(1700.0 millis) 1600.0 millis(1600.0 millis), tenant (alloc): 400.0 millis(400.0 millis)
+  granter: tokens: 1700.0 millis 1600.0 millis
 
 ----
 ----
@@ -42,28 +42,28 @@ adjust time-millis=1500 cpu-millis=3000 cpu-count=2 int-tokens=3200 cur-tokens-i
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1600.0 millis, true)
-CTTA t=1500.0 millis: total-cpu=3000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1600.0 millis, 0.0 millis, tenant: 1600.0 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(400.0 millis, true)
+CTTA t=1500.0 millis: total-cpu=3000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(0.0 millis) 1600.0 millis(0.0 millis), tenant (alloc): 400.0 millis(0.0 millis)
+  granter: tokens: 0.0 millis -10.0 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=1500.0 millis: total-cpu=3000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1600.0 millis, 1.6 millis, tenant: 1600.0 millis, 1.6 millis
-  granter: tokens: 1.6 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=1500.0 millis: total-cpu=3000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(1.7 millis) 1600.0 millis(1.6 millis), tenant (alloc): 400.0 millis(0.4 millis)
+  granter: tokens: 1.7 millis -8.4 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=1500.0 millis: total-cpu=3000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1600.0 millis, 3.2 millis, tenant: 1600.0 millis, 3.2 millis
-  granter: tokens: 3.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=1500.0 millis: total-cpu=3000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(3.4 millis) 1600.0 millis(3.2 millis), tenant (alloc): 400.0 millis(0.8 millis)
+  granter: tokens: 3.4 millis -6.8 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=1500.0 millis: total-cpu=3000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1600.0 millis, 1600.0 millis, tenant: 1600.0 millis, 1600.0 millis
-  granter: tokens: 1600.0 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=1500.0 millis: total-cpu=3000.0 millis, mult=1.0
+  tokens (alloc): 1700.0 millis(1700.0 millis) 1600.0 millis(1600.0 millis), tenant (alloc): 400.0 millis(400.0 millis)
+  granter: tokens: 1700.0 millis 1590.0 millis
 
 ----
 ----
@@ -77,61 +77,60 @@ adjust time-millis=2500 cpu-millis=5000 cpu-count=2 int-tokens=1600 cur-tokens-i
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1422.2 millis, true)
-CTTA t=2500.0 millis: total-cpu=5000.0 millis, last-tokens=0.0 millis, mult=1.1
-  tokens: 1422.2 millis, 0.0 millis, tenant: 1422.2 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(355.6 millis, true)
+CTTA t=2500.0 millis: total-cpu=5000.0 millis, mult=1.1
+  tokens (alloc): 1511.1 millis(0.0 millis) 1422.2 millis(0.0 millis), tenant (alloc): 355.6 millis(0.0 millis)
+  granter: tokens: 0.0 millis -88.9 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.4 millis)
-CTTA t=2500.0 millis: total-cpu=5000.0 millis, last-tokens=0.0 millis, mult=1.1
-  tokens: 1422.2 millis, 1.4 millis, tenant: 1422.2 millis, 1.4 millis
-  granter: tokens: 1.4 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=2500.0 millis: total-cpu=5000.0 millis, mult=1.1
+  tokens (alloc): 1511.1 millis(1.5 millis) 1422.2 millis(1.4 millis), tenant (alloc): 355.6 millis(0.4 millis)
+  granter: tokens: 1.5 millis -87.5 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.4 millis)
-CTTA t=2500.0 millis: total-cpu=5000.0 millis, last-tokens=0.0 millis, mult=1.1
-  tokens: 1422.2 millis, 2.8 millis, tenant: 1422.2 millis, 2.8 millis
-  granter: tokens: 2.8 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=2500.0 millis: total-cpu=5000.0 millis, mult=1.1
+  tokens (alloc): 1511.1 millis(3.0 millis) 1422.2 millis(2.8 millis), tenant (alloc): 355.6 millis(0.7 millis)
+  granter: tokens: 3.0 millis -86.0 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.4 millis)
-CTTA t=2500.0 millis: total-cpu=5000.0 millis, last-tokens=0.0 millis, mult=1.1
-  tokens: 1422.2 millis, 1422.2 millis, tenant: 1422.2 millis, 1422.2 millis
-  granter: tokens: 1422.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=2500.0 millis: total-cpu=5000.0 millis, mult=1.1
+  tokens (alloc): 1511.1 millis(1511.1 millis) 1422.2 millis(1422.2 millis), tenant (alloc): 355.6 millis(355.6 millis)
+  granter: tokens: 1511.1 millis 1333.3 millis
 
 ----
 ----
 
 # Same as previous. The mult further increases to 1.2 which causes token rate
-# to decline. Also the 1600 tokens consumed is higher than the 1422ms of
-# tokens that were expected so tenant token rate is reduced.
+# to decline.
 adjust time-millis=3500 cpu-millis=7000 cpu-count=2 int-tokens=1600 cur-tokens-in-bucket=-10
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1169.6 millis, true)
-CTTA t=3500.0 millis: total-cpu=7000.0 millis, last-tokens=0.0 millis, mult=1.2
-  tokens: 1347.4 millis, 0.0 millis, tenant: 1169.6 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(336.8 millis, true)
+CTTA t=3500.0 millis: total-cpu=7000.0 millis, mult=1.2
+  tokens (alloc): 1431.6 millis(0.0 millis) 1347.4 millis(0.0 millis), tenant (alloc): 336.8 millis(0.0 millis)
+  granter: tokens: 0.0 millis -84.2 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.2 millis)
-CTTA t=3500.0 millis: total-cpu=7000.0 millis, last-tokens=0.0 millis, mult=1.2
-  tokens: 1347.4 millis, 1.3 millis, tenant: 1169.6 millis, 1.2 millis
-  granter: tokens: 1.3 millis
+  tenantCPUTokensTick(0.3 millis)
+CTTA t=3500.0 millis: total-cpu=7000.0 millis, mult=1.2
+  tokens (alloc): 1431.6 millis(1.4 millis) 1347.4 millis(1.3 millis), tenant (alloc): 336.8 millis(0.3 millis)
+  granter: tokens: 1.4 millis -82.9 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.2 millis)
-CTTA t=3500.0 millis: total-cpu=7000.0 millis, last-tokens=0.0 millis, mult=1.2
-  tokens: 1347.4 millis, 2.7 millis, tenant: 1169.6 millis, 2.3 millis
-  granter: tokens: 2.7 millis
+  tenantCPUTokensTick(0.3 millis)
+CTTA t=3500.0 millis: total-cpu=7000.0 millis, mult=1.2
+  tokens (alloc): 1431.6 millis(2.9 millis) 1347.4 millis(2.7 millis), tenant (alloc): 336.8 millis(0.7 millis)
+  granter: tokens: 2.9 millis -81.5 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.2 millis)
-CTTA t=3500.0 millis: total-cpu=7000.0 millis, last-tokens=0.0 millis, mult=1.2
-  tokens: 1347.4 millis, 1347.4 millis, tenant: 1169.6 millis, 1169.6 millis
-  granter: tokens: 1347.4 millis
+  tenantCPUTokensTick(0.3 millis)
+CTTA t=3500.0 millis: total-cpu=7000.0 millis, mult=1.2
+  tokens (alloc): 1431.6 millis(1431.6 millis) 1347.4 millis(1347.4 millis), tenant (alloc): 336.8 millis(336.8 millis)
+  granter: tokens: 1431.6 millis 1263.2 millis
 
 ----
 ----
@@ -139,99 +138,96 @@ CTTA t=3500.0 millis: total-cpu=7000.0 millis, last-tokens=0.0 millis, mult=1.2
 # There is no more backlog in the goroutine scheduler, but due to small
 # tenants consuming without permission, 2000ms of tokens are consumed and
 # 2000ms of CPU is consumed. mult declines to 1.0, and token rate increases.
-# But tenant token rate is further reduced.
-adjust time-millis=4500 cpu-millis=9000 cpu-count=2 int-tokens=2000 cur-tokens-in-bucket=-410
+adjust time-millis=4500 cpu-millis=9000 cpu-count=2 int-tokens=2000 cur-tokens-in-bucket=1700
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(686.1 millis, true)
-CTTA t=4500.0 millis: total-cpu=9000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1542.2 millis, 0.0 millis, tenant: 686.1 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(385.5 millis, true)
+CTTA t=4500.0 millis: total-cpu=9000.0 millis, mult=1.0
+  tokens (alloc): 1638.6 millis(0.0 millis) 1542.2 millis(0.0 millis), tenant (alloc): 385.5 millis(0.0 millis)
+  granter: tokens: 1638.6 millis 1542.2 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(0.7 millis)
-CTTA t=4500.0 millis: total-cpu=9000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1542.2 millis, 1.5 millis, tenant: 686.1 millis, 0.7 millis
-  granter: tokens: 1.5 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=4500.0 millis: total-cpu=9000.0 millis, mult=1.0
+  tokens (alloc): 1638.6 millis(1.6 millis) 1542.2 millis(1.5 millis), tenant (alloc): 385.5 millis(0.4 millis)
+  granter: tokens: 1638.6 millis 1542.2 millis
 
 remaining tick 999
-  tenantCPUTokensTick(0.7 millis)
-CTTA t=4500.0 millis: total-cpu=9000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1542.2 millis, 3.1 millis, tenant: 686.1 millis, 1.4 millis
-  granter: tokens: 3.1 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=4500.0 millis: total-cpu=9000.0 millis, mult=1.0
+  tokens (alloc): 1638.6 millis(3.3 millis) 1542.2 millis(3.1 millis), tenant (alloc): 385.5 millis(0.8 millis)
+  granter: tokens: 1638.6 millis 1542.2 millis
 
 remaining tick 1
-  tenantCPUTokensTick(0.7 millis)
-CTTA t=4500.0 millis: total-cpu=9000.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1542.2 millis, 1542.2 millis, tenant: 686.1 millis, 686.1 millis
-  granter: tokens: 1542.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=4500.0 millis: total-cpu=9000.0 millis, mult=1.0
+  tokens (alloc): 1638.6 millis(1638.6 millis) 1542.2 millis(1542.2 millis), tenant (alloc): 385.5 millis(385.5 millis)
+  granter: tokens: 1638.6 millis 1542.2 millis
 
 ----
 ----
 
 # Low cpu consumption of 500ms and the same number of tokens. mult declines to
-# 1.0, and token rate increases. The tenant token rate is restored to be equal
-# to token rate.
+# 1.0, and token rate increases.
 adjust time-millis=5500 cpu-millis=9500 cpu-count=2 int-tokens=500 cur-tokens-in-bucket=900
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1588.1 millis, true)
-CTTA t=5500.0 millis: total-cpu=9500.0 millis, last-tokens=945.9 millis, mult=1.0
-  tokens: 1588.1 millis, 0.0 millis, tenant: 1588.1 millis, 0.0 millis
-  granter: tokens: 945.9 millis
+  setTenantCPUTokensBurstLimit(397.0 millis, true)
+CTTA t=5500.0 millis: total-cpu=9500.0 millis, mult=1.0
+  tokens (alloc): 1687.3 millis(0.0 millis) 1588.1 millis(0.0 millis), tenant (alloc): 397.0 millis(0.0 millis)
+  granter: tokens: 993.8 millis 945.9 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=5500.0 millis: total-cpu=9500.0 millis, last-tokens=945.9 millis, mult=1.0
-  tokens: 1588.1 millis, 1.6 millis, tenant: 1588.1 millis, 1.6 millis
-  granter: tokens: 947.5 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=5500.0 millis: total-cpu=9500.0 millis, mult=1.0
+  tokens (alloc): 1687.3 millis(1.7 millis) 1588.1 millis(1.6 millis), tenant (alloc): 397.0 millis(0.4 millis)
+  granter: tokens: 995.5 millis 947.5 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=5500.0 millis: total-cpu=9500.0 millis, last-tokens=945.9 millis, mult=1.0
-  tokens: 1588.1 millis, 3.2 millis, tenant: 1588.1 millis, 3.2 millis
-  granter: tokens: 949.1 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=5500.0 millis: total-cpu=9500.0 millis, mult=1.0
+  tokens (alloc): 1687.3 millis(3.4 millis) 1588.1 millis(3.2 millis), tenant (alloc): 397.0 millis(0.8 millis)
+  granter: tokens: 997.2 millis 949.1 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=5500.0 millis: total-cpu=9500.0 millis, last-tokens=945.9 millis, mult=1.0
-  tokens: 1588.1 millis, 1588.1 millis, tenant: 1588.1 millis, 1588.1 millis
-  granter: tokens: 1588.1 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=5500.0 millis: total-cpu=9500.0 millis, mult=1.0
+  tokens (alloc): 1687.3 millis(1687.3 millis) 1588.1 millis(1588.1 millis), tenant (alloc): 397.0 millis(397.0 millis)
+  granter: tokens: 1687.3 millis 1588.1 millis
 
 ----
 ----
 
 # Another burst. 2000ms of CPU consumed and 2500ms of tokens consumed. Mult
-# remains 1.0, and tokens rate remains high. Because excess tokens is close to
-# 0, the tenant token rate is not reduced.
+# remains 1.0, and tokens rate remains high.
 adjust time-millis=6500 cpu-millis=11500 cpu-count=2 int-tokens=2500 cur-tokens-in-bucket=-10
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1597.6 millis, true)
-CTTA t=6500.0 millis: total-cpu=11500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1597.6 millis, 0.0 millis, tenant: 1597.6 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(399.4 millis, true)
+CTTA t=6500.0 millis: total-cpu=11500.0 millis, mult=1.0
+  tokens (alloc): 1697.5 millis(0.0 millis) 1597.6 millis(0.0 millis), tenant (alloc): 399.4 millis(0.0 millis)
+  granter: tokens: 0.6 millis -0.5 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=6500.0 millis: total-cpu=11500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1597.6 millis, 1.6 millis, tenant: 1597.6 millis, 1.6 millis
-  granter: tokens: 1.6 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=6500.0 millis: total-cpu=11500.0 millis, mult=1.0
+  tokens (alloc): 1697.5 millis(1.7 millis) 1597.6 millis(1.6 millis), tenant (alloc): 399.4 millis(0.4 millis)
+  granter: tokens: 2.3 millis 1.1 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=6500.0 millis: total-cpu=11500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1597.6 millis, 3.2 millis, tenant: 1597.6 millis, 3.2 millis
-  granter: tokens: 3.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=6500.0 millis: total-cpu=11500.0 millis, mult=1.0
+  tokens (alloc): 1697.5 millis(3.4 millis) 1597.6 millis(3.2 millis), tenant (alloc): 399.4 millis(0.8 millis)
+  granter: tokens: 4.0 millis 2.7 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.6 millis)
-CTTA t=6500.0 millis: total-cpu=11500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1597.6 millis, 1597.6 millis, tenant: 1597.6 millis, 1597.6 millis
-  granter: tokens: 1597.6 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=6500.0 millis: total-cpu=11500.0 millis, mult=1.0
+  tokens (alloc): 1697.5 millis(1697.5 millis) 1597.6 millis(1597.6 millis), tenant (alloc): 399.4 millis(399.4 millis)
+  granter: tokens: 1697.5 millis 1597.1 millis
 
 ----
 ----
@@ -243,60 +239,59 @@ adjust time-millis=7500 cpu-millis=13500 cpu-count=2 int-tokens=2100 cur-tokens-
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1097.1 millis, true)
-CTTA t=7500.0 millis: total-cpu=13500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1599.5 millis, 0.0 millis, tenant: 1097.1 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(399.9 millis, true)
+CTTA t=7500.0 millis: total-cpu=13500.0 millis, mult=1.0
+  tokens (alloc): 1699.5 millis(0.0 millis) 1599.5 millis(0.0 millis), tenant (alloc): 399.9 millis(0.0 millis)
+  granter: tokens: 0.0 millis -8.1 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=7500.0 millis: total-cpu=13500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1599.5 millis, 1.6 millis, tenant: 1097.1 millis, 1.1 millis
-  granter: tokens: 1.6 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=7500.0 millis: total-cpu=13500.0 millis, mult=1.0
+  tokens (alloc): 1699.5 millis(1.7 millis) 1599.5 millis(1.6 millis), tenant (alloc): 399.9 millis(0.4 millis)
+  granter: tokens: 1.7 millis -6.5 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=7500.0 millis: total-cpu=13500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1599.5 millis, 3.2 millis, tenant: 1097.1 millis, 2.2 millis
-  granter: tokens: 3.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=7500.0 millis: total-cpu=13500.0 millis, mult=1.0
+  tokens (alloc): 1699.5 millis(3.4 millis) 1599.5 millis(3.2 millis), tenant (alloc): 399.9 millis(0.8 millis)
+  granter: tokens: 3.4 millis -4.9 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=7500.0 millis: total-cpu=13500.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1599.5 millis, 1599.5 millis, tenant: 1097.1 millis, 1097.1 millis
-  granter: tokens: 1599.5 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=7500.0 millis: total-cpu=13500.0 millis, mult=1.0
+  tokens (alloc): 1699.5 millis(1699.5 millis) 1599.5 millis(1599.5 millis), tenant (alloc): 399.9 millis(399.9 millis)
+  granter: tokens: 1699.5 millis 1591.4 millis
 
 ----
 ----
 
-# 1600ms of CPU time and 1580ms of tokens. This is close to our goal, so there
-# is no appreciable change in tenant tokens.
-adjust time-millis=8500 cpu-millis=15100 cpu-count=2 int-tokens=1580 cur-tokens-in-bucket=-10
+# 1600ms of CPU time and 1580ms of tokens.
+adjust time-millis=8500 cpu-millis=15100 cpu-count=2 int-tokens=1580 cur-tokens-in-bucket=1400
 ----
 ----
 adjust
-  setTenantCPUTokensBurstLimit(1090.4 millis, true)
-CTTA t=8500.0 millis: total-cpu=15100.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1589.7 millis, 0.0 millis, tenant: 1090.4 millis, 0.0 millis
-  granter: tokens: 0.0 millis
+  setTenantCPUTokensBurstLimit(397.4 millis, true)
+CTTA t=8500.0 millis: total-cpu=15100.0 millis, mult=1.0
+  tokens (alloc): 1689.1 millis(0.0 millis) 1589.7 millis(0.0 millis), tenant (alloc): 397.4 millis(0.0 millis)
+  granter: tokens: 1459.6 millis 1390.2 millis
 
 remaining tick 1000
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=8500.0 millis: total-cpu=15100.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1589.7 millis, 1.6 millis, tenant: 1090.4 millis, 1.1 millis
-  granter: tokens: 1.6 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=8500.0 millis: total-cpu=15100.0 millis, mult=1.0
+  tokens (alloc): 1689.1 millis(1.7 millis) 1589.7 millis(1.6 millis), tenant (alloc): 397.4 millis(0.4 millis)
+  granter: tokens: 1461.3 millis 1391.8 millis
 
 remaining tick 999
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=8500.0 millis: total-cpu=15100.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1589.7 millis, 3.2 millis, tenant: 1090.4 millis, 2.2 millis
-  granter: tokens: 3.2 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=8500.0 millis: total-cpu=15100.0 millis, mult=1.0
+  tokens (alloc): 1689.1 millis(3.4 millis) 1589.7 millis(3.2 millis), tenant (alloc): 397.4 millis(0.8 millis)
+  granter: tokens: 1462.9 millis 1393.4 millis
 
 remaining tick 1
-  tenantCPUTokensTick(1.1 millis)
-CTTA t=8500.0 millis: total-cpu=15100.0 millis, last-tokens=0.0 millis, mult=1.0
-  tokens: 1589.7 millis, 1589.7 millis, tenant: 1090.4 millis, 1090.4 millis
-  granter: tokens: 1589.7 millis
+  tenantCPUTokensTick(0.4 millis)
+CTTA t=8500.0 millis: total-cpu=15100.0 millis, mult=1.0
+  tokens (alloc): 1689.1 millis(1689.1 millis) 1589.7 millis(1589.7 millis), tenant (alloc): 397.4 millis(397.4 millis)
+  granter: tokens: 1689.1 millis 1589.7 millis
 
 ----
 ----

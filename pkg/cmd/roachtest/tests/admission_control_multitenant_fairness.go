@@ -55,7 +55,13 @@ func registerMultiTenantFairness(r registry.Registry) {
 		},
 		{
 			name:        "read-heavy/skewed",
-			concurrency: func(i int) int { return i * 25 },
+			concurrency: func(i int) int { return 100 },
+			maxRate: func(i int) int {
+				if i <= 3 {
+					return 300
+				}
+				return 30000
+			},
 			blockSize:   5,
 			readPercent: 95,
 			duration:    60 * time.Minute,
@@ -111,6 +117,7 @@ type multiTenantFairnessSpec struct {
 	blockSize   int           // --min-block-bytes, --max-block-bytes
 	duration    time.Duration // --duration
 	concurrency func(int) int // --concurrency
+	maxRate     func(int) int // --max-rate
 	batch       int           // --batch
 	maxOps      int           // --max-ops
 }
@@ -266,6 +273,7 @@ func runMultiTenantFairness(
 
 		name := name
 		node := node
+		m := n
 		go func(ctx context.Context) error {
 			cmd := roachtestutil.NewCommand("%s workload run kv", test.DefaultCockroachPath).
 				Option("secure").
@@ -276,9 +284,14 @@ func runMultiTenantFairness(
 				Flag("batch", s.batch).
 				Flag("duration", s.duration).
 				Flag("read-percent", s.readPercent).
-				Flag("concurrency", s.concurrency(n)).
+				Flag("concurrency", s.concurrency(m)).
 				Arg("%s", pgurl)
 
+			if s.maxRate != nil {
+				maxRate := s.maxRate(m)
+				cmd = cmd.Flag("max-rate", maxRate)
+				t.L().Printf("tenant %d: setting max-rate %d", m, maxRate)
+			}
 			if err := c.RunE(ctx, option.WithNodes(node), cmd.String()); err != nil {
 				return err
 			}
