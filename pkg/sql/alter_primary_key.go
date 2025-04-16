@@ -54,6 +54,15 @@ func (p *planner) AlterPrimaryKey(
 	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
+	// Check if sql_safe_updates is enabled and the table has vector indexes
+	if p.EvalContext().SessionData().SafeUpdates {
+		for _, idx := range tableDesc.AllIndexes() {
+			if idx.GetType() == idxtype.VECTOR {
+				return pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt")
+			}
+		}
+	}
+
 	if err := paramparse.ValidateUniqueConstraintParams(
 		alterPKNode.StorageParams,
 		paramparse.UniqueConstraintParamContext{

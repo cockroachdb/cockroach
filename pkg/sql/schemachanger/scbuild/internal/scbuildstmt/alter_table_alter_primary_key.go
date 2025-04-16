@@ -59,6 +59,16 @@ type alterPrimaryKeySpec struct {
 func alterPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t alterPrimaryKeySpec,
 ) {
+	// Check if sql_safe_updates is enabled and the table has a vector index
+	if b.EvalCtx().SessionData().SafeUpdates {
+		tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
+		scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+			if idx.Type == idxtype.VECTOR {
+				panic(pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
+			}
+		})
+	}
+
 	// Panic on certain forbidden `ALTER PRIMARY KEY` cases (e.g. one of
 	// the new primary key column is a virtual column). See the comments
 	// for a full list of preconditions we check.

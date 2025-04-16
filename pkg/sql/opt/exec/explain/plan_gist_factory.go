@@ -800,4 +800,8 @@ func (u *unknownIndex) Partition(i int) cat.Partition {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
+func (u *unknownIndex) IsTemporaryIndexForBackfill() bool {
+	return false
+}
+
 var _ cat.Index = &unknownIndex{}

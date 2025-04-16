@@ -21,9 +21,9 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_btree//:btree",
         "@com_github_pires_go_proxyproto//:go-proxyproto",
         "@com_github_pires_go_proxyproto//tlvparse",
-        "@com_github_raduberinde_btree//:btree",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
@@ -50,7 +50,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_pires_go_proxyproto//:go-proxyproto",
         "@com_github_pires_go_proxyproto//tlvparse",
-        "@com_github_raduberinde_btree//:btree",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],

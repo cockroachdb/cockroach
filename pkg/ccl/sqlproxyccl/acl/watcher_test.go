@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
@@ -403,8 +402,8 @@ func TestACLWatcher(t *testing.T) {
 		require.Nil(t, err)
 
 		var l *listener
-		watcher.listeners.Ascend(func(i btree.Item) bool {
-			l = i.(*listener)
+		watcher.listeners.Ascend(func(lst *listener) bool {
+			l = lst
 			return false
 		})
 		require.NotNil(t, l)
