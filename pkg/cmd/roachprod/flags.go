@@ -361,9 +361,6 @@ func initFlags() {
 	jaegerStartCmd.Flags().StringVar(&jaegerConfigNodes, "configure-nodes", "",
 		"the nodes on which to set the relevant CRDB cluster settings")
 
-	sideEyeRootCmd.AddCommand(sideEyeInstallCmd)
-	sideEyeRootCmd.AddCommand(sideEyeSnapCmd)
-
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 

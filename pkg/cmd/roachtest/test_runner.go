@@ -1509,7 +1509,7 @@ func (r *testRunner) postTestAssertions(
 // Errors during artifact collection will be propagated up.
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
-) (string, error) {
+) error {
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
@@ -1542,7 +1542,7 @@ func (r *testRunner) teardownTest(
 		getGoCoverArtifacts(ctx, c, t)
 	}
 
-	return "", nil
+	return nil
 }
 
 func (r *testRunner) collectArtifacts(
