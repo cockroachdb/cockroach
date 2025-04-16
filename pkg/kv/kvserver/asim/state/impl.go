@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/google/btree"
 )
 
 type state struct {

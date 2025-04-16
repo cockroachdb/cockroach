@@ -10,6 +10,7 @@ import (
 	"math"
 	"sort"
 
+	gbtree "github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	gbtree "github.com/google/btree"
 )
 
 // The degree of the inFlightWrites btree.

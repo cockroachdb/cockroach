@@ -8,9 +8,9 @@ package rel
 import (
 	"reflect"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 // Database is a data structure for indexing entities.

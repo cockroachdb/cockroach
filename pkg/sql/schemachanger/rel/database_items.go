@@ -8,7 +8,7 @@ package rel
 import (
 	"sync"
 
-	"github.com/google/btree"
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 )
 
 // valuesItem is used to construct query bounds from the tree.

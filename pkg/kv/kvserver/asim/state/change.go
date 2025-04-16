@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/google/btree"
 )
 
 // Change is a state change for a range, to a target store that has some delay.
