@@ -1800,7 +1800,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 type replicaSyncCallback Replica
 
 func (r *replicaSyncCallback) OnLogSync(
-	ctx context.Context, ack raft.StorageAppendAck, commitStats storage.BatchCommitStats,
+	ctx context.Context, ack raft.StorageAppendAck, stats logstore.WriteStats,
 ) {
 	repl := (*Replica)(r)
 	// The log mark is non-empty only if this was a non-empty log append that
@@ -1814,8 +1814,10 @@ func (r *replicaSyncCallback) OnLogSync(
 	}
 	// Send MsgStorageAppend's responses.
 	repl.sendStorageAck(ctx, ack, false /* willDeliver */)
-	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
-		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
+
+	r.store.metrics.RaftLogCommitLatency.RecordValue(stats.CommitDur.Nanoseconds())
+	if stats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
+		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", stats.BatchCommitStats)
 	}
 }
 

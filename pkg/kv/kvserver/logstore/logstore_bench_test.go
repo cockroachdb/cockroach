@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,9 +32,7 @@ func (b *discardBatch) Commit(bool) error {
 
 type noopSyncCallback struct{}
 
-func (noopSyncCallback) OnLogSync(
-	context.Context, raft.StorageAppendAck, storage.BatchCommitStats,
-) {
+func (noopSyncCallback) OnLogSync(context.Context, raft.StorageAppendAck, WriteStats) {
 }
 
 func BenchmarkLogStore_StoreEntries(b *testing.B) {
@@ -65,14 +61,6 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		StateLoader: NewStateLoader(rangeID),
 		EntryCache:  ec,
 		Settings:    st,
-		Metrics: Metrics{
-			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePrometheus,
-				Metadata:     metric.Metadata{},
-				Duration:     10 * time.Second,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-		},
 	}
 
 	rs := RaftState{
