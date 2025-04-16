@@ -10,10 +10,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  -- BTREE
  --
  CREATE INDEX onek_unique1 ON onek USING btree(unique1 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX IF NOT EXISTS onek_unique1 ON onek USING btree(unique1 int4_ops);
 -NOTICE:  relation "onek_unique1" already exists, skipping
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX IF NOT EXISTS ON onek USING btree(unique1 int4_ops);
 -ERROR:  syntax error at or near "ON"
 -LINE 1: CREATE INDEX IF NOT EXISTS ON onek USING btree(unique1 int4_...
@@ -24,24 +24,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
 +                              ^
 +HINT:  try \h CREATE INDEX
  CREATE INDEX onek_unique2 ON onek USING btree(unique2 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX onek_hundred ON onek USING btree(hundred int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX onek_stringu1 ON onek USING btree(stringu1 name_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk1_unique1 ON tenk1 USING btree(unique1 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk1_unique2 ON tenk1 USING btree(unique2 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk1_hundred ON tenk1 USING btree(hundred int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk1_thous_tenthous ON tenk1 (thousand, tenthous);
  CREATE INDEX tenk2_unique1 ON tenk2 USING btree(unique1 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk2_unique2 ON tenk2 USING btree(unique2 int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX tenk2_hundred ON tenk2 USING btree(hundred int4_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX rix ON road USING btree (name text_ops);
 +ERROR:  relation "road" does not exist
  CREATE INDEX iix ON ihighway USING btree (name text_ops);
@@ -61,13 +61,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  --
  CREATE INDEX onek2_u1_prtl ON onek2 USING btree(unique1 int4_ops)
  	where unique1 < 20 or unique1 > 980;
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX onek2_u2_prtl ON onek2 USING btree(unique2 int4_ops)
  	where stringu1 < 'B';
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  CREATE INDEX onek2_stu1_prtl ON onek2 USING btree(stringu1 name_ops)
  	where onek2.stringu1 >= 'J' and onek2.stringu1 < 'K';
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  --
  -- GiST (rtree-equivalent opclasses only)
  --
@@ -2086,7 +2086,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_index.out 
  DROP TABLE func_index_heap;
  CREATE TABLE func_index_heap (f1 text, f2 text);
  CREATE UNIQUE INDEX func_index_index on func_index_heap ((f1 || f2) text_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  INSERT INTO func_index_heap VALUES('ABC','DEF');
  INSERT INTO func_index_heap VALUES('AB','CDEFG');
  INSERT INTO func_index_heap VALUES('QWE','RTY');
