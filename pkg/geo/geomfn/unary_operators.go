@@ -6,8 +6,6 @@
 package geomfn
 
 import (
-	"math"
-
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
@@ -242,88 +240,5 @@ func CountVertices(t geom.T) int {
 		return numPoints
 	default:
 		return len(t.FlatCoords()) / t.Stride()
-	}
-}
-
-// length3DLineString returns the length of a
-// given 3D LINESTRING. Returns an error if
-// lineString does not have a z-coordinate.
-func length3DLineString(lineString *geom.LineString) (float64, error) {
-	lineCoords := lineString.Coords()
-	prevPoint := lineCoords[0]
-	lineLength := float64(0)
-	zIndex := lineString.Layout().ZIndex()
-	if zIndex < 0 || zIndex >= lineString.Stride() {
-		return 0, errors.AssertionFailedf("Z-Index for LINESTRING is out-of-bounds")
-	}
-	for i := 0; i < lineString.NumCoords(); i++ {
-		curPoint := lineCoords[i]
-		deltaX := curPoint.X() - prevPoint.X()
-		deltaY := curPoint.Y() - prevPoint.Y()
-		deltaZ := curPoint[zIndex] - prevPoint[zIndex]
-		distBetweenPoints := math.Sqrt(deltaX*deltaX + deltaY*deltaY + deltaZ*deltaZ)
-		lineLength += distBetweenPoints
-		prevPoint = curPoint
-	}
-
-	return lineLength, nil
-}
-
-// length3DMultiLineString returns the length of a
-// given 3D MULTILINESTRING. Returns an error if
-// multiLineString is not 3D.
-func length3DMultiLineString(multiLineString *geom.MultiLineString) (float64, error) {
-	multiLineLength := 0.0
-	for i := 0; i < multiLineString.NumLineStrings(); i++ {
-		lineLength, err := length3DLineString(multiLineString.LineString(i))
-		if err != nil {
-			return 0, err
-		}
-		multiLineLength += lineLength
-	}
-
-	return multiLineLength, nil
-}
-
-// Length3D returns the length of a given Geometry.
-// Compatible with 3D geometries.
-// Note only (MULTI)LINESTRING objects have a length.
-func Length3D(g geo.Geometry) (float64, error) {
-	geomRepr, err := g.AsGeomT()
-	if err != nil {
-		return 0, err
-	}
-
-	switch geomRepr.Layout() {
-	case geom.XYZ, geom.XYZM:
-		return length3DFromGeomT(geomRepr)
-	}
-	// Call default length
-	return lengthFromGeomT(geomRepr)
-}
-
-// length3DFromGeomT returns the length from a geom.T, recursing down
-// GeometryCollections if required.
-// Compatible with 3D geometries.
-func length3DFromGeomT(geomRepr geom.T) (float64, error) {
-	switch geomRepr := geomRepr.(type) {
-	case *geom.Point, *geom.MultiPoint, *geom.Polygon, *geom.MultiPolygon:
-		return 0, nil
-	case *geom.LineString:
-		return length3DLineString(geomRepr)
-	case *geom.MultiLineString:
-		return length3DMultiLineString(geomRepr)
-	case *geom.GeometryCollection:
-		total := float64(0)
-		for _, subG := range geomRepr.Geoms() {
-			subLength, err := length3DFromGeomT(subG)
-			if err != nil {
-				return 0, err
-			}
-			total += subLength
-		}
-		return total, nil
-	default:
-		return 0, errors.AssertionFailedf("unknown geometry type: %T", geomRepr)
 	}
 }
