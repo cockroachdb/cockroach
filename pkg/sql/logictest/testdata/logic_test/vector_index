@@ -514,10 +514,29 @@ DROP TABLE backfill_test
 subtest end
 
 #
-# vector_search_beam_size setting.
+# Settings tests.
 #
 
-subtest vector_search_beam_size
+subtest vector_settings
+
+# Disable / enable vector indexes.
+statement ok
+SET CLUSTER SETTING feature.vector_index.enabled = false
+
+statement error vector indexes are not enabled; enable with the feature.vector_index.enabled cluster setting
+CREATE TABLE not_enabled (a INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v))
+
+statement ok
+CREATE TABLE enabled (a INT PRIMARY KEY, v VECTOR(3))
+
+statement error vector indexes are not enabled; enable with the feature.vector_index.enabled cluster setting
+CREATE VECTOR INDEX not_enabled_idx ON enabled (v)
+
+statement ok
+DROP TABLE enabled
+
+statement ok
+SET CLUSTER SETTING feature.vector_index.enabled = true
 
 # Ensure that the vector_search_beam_size session setting is settable.
 query T

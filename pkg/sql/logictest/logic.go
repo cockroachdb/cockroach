@@ -1854,6 +1854,14 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+
+		// Enable vector indexes by default for tests.
+		// TODO(andyk): Remove this once vector indexes are enabled by default.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING feature.vector_index.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {

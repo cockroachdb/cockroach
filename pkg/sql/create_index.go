@@ -249,6 +249,12 @@ func makeIndexDescriptor(
 	}
 
 	if n.Type == idxtype.VECTOR {
+		// Disable vector indexes by default in 25.2.
+		// TODO(andyk): Remove this check after 25.2.
+		if err = vecindex.CheckEnabled(&params.EvalContext().Settings.SV); err != nil {
+			return nil, err
+		}
+
 		vecCol := columns[len(columns)-1]
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
 		if err != nil {
