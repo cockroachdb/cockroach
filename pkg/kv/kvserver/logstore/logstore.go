@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
@@ -119,9 +119,10 @@ type AppendStats struct {
 	NonBlocking bool
 }
 
-// Metrics contains metrics specific to the log storage.
-type Metrics struct {
-	RaftLogCommitLatency metric.IHistogram
+// WriteStats contains stats about a write to raft storage.
+type WriteStats struct {
+	CommitDur time.Duration
+	storage.BatchCommitStats
 }
 
 // LogStore is a stub of a separated Raft log storage.
@@ -133,7 +134,6 @@ type LogStore struct {
 	SyncWaiter  *SyncWaiterLoop
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
-	Metrics     Metrics
 
 	DisableSyncLogWriteToss bool // for testing only
 }
@@ -146,7 +146,7 @@ type LogStore struct {
 //
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, raft.StorageAppendAck, storage.BatchCommitStats)
+	OnLogSync(context.Context, raft.StorageAppendAck, WriteStats)
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -273,7 +273,6 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			cb:             cb,
 			onDone:         m.Ack(),
 			batch:          batch,
-			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
 		}
 		s.SyncWaiter.enqueue(ctx, batch, waiterCallback)
@@ -287,9 +286,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.PebbleEnd = crtime.NowMono()
 		stats.PebbleCommitStats = batch.CommitStats()
 		if wantsSync {
-			logCommitEnd := stats.PebbleEnd
-			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Ack(), storage.BatchCommitStats{})
+			commitDur := stats.PebbleEnd.Sub(stats.PebbleBegin)
+			cb.OnLogSync(ctx, m.Ack(), WriteStats{CommitDur: commitDur})
 		}
 	}
 	stats.Sync = wantsSync
@@ -344,17 +342,16 @@ type nonBlockingSyncWaiterCallback struct {
 	onDone raft.StorageAppendAck
 	// Used to extract stats. This is the batch that has been synced.
 	batch storage.WriteBatch
-	// Used to record Metrics.
-	metrics        Metrics
+	// Used to measure raft storage write/sync latency.
 	logCommitBegin crtime.Mono
 }
 
 // run is the callback's logic. It is executed on the SyncWaiterLoop goroutine.
 func (cb *nonBlockingSyncWaiterCallback) run() {
-	dur := cb.logCommitBegin.Elapsed().Nanoseconds()
-	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
-	commitStats := cb.batch.CommitStats()
-	cb.cb.OnLogSync(cb.ctx, cb.onDone, commitStats)
+	cb.cb.OnLogSync(cb.ctx, cb.onDone, WriteStats{
+		CommitDur:        cb.logCommitBegin.Elapsed(),
+		BatchCommitStats: cb.batch.CommitStats(),
+	})
 	cb.release()
 }
 
