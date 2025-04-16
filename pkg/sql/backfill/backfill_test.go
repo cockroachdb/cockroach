@@ -51,6 +51,9 @@ func TestVectorColumnAndIndexBackfill(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	// Enable vector indexes.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
 	// Create a table with a vector column
 	sqlDB.Exec(t, `
 		CREATE TABLE vectors (
@@ -114,6 +117,9 @@ func TestConcurrentOperationsDuringVectorIndexCreation(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Enable vector indexes.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	// Create a table with a vector column
 	sqlDB.Exec(t, `

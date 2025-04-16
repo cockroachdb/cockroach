@@ -304,6 +304,8 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	// Disable plan caching to get accurate counts if the same statement is
 	// issued multiple times.
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
+	// Enable vector indexes, since they're disabled by default in 25.2.
+	runner.Exec(tt.t, "SET CLUSTER SETTING feature.vector_index.enabled = true")
 }
 
 type featureList []struct {
