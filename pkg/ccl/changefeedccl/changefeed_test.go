@@ -1193,6 +1193,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 					"cannot subtract infinite dates",
 					"regexp compilation failed",
 					"invalid regular expression",
+					"invalid escape string",
 					"error parsing GeoJSON",
 					"error parsing EWKT",
 					"geometry type is unsupported",
