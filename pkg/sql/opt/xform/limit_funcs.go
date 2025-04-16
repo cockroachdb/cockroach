@@ -468,9 +468,11 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	scanExpr *memo.ScanExpr,
 	filters memo.FiltersExpr,
 	passthrough opt.ColSet,
-	vectorCol, distanceCol opt.ColumnID,
-	distanceExpr, queryVector opt.ScalarExpr,
+	vectorCol opt.ColumnID,
+	queryVector opt.ScalarExpr,
+	projections memo.ProjectionsExpr,
 	limit tree.Datum,
+	limitOrd props.OrderingChoice,
 ) {
 	sp := &scanExpr.ScanPrivate
 
@@ -552,15 +554,13 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		}
 		vectorSearch = c.e.f.ConstructLookupJoin(vectorSearch, nil /* on */, lookupPrivate)
 
-		// Project the distance column.
-		projections := memo.ProjectionsExpr{c.e.f.ConstructProjectionsItem(distanceExpr, distanceCol)}
+		// Add back the projections, including the distance column.
 		vectorSearch = c.e.f.ConstructProject(vectorSearch, projections, passthrough)
 
 		// Build a top-k operator ordering by the distance column and limited by the
-		// NN count to obtain the final result.
-		var ord props.OrderingChoice
-		ord.AppendCol(distanceCol, false /* descending */)
-		topKPrivate := memo.TopKPrivate{K: limitInt, Ordering: ord}
+		// NN count to obtain the final result. We verified when the rule matched
+		// that the limit is ordering by the distance column.
+		topKPrivate := memo.TopKPrivate{K: limitInt, Ordering: limitOrd}
 		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: vectorSearch, TopKPrivate: topKPrivate}, grp)
 	})
 }
