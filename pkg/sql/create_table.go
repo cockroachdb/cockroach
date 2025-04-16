@@ -1965,6 +1965,11 @@ func NewTableDesc(
 				}
 			}
 			if d.Type == idxtype.VECTOR {
+				// Disable vector indexes by default in 25.2.
+				// TODO(andyk): Remove this check after 25.2.
+				if err := vecindex.CheckEnabled(&st.SV); err != nil {
+					return nil, err
+				}
 				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
 				if err != nil {
 					return nil, err
