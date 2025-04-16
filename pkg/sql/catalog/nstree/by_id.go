@@ -8,8 +8,8 @@ package nstree
 import (
 	"sync"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/google/btree"
 )
 
 func (t byIDMap) len() int {

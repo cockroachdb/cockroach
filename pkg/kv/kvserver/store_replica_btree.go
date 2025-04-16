@@ -8,11 +8,11 @@ package kvserver
 import (
 	"context"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/google/btree"
 )
 
 // IterationOrder specifies the order in which replicas will be iterated through

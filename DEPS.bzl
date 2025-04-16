@@ -7973,6 +7973,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_raduberinde_btree",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/RaduBerinde/btree",
+        sha256 = "1c845dc6e77f27888fa66c8521df4d1d30f3ccf6892e8c1ba0aab4db24e717c1",
+        strip_prefix = "github.com/RaduBerinde/btree@v1.0.2-0.20250415192849-8beea01764ce",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/btree/com_github_raduberinde_btree-v1.0.2-0.20250415192849-8beea01764ce.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_rcrowley_go_metrics",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rcrowley/go-metrics",

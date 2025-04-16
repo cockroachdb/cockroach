@@ -12,11 +12,11 @@ import (
 	"hash/fnv"
 	"strings"
 
+	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 

@@ -30,7 +30,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_google_btree//:btree",
+        "@com_github_raduberinde_btree//:btree",
     ],
 )
 
