@@ -108,8 +108,7 @@ func (cs *childSet) Each(
 ) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	cs.mu.children.Do(func(e interface{}) {
-		cm := cs.mu.children.GetChildMetric(e)
+	cs.mu.children.ForEach(func(cm ChildMetric) {
 		pm := cm.ToPrometheusMetric()
 
 		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
@@ -130,8 +129,8 @@ func (cs *childSet) Each(
 func (cs *childSet) apply(applyFn func(item MetricItem)) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	cs.mu.children.Do(func(e interface{}) {
-		applyFn(cs.mu.children.GetChildMetric(e).(MetricItem))
+	cs.mu.children.ForEach(func(cm ChildMetric) {
+		applyFn(cm)
 	})
 }
 
@@ -192,8 +191,7 @@ func (sm *SQLMetric) Each(
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	sm.mu.children.Do(func(e interface{}) {
-		cm := sm.mu.children.GetChildMetric(e)
+	sm.mu.children.ForEach(func(cm ChildMetric) {
 		pm := cm.ToPrometheusMetric()
 
 		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+2)
@@ -317,8 +315,9 @@ type ChildrenStorage interface {
 	Get(labelVals ...string) (ChildMetric, bool)
 	Add(metric ChildMetric)
 	Del(key ChildMetric)
-	Do(f func(e interface{}))
-	GetChildMetric(e interface{}) ChildMetric
+
+	// ForEach calls f for each child metric, in arbitrary order.
+	ForEach(f func(metric ChildMetric))
 	Clear()
 }
 
@@ -327,10 +326,6 @@ var _ ChildrenStorage = &BtreeWrapper{}
 
 type UnorderedCacheWrapper struct {
 	cache *cache.UnorderedCache
-}
-
-func (ucw *UnorderedCacheWrapper) GetChildMetric(e interface{}) ChildMetric {
-	return e.(*cache.Entry).Value.(ChildMetric)
 }
 
 func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
@@ -358,9 +353,9 @@ func (ucw *UnorderedCacheWrapper) Del(metric ChildMetric) {
 	}
 }
 
-func (ucw *UnorderedCacheWrapper) Do(f func(e interface{})) {
+func (ucw *UnorderedCacheWrapper) ForEach(f func(metric ChildMetric)) {
 	ucw.cache.Do(func(e *cache.Entry) {
-		f(e)
+		f(e.Value.(ChildMetric))
 	})
 }
 
@@ -395,15 +390,11 @@ func (b BtreeWrapper) Del(metric ChildMetric) {
 	}
 }
 
-func (b BtreeWrapper) Do(f func(e interface{})) {
+func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 	b.tree.Ascend(func(i btree.Item) bool {
-		f(i)
+		f(i.(ChildMetric))
 		return true
 	})
-}
-
-func (b BtreeWrapper) GetChildMetric(e interface{}) ChildMetric {
-	return e.(ChildMetric)
 }
 
 func (b BtreeWrapper) Clear() {
