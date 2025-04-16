@@ -89,7 +89,7 @@ func growMemtable(t T, eng storage.Engine, target int64) {
 	// memtable size, and doubles with each flush. We'll have reached any
 	// reasonable memtable size in well under 20 iterations.
 	for memtableSize := int64(256 * 1024); memtableSize < target; memtableSize *= 2 {
-		b := eng.NewUnindexedBatch()
+		b := eng.NewWriteBatch()
 		require.NoError(t, b.PutUnversioned(roachpb.Key("zoo"), nil))
 		require.NoError(t, b.Commit(false)) // this works even when WAL is off
 
@@ -98,7 +98,7 @@ func growMemtable(t T, eng storage.Engine, target int64) {
 	}
 
 	// Delete the key.
-	b := eng.NewUnindexedBatch()
+	b := eng.NewWriteBatch()
 	require.NoError(t, b.ClearUnversioned(roachpb.Key("zoo"), storage.ClearOptions{}))
 	require.NoError(t, b.Commit(false))
 
