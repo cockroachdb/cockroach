@@ -35,6 +35,10 @@ CREATE VECTOR INDEX ON simple (vec1)
 statement ok
 CREATE INDEX ON simple USING cspann (vec1 ASC);
 
+# We allow hnsw as an alias for cspann.
+statement ok
+CREATE INDEX ON simple USING hnsw (vec1);
+
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -46,6 +50,7 @@ simple  CREATE TABLE public.simple (
           VECTOR INDEX simple_vec1_idx (vec1 vector_l2_ops),
           VECTOR INDEX simple_vec1_idx1 (vec1 vector_l2_ops),
           VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
           FAMILY fam_0_a_vec1_b (a, vec1, b)
         )
 
@@ -308,8 +313,8 @@ statement error vector indexes don't support stored columns
 CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 
 # Try to use unsupported vector index type.
-statement error at or near "hnsw": syntax error: unrecognized access method: hnsw
-CREATE INDEX ON vec_errors USING hnsw (vec1)
+statement error at or near "ivfflat": syntax error: unrecognized access method: ivfflat
+CREATE INDEX ON vec_errors USING ivfflat (vec1)
 
 # Operator classes other than vector_l2_ops are not (yet) supported.
 statement error pgcode 0A000 pq: unimplemented: operator class vector_l1_ops is not supported
