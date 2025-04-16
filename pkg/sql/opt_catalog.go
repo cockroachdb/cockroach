@@ -1850,7 +1850,7 @@ func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 // VectorColumn is part of the cat.Index interface.
 func (oi *optIndex) VectorColumn() cat.IndexColumn {
 	if oi.Type() != idxtype.VECTOR {
-		panic(errors.AssertionFailedf("non-vector indexes do not have inverted columns"))
+		panic(errors.AssertionFailedf("non-vector indexes do not have vector columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
