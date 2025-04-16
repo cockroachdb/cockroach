@@ -8,7 +8,7 @@ upgrade 0
 query T nodeidx=0
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-25.2
+25.3
 
 statement error pq: jsonpath not supported until version 25.2
 SELECT '$'::JSONPATH
