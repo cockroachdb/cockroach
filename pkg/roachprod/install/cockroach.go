@@ -386,7 +386,7 @@ func (c *SyncedCluster) fetchVersion(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) (*version.Version, error) {
 	node := c.Nodes[0]
-	runVersionCmd := cockroachNodeBinary(c, node) + " version --build-tag"
+	runVersionCmd := SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " version --build-tag"
 
 	result, err := c.runCmdOnSingleNode(ctx, l, node, runVersionCmd, defaultCmdOpts("run-cockroach-version"))
 	if err != nil {
