@@ -46,8 +46,8 @@ func NewFunctionalGauge(
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()
-		g.childSet.mu.children.Do(func(e interface{}) {
-			cg := g.childSet.mu.children.GetChildMetric(e).(*Gauge)
+		g.childSet.mu.children.ForEach(func(metric ChildMetric) {
+			cg := metric.(*Gauge)
 			values = append(values, cg.Value())
 		})
 		return f(values)
