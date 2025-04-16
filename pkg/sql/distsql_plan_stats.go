@@ -64,6 +64,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,
+	// TODO(yuzefovich): we should add non-negative duration validation.
 )
 
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
