@@ -247,8 +247,8 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	sh.mu.children.Do(func(e interface{}) {
-		applyFn(sh.mu.children.GetChildMetric(e).(*SQLChildHistogram))
+	sh.mu.children.ForEach(func(metric ChildMetric) {
+		applyFn(metric.(*SQLChildHistogram))
 	})
 }
 
