@@ -363,6 +363,12 @@ func (p *Provider) GetHostErrorVMs(
 	return nil, nil
 }
 
+func (p *Provider) GetLiveMigrationVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]string, error) {
+	return nil, nil
+}
+
 // GetVMSpecs returns a map from VM.Name to a map of VM attributes, provided by AWS
 func (p *Provider) GetVMSpecs(
 	l *logger.Logger, vms vm.List,

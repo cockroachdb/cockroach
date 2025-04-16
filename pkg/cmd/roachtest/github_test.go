@@ -214,6 +214,8 @@ func TestCreatePostRequest(t *testing.T) {
 							refError = vmPreemptionError("my_VM")
 						case "vm-host-error":
 							refError = vmHostError("my_VM")
+						case "live-migration-error":
+							refError = liveMigrationError("my_VM")
 						case "error-with-owner-sql-foundations":
 							refError = registry.ErrorWithOwner(registry.OwnerSQLFoundations, refError)
 						case "error-with-owner-test-eng":
