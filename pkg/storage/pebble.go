@@ -1400,9 +1400,8 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool
 // ClearMVCCRange implements the Engine interface.
 func (p *Pebble) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	// Write all the tombstones in one batch.
-	batch := p.NewUnindexedBatch()
+	batch := p.NewWriteBatch()
 	defer batch.Close()
-
 	if err := batch.ClearMVCCRange(start, end, pointKeys, rangeKeys); err != nil {
 		return err
 	}
@@ -1417,9 +1416,8 @@ func (p *Pebble) ClearMVCCVersions(start, end MVCCKey) error {
 // ClearMVCCIteratorRange implements the Engine interface.
 func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
 	// Write all the tombstones in one batch.
-	batch := p.NewUnindexedBatch()
+	batch := p.NewBatch()
 	defer batch.Close()
-
 	if err := batch.ClearMVCCIteratorRange(start, end, pointKeys, rangeKeys); err != nil {
 		return err
 	}
