@@ -587,7 +587,7 @@ select crdb_internal.get_vmodule()
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-25.2
+25.3
 
 query error version '1.0' not supported
 SELECT crdb_internal.release_series('1.0')
@@ -750,7 +750,7 @@ SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-25.2
+25.3
 
 user root
 

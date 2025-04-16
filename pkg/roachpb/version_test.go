@@ -93,7 +93,7 @@ func TestReleaseSeriesSuccessor(t *testing.T) {
 	for ok := true; ok; r, ok = r.Successor() {
 		seq = append(seq, r.String())
 	}
-	expected := "20.1, 20.2, 21.1, 21.2, 22.1, 22.2, 23.1, 23.2, 24.1, 24.2, 24.3, 25.1, 25.2"
+	expected := "20.1, 20.2, 21.1, 21.2, 22.1, 22.2, 23.1, 23.2, 24.1, 24.2, 24.3, 25.1, 25.2, 25.3"
 	require.Equal(t, expected, strings.Join(seq, ", "))
 }
 
