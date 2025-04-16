@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -3364,7 +3363,15 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 		return err
 	}
 
-	splitter := span.MakeSplitter(planInfo.fetch.desc, index, fetchOrdinals)
+	var splitter span.Splitter
+	// This logic matches opt.Locking.MustLockAllRequestedColumnFamilies.
+	if (joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
+		joinReaderSpec.LockingDurability == descpb.ScanLockingDurability_GUARANTEED) ||
+		joinReaderSpec.LockingWaitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
+		splitter = span.MakeSplitterForSideEffect(planInfo.fetch.desc, index, fetchOrdinals)
+	} else {
+		splitter = span.MakeSplitter(planInfo.fetch.desc, index, fetchOrdinals)
+	}
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(fetchColIDs))
@@ -3459,8 +3466,10 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 	}
 
 	var splitter span.Splitter
-	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
-		planCtx.ExtendedEvalCtx.TxnIsoLevel != isolation.Serializable {
+	// This logic matches opt.Locking.MustLockAllRequestedColumnFamilies.
+	if (joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
+		joinReaderSpec.LockingDurability == descpb.ScanLockingDurability_GUARANTEED) ||
+		joinReaderSpec.LockingWaitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
 		splitter = span.MakeSplitterForSideEffect(planInfo.fetch.desc, planInfo.fetch.index, fetchOrdinals)
 	} else {
 		splitter = span.MakeSplitter(planInfo.fetch.desc, planInfo.fetch.index, fetchOrdinals)

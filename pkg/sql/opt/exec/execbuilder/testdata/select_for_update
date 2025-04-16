@@ -2929,7 +2929,8 @@ vectorized: true
       table: t@t_pkey
       spans: /5/0
 
-# Table with multiple column families. Cannot push down locking.
+# Table with multiple column families. Test that we can push down locking in
+# some cases.
 statement ok
 CREATE TABLE xyz (
   x INT PRIMARY KEY,
@@ -2940,6 +2941,7 @@ CREATE TABLE xyz (
   FAMILY (z)
 )
 
+# We can't push down locking if the scan doesn't fetch all families.
 query T
 EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
 ----
@@ -2963,40 +2965,85 @@ vectorized: true
           table: xyz@xyz_pkey
           spans: /1/0
 
+# We can push down locking if the scan fetches all families.
+query T
+EXPLAIN (VERBOSE) SELECT y, z FROM xyz WHERE x = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y, z)
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 1 (missing stats)
+      table: xyz@xyz_pkey
+      spans: /1-/2
+      locking strength: for update
+
+# We can't push down locking if the index join doesn't fetch all families.
+query T
+EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE z = 2 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • lookup join (semi)
+    │ columns: (x, y)
+    │ estimated row count: 10 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │ locking strength: for share
+    │
+    └── • project
+        │ columns: (x, y)
+        │
+        └── • index join
+            │ columns: (x, y, z)
+            │ estimated row count: 10 (missing stats)
+            │ table: xyz@xyz_pkey
+            │ key columns: x
+            │
+            └── • scan
+                  columns: (x, z)
+                  estimated row count: 10 (missing stats)
+                  table: xyz@xyz_z_idx
+                  spans: /2-/3
+
+# We can push down locking if the index join fetches all families.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
 ----
 distribution: local
 vectorized: true
 ·
-• lookup join (semi)
+• index join
 │ columns: (x, y, z)
 │ estimated row count: 10 (missing stats)
 │ table: xyz@xyz_pkey
-│ equality: (x) = (x)
-│ equality cols are key
+│ key columns: x
 │ locking strength: for share
 │
-└── • index join
-    │ columns: (x, y, z)
-    │ estimated row count: 10 (missing stats)
-    │ table: xyz@xyz_pkey
-    │ key columns: x
-    │
-    └── • scan
-          columns: (x, z)
-          estimated row count: 10 (missing stats)
-          table: xyz@xyz_z_idx
-          spans: /2-/3
+└── • scan
+      columns: (x, z)
+      estimated row count: 10 (missing stats)
+      table: xyz@xyz_z_idx
+      spans: /2-/3
 
+# We can't push down locking if the lookup join doesn't fetch all families.
 query T
-EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+EXPLAIN (VERBOSE) SELECT t.*, x FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
 ----
 distribution: local
 vectorized: true
 ·
 • lookup join (semi)
-│ columns: (a, b, x, y, z)
+│ columns: (a, b, x)
 │ estimated row count: 1 (missing stats)
 │ table: xyz@xyz_pkey
 │ equality: (x) = (x)
@@ -3004,7 +3051,7 @@ vectorized: true
 │ locking strength: for update
 │
 └── • lookup join (inner)
-    │ columns: (a, b, x, y, z)
+    │ columns: (a, b, x)
     │ estimated row count: 1 (missing stats)
     │ table: xyz@xyz_pkey
     │ equality: (b) = (x)
@@ -3015,6 +3062,27 @@ vectorized: true
           estimated row count: 1 (missing stats)
           table: t@t_pkey
           spans: /5/0
+
+# We can push down locking if the lookup join fetches all families.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, x, y, z)
+│ estimated row count: 1 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
 
 statement ok
 RESET optimizer_use_lock_op_for_serializable

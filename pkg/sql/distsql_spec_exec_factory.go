@@ -284,7 +284,12 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if params.InvertedConstraint != nil {
 		spans, err = sb.SpansFromInvertedSpans(e.ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	} else {
-		splitter := span.MakeSplitter(tabDesc, idx, params.NeededCols)
+		var splitter span.Splitter
+		if params.Locking.MustLockAllRequestedColumnFamilies() {
+			splitter = span.MakeSplitterForSideEffect(tabDesc, idx, params.NeededCols)
+		} else {
+			splitter = span.MakeSplitter(tabDesc, idx, params.NeededCols)
+		}
 		spans, err = sb.SpansFromConstraint(params.IndexConstraint, splitter)
 	}
 	if err != nil {

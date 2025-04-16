@@ -25,9 +25,10 @@ var errStalePreviousValue = errors.New("stale previous value")
 // sqlRowWriter is configured to write rows to a specific table and descriptor
 // version.
 type sqlRowWriter struct {
-	insert statements.Statement[tree.Statement]
-	update statements.Statement[tree.Statement]
-	delete statements.Statement[tree.Statement]
+	insert          statements.Statement[tree.Statement]
+	update          statements.Statement[tree.Statement]
+	delete          statements.Statement[tree.Statement]
+	sessionOverride sessiondata.InternalExecutorOverride
 
 	scratchDatums []any
 	columns       []string
@@ -36,8 +37,9 @@ type sqlRowWriter struct {
 func (s *sqlRowWriter) getExecutorOverride(
 	originTimestamp hlc.Timestamp,
 ) sessiondata.InternalExecutorOverride {
-	session := ieOverrideBase
+	session := s.sessionOverride
 	session.OriginTimestampForLogicalDataReplication = originTimestamp
+	session.OriginIDForLogicalDataReplication = 1
 	return session
 }
 
@@ -121,7 +123,9 @@ func (s *sqlRowWriter) UpdateRow(
 	return err
 }
 
-func newSQLRowWriter(table catalog.TableDescriptor) (*sqlRowWriter, error) {
+func newSQLRowWriter(
+	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
+) (*sqlRowWriter, error) {
 	physicalColumns := getPhysicalColumns(table)
 	columns := make([]string, len(physicalColumns))
 	for i, col := range physicalColumns {
@@ -151,9 +155,10 @@ func newSQLRowWriter(table catalog.TableDescriptor) (*sqlRowWriter, error) {
 	}
 
 	return &sqlRowWriter{
-		insert:  insert,
-		update:  update,
-		delete:  delete,
-		columns: columns,
+		insert:          insert,
+		update:          update,
+		delete:          delete,
+		sessionOverride: sessionOverride,
+		columns:         columns,
 	}, nil
 }

@@ -7,7 +7,9 @@ package logical
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -62,13 +64,25 @@ func (t *tableBatchStats) Add(o tableBatchStats) {
 	t.kvLwwLosers += o.kvLwwLosers
 }
 
+func (t *tableBatchStats) AddTo(bs *batchStats) {
+	// TODO(jeffswenson): rework batch stats so they record interesting crud
+	// writer behavior. The values in batch stats are currently designed mostly
+	// for the legacy kv writer.
+	bs.kvWriteTooOld += t.kvLwwLosers + t.refreshLwwLosers
+	if t.refreshedRows != 0 {
+		bs.kvWriteValueRefreshes += 1
+	}
+}
+
 // newTableHandler creates a new tableHandler for the given table descriptor ID.
 // It internally constructs the sqlReader and sqlWriter components.
 func newTableHandler(
+	ctx context.Context,
 	tableID descpb.ID,
 	db descs.DB,
 	codec keys.SQLCodec,
 	sd *sessiondata.SessionData,
+	jobID jobspb.JobID,
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
 ) (*tableHandler, error) {
@@ -77,7 +91,7 @@ func newTableHandler(
 	// NOTE: we don't hold a lease on the table descriptor, but validation
 	// prevents users from changing the set of columns or the primary key of an
 	// LDR replicated table.
-	err := db.DescsTxn(context.Background(), func(ctx context.Context, txn descs.Txn) error {
+	err := db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		var err error
 		table, err = txn.Descriptors().GetLeasedImmutableTableByID(ctx, txn.KV(), tableID)
 		return err
@@ -86,12 +100,17 @@ func newTableHandler(
 		return nil, err
 	}
 
-	reader, err := newSQLRowReader(table)
+	// Set an applicaiton name that makes it clear which ldr job the queries
+	// belong to.
+	sessionOverride := ieOverrideBase
+	sessionOverride.ApplicationName = fmt.Sprintf("%s-logical-replication-%d", sd.ApplicationName, jobID)
+
+	reader, err := newSQLRowReader(table, sessionOverride)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := newSQLRowWriter(table)
+	writer, err := newSQLRowWriter(table, sessionOverride)
 	if err != nil {
 		return nil, err
 	}
