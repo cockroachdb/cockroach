@@ -39,7 +39,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_dataexmachina_dev_side_eye_go//sideeyeclient",
         "@org_golang_x_sys//unix",
     ],
 )

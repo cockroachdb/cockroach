@@ -64,7 +64,6 @@ func (cr *commandRegistry) register() {
 		cr.buildJaegerStartCmd(),
 		cr.buildJaegerStopCmd(),
 		cr.buildJaegerURLCmd(),
-		cr.buildSideEyeRootCmd(),
 		cr.buildFluentBitStartCmd(),
 		cr.buildFluentBitStopCmd(),
 		cr.buildOpentelemetryStartCmd(),
