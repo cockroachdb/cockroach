@@ -545,7 +545,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	}
 	// Do the truncation of persistent raft entries, specified by enactIndex
 	// (this subsumes all the preceding queued truncations).
-	batch := t.store.getEngine().NewUnindexedBatch()
+	batch := t.store.getEngine().NewWriteBatch()
 	defer batch.Close()
 	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
