@@ -1693,7 +1693,7 @@ statement error duplicate key value violates unique constraint
 CREATE UNIQUE INDEX ON unique_array(b)
 
 # Create an indexes on a bad type.
-statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
+statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
 CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
 
 # Test arrays of composite types.
