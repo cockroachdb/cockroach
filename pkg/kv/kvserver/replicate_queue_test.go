@@ -2375,6 +2375,40 @@ func TestReplicateQueueAllocatorToken(t *testing.T) {
 	require.ErrorAs(t, processErr, &allocationError)
 }
 
+// TestAdminScatterAllocatorToken verifies issue #144579 by demonstrating that
+// AdminScatter does not acquire the allocator token. AdminScatter should not
+// have scattered replicas while the token was explicitly held by the test. But
+// the test confirms otherwise.
+func TestAdminScatterAllocatorToken(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := roachpb.Key("a")
+	_, _, err := tc.SplitRange(key)
+	require.NoError(t, err)
+	repl := tc.GetRaftLeader(t, roachpb.RKey(key))
+
+	require.NoError(t, repl.AllocatorToken().TryAcquire(ctx, "test"))
+	s := tc.Server(0)
+	db := s.DB()
+	require.NoError(t, db.Put(ctx, key, "abc"))
+	resp, err := db.AdminScatter(ctx, key, 0)
+	repl.AllocatorToken().Release(ctx)
+	require.NoError(t, err)
+	// A non-empty resp.ReplicasScatteredBytes indicates that the adminScatter did
+	// scatter the replica, even though it shouldn't have (because it didn't have
+	// the allocator token).
+	require.Greater(t, resp.ReplicasScatteredBytes, int64(0))
+	// We actually want resp.ReplicasScatteredBytes == 0.
+	//require.Equal(t, resp.ReplicasScatteredBytes, int64(0))
+}
+
 // TestReplicateQueueDecommissionScannerDisabled asserts that decommissioning
 // replicas are replaced by the replicate queue despite the scanner being
 // disabled, when EnqueueProblemRangeInReplicateQueueInterval is set to a
