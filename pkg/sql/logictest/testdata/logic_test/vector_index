@@ -2,6 +2,8 @@
 # CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
 
+subtest create_table_index
+
 # Simple vector index.
 statement ok
 CREATE TABLE simple (
@@ -25,9 +27,9 @@ simple  CREATE TABLE public.simple (
           a INT8 NOT NULL,
           vec1 VECTOR(3) NULL,
           CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
-          VECTOR INDEX simple_vec1_idx (vec1),
-          VECTOR INDEX simple_vec1_idx1 (vec1),
-          VECTOR INDEX simple_vec1_idx2 (vec1),
+          VECTOR INDEX simple_vec1_idx (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx1 (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
           FAMILY fam_0_a_vec1 (a, vec1)
         )
 
@@ -62,8 +64,8 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               a INT8 NOT NULL,
               vec1 VECTOR(3) NULL,
               CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
-              VECTOR INDEX vec_idx (vec1),
-              VECTOR INDEX another_index (vec1),
+              VECTOR INDEX vec_idx (vec1 vector_l2_ops),
+              VECTOR INDEX another_index (vec1 vector_l2_ops),
               FAMILY fam_0_a_vec1 (a, vec1)
             )
 
@@ -89,8 +91,8 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     vec1 VECTOR(3) NULL,
                     vec2 VECTOR(1000) NULL,
                     CONSTRAINT multiple_indexes_pkey PRIMARY KEY (a ASC),
-                    VECTOR INDEX multiple_indexes_vec1_idx (vec1),
-                    VECTOR INDEX multiple_indexes_vec2_idx (vec2),
+                    VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
+                    VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
                   )
 
@@ -126,8 +128,8 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                c INT8 NULL,
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1),
-               VECTOR INDEX another_index (b ASC, c DESC, vec1),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
+               VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              )
 
@@ -148,7 +150,29 @@ CREATE VECTOR INDEX ON mixed_case (qUuX)
 statement ok
 DROP TABLE mixed_case
 
+# It is possible to specify the default vector_l2_ops operator class.
+statement ok
+CREATE TABLE operator_class (
+  a INT PRIMARY KEY,
+  b INT,
+  vec1 VECTOR(3),
+  VECTOR INDEX (vec1 vector_l2_ops),
+  VECTOR INDEX (b, vec1 vector_l2_ops)
+)
+
+statement ok
+CREATE INDEX ON operator_class USING cspann (vec1 vector_l2_ops)
+
+statement ok
+CREATE INDEX ON operator_class USING cspann (b, vec1 vector_l2_ops)
+
+statement ok
+DROP TABLE operator_class
+
+subtest end
+
 # ----- CREATE TABLE errors -----
+subtest create_table_errors
 
 # Try to use vector in primary key.
 statement error column a has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
@@ -174,7 +198,11 @@ CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
 statement error column c has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
 
+subtest end
+
 # ----- CREATE INDEX errors -----
+subtest create_index_errors
+
 statement ok
 CREATE TABLE vec_errors (
   a INT PRIMARY KEY,
@@ -218,17 +246,27 @@ CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 statement error at or near "hnsw": syntax error: unrecognized access method: hnsw
 CREATE INDEX ON vec_errors USING hnsw (vec1)
 
-# Operator classes are not (yet) supported.
-statement error operator classes are only allowed for the last column of an inverted index
-CREATE INDEX ON vec_errors USING cspann (vec1 vector_l2_ops)
+# Operator classes other than vector_l2_ops are not (yet) supported.
+statement error pgcode 0A000 pq: unimplemented: operator class vector_l1_ops is not supported
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_l1_ops)
+
+statement error pgcode 0A000 pq: unimplemented: operator class vector_cosine_ops is not supported
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_cosine_ops)
+
+statement error pgcode 42704 pq: operator class "nonexistent_op_type" does not exist
+CREATE INDEX ON vec_errors USING cspann (vec1 nonexistent_op_type)
 
 statement ok
 DROP TABLE vec_errors
+
+subtest end
 
 # ------------------------------------------------------------------------------
 # ALTER TABLE tests.
 # TODO(andyk): Move these tests to alter_primary_key when insertion is possible.
 # ------------------------------------------------------------------------------
+
+subtest alter_table
 
 statement ok
 CREATE TABLE alter_test (
@@ -250,7 +288,7 @@ alter_test  CREATE TABLE public.alter_test (
               b INT8 NOT NULL,
               vec1 VECTOR(3) NULL,
               CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
-              VECTOR INDEX alter_test_vec1_idx (vec1),
+              VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
             )
@@ -258,9 +296,13 @@ alter_test  CREATE TABLE public.alter_test (
 statement ok
 DROP TABLE alter_test
 
+subtest end
+
 # ------------------------------------------------------------------------------
 # Execution tests.
 # ------------------------------------------------------------------------------
+
+subtest execution
 
 statement ok
 CREATE TABLE exec_test (
@@ -315,6 +357,8 @@ SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 
 statement ok
 DROP TABLE exec_test
+
+subtest end
 
 #
 # Test backfill.

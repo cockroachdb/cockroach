@@ -422,12 +422,12 @@ CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted.
-statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
 CREATE INDEX ON opclasses(b blah_ops)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted, even if the type is invertible.
-statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
 CREATE INDEX ON opclasses(c blah_ops)
 
 # Make sure that we don't permit creating indexes with opclasses that don't exist
