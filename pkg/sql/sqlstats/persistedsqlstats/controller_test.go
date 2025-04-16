@@ -87,8 +87,7 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
 
 	// Resets cluster wide SQL stats.
-	sqlStatsController := server.SQLServer().(*sql.Server).GetSQLStatsController()
-	require.NoError(t, sqlStatsController.ResetClusterSQLStats(ctx))
+	require.NoError(t, sqlStats.ResetClusterSQLStats(ctx))
 
 	var count int
 	observer.QueryRow(t,

@@ -340,9 +340,6 @@ type Server struct {
 	// node. Newly collected statistics flow into localSqlStats.
 	localSqlStats *sslocal.SQLStats
 
-	// sqlStatsController is the control-plane interface for sqlStats.
-	sqlStatsController *persistedsqlstats.Controller
-
 	// sqlStatsIngester provides the interface to consume stats about a sql execution.
 	sqlStatsIngester *sslocal.SQLStatsIngester
 
@@ -358,10 +355,6 @@ type Server struct {
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
 	reportedStats *sslocal.SQLStats
-
-	// reportedStatsController is the control-plane interface for
-	// reportedStatsController.
-	reportedStatsController *sslocal.Controller
 
 	insights *insights.Provider
 
@@ -452,7 +445,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
-	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -471,18 +463,17 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		}
 	})
 	s := &Server{
-		cfg:                     cfg,
-		Metrics:                 metrics,
-		InternalMetrics:         makeMetrics(true /* internal */, &cfg.Settings.SV),
-		ServerMetrics:           serverMetrics,
-		pool:                    pool,
-		localSqlStats:           memSQLStats,
-		reportedStats:           reportedSQLStats,
-		sqlStatsIngester:        sqlStatsIngester,
-		reportedStatsController: reportedSQLStatsController,
-		insights:                insightsProvider,
-		reCache:                 tree.NewRegexpCache(512),
-		toCharFormatCache:       tochar.NewFormatCache(512),
+		cfg:               cfg,
+		Metrics:           metrics,
+		InternalMetrics:   makeMetrics(true /* internal */, &cfg.Settings.SV),
+		ServerMetrics:     serverMetrics,
+		pool:              pool,
+		localSqlStats:     memSQLStats,
+		reportedStats:     reportedSQLStats,
+		sqlStatsIngester:  sqlStatsIngester,
+		insights:          insightsProvider,
+		reCache:           tree.NewRegexpCache(512),
+		toCharFormatCache: tochar.NewFormatCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
 			ChannelSize: idxusage.DefaultChannelSize,
 			Setting:     cfg.Settings,
@@ -507,6 +498,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
 		SQLIDContainer:          cfg.NodeInfo.NodeID,
 		JobRegistry:             s.cfg.JobRegistry,
+		FanoutServer:            cfg.SQLStatusServer,
 		Knobs:                   cfg.SQLStatsTestingKnobs,
 		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
 		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
@@ -516,7 +508,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
-	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -700,12 +691,6 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.txnIDCache.Start(ctx, stopper)
 }
 
-// GetSQLStatsController returns the persistedsqlstats.Controller for current
-// sql.Server's SQL Stats.
-func (s *Server) GetSQLStatsController() *persistedsqlstats.Controller {
-	return s.sqlStatsController
-}
-
 // GetSchemaTelemetryController returns the schematelemetryschedule.Controller
 // for current sql.Server's schema telemetry.
 func (s *Server) GetSchemaTelemetryController() *schematelemetrycontroller.Controller {
@@ -734,10 +719,10 @@ func (s *Server) GetLocalSQLStatsProvider() *sslocal.SQLStats {
 	return s.localSqlStats
 }
 
-// GetReportedSQLStatsController returns the sqlstats.Controller for the current
-// sql.Server's reported SQL Stats.
-func (s *Server) GetReportedSQLStatsController() *sslocal.Controller {
-	return s.reportedStatsController
+// GetReportedSQLStatsProvider returns the provider for the in-memory reported
+// sql stats sink.
+func (s *Server) GetReportedSQLStatsProvider() *sslocal.SQLStats {
+	return s.reportedStats
 }
 
 // GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
@@ -3840,7 +3825,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.sqlStatsController,
+			SQLStatsController:             ex.server.sqlStats,
 			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,

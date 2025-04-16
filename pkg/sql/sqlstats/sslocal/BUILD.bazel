@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "cluster_settings.go",
         "sql_stats.go",
-        "sql_stats_controller.go",
         "sql_stats_ingestor.go",
         "sslocal_iterator.go",
         "sslocal_provider.go",

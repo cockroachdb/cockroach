@@ -8,7 +8,6 @@ go_library(
         "cluster_settings.go",
         "compaction_exec.go",
         "compaction_scheduling.go",
-        "controller.go",
         "flush.go",
         "provider.go",
         "scheduled_job_monitor.go",
