@@ -313,6 +313,7 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+feature.vector_index.enabled
 sql.crdb_internal.table_row_statistics.as_of_time
 version
 
@@ -329,6 +330,7 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+feature.vector_index.enabled
 sql.crdb_internal.table_row_statistics.as_of_time
 version
 
@@ -350,6 +352,7 @@ AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
+feature.vector_index.enabled                       true
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
 
@@ -366,6 +369,7 @@ AND name NOT IN ('version', 'cluster.secret')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
+feature.vector_index.enabled                       true
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
 

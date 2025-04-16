@@ -1304,6 +1304,9 @@ func TestVectorEncoding(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
 
+	// Enable vector indexes.
+	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
 	runner.Exec(t, `CREATE TABLE prefix_cols (
   a INT PRIMARY KEY,
   b INT,
@@ -1394,6 +1397,9 @@ func TestVectorCompositeEncoding(t *testing.T) {
 	codec := srv.ApplicationLayer().Codec()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
+
+	// Enable vector indexes.
+	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	runner.Exec(t, `CREATE TABLE prefix_cols (
   a INT PRIMARY KEY,

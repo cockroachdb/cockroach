@@ -60,6 +60,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			Invisibility:   n.Invisibility.Value,
 		},
 	}
+	if n.Type == idxtype.VECTOR {
+		// Disable vector indexes by default in 25.2.
+		// TODO(andyk): Remove this check after 25.2.
+		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+			panic(err)
+		}
+	}
+
 	var relation scpb.Element
 	var sourceIndex *scpb.PrimaryIndex
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
