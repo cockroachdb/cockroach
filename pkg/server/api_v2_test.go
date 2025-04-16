@@ -267,23 +267,23 @@ func TestPlanDrain(t *testing.T) {
 
 		// Check if the response was a 200.
 		require.Equal(t, 200, resp.StatusCode)
-		// Check if an unmarshal into the (empty) DrainPlanBatch struct works.
-		var batchResult serverpb.DrainPlanBatch
+		// Check if an unmarshal into the (empty) RestartPlanBatch struct works.
+		var batchResult serverpb.RestartPlanBatch
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&batchResult))
 		require.NoError(t, resp.Body.Close())
 
 		// Check that the drain cohort is non-empty (which is expected here, since we're not actually downing any nodes)
 		// NB: In a real client, an empty cohort should just cause you to sleep for like 30s and check again.
-		require.Greater(t, len(batchResult.DrainCohort), 0)
+		require.Greater(t, len(batchResult.Batch), 0)
 		// Check that we're not exceeding our disruption budget
 		disruptionBudget := (1.0 - capacityTarget) * nodeCount
-		require.LessOrEqual(t, len(batchResult.DrainCohort), int(disruptionBudget))
-		t.Logf("Cohort size %d", len(batchResult.DrainCohort))
+		require.LessOrEqual(t, len(batchResult.Batch), int(disruptionBudget))
+		t.Logf("Cohort size %d", len(batchResult.Batch))
 
 		// NB: In a real operations orchestrator, this is where you go drain and restart the nodes in
-		// batchResult.DrainCohort in parallel
+		// batchResult.Batch in parallel
 
-		for _, toDrain := range batchResult.DrainCohort {
+		for _, toDrain := range batchResult.Batch {
 			_, ok := doneNodes[toDrain.NodeID]
 			// Check that we're not repeating any nodes that are already done
 			require.False(t, ok, "repeated drain node %d", toDrain.NodeID)
