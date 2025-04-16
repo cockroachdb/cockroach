@@ -741,6 +741,25 @@ func registerTPCC(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
+		Name:              "tpcc-nowait/nodes=5/w=1000",
+		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
+		Cluster:           r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds:  registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
+		EncryptionSupport: registry.EncryptionAlwaysEnabled,
+		Leases:            registry.DefaultLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
+				Warehouses:   1000,
+				Duration:     10 * time.Minute,
+				ExtraRunArgs: "--wait=false",
+				SetupType:    usingImport,
+			})
+		},
+	})
+
+	r.Add(registry.TestSpec{
 		Name:              "tpcc-nowait/nodes=3/w=1",
 		Owner:             registry.OwnerTestEng,
 		Benchmark:         true,
