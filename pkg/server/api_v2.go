@@ -441,8 +441,8 @@ func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := &serverpb.DrainPlanBatch{
-		DrainCohort: batch,
+	resp := &serverpb.RestartPlanBatch{
+		Batch:       batch,
 		MoreBatches: moreBatches,
 	}
 
