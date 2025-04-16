@@ -308,14 +308,16 @@
                     $ok
                 )
             $projections:[
+                ...
                 (ProjectionsItem
-                    $distanceExpr:(VectorDistance
+                    (VectorDistance
                         (Variable $vectorCol:*) &
                             (IsFixedWidthVectorCol $vectorCol)
                         $queryVector:(Const | Placeholder)
                     )
                     $distanceCol:*
                 )
+                ...
             ]
             $passthrough:*
         ) &
@@ -329,8 +331,8 @@
     $filters
     $passthrough
     $vectorCol
-    $distanceCol
-    $distanceExpr
     $queryVector
+    $projections
     $limit
+    $ordering
 )

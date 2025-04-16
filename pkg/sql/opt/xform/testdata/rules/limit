@@ -3620,6 +3620,42 @@ top-k
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
+# Case with additional projected expressions.
+opt expect=GenerateVectorSearch
+SELECT id, vec1, latitude*longitude, data1*data2 FROM index_tab
+ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
+----
+top-k
+ ├── columns: id:1!null vec1:9 "?column?":15 "?column?":16!null  [hidden: column17:17]
+ ├── internal-ordering: +17
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(9,15-17), (9)-->(17)
+ ├── ordering: +17
+ └── project
+      ├── columns: "?column?":15 "?column?":16!null column17:17 id:1!null vec1:9
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(9,15-17), (9)-->(17)
+      ├── inner-join (lookup index_tab)
+      │    ├── columns: id:1!null latitude:4 longitude:5 data1:6!null data2:7!null vec1:9
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4-7,9)
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
+      └── projections
+           ├── latitude:4 * longitude:5 [as="?column?":15, outer=(4,5), immutable]
+           ├── data1:6 * data2:7 [as="?column?":16, outer=(6,7), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as=column17:17, outer=(9), immutable]
+
 # Case with prefix columns.
 opt expect=GenerateVectorSearch
 SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data2 = 2 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
@@ -3783,8 +3819,7 @@ top-k
       └── projections
            └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
 
-# Currently, the extra projection for col4 prevents the vector search.
-opt expect-not=GenerateVectorSearch
+opt expect=GenerateVectorSearch
 SELECT * FROM index_with_computed_tab WHERE col3 = 5 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
@@ -3798,20 +3833,20 @@ top-k
  └── project
       ├── columns: column9:9 col4:4!null col1:1!null col2:2!null col3:3!null vec:5
       ├── immutable
-      ├── fd: ()-->(3), (5)-->(9), (1,2)-->(4)
-      ├── select
+      ├── fd: (1,2)-->(3,4), (5)-->(9)
+      ├── inner-join (lookup index_with_computed_tab)
       │    ├── columns: col1:1!null col2:2!null col3:3!null vec:5
-      │    ├── fd: ()-->(3)
-      │    ├── scan index_with_computed_tab
-      │    │    ├── columns: col1:1!null col2:2!null col3:3!null vec:5
-      │    │    ├── computed column expressions
-      │    │    │    ├── col3:3
-      │    │    │    │    └── col1:1 + col2:2
-      │    │    │    └── col4:4
-      │    │    │         └── col1:1 * col2:2
-      │    │    └── fd: (1,2)-->(3)
-      │    └── filters
-      │         └── col3:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+      │    ├── key columns: [6] = [6]
+      │    ├── lookup columns are key
+      │    ├── fd: (1,2)-->(3)
+      │    ├── vector-search index_with_computed_tab@index_with_computed_tab_col3_vec_idx,vector
+      │    │    ├── columns: rowid:6!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── prefix constraint: /3
+      │    │    │    └── [/5 - /5]
+      │    │    ├── key: (6)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            ├── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
            └── col1:1 * col2:2 [as=col4:4, outer=(1,2), immutable]
