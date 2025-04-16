@@ -424,7 +424,9 @@ func (twb *txnWriteBuffer) adjustError(
 		baIdx := int32(0)
 		for i := range numOriginalRequests {
 			if len(ts) > 0 && ts[0].index == i {
-				if ts[0].stripped {
+				curTs := ts[0]
+				ts = ts[1:]
+				if curTs.stripped {
 					numStripped++
 				} else {
 					// This is a transformed request (for example a LockingGet that was
@@ -433,14 +435,19 @@ func (twb *txnWriteBuffer) adjustError(
 					// exactly the request the user sent.
 					//
 					// For now, we handle this by logging and removing the error index.
-					if baIdx == pErr.Index.Index {
+					//
+					// [1] Get requests are always collected as transformations, but
+					// they're never transformed. Attributing an error to them shouldn't
+					// confuse the client.
+					if baIdx == pErr.Index.Index && curTs.origRequest.Method() != kvpb.Get {
 						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
 						pErr.Index = nil
 						return pErr
 					}
 				}
-				ts = ts[1:]
-				continue
+				if curTs.origRequest.Method() != kvpb.Get {
+					continue
+				}
 			}
 			if baIdx == pErr.Index.Index {
 				break
@@ -713,42 +720,43 @@ func (twb *txnWriteBuffer) applyTransformations(
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
-			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			// The actual serving of the read will happen on the response path though.
+			stripped := false
+			_, served := twb.maybeServeRead(t.Key, t.Sequence)
 			if served {
-				log.VEventf(ctx, 2, "serving %s on key %s from the buffer", t.Method(), t.Key)
-				var resp kvpb.ResponseUnion
-				getResp := &kvpb.GetResponse{}
-				if val.IsPresent() {
-					getResp.Value = val
-				}
-				resp.MustSetInner(getResp)
-
-				stripped := true
 				if t.KeyLockingStrength != lock.None {
 					// Even though the Get request must be served from the buffer, as the
 					// transaction performed a previous write to the key, we still need to
 					// acquire a lock at the leaseholder. As a result, we can't strip the
-					// request from the batch.
+					// request from the remote batch.
 					//
 					// TODO(arul): we could eschew sending this request if we knew there
 					// was a sufficiently strong lock already present on the key.
-					stripped = false
+					log.VEventf(ctx, 2, "locking %s on key %s must be sent to the server", t.Method(), t.Key)
 					baRemote.Requests = append(baRemote.Requests, ru)
+				} else {
+					// We'll synthesize the response from the buffer on the response path;
+					// eschew sending the request to the KV layer as we don't need to
+					// acquire a lock.
+					stripped = true
+					log.VEventf(
+						ctx, 2, "non-locking %s on key %s can be fully served by the client; not sending to KV", t.Method(), t.Key,
+					)
 				}
-
-				ts = append(ts, transformation{
-					stripped:    stripped,
-					index:       i,
-					origRequest: req,
-					resp:        resp,
-				})
-				// We've constructed a response that we'll stitch together with the
-				// result on the response path; eschew sending the request to the KV
-				// layer.
-				continue
+			} else {
+				// Wasn't served locally; send the request to the KV layer.
+				baRemote.Requests = append(baRemote.Requests, ru)
 			}
-			// Wasn't served locally; send the request to the KV layer.
-			baRemote.Requests = append(baRemote.Requests, ru)
+			// Even if the request wasn't served from the buffer here, we still track
+			// a transformation for it. That's because we haven't buffered any writes
+			// from our current batch in the buffer yet, so checking the buffer above
+			// isn't sufficient to determine whether the request needs to serve a read
+			// from the buffer before returning a response or not.
+			ts = append(ts, transformation{
+				stripped:    stripped,
+				index:       i,
+				origRequest: req,
+			})
 
 		case *kvpb.ScanRequest:
 			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
@@ -1054,12 +1062,6 @@ type transformation struct {
 	index int
 	// origRequest is the original request that was transformed.
 	origRequest kvpb.Request
-	// resp is locally produced response that needs to be merged with any
-	// responses returned by the KV layer. This is set for requests that can be
-	// evaluated locally (e.g. blind writes, reads that can be served entirely
-	// from the buffer). Must be set if stripped is true, but the converse doesn't
-	// hold.
-	resp kvpb.ResponseUnion
 }
 
 // toResp returns the response that should be added to the batch response as
@@ -1146,13 +1148,20 @@ func (t transformation) toResp(
 		})
 
 	case *kvpb.GetRequest:
-		// Get requests must be served from the local buffer if a transaction
-		// performed a previous write to the key being read. However, Get
-		// requests must be sent to the KV layer (i.e. not be stripped) iff they
-		// are locking in nature.
-		assertTrue(t.stripped == (req.KeyLockingStrength == lock.None),
-			"Get requests should either be stripped or be locking")
-		ru = t.resp
+		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		if served {
+			getResp := &kvpb.GetResponse{}
+			if val.IsPresent() {
+				getResp.Value = val
+			}
+			ru.MustSetInner(getResp)
+			log.VEventf(ctx, 2, "serving %s on key %s from the buffer", req.Method(), req.Key)
+		} else {
+			// The request wasn't served from the buffer; return the response from the
+			// KV layer.
+			assertTrue(!t.stripped, "we shouldn't be stripping requests that aren't served from the buffer")
+			ru = br
+		}
 
 	case *kvpb.ScanRequest:
 		scanResp, err := twb.mergeWithScanResp(
