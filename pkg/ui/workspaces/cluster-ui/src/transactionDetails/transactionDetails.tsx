@@ -282,9 +282,9 @@ export class TransactionDetails extends React.Component<
     });
   };
 
-  onChangePage = (current: number): void => {
+  onChangePage = (current: number, pageSize: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
+    this.setState({ pagination: { ...pagination, current, pageSize } });
   };
 
   backToTransactionsClick = (): void => {
@@ -606,6 +606,7 @@ export class TransactionDetails extends React.Component<
                   current={pagination.current}
                   total={aggregatedStatements.length}
                   onChange={this.onChangePage}
+                  onShowSizeChange={this.onChangePage}
                 />
               </React.Fragment>
             );
