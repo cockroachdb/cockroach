@@ -1025,7 +1025,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> LABEL LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGICAL LOGICALLY LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGGED LOGICAL LOGICALLY LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
@@ -1150,6 +1150,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
 %type <tree.Statement> alter_table_locality_stmt
+%type <tree.Statement> alter_table_logged_stmt
 %type <tree.Statement> alter_table_owner_stmt
 
 // ALTER VIRTUAL CLUSTER
@@ -2012,6 +2013,7 @@ alter_table_stmt:
 | alter_rename_table_stmt
 | alter_table_set_schema_stmt
 | alter_table_locality_stmt
+| alter_table_logged_stmt
 | alter_table_owner_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
@@ -12646,6 +12648,40 @@ locality:
     }
   }
 
+alter_table_logged_stmt:
+  ALTER TABLE relation_expr SET LOGGED
+  {
+    $$.val = &tree.AlterTableSetLogged{
+      Name: $3.unresolvedObjectName(),
+      IsLogged: true,
+      IfExists: false,
+    }
+  }
+| ALTER TABLE IF EXISTS relation_expr SET LOGGED
+  {
+    $$.val = &tree.AlterTableSetLogged{
+      Name: $5.unresolvedObjectName(),
+      IsLogged: true,
+      IfExists: true,
+    }
+  }
+| ALTER TABLE relation_expr SET UNLOGGED
+  {
+    $$.val = &tree.AlterTableSetLogged{
+      Name: $3.unresolvedObjectName(),
+      IsLogged: false,
+      IfExists: false,
+    }
+  }
+| ALTER TABLE IF EXISTS relation_expr SET UNLOGGED
+  {
+    $$.val = &tree.AlterTableSetLogged{
+      Name: $5.unresolvedObjectName(),
+      IsLogged: false,
+      IfExists: true,
+    }
+  }
+
 alter_table_owner_stmt:
   ALTER TABLE relation_expr OWNER TO role_spec
   {
@@ -18301,6 +18337,7 @@ unreserved_keyword:
 | LOGICALLY
 | LOGIN
 | LOCALITY
+| LOGGED
 | LOOKUP
 | LOW
 | MATCH
@@ -18869,6 +18906,7 @@ bare_label_keywords:
 | LOCALTIME
 | LOCALTIMESTAMP
 | LOCKED
+| LOGGED
 | LOGICAL
 | LOGICALLY
 | LOGIN
