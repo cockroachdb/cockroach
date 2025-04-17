@@ -87,6 +87,10 @@ type InternalExecutorOverride struct {
 	// BufferedWritesEnabled, if set, controls whether the buffered writes KV transaction
 	// protocol is used for user queries on the current session.
 	BufferedWritesEnabled *bool
+	// SwallowSettingOverrideErr, if set, indicates that when an app tenant
+	// attempts to set a cluster setting overrode by the system tenant, the query
+	// no-ops instead of errors.
+	SwallowSettingOverrideErr bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
@@ -113,4 +117,9 @@ var NodeUserWithLowUserPrioritySessionDataOverride = InternalExecutorOverride{
 var NodeUserWithBulkLowPriSessionDataOverride = InternalExecutorOverride{
 	User:             username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
 	QualityOfService: &sessiondatapb.BulkLowQoS,
+}
+
+var NodeUserWithSwallowSettingOverride = InternalExecutorOverride{
+	User:                      username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+	SwallowSettingOverrideErr: true,
 }

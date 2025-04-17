@@ -165,8 +165,11 @@ func optInToDiagnosticsStatReporting(
 	if cluster.TelemetryOptOut {
 		return nil
 	}
-	_, err := deps.InternalExecutor.Exec(
-		ctx, "optInToDiagnosticsStatReporting", nil, /* txn */
+	_, err := deps.InternalExecutor.ExecEx(
+		ctx,
+		"optInToDiagnosticsStatReporting",
+		nil, /* txn */
+		sessiondata.NodeUserWithSwallowSettingOverride,
 		`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
 	return err
 }

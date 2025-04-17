@@ -223,8 +223,10 @@ func (p *planner) SetClusterSetting(
 			}
 		}
 	}
-
 	if st.OverridesInformer != nil && st.OverridesInformer.IsOverridden(setting.InternalKey()) {
+		if p.SessionData().SwallowSettingOverrideErr {
+			return &zeroNode{}, nil
+		}
 		return nil, errors.Errorf("cluster setting '%s' is currently overridden by the operator", name)
 	}
 
