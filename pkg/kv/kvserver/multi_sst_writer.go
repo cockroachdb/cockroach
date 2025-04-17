@@ -70,7 +70,6 @@ func newMultiSSTWriter(
 	localKeySpans []roachpb.Span,
 	mvccKeySpan roachpb.Span,
 	sstChunkSize int64,
-	rangeKeysInOrder bool,
 ) (*multiSSTWriter, error) {
 	msstw := &multiSSTWriter{
 		st:            st,
@@ -82,15 +81,7 @@ func newMultiSSTWriter(
 			End:   storage.EngineKey{Key: mvccKeySpan.EndKey},
 		}},
 		sstChunkSize: sstChunkSize,
-	}
-	if rangeKeysInOrder {
-		// We disable snapshot sstable splitting unless the sender has
-		// specified in its snapshot header that it is sending range keys in
-		// key order alongside point keys, as opposed to sending them at the end
-		// of the snapshot. This is necessary to efficiently produce fragmented
-		// snapshot sstables, as otherwise range keys will arrive out-of-order
-		// wrt. point keys.
-		msstw.maxSSTSize = MaxSnapshotSSTableSize.Get(&st.SV)
+		maxSSTSize:   MaxSnapshotSSTableSize.Get(&st.SV),
 	}
 	msstw.rangeKeyFrag = rangekey.Fragmenter{
 		Cmp:    storage.EngineComparer.Compare,
