@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -581,7 +582,7 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
+			SQLServiceLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
@@ -599,21 +600,21 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLTxnLatency: metric.NewHistogram(metric.HistogramOptions{
+			SQLTxnLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLTxnLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLTxnsOpen:         metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
-			SQLActiveStatements: metric.NewGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
+			SQLTxnsOpen:         aggmetric.NewSQLGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
+			SQLActiveStatements: aggmetric.NewSQLGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
 			SQLContendedTxns:    metric.NewCounter(getMetricMeta(MetaSQLTxnContended, internal)),
 
 			TxnAbortCount:                     metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
-			FailureCount:                      metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+			FailureCount:                      aggmetric.NewSQLCounter(getMetricMeta(MetaFailure, internal)),
 			StatementTimeoutCount:             metric.NewCounter(getMetricMeta(MetaStatementTimeout, internal)),
 			TransactionTimeoutCount:           metric.NewCounter(getMetricMeta(MetaTransactionTimeout, internal)),
-			FullTableOrIndexScanCount:         metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			FullTableOrIndexScanCount:         aggmetric.NewSQLCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
@@ -2909,12 +2910,14 @@ func (ex *connExecutor) execCopyOut(
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	defer func() {
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
+			ex.sessionData().Database, ex.sessionData().ApplicationName)
 		if !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
@@ -3121,12 +3124,14 @@ func (ex *connExecutor) execCopyIn(
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
 	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
-	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1,
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	defer func() {
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
-		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
+			ex.sessionData().Database, ex.sessionData().ApplicationName)
 		if !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
@@ -4510,17 +4515,17 @@ type StatementCounters struct {
 	QueryCount telemetry.CounterWithMetric
 
 	// Basic CRUD statements.
-	SelectCount telemetry.CounterWithMetric
-	UpdateCount telemetry.CounterWithMetric
-	InsertCount telemetry.CounterWithMetric
-	DeleteCount telemetry.CounterWithMetric
+	SelectCount telemetry.CounterWithAggMetric
+	UpdateCount telemetry.CounterWithAggMetric
+	InsertCount telemetry.CounterWithAggMetric
+	DeleteCount telemetry.CounterWithAggMetric
 	// CRUDQueryCount includes all 4 CRUD statements above.
-	CRUDQueryCount telemetry.CounterWithMetric
+	CRUDQueryCount telemetry.CounterWithAggMetric
 
 	// Transaction operations.
-	TxnBeginCount    telemetry.CounterWithMetric
-	TxnCommitCount   telemetry.CounterWithMetric
-	TxnRollbackCount telemetry.CounterWithMetric
+	TxnBeginCount    telemetry.CounterWithAggMetric
+	TxnCommitCount   telemetry.CounterWithAggMetric
+	TxnRollbackCount telemetry.CounterWithAggMetric
 	TxnUpgradedCount *metric.Counter
 
 	// Transaction XA two-phase commit operations.
@@ -4561,11 +4566,11 @@ type StatementCounters struct {
 
 func makeStartedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithMetric(
+		TxnBeginCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnBeginStarted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithMetric(
+		TxnCommitCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnCommitStarted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithMetric(
+		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
@@ -4587,15 +4592,15 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointStarted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointStarted, internal)),
-		SelectCount: telemetry.NewCounterWithMetric(
+		SelectCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaSelectStarted, internal)),
-		UpdateCount: telemetry.NewCounterWithMetric(
+		UpdateCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaUpdateStarted, internal)),
-		InsertCount: telemetry.NewCounterWithMetric(
+		InsertCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaInsertStarted, internal)),
-		DeleteCount: telemetry.NewCounterWithMetric(
+		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithMetric(
+		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
@@ -4614,11 +4619,11 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 
 func makeExecutedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithMetric(
+		TxnBeginCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnBeginExecuted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithMetric(
+		TxnCommitCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithMetric(
+		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
@@ -4640,15 +4645,15 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointExecuted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointExecuted, internal)),
-		SelectCount: telemetry.NewCounterWithMetric(
+		SelectCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaSelectExecuted, internal)),
-		UpdateCount: telemetry.NewCounterWithMetric(
+		UpdateCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaUpdateExecuted, internal)),
-		InsertCount: telemetry.NewCounterWithMetric(
+		InsertCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaInsertExecuted, internal)),
-		DeleteCount: telemetry.NewCounterWithMetric(
+		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithMetric(
+		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),
@@ -4667,30 +4672,32 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 
 func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statement) {
 	sc.QueryCount.Inc()
+	dbName := ex.sessionData().Database
+	appName := ex.sessionData().ApplicationName
 	switch t := stmt.(type) {
 	case *tree.BeginTransaction:
-		sc.TxnBeginCount.Inc()
+		sc.TxnBeginCount.Inc(dbName, appName)
 	case *tree.Select:
-		sc.SelectCount.Inc()
-		sc.CRUDQueryCount.Inc()
+		sc.SelectCount.Inc(dbName, appName)
+		sc.CRUDQueryCount.Inc(dbName, appName)
 	case *tree.Update:
-		sc.UpdateCount.Inc()
-		sc.CRUDQueryCount.Inc()
+		sc.UpdateCount.Inc(dbName, appName)
+		sc.CRUDQueryCount.Inc(dbName, appName)
 	case *tree.Insert:
-		sc.InsertCount.Inc()
-		sc.CRUDQueryCount.Inc()
+		sc.InsertCount.Inc(dbName, appName)
+		sc.CRUDQueryCount.Inc(dbName, appName)
 	case *tree.Delete:
-		sc.DeleteCount.Inc()
-		sc.CRUDQueryCount.Inc()
+		sc.DeleteCount.Inc(dbName, appName)
+		sc.CRUDQueryCount.Inc(dbName, appName)
 	case *tree.CommitTransaction:
-		sc.TxnCommitCount.Inc()
+		sc.TxnCommitCount.Inc(dbName, appName)
 	case *tree.RollbackTransaction:
 		// The CommitWait state means that the transaction has already committed
 		// after a specially handled `RELEASE SAVEPOINT cockroach_restart` command.
 		if ex.getTransactionState() == CommitWaitStateStr {
-			sc.TxnCommitCount.Inc()
+			sc.TxnCommitCount.Inc(dbName, appName)
 		} else {
-			sc.TxnRollbackCount.Inc()
+			sc.TxnRollbackCount.Inc(dbName, appName)
 		}
 	case *tree.PrepareTransaction:
 		sc.TxnPrepareCount.Inc()

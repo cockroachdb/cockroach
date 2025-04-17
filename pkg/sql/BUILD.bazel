@@ -582,6 +582,7 @@ go_library(
         "//pkg/util/memzipper",
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/pretty",
