@@ -1640,3 +1640,164 @@ query T
 SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
 ----
 {"a": 10}
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('{}', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('"a"', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('true', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('null', '$.abs()');
+
+query T
+SELECT jsonb_path_query('{}', '(1).abs()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).abs()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).abs()');
+----
+0.5
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).abs()');
+----
+0.5
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5]', '$.abs()');
+----
+1
+1
+0.5
+0.5
+
+query T
+SELECT jsonb_path_query('{}', '(1).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).ceiling()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).ceiling()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(0.1).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.1).ceiling()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(0.9).ceiling()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-0.9).ceiling()');
+----
+0
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5, 0.1, -0.1, 0.9, -0.9]', '$.ceiling()');
+----
+1
+-1
+1
+0
+1
+0
+1
+0
+
+query T
+SELECT jsonb_path_query('{}', '(1).floor()');
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '(-1).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.5).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.5).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.1).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.1).floor()');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '(0.9).floor()');
+----
+0
+
+query T
+SELECT jsonb_path_query('{}', '(-0.9).floor()');
+----
+-1
+
+query T rowsort
+SELECT jsonb_path_query('[1, -1, 0.5, -0.5, 0.1, -0.1, 0.9, -0.9]', '$.floor()');
+----
+1
+-1
+0
+-1
+0
+-1
+0
+-1
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('[[1, 2]]', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('[1, 2, [3, 4]]', '$.abs()');
+
+query T
+SELECT jsonb_path_query('{"a": -0.5}', '$.a.abs()')
+----
+0.5
+
+statement error pgcode 22036 pq: jsonpath item method .abs\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('"1"', '$.abs()');
+
+statement error pgcode 22036 pq: jsonpath item method .floor\(\) can only be applied to a numeric value
+SELECT jsonb_path_query('{}', '(null).floor()');
