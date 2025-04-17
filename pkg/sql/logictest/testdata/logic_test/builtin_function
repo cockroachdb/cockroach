@@ -223,7 +223,7 @@ EXECUTE concat_stmt2(':')
 statement ok
 RESET use_pre_25_2_variadic_builtins
 
-statement ok
+statement error pgcode 42P18 pq: concat\(\): error type checking resolved expression:: could not determine data type of placeholder \$1
 PREPARE concat_stmt3 AS SELECT concat("foo"."a", $1) FROM foo
 
 query T
