@@ -196,6 +196,12 @@ func (m *Manager) Get(
 			if err != nil {
 				return nil, err
 			}
+			options := m.getIndexOptions(config)
+			if DeterministicFixupsSetting.Get(m.sv) {
+				// Enable deterministic fixups, for testing.
+				config.Seed = 42
+				options.IsDeterministic = true
+			}
 			// TODO(drewk): use the config to populate the index options as well.
 			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
 			store, err := vecstore.New(ctx, m.db, quantizer, m.codec, tableID, indexID)
@@ -207,17 +213,17 @@ func (m *Manager) Get(
 			// passed to cspann.NewIndex, and we don't want that to be the context of
 			// the Get call.
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
+				m.ctx, store, quantizer, config.Seed, options, m.stopper)
 		},
 	)
 }
 
 func (m *Manager) getIndexOptions(config vecpb.Config) *cspann.IndexOptions {
-	// Hook up the StalledOpTimeout callback to the cluster setting.
 	return &cspann.IndexOptions{
 		MinPartitionSize: int(config.MinPartitionSize),
 		MaxPartitionSize: int(config.MaxPartitionSize),
 		BaseBeamSize:     int(config.BuildBeamSize),
+		// Hook up the StalledOpTimeout callback to the cluster setting.
 		StalledOpTimeout: func() time.Duration {
 			return StalledOpTimeoutSetting.Get(m.sv)
 		},

@@ -270,13 +270,13 @@ CREATE VECTOR INDEX ON vec_errors (d)
 statement error pq: column vec1 has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
 CREATE INDEX ON vec_errors (b, vec1)
 
-statement error vector indexes can't be unique
+statement error vector indexes can.t be unique
 CREATE UNIQUE VECTOR INDEX ON vec_errors (vec1)
 
-statement error vector indexes don't support stored columns
+statement error vector indexes don.t support stored columns
 CREATE INDEX on vec_errors USING cspann (vec1) STORING (b);
 
-statement error vector indexes don't support stored columns
+statement error vector indexes don.t support stored columns
 CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 
 # Try to use unsupported vector index type.
@@ -331,13 +331,14 @@ DROP TABLE alter_test
 # Execution tests.
 # ------------------------------------------------------------------------------
 
+# Use small partition size so that index has more than one level.
 statement ok
 CREATE TABLE exec_test (
   a INT PRIMARY KEY,
   b INT,
   vec1 VECTOR(3),
-  VECTOR INDEX idx1 (vec1),
-  VECTOR INDEX idx2 (b, vec1)
+  VECTOR INDEX idx1 (vec1) WITH (min_partition_size=1, max_partition_size=4),
+  VECTOR INDEX idx2 (b, vec1) WITH (min_partition_size=1, max_partition_size=4)
 )
 
 statement ok
@@ -350,37 +351,29 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (6, NULL, '[16, 17, 18]'),
   (7, NULL, '[1, 1, 1]');
 
-# TODO(143209): write a full set of tests once we can make them deterministic.
-# For now, we can write tests that return every vector with a given prefix.
-query I rowsort
-SELECT a FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 7;
+query IT rowsort
+SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
-7
-1
-2
-3
-4
-5
-6
+7  [1,1,1]
+1  [1,2,3]
+2  [4,5,6]
 
-query I rowsort
-SELECT a FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 2;
+query IT rowsort
+SELECT a, vec1 FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 1;
 ----
-1
-2
+1  [1,2,3]
 
-query I rowsort
-SELECT a FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
+query IT rowsort
+SELECT a, vec1 FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[15, 15, 15]' LIMIT 2;
 ----
-3
-4
-5
+5  [13,14,15]
+4  [10,11,12]
 
-query I rowsort
-SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
+query IT rowsort
+SELECT a, vec1 FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
-7
-6
+7  [1,1,1]
+6  [16,17,18]
 
 statement ok
 DROP TABLE exec_test
@@ -390,7 +383,7 @@ DROP TABLE exec_test
 #
 # The SELECT statements for these tests retrieve all the rows in the table
 # because the point is to test that backfill is happening correctly and that
-# we're still able to insert into and modify the index after the backfill is
+# we are still able to insert into and modify the index after the backfill is
 # done.
 
 subtest backfill
