@@ -416,6 +416,11 @@ func (sg *SQLGauge) Inspect(f func(interface{})) {
 	f(sg)
 }
 
+// Value returns the aggregate sum of all of its current children.
+func (sg *SQLGauge) Value() int64 {
+	return sg.g.Value()
+}
+
 // Update updates the Gauge value by i for the given label values. If a
 // Gauge with the given label values doesn't exist yet, it creates a new
 // Gauge and updates it. Update increments parent metrics

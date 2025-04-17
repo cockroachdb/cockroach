@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 )
 
 // DistSQLMetrics contains pointers to the metrics for monitoring DistSQL
@@ -17,8 +18,8 @@ type DistSQLMetrics struct {
 	QueriesActive               *metric.Gauge
 	QueriesTotal                *metric.Counter
 	DistributedCount            *metric.Counter
-	ContendedQueriesCount       *metric.Counter
-	CumulativeContentionNanos   *metric.Counter
+	ContendedQueriesCount       *aggmetric.SQLCounter
+	CumulativeContentionNanos   *aggmetric.SQLCounter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
 	MaxBytesHist                metric.IHistogram
@@ -153,8 +154,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		QueriesActive:             metric.NewGauge(metaQueriesActive),
 		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
 		DistributedCount:          metric.NewCounter(metaDistributedCount),
-		ContendedQueriesCount:     metric.NewCounter(metaContendedQueriesCount),
-		CumulativeContentionNanos: metric.NewCounter(metaCumulativeContentionNanos),
+		ContendedQueriesCount:     aggmetric.NewSQLCounter(metaContendedQueriesCount),
+		CumulativeContentionNanos: aggmetric.NewSQLCounter(metaCumulativeContentionNanos),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
 		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
