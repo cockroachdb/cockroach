@@ -1640,3 +1640,84 @@ query T
 SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
 ----
 {"a": 10}
+
+query T
+SELECT jsonb_path_query('"Hello"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "s"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag "m"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag "q"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag ""');
+----
+true
+
+# Case insensitive and dot matches newline
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "hello.world" flag "is"');
+----
+true
+
+# Case insensitive and multiline
+query T
+SELECT jsonb_path_query('"Line1\nline2"', '$ like_regex "^LINE2$" flag "im"');
+----
+true
+
+# Case insensitive and literal matching
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "HELLO.*WORLD" flag "iq"');
+----
+false
+
+# Dot matches newline and multiline
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "ms"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "m"');
+----
+false
+
+# Dot matches newline and literal matching
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "sq"');
+----
+false
+
+# Multiline and literal matching
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
+----
+false
