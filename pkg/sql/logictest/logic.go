@@ -1862,6 +1862,14 @@ func (t *logicTest) newCluster(
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		// Ensure that vector index background operations are deterministic, so
+		// that tests don't flake.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {

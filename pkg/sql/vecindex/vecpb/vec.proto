@@ -34,4 +34,9 @@ message Config {
   // MaxPartitionSize is the highest number of vectors that a partition can have
   // without being split.
   int32 max_partition_size = 5;
+  // IsDeterministic means that background fixup operations on the index are
+  // deterministic, as explained in the DeterministicFixupsSetting comment. This
+  // is set to true when the DeterministicFixupsSetting is true at index
+  // creation time.
+  bool is_deterministic = 6;
 }
