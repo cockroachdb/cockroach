@@ -622,6 +622,7 @@ func createCompactionManifest(
 	if err != nil {
 		return nil, err
 	}
+	m.IsCompacted = true
 	m.IntroducedSpans, err = compactIntroducedSpans(ctx, m, compactChain)
 	if err != nil {
 		return nil, err
@@ -691,7 +692,7 @@ func getBackupChain(
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
 		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false,
+		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
