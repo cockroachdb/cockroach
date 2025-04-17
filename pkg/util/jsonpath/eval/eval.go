@@ -183,7 +183,7 @@ func (ctx *jsonpathCtx) eval(
 	case jsonpath.Last:
 		return ctx.evalLast()
 	case jsonpath.Method:
-		return ctx.evalMethod(path, jsonValue)
+		return ctx.evalMethod(path, jsonValue, unwrap)
 	default:
 		return nil, errUnimplemented
 	}

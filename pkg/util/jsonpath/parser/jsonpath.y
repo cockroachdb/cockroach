@@ -569,15 +569,15 @@ method:
   }
 | ABS
   {
-    return unimplemented(jsonpathlex, ".abs()")
+    $$.val = jsonpath.Method{Type: jsonpath.AbsMethod}
   }
 | CEILING
   {
-    return unimplemented(jsonpathlex, ".ceiling()")
+    $$.val = jsonpath.Method{Type: jsonpath.CeilingMethod}
   }
 | FLOOR
   {
-    return unimplemented(jsonpathlex, ".floor()")
+    $$.val = jsonpath.Method{Type: jsonpath.FloorMethod}
   }
 | BIGINT
   {
