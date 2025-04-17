@@ -75,7 +75,7 @@ type SemaContext struct {
 	// supported by the current cluster version. It may be unset.
 	UnsupportedTypeChecker UnsupportedTypeChecker
 
-	// UsePre25_2VariadicBuiltins is set to true when we should use the pre-25.2
+	// UsePre_25_2VariadicBuiltins is set to true when we should use the pre-25.2
 	// variadic builtins behavior.
 	UsePre_25_2VariadicBuiltins bool
 }
