@@ -640,7 +640,11 @@ func (lww *lwwQuerier) InsertRow(
 		if !useLowPriority.Get(&lww.settings.SV) {
 			sess.QualityOfService = nil
 		}
-		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
+		err = withSavepoint(ctx, kvTxn, func() error {
+			_, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...)
+			return err
+		})
+		if err != nil {
 			if isLwwLoser(err) {
 				return batchStats{}, nil
 			}
@@ -667,7 +671,10 @@ func (lww *lwwQuerier) InsertRow(
 		sess.QualityOfService = nil
 	}
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
-	_, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...)
+	err = withSavepoint(ctx, kvTxn, func() error {
+		_, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...)
+		return err
+	})
 	if isLwwLoser(err) {
 		return batchStats{}, nil
 	}
