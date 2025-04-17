@@ -300,7 +300,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 
 	msstw, err := newMultiSSTWriter(
 		ctx, st, scratch, localSpans, mvccSpan, 0,
-		false, /* rangeKeysInOrder */
+		true, /* rangeKeysInOrder */
 	)
 	require.NoError(t, err)
 
@@ -544,7 +544,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0, false)
+	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0, true)
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
