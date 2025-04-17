@@ -1453,6 +1453,83 @@ func registerCDC(r registry.Registry) {
 			exportStatsFile()
 		},
 	})
+
+	runInitialScanOnlyEnrichedBench := func(newOpts map[string]string) func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		return func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			opts := map[string]string{
+				"initial_scan":   "'only'",
+				"envelope":       "'enriched'",
+				"mvcc_timestamp": "",
+				"key_in_value":   "",
+			}
+			for k, v := range newOpts {
+				opts[k] = v
+			}
+
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
+
+			exportStatsFile := ct.startStatsCollection()
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts:     opts,
+			})
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			waitForCompletion()
+			exportStatsFile()
+		}
+	}
+
+	r.Add(registry.TestSpec{
+		Name:      "cdc/initial-scan-only/envelope=enriched/no-properties",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		// This test uses google cloudStorageSink because it is the fastest,
+		// but it is not a requirement for this test. The sink could be
+		// chosen on a per cloud basis if we want to run this on other clouds.
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runInitialScanOnlyEnrichedBench(map[string]string{})
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:      "cdc/initial-scan-only/envelope=enriched/source",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		// This test uses google cloudStorageSink because it is the fastest,
+		// but it is not a requirement for this test. The sink could be
+		// chosen on a per cloud basis if we want to run this on other clouds.
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runInitialScanOnlyEnrichedBench(map[string]string{"enriched_properties": "'source'"})
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:      "cdc/initial-scan-only/envelope=enriched/source,schema",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		// This test uses google cloudStorageSink because it is the fastest,
+		// but it is not a requirement for this test. The sink could be
+		// chosen on a per cloud basis if we want to run this on other clouds.
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runInitialScanOnlyEnrichedBench(map[string]string{"enriched_properties": "'source,schema"})
+		},
+	})
+
 	r.Add(registry.TestSpec{
 		Name:             "cdc/initial-scan-rolling-restart/normal-checkpoint",
 		Owner:            registry.OwnerCDC,
