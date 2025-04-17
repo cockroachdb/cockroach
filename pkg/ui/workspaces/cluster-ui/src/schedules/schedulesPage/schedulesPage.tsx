@@ -5,18 +5,18 @@
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
-import { Schedules } from "src/api/schedulesApi";
+import { getSchedules } from "src/api/schedulesApi";
 import { commonStyles } from "src/common";
 import { Delayed } from "src/delayed";
 import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SortSetting } from "src/sortedtable";
-import { syncHistory } from "src/util";
+import { syncHistory, useSwrWithClusterId } from "src/util";
 
 import styles from "../schedules.module.scss";
 
@@ -27,19 +27,10 @@ const cx = classNames.bind(styles);
 
 export interface SchedulesPageStateProps {
   sort: SortSetting;
-  status: string;
-  show: string;
-  schedules: Schedules;
-  schedulesError: Error | null;
-  schedulesLoading: boolean;
 }
 
 export interface SchedulesPageDispatchProps {
   setSort: (value: SortSetting) => void;
-  setStatus: (value: string) => void;
-  setShow: (value: string) => void;
-  refreshSchedules: (req: { status: string; limit: number }) => void;
-  onFilterChange?: (req: { status: string; limit: number }) => void;
 }
 
 export type SchedulesPageProps = SchedulesPageStateProps &
@@ -47,17 +38,7 @@ export type SchedulesPageProps = SchedulesPageStateProps &
   RouteComponentProps;
 
 export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
-  const {
-    history,
-    onFilterChange,
-    refreshSchedules,
-    status,
-    setStatus,
-    show,
-    setShow,
-    sort,
-    setSort,
-  } = props;
+  const { history, sort, setSort } = props;
   const searchParams = new URLSearchParams(history.location.search);
 
   // Sort Settings.
@@ -71,11 +52,14 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
     setSort({ columnTitle, ascending });
   }, [setSort, columnTitle, ascending]);
 
+  const [status, setStatus] = useState(statusOptions[0].value);
+  const [show, setShow] = useState(showOptions[0].value);
+
   // Filter Status.
-  const paramStatus = searchParams.get("status") || undefined;
+  const paramStatus = searchParams.get("status");
   useEffect(() => {
     if (
-      paramStatus === undefined ||
+      !paramStatus ||
       statusOptions.find(option => option["value"] === paramStatus) ===
         undefined
     ) {
@@ -85,10 +69,10 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
   }, [paramStatus, setStatus]);
 
   // Filter Show.
-  const paramShow = searchParams.get("show") || undefined;
+  const paramShow = searchParams.get("show");
   useEffect(() => {
     if (
-      paramShow === undefined ||
+      !paramShow ||
       showOptions.find(option => option["value"] === paramShow) === undefined
     ) {
       return;
@@ -96,15 +80,15 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
     setShow(paramShow);
   }, [paramShow, setShow]);
 
-  useEffect(() => {
-    const req = {
-      status: status,
-      limit: parseInt(show, 10),
-    };
-
-    onFilterChange ? onFilterChange(req) : refreshSchedules(req);
-  }, [status, show, refreshSchedules, onFilterChange]);
-
+  const limit = parseInt(show) ?? 0;
+  const { data, error, isLoading } = useSwrWithClusterId(
+    {
+      name: "schedules",
+      status,
+      limit,
+    },
+    () => getSchedules({ status, limit }),
+  );
   const onStatusSelected = (item: string) => {
     setStatus(item);
     syncHistory(
@@ -136,8 +120,6 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
     );
   };
 
-  const isLoading = !props.schedules || props.schedulesLoading;
-  const error = props.schedulesError;
   return (
     <div className={cx("schedules-page")}>
       <Helmet title="Schedules" />
@@ -175,8 +157,8 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
           error={error}
           render={() => (
             <ScheduleTable
-              isUsedFilter={status.length > 0}
-              schedules={props.schedules}
+              isUsedFilter={!!status}
+              schedules={data}
               setSort={changeSortSetting}
               sort={sort}
             />
