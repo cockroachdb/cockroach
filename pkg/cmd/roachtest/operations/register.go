@@ -15,6 +15,7 @@ func RegisterOperations(r registry.Registry) {
 	registerAddColumn(r)
 	registerAddDatabase(r)
 	registerAddIndex(r)
+	registerAddRLSPolicy(r)
 	registerGrantRevoke(r)
 	registerNetworkPartition(r)
 	registerDiskStall(r)
