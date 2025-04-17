@@ -21,6 +21,13 @@ type IndexMetric struct {
 	Value float64
 }
 
+// SearchState holds prepared state needed by a vector provider across multiple
+// calls to Search.
+type SearchState interface {
+	// Close releases any resources held by the search state.
+	Close()
+}
+
 // VectorProvider abstracts the operations needed for vector storage and
 // retrieval. This allows different implementations (in-memory, SQL-based, etc.)
 // to provide the functionality needed by vecbench.
@@ -47,11 +54,16 @@ type VectorProvider interface {
 	// identified by a key.
 	InsertVectors(ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set) error
 
+	// SetupSearch allows the provider to perform expensive up-front steps in
+	// preparation for many calls to Search. It returns provider-specific state
+	// that will be passed to Search.
+	SetupSearch(ctx context.Context, maxResults int, beamSize int) (SearchState, error)
+
 	// Search searches for vectors similar to the query vector. It returns the
 	// keys of the most similar vectors. If supported, stats are recorded in
 	// "stats" for this search.
 	Search(
-		ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
+		ctx context.Context, state SearchState, vec vector.T, stats *cspann.SearchStats,
 	) ([]cspann.KeyBytes, error)
 
 	// GetMetrics returns interesting metrics for the vector index. Each provider

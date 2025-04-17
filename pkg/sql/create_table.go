@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1964,12 +1965,16 @@ func NewTableDesc(
 				}
 			}
 			if d.Type == idxtype.VECTOR {
+				// Disable vector indexes by default in 25.2.
+				// TODO(andyk): Remove this check after 25.2.
+				if err := vecindex.CheckEnabled(&st.SV); err != nil {
+					return nil, err
+				}
 				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
 				if err != nil {
 					return nil, err
 				}
-				idx.VecConfig.Dims = column.GetType().Width()
-				idx.VecConfig.Seed = evalCtx.GetRNG().Int63()
+				idx.VecConfig = vecindex.MakeVecConfig(evalCtx, column.GetType())
 			}
 
 			var idxPartitionBy *tree.PartitionBy
