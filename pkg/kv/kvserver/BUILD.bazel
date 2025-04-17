@@ -324,6 +324,7 @@ go_test(
         "metrics_test.go",
         "mvcc_gc_queue_test.go",
         "node_liveness_test.go",
+        "obsolete_code_test.go",
         "queue_concurrency_test.go",
         "queue_test.go",
         "raft_log_queue_test.go",
