@@ -213,14 +213,15 @@ func (m *Manager) Get(
 }
 
 func (m *Manager) getIndexOptions(config vecpb.Config) *cspann.IndexOptions {
-	// Hook up the StalledOpTimeout callback to the cluster setting.
 	return &cspann.IndexOptions{
 		MinPartitionSize: int(config.MinPartitionSize),
 		MaxPartitionSize: int(config.MaxPartitionSize),
 		BaseBeamSize:     int(config.BuildBeamSize),
+		// Hook up the StalledOpTimeout callback to the cluster setting.
 		StalledOpTimeout: func() time.Duration {
 			return StalledOpTimeoutSetting.Get(m.sv)
 		},
+		IsDeterministic: config.IsDeterministic,
 	}
 }
 
