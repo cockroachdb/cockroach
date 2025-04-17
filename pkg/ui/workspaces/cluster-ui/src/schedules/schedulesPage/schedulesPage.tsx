@@ -74,7 +74,11 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
   // Filter Status.
   const paramStatus = searchParams.get("status") || undefined;
   useEffect(() => {
-    if (paramStatus === undefined) {
+    if (
+      paramStatus === undefined ||
+      statusOptions.find(option => option["value"] === paramStatus) ===
+        undefined
+    ) {
       return;
     }
     setStatus(paramStatus);
@@ -83,7 +87,10 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
   // Filter Show.
   const paramShow = searchParams.get("show") || undefined;
   useEffect(() => {
-    if (paramShow === undefined) {
+    if (
+      paramShow === undefined ||
+      showOptions.find(option => option["value"] === paramShow) === undefined
+    ) {
       return;
     }
     setShow(paramShow);
@@ -140,13 +147,23 @@ export const SchedulesPage: React.FC<SchedulesPageProps> = props => {
           <PageConfigItem>
             <Dropdown items={statusOptions} onChange={onStatusSelected}>
               Status:{" "}
-              {statusOptions.find(option => option["value"] === status)["name"]}
+              {
+                (
+                  statusOptions.find(option => option["value"] === status) ??
+                  statusOptions[0]
+                ).name
+              }
             </Dropdown>
           </PageConfigItem>
           <PageConfigItem>
             <Dropdown items={showOptions} onChange={onShowSelected}>
               Show:{" "}
-              {showOptions.find(option => option["value"] === show)["name"]}
+              {
+                (
+                  showOptions.find(option => option["value"] === show) ??
+                  showOptions[0]
+                ).name
+              }
             </Dropdown>
           </PageConfigItem>
         </PageConfig>
