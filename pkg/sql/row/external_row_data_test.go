@@ -125,68 +125,95 @@ func TestExternalRowDataDistSQL(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "defaultdb",
+				UseDatabase:       "defaultdb",
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
 
-	r0 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
-	r0.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v1 INT, v2 INT)`)
-	r0.Exec(t, `CREATE TABLE t_copy (k INT PRIMARY KEY, v1 INT, v2 INT)`)
-	r0.Exec(t, `INSERT INTO t VALUES (1), (3), (5)`)
-
-	if tc.StartedDefaultTestTenant() {
-		// Grant capability to run RELOCATE to secondary (test) tenant.
-		systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-		systemDB.Exec(t,
-			`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
-			serverutils.TestTenantID().ToUint64())
-	}
-
-	// Place leaseholders on nodes 3, 4, 5.
-	r0.Exec(t, `ALTER TABLE t SPLIT AT VALUES (2), (4)`)
-	r0.ExecSucceedsSoon(
-		t, `ALTER TABLE t RELOCATE VALUES (ARRAY[3], 1), (ARRAY[4], 3), (ARRAY[5], 5)`,
+	srcTenant, srcDB, err := ts.TenantController().StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:    serverutils.TestTenantID(),
+			TenantName:  "src",
+			UseDatabase: "defaultdb",
+		},
 	)
+	require.NoError(t, err)
+	dstTenant, dstDB, err := ts.TenantController().StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:    serverutils.TestTenantID2(),
+			TenantName:  "dst",
+			UseDatabase: "defaultdb",
+		},
+	)
+	require.NoError(t, err)
 
-	asOf := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	for _, useDifferentTenant := range []bool{false, true} {
+		t.Run(fmt.Sprintf("useDifferentTenant=%t", useDifferentTenant), func(t *testing.T) {
+			var srcRunner, dstRunner *sqlutils.SQLRunner
+			var dstInternalDB *sql.InternalDB
+			srcRunner = sqlutils.MakeSQLRunner(srcDB)
+			if useDifferentTenant {
+				dstRunner = sqlutils.MakeSQLRunner(dstDB)
+				dstInternalDB = dstTenant.InternalDB().(*sql.InternalDB)
+			} else {
+				dstRunner = srcRunner
+				dstInternalDB = srcTenant.InternalDB().(*sql.InternalDB)
+			}
 
-	// Modify the table descriptor for 't_copy' to have external row data from
-	// table 't'.
-	var tableID int
-	row := r0.QueryRow(t, `SELECT 't'::REGCLASS::OID`)
-	row.Scan(&tableID)
-	execCfg0 := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
-	require.NoError(t, execCfg0.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		descriptors := txn.Descriptors()
-		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t_copy")
-		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
-		if err != nil {
-			return err
-		}
-		require.NotNil(t, mut)
-		mut.External = &descpb.ExternalRowData{
-			AsOf:     asOf,
-			TenantID: execCfg0.Codec.TenantID,
-			TableID:  descpb.ID(tableID),
-		}
-		return descriptors.WriteDesc(ctx, false /* kvtrace */, mut, txn.KV())
-	}))
+			srcRunner.Exec(t, `DROP TABLE IF EXISTS t_src;`)
+			srcRunner.Exec(t, `CREATE TABLE t_src (k INT PRIMARY KEY, v1 INT, v2 INT)`)
+			dstRunner.Exec(t, `DROP TABLE IF EXISTS t_dst;`)
+			dstRunner.Exec(t, `CREATE TABLE t_dst (k INT PRIMARY KEY, v1 INT, v2 INT)`)
+			srcRunner.Exec(t, `INSERT INTO t_src VALUES (1), (3), (5)`)
 
-	// Now check that DistSQL plans against both tables correctly place
-	// flows on nodes 1, 3, 4, 5.
-	r0.Exec(t, `SET distsql = always`)
+			// Place leaseholders on nodes 3, 4, 5.
+			srcRunner.Exec(t, `ALTER TABLE t_src SPLIT AT VALUES (2), (4)`)
+			srcRunner.ExecSucceedsSoon(
+				t, `ALTER TABLE t_src RELOCATE VALUES (ARRAY[3], 1), (ARRAY[4], 3), (ARRAY[5], 5)`,
+			)
 
-	exp := `"nodeNames":["1","3","4","5"]`
-	var info string
-	row = r0.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t`)
-	row.Scan(&info)
-	if !strings.Contains(info, exp) {
-		t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
-	}
-	row = r0.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t_copy`)
-	row.Scan(&info)
-	if !strings.Contains(info, exp) {
-		t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
+			asOf := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+			// Modify the table descriptor for 't_dst' to have external row data from
+			// table 't_src'.
+			var tableID int
+			row := srcRunner.QueryRow(t, `SELECT 't_src'::REGCLASS::OID`)
+			row.Scan(&tableID)
+			require.NoError(t, dstInternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				descriptors := txn.Descriptors()
+				tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t_dst")
+				_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
+				if err != nil {
+					return err
+				}
+				require.NotNil(t, mut)
+				mut.External = &descpb.ExternalRowData{
+					AsOf:     asOf,
+					TenantID: serverutils.TestTenantID(),
+					TableID:  descpb.ID(tableID),
+				}
+				return descriptors.WriteDesc(ctx, false /* kvtrace */, mut, txn.KV())
+			}))
+
+			// Now check that DistSQL plans against both tables correctly place
+			// flows on nodes 1, 3, 4, 5.
+			srcRunner.Exec(t, `SET distsql = always`)
+			dstRunner.Exec(t, `SET distsql = always`)
+
+			exp := `"nodeNames":["1","3","4","5"]`
+			var info string
+			row = srcRunner.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t_src`)
+			row.Scan(&info)
+			if !strings.Contains(info, exp) {
+				t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
+			}
+			row = dstRunner.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t_dst`)
+			row.Scan(&info)
+			if !strings.Contains(info, exp) {
+				t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
+			}
+		})
 	}
 }
