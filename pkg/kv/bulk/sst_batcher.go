@@ -692,7 +692,17 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	// the next one; if memory is not available we'll just block on the send
 	// and then move on to the next send after this SST is no longer being held
 	// in memory.
-	flushAsync := reason == rangeFlush
+	//
+	// TODO(jeffswenson): re-enable flush async after fixing performance and
+	// correctness issues.
+	//
+	// CORRECTNESS: Something has to surface the error from the async flush to
+	// the caller. Right now the error is logged by `Reset`.
+	// PERFORMANCE: The only caller that sets `rangeFlush` calls Reset immediatly
+	// after, which blocks on all in flight requests. So there is no performance
+	// benefit to the async flush.
+	//flushAsync := reason == rangeFlush
+	flushAsync := false
 
 	var reserved int64
 	if flushAsync {
