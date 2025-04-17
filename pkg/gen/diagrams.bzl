@@ -57,6 +57,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:alter_table.html",
     "//docs/generated/sql/bnf:alter_table_cmds.html",
     "//docs/generated/sql/bnf:alter_table_locality.html",
+    "//docs/generated/sql/bnf:alter_table_logged.html",
     "//docs/generated/sql/bnf:alter_table_owner.html",
     "//docs/generated/sql/bnf:alter_table_partition_by.html",
     "//docs/generated/sql/bnf:alter_table_reset_storage_param.html",
