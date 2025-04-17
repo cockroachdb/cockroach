@@ -600,6 +600,21 @@ $.a.type()
 ----
 $."a".type() -- normalized!
 
+parse
+$.a.abs()
+----
+$."a".abs() -- normalized!
+
+parse
+$.a.floor()
+----
+$."a".floor() -- normalized!
+
+parse
+$.a.ceiling()
+----
+$."a".ceiling() -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

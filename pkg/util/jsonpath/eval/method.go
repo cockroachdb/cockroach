@@ -6,18 +6,21 @@
 package eval
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 )
 
 var (
 	errEvalSizeNotArray = pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath item method .size() can only be applied to an array")
+	errEvalAbsNotNumber = pgerror.Newf(pgcode.NonNumericSQLJSONItem, "jsonpath item method .abs() can only be applied to a numeric value")
 )
 
 func (ctx *jsonpathCtx) evalMethod(
-	method jsonpath.Method, jsonValue json.JSON,
+	jsonPath jsonpath.Path, method jsonpath.Method, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
 	switch method.Type {
 	case jsonpath.SizeMethod:
@@ -29,6 +32,12 @@ func (ctx *jsonpathCtx) evalMethod(
 	case jsonpath.TypeMethod:
 		t := ctx.evalType(jsonValue)
 		return []json.JSON{json.FromString(t)}, nil
+	case jsonpath.AbsMethod:
+		return ctx.evalNumericMethod(jsonPath, jsonValue, unwrap, evalAbs)
+	case jsonpath.FloorMethod:
+		return ctx.evalNumericMethod(jsonPath, jsonValue, unwrap, evalFloor)
+	case jsonpath.CeilingMethod:
+		return ctx.evalNumericMethod(jsonPath, jsonValue, unwrap, evalCeiling)
 	default:
 		return nil, errUnimplemented
 	}
@@ -51,4 +60,44 @@ func (ctx *jsonpathCtx) evalType(jsonValue json.JSON) string {
 		return "number"
 	}
 	return jsonValue.Type().String()
+}
+
+func (ctx *jsonpathCtx) evalNumericMethod(
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrap bool, fn func(dec *apd.Decimal) error,
+) ([]json.JSON, error) {
+	if unwrap && jsonValue.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(jsonPath, jsonValue, unwrap)
+	}
+	dec, ok := jsonValue.AsDecimal()
+	if !ok {
+		return nil, maybeThrowError(ctx, errEvalAbsNotNumber)
+	}
+	if err := fn(dec); err != nil {
+		return nil, err
+	}
+	return []json.JSON{json.FromDecimal(*dec)}, nil
+}
+
+func evalAbs(dec *apd.Decimal) error {
+	_ = dec.Abs(dec)
+	return nil
+}
+
+func evalFloor(dec *apd.Decimal) error {
+	_, err := tree.ExactCtx.Floor(dec, dec)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func evalCeiling(dec *apd.Decimal) error {
+	_, err := tree.ExactCtx.Ceil(dec, dec)
+	if err != nil {
+		return err
+	}
+	if dec.IsZero() {
+		dec.Negative = false
+	}
+	return nil
 }
