@@ -44,23 +44,14 @@ func CheckPartitionCount(
 	require.Equal(t, expectedCount, count)
 }
 
-// BeginTransaction starts a new transaction for the given store and returns it.
-func BeginTransaction(ctx context.Context, t *testing.T, store cspann.Store) cspann.Txn {
-	txn, err := store.BeginTransaction(ctx)
-	require.NoError(t, err)
-	return txn
-}
-
-// CommitTransaction commits a transaction that was started by BeginTransaction.
-func CommitTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.CommitTransaction(ctx, txn)
-	require.NoError(t, err)
-}
-
-// AbortTransaction aborts a transaction that was started by BeginTransaction.
-func AbortTransaction(ctx context.Context, t *testing.T, store cspann.Store, txn cspann.Txn) {
-	err := store.AbortTransaction(ctx, txn)
-	require.NoError(t, err)
+// RunTransaction wraps the store.RunTransaction method.
+func RunTransaction(
+	ctx context.Context, t *testing.T, store cspann.Store, fn func(txn cspann.Txn),
+) {
+	require.NoError(t, store.RunTransaction(ctx, func(txn cspann.Txn) error {
+		fn(txn)
+		return nil
+	}))
 }
 
 // RoundResults rounds all float fields in the given set of results, using the

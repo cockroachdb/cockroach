@@ -54,7 +54,11 @@ func TestPartition(t *testing.T) {
 		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		childKeys := []ChildKey{childKey10, childKey20, childKey30}
 		valueBytes := []ValueBytes{valueBytes10, valueBytes20, valueBytes30}
-		metadata := PartitionMetadata{Level: 1, Centroid: quantizedSet.GetCentroid()}
+		metadata := PartitionMetadata{
+			Level:        1,
+			Centroid:     quantizedSet.GetCentroid(),
+			StateDetails: MakeReadyDetails(),
+		}
 		metadata.StateDetails.State = ReadyState
 		return NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 	}
@@ -66,6 +70,20 @@ func TestPartition(t *testing.T) {
 			require.Equal(t, expected[i], vectors.At(i))
 		}
 	}
+
+	t.Run("test Init", func(t *testing.T) {
+		// Validate that Init sets same values.
+		partition := newTestPartition()
+		var partition2 Partition
+		partition2.Init(
+			*partition.Metadata(),
+			partition.Quantizer(),
+			partition.QuantizedSet(),
+			partition.ChildKeys(),
+			partition.ValueBytes(),
+		)
+		require.Equal(t, *partition, partition2)
+	})
 
 	t.Run("test Clone", func(t *testing.T) {
 		partition := newTestPartition()
@@ -175,10 +193,10 @@ func TestPartition(t *testing.T) {
 		// Search empty partition.
 		metadata := PartitionMetadata{Level: LeafLevel, Centroid: vector.T{4, 3}}
 		partition := CreateEmptyPartition(quantizer, metadata)
+		require.Equal(t, Level(1), partition.Level())
 
 		searchSet := SearchSet{MaxResults: 1}
-		level, count := partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
-		require.Equal(t, Level(1), level)
+		count := partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		require.Equal(t, 0, count)
 		results := roundResults(searchSet.PopResults(), 4)
 		require.Equal(t, SearchResults(nil), results)
@@ -193,8 +211,7 @@ func TestPartition(t *testing.T) {
 		partition.AddSet(&workspace, vectors, childKeys, valueBytes, false /* overwrite */)
 
 		searchSet = SearchSet{MaxResults: 3}
-		level, count = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
-		require.Equal(t, Level(1), level)
+		count = partition.Search(&workspace, RootKey, vector.T{1, 1}, &searchSet)
 		require.Equal(t, 5, count)
 		result1 := SearchResult{
 			QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 3.2830, ParentPartitionKey: 1, ChildKey: childKey10, ValueBytes: valueBytes10}

@@ -237,6 +237,7 @@ force-split partition-key=1 steps=1
     └───• vec2 (-5, -5)
 
 # Search the tree without triggering fixups.
+# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
@@ -244,6 +245,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 13 vectors, 6 full vectors, 5 partitions
 
 # Move to the DrainingForSplit state, where sub-partition #6 has vectors.
@@ -288,6 +290,7 @@ format-tree root=6
     └───• vec2 (-5, -5)
 
 # Search the tree, ensure that duplicates are not returned.
+# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
@@ -295,6 +298,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # Move to the point where partition #1 children have been cleared.
@@ -310,6 +314,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
 
 # Move to the AddingLevel state, where root partition's level has increased.
@@ -325,6 +330,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
 
 # Move to point where sub-partitions #6 and #7 have been added to the root.
@@ -365,6 +371,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # Finish the split.
@@ -405,6 +412,7 @@ vec1: 4 (centroid=3.8)
 vec7: 5 (centroid=1.67)
 vec8: 5 (centroid=2.24)
 vec3: 26 (centroid=1.05)
+vec4: 26 (centroid=1.05)
 9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # ----------------------------------------------------------------------
@@ -539,10 +547,12 @@ force-split partition-key=2 parent-partition-key=1 steps=10 root=2
 └───• vec7 (8, 8)
 
 # Insert another vector that should be redirected to sub-partition #2.
+# NOTE: sqdist is 0 since we don't fetch the original full vectors in this case,
+# but instead arbitrarily pick the first target as the insertion partition.
 search-for-insert discard-fixups
 (15, 5)
 ----
-partition 2, centroid=(10.5, 2.5), sqdist=26.5
+partition 2, centroid=(10.5, 2.5), sqdist=0
 
 insert discard-fixups root=2
 vec8: (15, 5)

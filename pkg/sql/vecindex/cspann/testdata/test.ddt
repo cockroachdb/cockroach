@@ -1,0 +1,30 @@
+# Load root partition that exceeds the max partition size.
+load-index min-partition-size=1 max-partition-size=3 beam-size=2
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+├───• vec3 (4, 3)
+└───• vec4 (5, 5)
+----
+Loaded 4 vectors.
+
+# Delete vector from primary index, but not from secondary index.
+delete not-found
+vec3
+----
+• 1 (0, 0)
+│
+├───• vec1 (1, 2)
+├───• vec2 (7, 4)
+├───• vec3 (MISSING)
+└───• vec4 (5, 5)
+
+# Search triggers a split, followed by an attempt to delete the missing vector.
+# However, the split changes the root partition level, so the fixup should
+# abort.
+search max-results=1
+(4, 3)
+----
+vec4: 5 (centroid=7.07)
+4 leaf vectors, 4 vectors, 4 full vectors, 1 partitions

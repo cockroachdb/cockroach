@@ -48,10 +48,6 @@ func (ts *testStore) AllowMultipleTrees() bool {
 	return ts.usePrefix
 }
 
-func (ts *testStore) SupportsTry() bool {
-	return false
-}
-
 func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
 	if !ts.usePrefix {
 		return nil
@@ -160,33 +156,25 @@ func TestStore(t *testing.T) {
 
 		var done atomic.Int64
 		getMetadata := func(treeKey cspann.TreeKey) {
-			var err error
-			tx, err := store.BeginTransaction(ctx)
-			require.NoError(t, err)
-			defer func() {
+			_ = store.RunTransaction(ctx, func(txn cspann.Txn) error {
+				// Enable stepping in the txn, which is what SQL does.
+				txn.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
+
+				_, err := txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
 				if err != nil {
-					err = store.AbortTransaction(ctx, tx)
+					// Returning the error will cause the transaction to abort.
+					require.ErrorContains(t, err, "WriteTooOldError")
+					done.Store(1)
+					return err
 				}
-			}()
 
-			// Enable stepping in the txn, which is what SQL does.
-			tx.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
-
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			if err != nil {
-				require.ErrorContains(t, err, "WriteTooOldError")
-				done.Store(1)
-				return
-			}
-
-			// Run GetPartitionMetadata again, to ensure that it succeeds, as a
-			// way of simulating multiple vectors being inserted in the same
-			// SQL statement.
-			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
-			require.NoError(t, err)
-
-			err = store.CommitTransaction(ctx, tx)
-			require.NoError(t, err)
+				// Run GetPartitionMetadata again, to ensure that it succeeds, as a
+				// way of simulating multiple vectors being inserted in the same
+				// SQL statement.
+				_, err = txn.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
+				require.NoError(t, err)
+				return nil
+			})
 		}
 
 		for i := range 100 {
@@ -233,14 +221,12 @@ func TestQuantizeAndEncode(t *testing.T) {
 	vec2 := vector.T{-1.0, -2.0, -3.0, -4.0}
 	centroid := vector.T{0.0, 0.0, 0.0, 0.0}
 
-	// Create a RaBitQuantizer.
+	// Create quantizers.
+	rootQuantizer := quantize.NewUnQuantizer(dims)
 	quantizer := quantize.NewRaBitQuantizer(dims, seed)
 
-	// Create a transaction.
-	tx := &Txn{
-		codec:     makeStoreCodec(quantizer),
-		rootCodec: makeStoreCodec(quantize.NewUnQuantizer(dims)),
-	}
+	// Create a transaction and metadata.
+	tx := &Txn{codec: makePartitionCodec(rootQuantizer, quantizer)}
 
 	// Test encoding with non-root partition key (uses RaBitQuantizer).
 	partitionKey := cspann.PartitionKey(123)
@@ -249,11 +235,11 @@ func TestQuantizeAndEncode(t *testing.T) {
 	require.NotEmpty(t, encoded1)
 
 	// Verify we can decode the encoded vector.
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	codec.clear(1, centroid)
-	_, err = codec.decodeVector(encoded1)
+	codec := makeStoreCodec(quantizer)
+	codec.Init(centroid, 1)
+	_, err = codec.DecodeVector(encoded1)
 	require.NoError(t, err)
-	vs := codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
+	vs := codec.GetVectorSet().(*quantize.RaBitQuantizedVectorSet)
 	require.Equal(t, 1, vs.GetCount())
 
 	// Encode a different vector with root partition key (uses UnQuantizer).
@@ -262,10 +248,10 @@ func TestQuantizeAndEncode(t *testing.T) {
 	require.NotEmpty(t, encoded2)
 
 	// Verify we can decode the encoded vector.
-	codec = tx.getCodecForPartitionKey(partitionKey)
-	codec.clear(1, centroid)
-	_, err = codec.decodeVector(encoded1)
+	codec = makeStoreCodec(rootQuantizer)
+	codec.Init(centroid, 1)
+	_, err = codec.DecodeVector(encoded2)
 	require.NoError(t, err)
-	vs = codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
-	require.Equal(t, 1, vs.GetCount())
+	vs2 := codec.GetVectorSet().(*quantize.UnQuantizedVectorSet)
+	require.Equal(t, 1, vs2.GetCount())
 }

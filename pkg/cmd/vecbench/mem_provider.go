@@ -128,34 +128,27 @@ func (m *MemProvider) InsertVectors(
 func (m *MemProvider) Search(
 	ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
 ) (keys []cspann.KeyBytes, err error) {
-	var txn cspann.Txn
-	txn, err = m.store.BeginTransaction(ctx)
-	defer func() {
-		if err == nil {
-			err = m.store.CommitTransaction(ctx, txn)
-		}
+	err = m.store.RunTransaction(ctx, func(txn cspann.Txn) error {
+		// Search the store.
+		var idxCtx cspann.Context
+		idxCtx.Init(txn)
+		searchSet := cspann.SearchSet{MaxResults: maxResults}
+		searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
+		err = m.index.Search(ctx, &idxCtx, nil /* treeKey */, vec, &searchSet, searchOptions)
 		if err != nil {
-			err = m.store.AbortTransaction(ctx, txn)
+			return err
 		}
-	}()
+		*stats = searchSet.Stats
 
-	// Search the store.
-	var idxCtx cspann.Context
-	idxCtx.Init(txn)
-	searchSet := cspann.SearchSet{MaxResults: maxResults}
-	searchOptions := cspann.SearchOptions{BaseBeamSize: beamSize}
-	err = m.index.Search(ctx, &idxCtx, nil /* treeKey */, vec, &searchSet, searchOptions)
-	if err != nil {
-		return nil, err
-	}
-	*stats = searchSet.Stats
+		// Get result keys.
+		results := searchSet.PopResults()
+		keys = make([]cspann.KeyBytes, len(results))
+		for i, res := range results {
+			keys[i] = []byte(res.ChildKey.KeyBytes)
+		}
 
-	// Get result keys.
-	results := searchSet.PopResults()
-	keys = make([]cspann.KeyBytes, len(results))
-	for i, res := range results {
-		keys[i] = []byte(res.ChildKey.KeyBytes)
-	}
+		return nil
+	})
 
 	return keys, err
 }
