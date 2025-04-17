@@ -7,6 +7,7 @@ package jsonpath
 
 import (
 	"fmt"
+	"regexp/syntax"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -18,6 +19,8 @@ var (
 		"@ is not allowed in root expressions")
 	errLastInNonArray = pgerror.Newf(pgcode.Syntax,
 		"LAST is allowed only in array subscripts")
+	errRegexXFlag = pgerror.Newf(pgcode.FeatureNotSupported,
+		"XQuery \"x\" flag (expanded regular expressions) is not implemented")
 )
 
 type Path interface {
@@ -186,12 +189,69 @@ func (c Current) Validate(nestingLevel int, insideArraySubscript bool) error {
 
 type Regex struct {
 	Regex string
+	Flags syntax.Flags
 }
 
 var _ Path = Regex{}
 
 func (r Regex) ToString(sb *strings.Builder, _, _ bool) {
 	sb.WriteString(fmt.Sprintf("%q", r.Regex))
+	if r.Flags != syntax.Perl {
+		sb.WriteString(" flag ")
+		sb.WriteString(fmt.Sprintf("%q", flagsToString(r.Flags)))
+	}
+}
+
+func flagsToString(flags syntax.Flags) string {
+	s := ""
+	if flags&syntax.FoldCase != 0 {
+		s += "i"
+	}
+	if flags&syntax.DotNL != 0 {
+		s += "s"
+	}
+	// Check if the `OneLine` flag is not set.
+	if flags&syntax.OneLine == 0 {
+		s += "m"
+	}
+	if flags&syntax.Literal != 0 {
+		s += "q"
+	}
+	return s
+}
+
+// RegexFlagsToGoFlags converts a string of flags from `like_regex` to syntax.Flags,
+// to match the flags provided by Postgres' `like_regex` flag interface.
+//
+// The following flags are defined in Postgres:
+// - i: case-insensitive
+// - s: dot matches newline
+// - m: ^ and $ match at newlines
+// - x: ignore whitespace in pattern (this flag is defined, but not accepted)
+// - q: no special characters
+func RegexFlagsToGoFlags(flags string) (syntax.Flags, error) {
+	// syntax.Perl is the default flag for regexp.Compile.
+	goFlags := syntax.Perl
+	for _, c := range flags {
+		switch c {
+		case 'i':
+			goFlags |= syntax.FoldCase
+		case 's':
+			goFlags |= syntax.DotNL
+		case 'm':
+			// Bit clear the `OneLine` flag, since we want to match at newlines.
+			// This is turned on by default in `syntax.Perl`.
+			goFlags &^= syntax.OneLine
+		case 'x':
+			// `x` flag is not supported in Postgres.
+			return syntax.Flags(0), errRegexXFlag
+		case 'q':
+			goFlags |= syntax.Literal
+		default:
+			return syntax.Flags(0), pgerror.Newf(pgcode.Syntax, "unrecognized flag character %q in LIKE_REGEX predicate", c)
+		}
+	}
+	return goFlags, nil
 }
 
 func (r Regex) Validate(nestingLevel int, insideArraySubscript bool) error {

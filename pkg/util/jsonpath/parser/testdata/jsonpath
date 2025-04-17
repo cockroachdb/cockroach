@@ -697,6 +697,50 @@ $.a.ceiling()
 ----
 $."a".ceiling() -- normalized!
 
+parse
+"a" like_regex ".*" flag ""
+----
+("a" like_regex ".*") -- normalized!
+
+error
+"a" like_regex ".*" flag " "
+----
+at or near " ": syntax error: unrecognized flag character ' ' in LIKE_REGEX predicate
+DETAIL: source SQL:
+"a" like_regex ".*" flag " "
+                         ^
+
+error
+"a" like_regex ".*" flag "foo"
+----
+at or near "foo": syntax error: unrecognized flag character 'f' in LIKE_REGEX predicate
+DETAIL: source SQL:
+"a" like_regex ".*" flag "foo"
+                         ^
+
+error
+"a" like_regex ".*" flag "x"
+----
+at or near "x": syntax error: XQuery "x" flag (expanded regular expressions) is not implemented
+DETAIL: source SQL:
+"a" like_regex ".*" flag "x"
+                         ^
+
+parse
+"a" like_regex ".*" flag "ii"
+----
+("a" like_regex ".*" flag "i") -- normalized!
+
+parse
+"a" like_regex ".*" flag "si"
+----
+("a" like_regex ".*" flag "is") -- normalized!
+
+parse
+"a" like_regex ".*" flag "qqqmmmsssiii"
+----
+("a" like_regex ".*" flag "ismq") -- normalized!
+
 # parse
 # $.1a
 # ----
