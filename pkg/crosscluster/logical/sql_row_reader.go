@@ -43,7 +43,7 @@ type priorRow struct {
 func newSQLRowReader(
 	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
 ) (*sqlRowReader, error) {
-	cols := getPhysicalColumnsSchema(table)
+	cols := getColumnSchema(table)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
 		if col.isPrimaryKey {
