@@ -26,6 +26,7 @@ type Searcher struct {
 	idx       *cspann.Index
 	txn       vecstore.Txn
 	idxCtx    cspann.Context
+	options   cspann.SearchOptions
 	searchSet cspann.SearchSet
 	results   cspann.SearchResults
 	resultIdx int
@@ -36,24 +37,26 @@ type Searcher struct {
 //
 // NOTE: The index is expected to come from a call to Manager.Get, and therefore
 // using a vecstore.Store instance.
-func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn) {
+func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults int) {
 	s.idx = idx
 	s.txn.Init(idx.Store().(*vecstore.Store), txn)
 	s.idxCtx.Init(&s.txn)
+
+	// An index-join + top-k operation will handle the re-ranking, so we skip
+	// doing it here.
+	s.options = cspann.SearchOptions{
+		BaseBeamSize: baseBeamSize,
+		SkipRerank:   true,
+	}
+	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
+	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
 }
 
 // Search triggers a search over the index for the given vector, within the
 // scope of the given prefix. "maxResults" specifies the maximum number of
 // results that will be returned.
-func (s *Searcher) Search(
-	ctx context.Context, prefix roachpb.Key, vec vector.T, maxResults int,
-) error {
-	// An index-join + top-k operation will handle the re-ranking, so we skip
-	// doing it here.
-	options := cspann.SearchOptions{SkipRerank: true}
-	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
-	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
-	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, options)
+func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T) error {
+	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, s.options)
 	if err != nil {
 		return err
 	}

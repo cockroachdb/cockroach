@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -65,6 +65,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			Invisibility:   n.Invisibility.Value,
 		},
 	}
+	if n.Type == idxtype.VECTOR {
+		// Disable vector indexes by default in 25.2.
+		// TODO(andyk): Remove this check after 25.2.
+		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+			panic(err)
+		}
+	}
+
 	var relation scpb.Element
 	var sourceIndex *scpb.PrimaryIndex
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
@@ -908,7 +916,7 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 
 // maybeApplyStorageParameters apply any storage parameters into the index spec.
 func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, idxSpec *indexSpec) {
-	// Handle config for vector indexes.
+	// Create config for vector index.
 	if idxSpec.secondary != nil && idxSpec.secondary.Type == idxtype.VECTOR {
 		// Get number of dimensions from the vector column in the index (always
 		// the last key column).
@@ -918,7 +926,8 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 			}
 			lastKeyCol := idxSpec.columns[i].ColumnID
 			typeElem := mustRetrieveColumnTypeElem(b, idxSpec.secondary.TableID, lastKeyCol)
-			idxSpec.secondary.VecConfig = &vecpb.Config{Dims: typeElem.Type.Width(), Seed: 0}
+			cfg := vecindex.MakeVecConfig(b.EvalCtx(), typeElem.Type)
+			idxSpec.secondary.VecConfig = &cfg
 			break
 		}
 	}
@@ -927,10 +936,14 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 		return
 	}
 
-	// Handle config for geospatial inverted indexes.
+	// Handle storage params for geospatial inverted indexes and vector indexes.
 	dummyIndexDesc := &descpb.IndexDescriptor{}
-	if idxSpec.secondary != nil && idxSpec.secondary.GeoConfig != nil {
-		dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
+	if idxSpec.secondary != nil {
+		if idxSpec.secondary.GeoConfig != nil {
+			dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
+		} else if idxSpec.secondary.VecConfig != nil {
+			dummyIndexDesc.VecConfig = *idxSpec.secondary.VecConfig
+		}
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
@@ -939,12 +952,17 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 	if err != nil {
 		panic(err)
 	}
-	if idxSpec.secondary != nil && !dummyIndexDesc.GeoConfig.IsEmpty() {
-		idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
-	} else if idxSpec.secondary != nil {
-		idxSpec.secondary.GeoConfig = nil
+	if idxSpec.secondary != nil {
+		if idxSpec.secondary.GeoConfig != nil {
+			if !dummyIndexDesc.GeoConfig.IsEmpty() {
+				idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
+			} else {
+				idxSpec.secondary.GeoConfig = nil
+			}
+		} else if idxSpec.secondary.VecConfig != nil {
+			*idxSpec.secondary.VecConfig = dummyIndexDesc.VecConfig
+		}
 	}
-
 }
 
 // fallbackIfRelationIsNotTable falls back if a relation element is
