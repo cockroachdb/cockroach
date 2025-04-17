@@ -409,6 +409,14 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 	}
 
+	// Disable buffered writes if any system columns are needed that require
+	// MVCC decoding.
+	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+		if rf.args.Txn != nil && rf.args.Txn.BufferedWritesEnabled() {
+			rf.args.Txn.SetBufferedWritesEnabled(false /* enabled */)
+		}
+	}
+
 	if len(args.Spec.FetchedColumns) > 0 {
 		table.neededValueColsByIdx.AddRange(0, len(args.Spec.FetchedColumns)-1)
 	}
