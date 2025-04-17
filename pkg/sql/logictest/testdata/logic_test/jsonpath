@@ -160,9 +160,6 @@ statement error pgcode 42601 pq: could not parse "@" as type jsonpath: @ is not 
 SELECT '@'::JSONPATH
 
 statement error unimplemented
-SELECT '$ ? (@ like_regex ".*" flag "i")'::JSONPATH;
-
-statement error unimplemented
 SELECT '$.keyvalue()'::JSONPATH;
 
 statement error unimplemented
