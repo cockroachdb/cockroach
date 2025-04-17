@@ -238,6 +238,7 @@ func newCFetcherWrapper(
 		true,  /* singleUse */
 		collectStats,
 		alwaysReallocate,
+		nil, /* txn */
 	}
 
 	// This memory monitor is not connected to the memory accounting system
