@@ -70,6 +70,27 @@ var (
 
 func registerCDCBench(r registry.Registry) {
 
+	postProcessScanPerfMetrics := func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+		metrics := roachtestutil.AggregatedPerfMetrics{}
+
+		// Find the scan-rate summary
+		var scanRate float64
+		if len(histograms.Summaries) != 1 {
+			return nil, errors.Errorf("expected exactly 1 histogram summary, got %d", len(histograms.Summaries))
+		}
+		scanRate = float64(histograms.Summaries[0].HighestTrackableValue) / float64(time.Second)
+
+		// Add scan rate metric (higher is better)
+		metrics = append(metrics, &roachtestutil.AggregatedMetric{
+			Name:           "scan_rate",
+			Value:          roachtestutil.MetricPoint(scanRate),
+			Unit:           "rows/s",
+			IsHigherBetter: true,
+		})
+
+		return metrics, nil
+	}
+
 	// Initial/catchup scan benchmarks.
 	for _, scanType := range cdcBenchScanTypes {
 		for _, ranges := range []int64{100, 100000} {
@@ -79,6 +100,7 @@ func registerCDCBench(r registry.Registry) {
 				rows   = 1_000_000_000 // 19 GB
 				format = "json"
 			)
+
 			r.Add(registry.TestSpec{
 				Name: fmt.Sprintf(
 					"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=mux/format=%s/sink=null",
@@ -92,27 +114,30 @@ func registerCDCBench(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
 				},
-				PostProcessPerfMetrics: func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
-					metrics := roachtestutil.AggregatedPerfMetrics{}
-
-					// Find the scan-rate summary
-					var scanRate float64
-					if len(histograms.Summaries) != 1 {
-						return nil, errors.Errorf("expected exactly 1 histogram summary, got %d", len(histograms.Summaries))
-					}
-					scanRate = float64(histograms.Summaries[0].HighestTrackableValue) / float64(time.Second)
-
-					// Add scan rate metric (higher is better)
-					metrics = append(metrics, &roachtestutil.AggregatedMetric{
-						Name:           "scan_rate",
-						Value:          roachtestutil.MetricPoint(scanRate),
-						Unit:           "rows/s",
-						IsHigherBetter: true,
-					})
-
-					return metrics, nil
-				},
+				PostProcessPerfMetrics: postProcessScanPerfMetrics,
 			})
+
+			// Enriched envelope benchmarks, using the same parameters.
+			for _, enrichedProperties := range []string{"none", "source", "source,schema"} {
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf("cdc/scan/%s/ranges=%s/envelope=enriched/enriched_properties=%s",
+						scanType, formatSI(ranges), enrichedProperties),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Weekly),
+					Timeout:          4 * time.Hour,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						otherOpts := []kv{{"envelope", "enriched"}}
+						if enrichedProperties != "none" {
+							otherOpts = append(otherOpts, kv{"enriched_properties", enrichedProperties})
+						}
+						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format, otherOpts...)
+					},
+					PostProcessPerfMetrics: postProcessScanPerfMetrics,
+				})
+			}
 		}
 	}
 
@@ -242,6 +267,10 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	return opts, settings
 }
 
+type kv struct {
+	k, v string
+}
+
 // runCDCBenchScan benchmarks throughput for a changefeed initial or catchup
 // scan as rows scanned per second.
 //
@@ -255,6 +284,7 @@ func runCDCBenchScan(
 	scanType cdcBenchScanType,
 	numRows, numRanges int64,
 	format string,
+	otherOpts ...kv,
 ) {
 	const sink = "null://"
 	var (
@@ -325,6 +355,13 @@ func runCDCBenchScan(
 	t.L().Printf("running changefeed %s scan", scanType)
 	with := fmt.Sprintf(`format = '%s', end_time = '%s'`,
 		format, timeutil.Now().Add(30*time.Second).Format(time.RFC3339))
+	for _, opt := range otherOpts {
+		if opt.v != "" {
+			with += fmt.Sprintf(", %s = '%s'", opt.k, opt.v)
+		} else {
+			with += fmt.Sprintf(", %s", opt.k)
+		}
+	}
 	switch scanType {
 	case cdcBenchInitialScan:
 		with += ", initial_scan = 'yes'"
