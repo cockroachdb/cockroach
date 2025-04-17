@@ -602,6 +602,7 @@ func NewColIndexJoin(
 		false, /* singleUse */
 		shouldCollectStats,
 		false, /* alwaysReallocate */
+		txn,
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,
