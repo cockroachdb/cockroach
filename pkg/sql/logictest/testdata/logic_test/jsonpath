@@ -166,15 +166,6 @@ statement error unimplemented
 SELECT '$.keyvalue()'::JSONPATH;
 
 statement error unimplemented
-SELECT '$.abs()'::JSONPATH;
-
-statement error unimplemented
-SELECT '$.ceiling()'::JSONPATH;
-
-statement error unimplemented
-SELECT '$.floor()'::JSONPATH;
-
-statement error unimplemented
 SELECT '$.bigint()'::JSONPATH;
 
 statement error unimplemented

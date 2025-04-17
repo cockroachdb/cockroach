@@ -13,11 +13,17 @@ const (
 	InvalidMethod MethodType = iota
 	SizeMethod
 	TypeMethod
+	AbsMethod
+	FloorMethod
+	CeilingMethod
 )
 
-var methodTypeStrings = [...]string{
-	SizeMethod: "size",
-	TypeMethod: "type",
+var MethodTypeStrings = [...]string{
+	SizeMethod:    "size",
+	TypeMethod:    "type",
+	AbsMethod:     "abs",
+	FloorMethod:   "floor",
+	CeilingMethod: "ceiling",
 }
 
 type Method struct {
@@ -27,10 +33,10 @@ type Method struct {
 var _ Path = Method{}
 
 func (m Method) String() string {
-	if int(m.Type) < 0 || int(m.Type) >= len(methodTypeStrings) || m.Type == InvalidMethod {
+	if int(m.Type) < 0 || int(m.Type) >= len(MethodTypeStrings) || m.Type == InvalidMethod {
 		panic(fmt.Sprintf("invalid method type: %d", m.Type))
 	}
-	return fmt.Sprintf(".%s()", methodTypeStrings[m.Type])
+	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
 }
 
 func (m Method) Validate(nestingLevel int, insideArraySubscript bool) error {
