@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -419,87 +417,6 @@ crdb_internal.json_to_pb(
 	// iterator, add tests for dropped tables/indexes.
 }
 
-func TestBackupCompactionLocalityAware(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderDuress(t, "node startup is slow")
-
-	tempDir, tempDirCleanup := testutils.TempDir(t)
-	defer tempDirCleanup()
-	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
-		t, multiNode, tempDir, InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgsPerNode: map[int]base.TestServerArgs{
-				0: {
-					Locality: roachpb.Locality{Tiers: []roachpb.Tier{
-						{Key: "region", Value: "west"},
-						{Key: "az", Value: "az1"},
-						{Key: "dc", Value: "dc1"},
-					}},
-				},
-				1: {
-					Locality: roachpb.Locality{Tiers: []roachpb.Tier{
-						{Key: "region", Value: "east"},
-						{Key: "az", Value: "az1"},
-						{Key: "dc", Value: "dc2"},
-					}},
-				},
-				2: {
-					Locality: roachpb.Locality{Tiers: []roachpb.Tier{
-						{Key: "region", Value: "east"},
-						{Key: "az", Value: "az2"},
-						{Key: "dc", Value: "dc3"},
-					}},
-				},
-			},
-		},
-	)
-	defer cleanupDB()
-	collectionURIs := strings.Join([]string{
-		fmt.Sprintf(
-			"'nodelocal://1/backup?COCKROACH_LOCALITY=%s'",
-			url.QueryEscape("default"),
-		),
-		fmt.Sprintf(
-			"'nodelocal://2/backup?COCKROACH_LOCALITY=%s'",
-			url.QueryEscape("dc=dc2"),
-		),
-		fmt.Sprintf(
-			"'nodelocal://3/backup?COCKROACH_LOCALITY=%s'",
-			url.QueryEscape("region=west"),
-		),
-	}, ", ")
-	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
-	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-	start := getTime(t)
-	db.Exec(
-		t,
-		fmt.Sprintf("BACKUP INTO (%s) AS OF SYSTEM TIME '%d'", collectionURIs, start),
-	)
-
-	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-	db.Exec(
-		t,
-		fmt.Sprintf("BACKUP INTO LATEST IN (%s)", collectionURIs),
-	)
-
-	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-	end := getTime(t)
-	db.Exec(
-		t,
-		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%d'", collectionURIs, end),
-	)
-	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], '%s', '', %d::DECIMAL, %d::DECIMAL)"
-
-	var backupPath string
-	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
-	row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, collectionURIs, backupPath, start, end))
-	var jobID jobspb.JobID
-	row.Scan(&jobID)
-	waitForSuccessfulJob(t, tc, jobID)
-	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end, 2)
-}
-
 func TestScheduledBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -680,6 +597,16 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 				IncludeAllSecondaryTenants: true,
 			},
 			"backups of tenants not supported for compaction",
+		},
+		{
+			"locality aware backups not supported",
+			jobspb.BackupDetails{
+				ScheduleID: 1,
+				URIsByLocalityKV: map[string]string{
+					"region=us-east-2": "nodelocal://1/backup",
+				},
+			},
+			"locality aware backups not supported for compaction",
 		},
 	}
 
