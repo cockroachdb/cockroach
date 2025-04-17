@@ -76,7 +76,7 @@ func newEventDecoder(
 				return err
 			}
 
-			columns := getPhysicalColumnsSchema(descriptor)
+			columns := getColumnSchema(descriptor)
 			columnNames := make([]string, 0, len(columns))
 			for _, column := range columns {
 				columnNames = append(columnNames, column.column.GetName())

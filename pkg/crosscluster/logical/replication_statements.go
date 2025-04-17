@@ -20,40 +20,50 @@ import (
 type columnSchema struct {
 	column       catalog.Column
 	isPrimaryKey bool
+	isComputed   bool
 }
 
-// getPhysicalColumns returns the list of columns that are part of the table's
-// primary key and value.
-func getPhysicalColumns(table catalog.TableDescriptor) []catalog.Column {
-	columns := table.AllColumns()
-	result := make([]catalog.Column, 0, len(columns))
-	for _, col := range columns {
-		if !col.IsComputed() && !col.IsVirtual() && !col.IsSystemColumn() {
-			result = append(result, col)
-		}
-	}
-	return result
-}
-
-func getPhysicalColumnsSchema(table catalog.TableDescriptor) []columnSchema {
-	columns := getPhysicalColumns(table)
-	primaryIdx := table.GetPrimaryIndex()
-
+// getColumnSchema returns the list of all columns that is decoded by the CRUD
+// writer. It returns columns in column key order. The crud writer passes
+// around a tree.Datums for each row where column[i] is the column definition
+// for datums[i].
+//
+// A column is decoded by crud LDR writer if either are true:
+//  1. The column is part of the primary key. Every primary key column is needed
+//     to perform read refreshes.
+//  2. The column is not a computed column. If a column is not computed, it must
+//     be included in update and insert statements.
+//
+// Notably, this excludes computed columns that are not part of the primary key
+// and system columns like crdb_internal_mvcc_timestamp.
+func getColumnSchema(table catalog.TableDescriptor) []columnSchema {
 	// Create a map of column ID to column for fast lookup
+	primaryIdx := table.GetPrimaryIndex()
 	isPrimaryKey := make(map[catid.ColumnID]bool)
 	for _, col := range primaryIdx.IndexDesc().KeyColumnIDs {
 		isPrimaryKey[col] = true
 	}
 
-	cols := make([]columnSchema, 0, len(columns))
+	columns := table.AllColumns()
+	result := make([]columnSchema, 0, len(columns))
 	for _, col := range columns {
-		cols = append(cols, columnSchema{
+		if col.IsSystemColumn() {
+			continue
+		}
+
+		isComputed := col.IsComputed()
+		if isComputed && !isPrimaryKey[col.GetID()] {
+			continue
+		}
+
+		result = append(result, columnSchema{
 			column:       col,
 			isPrimaryKey: isPrimaryKey[col.GetID()],
+			isComputed:   isComputed,
 		})
 	}
 
-	return cols
+	return result
 }
 
 // newTypedPlaceholder creates a placeholder with the appropriate type for a column.
@@ -77,20 +87,26 @@ func newTypedPlaceholder(idx int, col catalog.Column) (*tree.CastExpr, error) {
 func newInsertStatement(
 	table catalog.TableDescriptor,
 ) (statements.Statement[tree.Statement], error) {
-	columns := getPhysicalColumns(table)
+	columns := getColumnSchema(table)
 
-	columnNames := make(tree.NameList, len(columns))
+	columnNames := make(tree.NameList, 0, len(columns))
+	parameters := make(tree.Exprs, 0, len(columns))
 	for i, col := range columns {
-		columnNames[i] = tree.Name(col.GetName())
-	}
+		// NOTE: this consumes a placholder ID because its part of the tree.Datums,
+		// but it doesn't show up in the query because computed columns are not
+		// needed for insert statements.
+		if col.isComputed {
+			continue
+		}
 
-	parameters := make(tree.Exprs, len(columnNames))
-	for i, col := range columns {
 		var err error
-		parameters[i], err = newTypedPlaceholder(i+1, col)
+		parameter, err := newTypedPlaceholder(i+1, col.column)
 		if err != nil {
 			return statements.Statement[tree.Statement]{}, err
 		}
+
+		columnNames = append(columnNames, tree.Name(col.column.GetName()))
+		parameters = append(parameters, parameter)
 	}
 
 	parameterValues := &tree.ValuesClause{
@@ -119,16 +135,31 @@ func newInsertStatement(
 // newMatchesLastRow creates a WHERE clause for matching all columns of a row.
 // It returns a tree.Expr that compares each column to a placeholder parameter.
 // Parameters are ordered by column ID, starting from startParamIdx.
-func newMatchesLastRow(columns []catalog.Column, startParamIdx int) (tree.Expr, error) {
+func newMatchesLastRow(columns []columnSchema, startParamIdx int) (tree.Expr, error) {
 	var whereClause tree.Expr
 	for i, col := range columns {
-		placeholder, err := newTypedPlaceholder(startParamIdx+i, col)
+		if col.isComputed {
+			// Skip computed columns since they are not needed to fully specify the
+			// contents of the row.
+			continue
+		}
+
+		placeholder, err := newTypedPlaceholder(startParamIdx+i, col.column)
 		if err != nil {
 			return nil, err
 		}
+
+		eq := treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)
+		if col.isPrimaryKey {
+			// Generic query planner plans full table scans if we use `IS NOT
+			// DISTINCT FROM`. Use `=` operator for primary key columns since they
+			// are guaranteed to be non-NULL.
+			eq = treecmp.MakeComparisonOperator(treecmp.EQ)
+		}
+
 		colExpr := &tree.ComparisonExpr{
-			Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
-			Left:     &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
+			Operator: eq,
+			Left:     &tree.ColumnItem{ColumnName: tree.Name(col.column.GetName())},
 			Right:    placeholder,
 		}
 
@@ -153,7 +184,7 @@ func newMatchesLastRow(columns []catalog.Column, startParamIdx int) (tree.Expr, 
 func newUpdateStatement(
 	table catalog.TableDescriptor,
 ) (statements.Statement[tree.Statement], error) {
-	columns := getPhysicalColumns(table)
+	columns := getColumnSchema(table)
 
 	// Create WHERE clause for matching the previous row values
 	whereClause, err := newMatchesLastRow(columns, 1)
@@ -161,23 +192,29 @@ func newUpdateStatement(
 		return statements.Statement[tree.Statement]{}, err
 	}
 
-	exprs := make(tree.UpdateExprs, len(columns))
+	exprs := make(tree.UpdateExprs, 0, len(columns))
 	for i, col := range columns {
-		nameNode := tree.Name(col.GetName())
+		if col.isComputed {
+			// Skip computed columns since they are not needed to fully specify the
+			// contents of the row.
+			continue
+		}
+
+		nameNode := tree.Name(col.column.GetName())
 		names := tree.NameList{nameNode}
 
 		// Create a placeholder for the new value (len(columns)+i+1) since we
 		// use 1-indexed placeholders and the first len(columns) placeholders
 		// are for the where clause.
-		placeholder, err := newTypedPlaceholder(len(columns)+i+1, col)
+		placeholder, err := newTypedPlaceholder(len(columns)+i+1, col.column)
 		if err != nil {
 			return statements.Statement[tree.Statement]{}, err
 		}
 
-		exprs[i] = &tree.UpdateExpr{
+		exprs = append(exprs, &tree.UpdateExpr{
 			Names: names,
 			Expr:  placeholder,
-		}
+		})
 	}
 
 	// Create the final update statement
@@ -203,7 +240,7 @@ func newUpdateStatement(
 func newDeleteStatement(
 	table catalog.TableDescriptor,
 ) (statements.Statement[tree.Statement], error) {
-	columns := getPhysicalColumns(table)
+	columns := getColumnSchema(table)
 
 	// Create WHERE clause for matching the row to delete
 	whereClause, err := newMatchesLastRow(columns, 1)
@@ -250,7 +287,7 @@ func newDeleteStatement(
 func newBulkSelectStatement(
 	table catalog.TableDescriptor,
 ) (statements.Statement[tree.Statement], error) {
-	cols := getPhysicalColumnsSchema(table)
+	cols := getColumnSchema(table)
 	primaryKeyColumns := make([]catalog.Column, 0, len(cols))
 	for _, col := range cols {
 		if col.isPrimaryKey {
