@@ -476,7 +476,7 @@ func Compact(
 	prev kvserverpb.RaftTruncatedState,
 	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
-	readWriter storage.ReadWriter,
+	writer storage.Writer,
 ) error {
 	if next.Index <= prev.Index {
 		// TODO(pav-kv): return an assertion failure error.
@@ -490,7 +490,7 @@ func Compact(
 	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
 		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
 		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
-		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
+		if err := writer.ClearRawRange(start, end, true, false); err != nil {
 			return errors.Wrapf(err,
 				"unable to clear truncated Raft entries for %+v after index %d",
 				next, prev.Index)
@@ -500,7 +500,7 @@ func Compact(
 		// allocating when constructing Raft log keys (16 bytes).
 		prefix := prefixBuf.RaftLogPrefix()
 		for idx := prev.Index + 1; idx <= next.Index; idx++ {
-			if err := readWriter.ClearUnversioned(
+			if err := writer.ClearUnversioned(
 				keys.RaftLogKeyFromPrefix(prefix, idx),
 				storage.ClearOptions{},
 			); err != nil {
@@ -517,9 +517,8 @@ func Compact(
 	}
 	value.InitChecksum(key)
 
-	if _, err := storage.MVCCPut(
-		ctx, readWriter, key, hlc.Timestamp{}, value,
-		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
+	if _, err := storage.MVCCBlindPut(
+		ctx, writer, key, hlc.Timestamp{}, value, storage.MVCCWriteOptions{},
 	); err != nil {
 		return errors.Wrap(err, "unable to write RaftTruncatedState")
 	}
