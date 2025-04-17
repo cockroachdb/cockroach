@@ -591,11 +591,13 @@ func (sip *streamIngestionProcessor) close() {
 		sip.subscriptionCancel()
 	}
 	if err := sip.subscriptionGroup.Wait(); err != nil {
-		log.Errorf(sip.Ctx(), "error on close(): %s", err)
+		log.Errorf(sip.Ctx(), "error on close(): %v", err)
 	}
 
 	if sip.batcher != nil {
-		sip.batcher.Close(sip.Ctx())
+		if err := sip.batcher.Close(sip.Ctx()); err != nil {
+			log.Errorf(sip.Ctx(), "error on close(): %v", err)
+		}
 	}
 	sip.maxFlushRateTimer.Stop()
 	sip.aggTimer.Stop()

@@ -313,11 +313,13 @@ func (o *offlineInitialScanProcessor) close() {
 	// worker group. The client close and stopCh close above should result
 	// in exit signals being sent to all relevant goroutines.
 	if err := o.workerGroup.Wait(); err != nil {
-		log.Errorf(o.Ctx(), "error on close(): %s", err)
+		log.Errorf(o.Ctx(), "error on close(): %v", err)
 	}
 
 	if o.batcher != nil {
-		o.batcher.Close(o.Ctx())
+		if err := o.batcher.Close(o.Ctx()); err != nil {
+			log.Errorf(o.Ctx(), "error on close(): %v", err)
+		}
 	}
 
 	o.InternalClose()
