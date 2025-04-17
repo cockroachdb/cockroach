@@ -126,9 +126,13 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
   }
 }
 
-func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error) {
-  r := jsonpath.Regex{Regex: regex}
-  _, err := ReCache.GetRegexp(r)
+func regexBinaryOp(left jsonpath.Path, regex string, flags string) (jsonpath.Operation, error) {
+  goFlags, err := jsonpath.RegexFlagsToGoFlags(flags)
+  if err != nil {
+    return jsonpath.Operation{}, err
+  }
+  r := jsonpath.Regex{Regex: regex, Flags: goFlags}
+  _, err = ReCache.GetRegexpWithFlags(r, goFlags)
   if err != nil {
     return jsonpath.Operation{}, pgerror.Wrapf(err, pgcode.InvalidRegularExpression,
       "invalid regular expression")
@@ -448,7 +452,7 @@ predicate:
   }
 | expr LIKE_REGEX STR
   {
-    regex, err := regexBinaryOp($1.path(), $3)
+    regex, err := regexBinaryOp($1.path(), $3, "")
     if err != nil {
       return setErr(jsonpathlex, err)
     }
@@ -456,7 +460,11 @@ predicate:
   }
 | expr LIKE_REGEX STR FLAG STR
   {
-    return unimplemented(jsonpathlex, "regex with flags")
+    regex, err := regexBinaryOp($1.path(), $3, $5)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = regex
   }
 ;
 
