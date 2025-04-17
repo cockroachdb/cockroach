@@ -384,6 +384,27 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	return err
 }
 
+var perturbationDefaultProcessFunction = func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	meanMetrics := make(map[string]roachtestutil.MetricPoint)
+
+	for _, summary := range histograms.Summaries {
+		meanMetrics[summary.Name] = summary.Values[0].Mean
+	}
+
+	var aggregatedMeanMetrics roachtestutil.AggregatedPerfMetrics
+	for key, value := range meanMetrics {
+		aggregatedMeanMetrics = append(aggregatedMeanMetrics, &roachtestutil.AggregatedMetric{
+			Name:             fmt.Sprintf("%s_%s_mean", test, key),
+			Value:            value / 1e6,
+			Unit:             "score(ms)",
+			IsHigherBetter:   false,
+			AdditionalLabels: nil,
+		})
+	}
+
+	return aggregatedMeanMetrics, nil
+}
+
 //lint:ignore U1000 unused
 func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
@@ -391,14 +412,15 @@ func addMetamorphic(r registry.Registry, p perturbation) {
 	v.seed = seed
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
-		CompatibleClouds: v.cloud,
-		Suites:           registry.Suites(registry.Perturbation),
-		Owner:            registry.OwnerKV,
-		Cluster:          v.makeClusterSpec(),
-		Leases:           v.leaseType,
-		Randomized:       true,
-		Run:              v.runTest,
+		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.Suites(registry.Perturbation),
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		Randomized:             true,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
 	})
 }
 
@@ -406,14 +428,15 @@ func addFull(r registry.Registry, p perturbation) {
 	v := p.setup()
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
-		CompatibleClouds: v.cloud,
-		Suites:           registry.Suites(registry.Nightly),
-		Owner:            registry.OwnerKV,
-		Cluster:          v.makeClusterSpec(),
-		Leases:           v.leaseType,
-		Benchmark:        true,
-		Run:              v.runTest,
+		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.Suites(registry.Nightly),
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		Benchmark:              true,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
 	})
 }
 
@@ -444,13 +467,14 @@ func addDev(r registry.Registry, p perturbation) {
 	v.cloud = registry.AllClouds
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
-		CompatibleClouds: v.cloud,
-		Suites:           registry.ManualOnly,
-		Owner:            registry.OwnerKV,
-		Cluster:          v.makeClusterSpec(),
-		Leases:           v.leaseType,
-		Run:              v.runTest,
+		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.ManualOnly,
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
 	})
 }
 
