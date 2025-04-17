@@ -83,7 +83,7 @@ func (w *worker) doTruncForReplica(t T, r *replicaWriteState, truncIndex uint64)
 		logf(t, "r%d: truncIndex %d, nextIndex: %d", r.rangeID, truncIndex,
 			r.nextRaftLogIndex)
 	}
-	raftBatch := w.o.raftEng.NewUnindexedBatch()
+	raftBatch := w.o.raftEng.NewWriteBatch()
 	for i := r.truncatedLogIndex + 1; i <= truncIndex; i++ {
 		key := r.rangeIDPrefixBuf.RaftLogKey(kvpb.RaftIndex(i))
 		if w.o.cfg.SingleDel {
