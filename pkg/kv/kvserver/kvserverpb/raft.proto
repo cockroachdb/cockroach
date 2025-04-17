@@ -244,6 +244,12 @@ message SnapshotRequest {
     // keys in key order, as opposed to iterating over point keys first
     // and range keys second. The receiver can take advantage of this
     // to split points/range keys into multiple sstables for ingestion.
+    //
+    // MIGRATION: v24.3 and newer will always set this field to true, and v25.3
+    // and newer stop consulting the field altogether (assume it is true). In
+    // v26.1, we can then drop this field altogether, since v26.1 is the first
+    // version that does not have to interop with v25.2 (the last version to
+    // attach meaning to this field being unset/absent) or older.
     bool range_keys_in_order = 14;
 
     reserved 1, 4, 6, 7, 8, 9;
