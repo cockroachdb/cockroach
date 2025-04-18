@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,4 +109,31 @@ var CachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
 		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
 	256,
 	settings.PositiveInt,
+)
+
+type LDRWriterType string
+
+const (
+	// LDRWriterTypeSQL uses the SQL layer to write replicated rows.
+	LDRWriterTypeSQL LDRWriterType = "sql"
+	// LDRWriterTypeLegacyKV uses the legacy KV layer to write rows. The KV writer
+	// is deprecated because it does not support the full set of features of the
+	// SQL writer.
+	LDRWriterTypeLegacyKV LDRWriterType = "legacy-kv"
+	// writerTypeCRUD is the shiny new sql writer that uses explicit reads,
+	// inserts, updates, and deletes instead of upserts.
+	LDRWriterTypeCRUD LDRWriterType = "crud"
+)
+
+var LDRImmediateModeWriter = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.immediate_mode_writer",
+	"the writer to use when in immediate mode",
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeSQL), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeCRUD)),
+	settings.WithValidateString(func(sv *settings.Values, val string) error {
+		if val != string(LDRWriterTypeSQL) && val != string(LDRWriterTypeLegacyKV) && val != string(LDRWriterTypeCRUD) {
+			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)
+		}
+		return nil
+	}),
 )
