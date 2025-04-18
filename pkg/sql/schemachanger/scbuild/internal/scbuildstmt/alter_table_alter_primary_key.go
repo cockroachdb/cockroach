@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -60,14 +61,19 @@ func alterPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t alterPrimaryKeySpec,
 ) {
 	// Check if sql_safe_updates is enabled and the table has a vector index
-	if b.EvalCtx().SessionData().SafeUpdates {
-		tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
-		scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-			if idx.Type == idxtype.VECTOR {
+	tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
+	noticeSent := false
+	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+		if idx.Type == idxtype.VECTOR {
+			if b.EvalCtx().SessionData().SafeUpdates {
 				panic(pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
+			} else if !noticeSent {
+				noticeSender := b.EvalCtx().ClientNoticeSender
+				noticeSender.BufferClientNotice(b, pgnotice.Newf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
+				noticeSent = true
 			}
-		})
-	}
+		}
+	})
 
 	// Panic on certain forbidden `ALTER PRIMARY KEY` cases (e.g. one of
 	// the new primary key column is a virtual column). See the comments
