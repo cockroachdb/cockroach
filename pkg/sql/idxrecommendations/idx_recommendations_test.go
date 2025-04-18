@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,6 +66,10 @@ func TestIndexRecommendationsStats(t *testing.T) {
 		for i := 0; i < (minExecutions + 2); i++ {
 			for _, tc := range testCases {
 				testConn.Exec(t, tc.stmt)
+				sqlstatstestutil.WaitForStatementEntriesEqual(t, testConn, 1, sqlstatstestutil.StatementFilter{
+					Query:     tc.fingerprint,
+					ExecCount: i + 1,
+				})
 				rows := testConn.QueryRow(t, "SELECT index_recommendations FROM CRDB_INTERNAL.STATEMENT_STATISTICS "+
 					" WHERE metadata ->> 'db' = 'idxrectest' AND metadata ->> 'query'=$1", tc.fingerprint)
 				rows.Scan(&recommendations)
@@ -84,6 +89,10 @@ func TestIndexRecommendationsStats(t *testing.T) {
 
 		for i := 0; i < (minExecutions + 2); i++ {
 			testConn.Exec(t, `INSERT INTO t3 VALUES($1)`, i)
+			sqlstatstestutil.WaitForStatementEntriesEqual(t, testConn, 1, sqlstatstestutil.StatementFilter{
+				Query:     "INSERT INTO t3 VALUES (_)",
+				ExecCount: i + 1,
+			})
 			rows := testConn.QueryRow(t, "SELECT index_recommendations FROM CRDB_INTERNAL.STATEMENT_STATISTICS "+
 				" WHERE metadata ->> 'db' = 'idxrectest' AND metadata ->> 'query' = 'INSERT INTO t3 VALUES (_)'")
 			rows.Scan(&recommendations)

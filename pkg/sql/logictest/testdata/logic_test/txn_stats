@@ -3,7 +3,7 @@
 statement ok
 SET application_name = test; SELECT 1
 
-query B
+query B retry
 SELECT count(*) > 0
   FROM crdb_internal.node_txn_stats
  WHERE application_name = 'test'
@@ -30,7 +30,7 @@ statement ok
 BEGIN TRANSACTION; SELECT 1; COMMIT TRANSACTION
 
 # Now we should have exactly one explicit transaction.
-query B
+query B retry
 SELECT txn_count - implicit_count = 1
   FROM crdb_internal.node_txn_stats
  WHERE application_name = 'test'
