@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "clusters_cache.go",
         "multitenant.go",
+        "node_stability.go",
         "roachprod.go",
         "roachprod_pprof.go",
     ],

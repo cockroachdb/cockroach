@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -524,7 +525,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 					// enough for that to matter.
 					db := c.Conn(ctx, l, stalledNode[0])
 					defer db.Close()
-					if err := roachtestutil.WaitForReplication(ctx, l, db, 3 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor); err != nil {
+					if err := roachtestutil.WaitForReplication(ctx, l, db, 3 /* replicationFactor */, roachprod.AtLeastReplicationFactor); err != nil {
 						return err
 					}
 					res, err := getRWBytesOverTime(ctx, l, c, f.FailureMode.(*failures.CGroupDiskStaller), stalledNode, unaffectedNode)
