@@ -470,7 +470,7 @@ type VectorIndexHelper struct {
 	vectorOrd int
 	// centroid is an all zeros centroid of the appropriate dimension for the vector
 	// column. It's used to encode the vector in the reader. The writer will
-	// re-encode the vector with the centroid for the parittionselected.
+	// re-encode the vector with the centroid for the partition selected.
 	centroid vector.T
 	// number of non-vector index key columns
 	numPrefixCols int
@@ -516,7 +516,7 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	key.Level = cspann.LeafLevel
 	quantizedVector, ok := tree.AsDBytes(searcher.EncodedVector())
 	if !ok {
-		panic("expected encoded vector to be of type DBytes")
+		return &rowenc.IndexEntry{}, errors.AssertionFailedf("expected encoded vector to be of type DBytes")
 	}
 
 	outputEntry.Key = append(outputEntry.Key[:0], vih.indexPrefix...)
