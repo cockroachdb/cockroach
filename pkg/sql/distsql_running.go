@@ -470,6 +470,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			setupReq.JobTag = jobTag.ValueStr()
 		}
 	}
+	if evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions && localState.Txn != nil {
+		// Propagate the admission control header so that leaf transactions
+		// correctly inherit it.
+		setupReq.LeafTxnAdmissionHeader = localState.Txn.AdmissionHeader()
+	}
 
 	var isVectorized bool
 	if vectorizeMode := evalCtx.SessionData().VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {

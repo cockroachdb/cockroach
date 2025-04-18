@@ -1065,7 +1065,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	// New create a second, leaf coordinator.
 	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
-	txn2 := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
+	txn2 := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, nil /* header */)
 
 	// Start the second transaction.
 	key2 := roachpb.Key("b")
@@ -2802,7 +2802,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	require.NoError(t, err)
 
 	// New create a second, leaf coordinator.
-	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, nil /* header */)
 
 	if _, err := leafTxn.Get(ctx, errKey); !testutils.IsError(err, "TransactionAbortedError") {
 		t.Fatalf("expected injected err, got: %v", err)
@@ -2832,7 +2832,7 @@ func TestUpdateRootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0, leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0, leafInputState, nil /* header */)
 
 	finalState, err := leafTxn.GetLeafTxnFinalState(ctx)
 	if err != nil {
@@ -3038,7 +3038,7 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 	rootTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, nil /* header */)
 
 	// A LeafTxn is not compatible with locking requests.
 	// 1. Locking Get requests.
