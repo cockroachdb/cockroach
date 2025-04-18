@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 )
 
-type bufferedStmtStats []*sqlstats.RecordedStmtStats
-
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session. It must be closed
 // with Close() when the session is done.
@@ -26,36 +24,17 @@ type bufferedStmtStats []*sqlstats.RecordedStmtStats
 //  1. The in-memory sql stats subsystem (flushTarget) which is the
 //     sql stats container for the current application. The collection
 //     process is currently synchronous and uses the following steps:
-//     - RecordStatement is called to either buffer the statement stats
-//     for the current transaction, or write them directly to the flushTarget
-//     if we belong to an "outer" transaction.
-//     - EndTransaction is called to flush the buffered statement stats
-//     and transaction to the flushTarget. This is where we also update
-//     the transaction fingerprint ID of the buffered statements.
+//     - RecordStatement is called to to send the statement stats to the
+//     stats ingester. The stats ingester will eventually record the
+//     statement stats to the flushTarget.
+//     - RecordTransaction is called to send the transaction stats to
+//     the stats ingester. The stats ingester will eventually record the
+//     transaction stats to the flushTarget.
 //
 //  2. The insights subsystem (insightsWriter) which is used to
 //     persist statement and transaction insights to an in-memory cache.
 //     Events are sent to the insights subsystem for async processing.
 type StatsCollector struct {
-
-	// stmtBuf contains the current transaction's statement
-	// statistics. They will be flushed to flushTarget when the transaction is done
-	// so that we can include the transaction fingerprint ID as part of the
-	// statement's key. This buffer is cleared for reuse after every transaction.
-	stmtBuf bufferedStmtStats
-
-	// If writeDirectlyToFlushTarget is set to true, the stmtBuf
-	// will be written directly to the flushTarget instead of being buffered to be written
-	// at the end of the transaction.
-	// See #124935 for more details. When we have a statement from an outer txn,
-	// the executor owning the stats collector is not responsible for
-	// starting or committing the transaction. Since the statements
-	// are merged into flushTarget on EndTransaction, in this case the
-	// container would never be merged into the flushTarget. Instead
-	// we'll write directly to the flushTarget when we're collecting
-	// stats for a conn exec belonging to an outer transaction.
-	writeDirectlyToFlushTarget bool
-
 	// stmtFingerprintID is the fingerprint ID of the current statement we are
 	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
 	// If no stats have been attempted to be recorded yet for the current statement,
@@ -69,13 +48,12 @@ type StatsCollector struct {
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
 	previousPhaseTimes sessionphase.Times
 
-	// sendInsights is true if we should send statement and transaction stats to
-	// the insights system for the current transaction. This value is reset for
-	// every new transaction.
-	// It is important that if we send statement insights, we also send transaction
-	// insights, as the transaction insight event will free the memory used by
-	// statement insights.
-	sendInsights bool
+	// sendStats is true if we should send statement and transaction stats to
+	// the sql stats ingester for the transaction. For sql stats, we decide to send
+	// all or no execution events to the ingester as the ingester depends on transaction
+	// events to clear any of the current session's previously buffered events.
+	// This value is reset for every new transaction.
+	sendStats bool
 
 	// flushTarget is the sql stats container for the current application.
 	// This is the target where the statement stats are flushed to upon
@@ -100,19 +78,20 @@ func NewStatsCollector(
 	ingester *SQLStatsIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
-	underOuterTxn bool,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
-	return &StatsCollector{
-		flushTarget:                appStats,
-		stmtBuf:                    make(bufferedStmtStats, 0, 1),
-		writeDirectlyToFlushTarget: underOuterTxn,
-		phaseTimes:                 *phaseTime,
-		uniqueServerCounts:         uniqueServerCounts,
-		statsIngester:              ingester,
-		st:                         st,
-		knobs:                      knobs,
+	s := &StatsCollector{
+		flushTarget:        appStats,
+		phaseTimes:         *phaseTime,
+		uniqueServerCounts: uniqueServerCounts,
+		statsIngester:      ingester,
+		st:                 st,
+		knobs:              knobs,
 	}
+
+	s.sendStats = s.enabled()
+
+	return s
 }
 
 // StatementFingerprintID returns the fingerprint ID for the current statement.
@@ -145,7 +124,6 @@ func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sess
 // any memory allocated by underlying sql stats systems for the session
 // that owns this stats collector.
 func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID) {
-	s.stmtBuf = nil
 	if s.statsIngester != nil {
 		s.statsIngester.ClearSession(sessionID)
 	}
@@ -153,40 +131,7 @@ func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID)
 
 // StartTransaction sets up the StatsCollector for a new transaction.
 func (s *StatsCollector) StartTransaction() {
-	s.sendInsights = s.shouldObserveInsights()
-}
-
-// EndTransaction informs the StatsCollector that the current txn has
-// finished execution. (Either COMMITTED or ABORTED). This means the txn's
-// fingerprint ID is now available. StatsCollector will now go back to update
-// the transaction fingerprint ID field of all the statement statistics for that
-// txn.
-func (s *StatsCollector) EndTransaction(
-	ctx context.Context, transactionFingerprintID appstatspb.TransactionFingerprintID,
-) (discardedStats int64) {
-	// We possibly ignore the transactionFingerprintID, for situations where
-	// grouping by it would otherwise result in collecting higher-cardinality
-	// data in the system tables than the cleanup job is able to keep up with.
-	// See #78338.
-	if !AssociateStmtWithTxnFingerprint.Get(&s.st.SV) {
-		transactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
-	}
-
-	for _, stmt := range s.stmtBuf {
-		stmt.TransactionFingerprintID = transactionFingerprintID
-		if err := s.flushTarget.RecordStatement(ctx, stmt); err != nil {
-			discardedStats++
-		}
-	}
-
-	// Avoid taking locks if no stats are discarded.
-	if discardedStats > 0 {
-		s.flushTarget.MaybeLogDiscardMessage(ctx)
-	}
-
-	s.stmtBuf = make(bufferedStmtStats, 0, len(s.stmtBuf)/2)
-
-	return discardedStats
+	s.sendStats = s.enabled()
 }
 
 // ShouldSampleNewStatement returns true if the statement is a new statement
@@ -209,61 +154,50 @@ func (s *StatsCollector) SetStatementSampled(
 	s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
 }
 
-func (s *StatsCollector) shouldObserveInsights() bool {
+func (s *StatsCollector) enabled() bool {
 	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV)
 }
 
 // RecordStatement records the statistics of a statement.
-func (s *StatsCollector) RecordStatement(
-	ctx context.Context, value *sqlstats.RecordedStmtStats,
-) error {
-	if s.sendInsights && s.statsIngester != nil {
-		s.statsIngester.IngestStatement(value)
+func (s *StatsCollector) RecordStatement(_ctx context.Context, value *sqlstats.RecordedStmtStats) {
+	if !s.sendStats {
+		return
 	}
+	s.statsIngester.IngestStatement(value)
 
-	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
-	// when we refactor the stats collection code to send the stats to an ingester.
-	s.stmtFingerprintID = value.FingerprintID
-	if s.writeDirectlyToFlushTarget {
-		err := s.flushTarget.RecordStatement(ctx, value)
-		return err
+	if s.knobs != nil && s.knobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		s.statsIngester.guard.ForceSync()
+		<-s.statsIngester.syncStatsTestingCh
 	}
-	s.stmtBuf = append(s.stmtBuf, value)
-	return nil
 }
 
-// RecordTransaction records the statistics of a transaction.
-// Transaction stats are always recorded directly on the flushTarget.
-func (s *StatsCollector) RecordTransaction(
-	ctx context.Context, value *sqlstats.RecordedTxnStats,
-) error {
-	if s.sendInsights && s.statsIngester != nil {
-		s.statsIngester.IngestTransaction(value)
+// RecordTransaction sends the transaction statistics to the stats ingester.
+func (s *StatsCollector) RecordTransaction(_ctx context.Context, value *sqlstats.RecordedTxnStats) {
+	if !s.sendStats {
+		return
 	}
 
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
-		return nil
-	}
+	s.statsIngester.IngestTransaction(value)
 
-	// Do not collect transaction statistics if the stats collection latency
-	// threshold is set, since our transaction UI relies on having stats for every
-	// statement in the transaction.
-	t := sqlstats.StatsCollectionLatencyThreshold.Get(&s.st.SV)
-	if t > 0 {
-		return nil
+	if s.knobs != nil && s.knobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		s.statsIngester.guard.ForceSync()
+		<-s.statsIngester.syncStatsTestingCh
 	}
-	return s.flushTarget.RecordTransaction(ctx, value)
 }
 
-// UpgradeToExplicitTransaction is called by the connExecutor when the current
-// transaction is upgraded from an implicit transaction to explicit. Since this
-// property is part of the statement fingerprint ID, we need to update the
-// fingerprint ID of all the statements in the current transaction.
-func (s *StatsCollector) UpgradeToExplicitTransaction() {
-	for _, stmt := range s.stmtBuf {
-		// Recalculate stmt fingerprint id.
-		stmt.ImplicitTxn = false
-		stmt.FingerprintID = appstatspb.ConstructStatementFingerprintID(stmt.Query, false /* implicit */, stmt.Database)
-	}
+func (s *StatsCollector) EnabledForTransaction() bool {
+	return s.sendStats
+}
+
+// CurrentApplicationName returns the name of the current application
+// that this StatsCollector is collecting information for. This method
+// is used when creating structs containing the per execution stats for
+// a statement or transaction. At that time, we can't read the app name
+// that's on the connection executor since a `SET application_name` may
+// have mutated the state already. For set application_name, the statement
+// is still run under hte previous application name.
+func (s *StatsCollector) CurrentApplicationName() string {
+	return s.flushTarget.ApplicationName()
 }
