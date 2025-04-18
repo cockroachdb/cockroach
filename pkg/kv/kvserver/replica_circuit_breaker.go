@@ -268,11 +268,23 @@ func replicaUnavailableError(
 	return kvpb.NewReplicaUnavailableError(errors.Wrapf(err, "%s", buf), desc, replDesc)
 }
 
+// replicaUnavailableError returns a new ReplicaUnavailableError that wraps the
+// provided error.
 func (r *Replica) replicaUnavailableError(err error) error {
-	desc := r.Desc()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.replicaUnavailableErrorRLocked(err)
+}
+
+// replicaUnavailableLocked is like replicaUnavailableError, except it requires
+// r.mu to be RLocked.
+func (r *Replica) replicaUnavailableErrorRLocked(err error) error {
+	desc := r.shMu.state.Desc
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
 	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	ct := r.GetCurrentClosedTimestamp(context.Background())
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
+	ct := r.getCurrentClosedTimestampLocked(context.Background(), hlc.Timestamp{} /* sufficient */)
+
+	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.raftStatusRLocked(), ct)
 }
