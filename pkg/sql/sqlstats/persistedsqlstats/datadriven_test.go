@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -154,6 +155,31 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			var issue int
 			d.ScanArgs(t, "issue-num", &issue)
 			skip.WithIssue(t, issue)
+			return ""
+		case "wait-for-stmt-stats":
+			// Wait for the in-memory statement stats to be recorded.
+			var count int
+			var app string
+			d.ScanArgs(t, "count", &count)
+			d.ScanArgs(t, "app", &app)
+			filters := sqlstatstestutil.StatementFilter{
+				App: app,
+			}
+			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer, count, filters)
+			return ""
+		case "wait-for-txn-stats":
+			// Wait for the in-memory transaction stats to be recorded.
+			var count, execCount int
+			var app string
+			d.ScanArgs(t, "count", &count)
+			d.ScanArgs(t, "app", &app)
+			d.MaybeScanArgs(t, "execCount", &execCount)
+			filters := sqlstatstestutil.TransactionFilter{
+				App:       app,
+				ExecCount: execCount,
+			}
+
+			sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, observer, count, filters)
 			return ""
 		}
 
