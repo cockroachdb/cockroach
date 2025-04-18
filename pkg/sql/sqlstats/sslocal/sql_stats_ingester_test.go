@@ -83,12 +83,12 @@ type testEvent struct {
 func ingestEventsSync(ingester *SQLStatsIngester, events []testEvent) {
 	for _, e := range events {
 		if e.statementID != 0 {
-			ingester.IngestStatement(&sqlstats.RecordedStmtStats{
+			ingester.BufferStatement(&sqlstats.RecordedStmtStats{
 				SessionID:     clusterunique.IDFromBytes([]byte(e.sessionID)),
 				FingerprintID: appstatspb.StmtFingerprintID(e.statementID),
 			})
 		} else {
-			ingester.IngestTransaction(&sqlstats.RecordedTxnStats{
+			ingester.BufferTransaction(&sqlstats.RecordedTxnStats{
 				SessionID:     clusterunique.IDFromBytes([]byte(e.sessionID)),
 				FingerprintID: appstatspb.TransactionFingerprintID(e.transactionID),
 			})
@@ -254,7 +254,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 		// twice. With no consumer of the channel running and no safeguards in
 		// place, this operation would block, which would be bad.
 		for i := 0; i < 2*bufferSize+1; i++ {
-			ingester.IngestStatement(&sqlstats.RecordedStmtStats{})
+			ingester.BufferStatement(&sqlstats.RecordedStmtStats{})
 		}
 		done <- struct{}{}
 	}()
@@ -343,8 +343,8 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		ingester := NewSQLStatsIngester(settings, knobs)
 		ingester.Start(ctx, stopper)
-		ingester.IngestStatement(statementA)
-		ingester.IngestStatement(statementB)
+		ingester.BufferStatement(statementA)
+		ingester.BufferStatement(statementB)
 		// Wait for the flush.
 		<-ingestCh
 		require.Len(t, ingester.statementsBySessionID, 2)
