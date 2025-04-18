@@ -690,7 +690,7 @@ vec2
 └───• vec9 (6, 5)
 
 # Delete vector after vectors have been copied to sub-partitions. This should
-# delete the vector in sub-partition #2, but leave it danging in the root
+# delete the vector in sub-partition #2, but leave it dangling in the root
 # partition.
 force-split partition-key=1 steps=4
 ----
