@@ -1079,6 +1079,42 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 	})
 }
 
+// TestTxnDeleteResponse verifies that the Delete response correctly includes
+// the keys that were deleted. Underneath the hood, this relies on
+// DeleteResponse.FoundKeys to be set correctly.
+func TestTxnDeleteResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "bufferedWritesEnabled", func(t *testing.T, bufferedWritesEnabled bool) {
+		ctx := context.Background()
+		s := createTestDB(t)
+		defer s.Stop()
+
+		txn := s.DB.NewTxn(ctx, "test txn")
+
+		if bufferedWritesEnabled {
+			txn.SetBufferedWritesEnabled(true)
+		}
+
+		err := txn.Put(ctx, "a", "val")
+		require.NoError(t, err)
+
+		// Delete the key that we just wrote.
+		deleted, err := txn.Del(ctx, "a")
+		require.NoError(t, err)
+		require.Len(t, deleted, 1)
+		require.Equal(t, roachpb.Key("a"), deleted[0])
+
+		// Delete a virgin key.
+		deleted, err = txn.Del(ctx, "b")
+		require.NoError(t, err)
+		require.Empty(t, deleted)
+
+		require.NoError(t, txn.Commit(ctx))
+	})
+}
+
 // Test that a transaction can be used after a locking request returns a
 // WriteIntentError. This is not generally allowed for other errors, but
 // a WriteIntentError is special.
