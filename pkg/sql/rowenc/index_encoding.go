@@ -1382,7 +1382,11 @@ func encodeSecondaryIndexKeyWithKeyPrefix(
 		secondaryIndexKey, err = encodeVectorIndexKey(
 			secondaryIndex, colMap, values, keyPrefix, vh,
 		)
-		secondaryKeys = [][]byte{secondaryIndexKey}
+		if secondaryIndexKey == nil {
+			secondaryKeys = [][]byte{}
+		} else {
+			secondaryKeys = [][]byte{secondaryIndexKey}
+		}
 	}
 	return secondaryKeys, containsNull, err
 }
