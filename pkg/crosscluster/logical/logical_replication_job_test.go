@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -2179,7 +2180,6 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		// adding unsuppored indexes disallowed
 		{"add virtual column index", "CREATE INDEX virtual_col_idx ON tab(virtual_col)", false},
 		{"add hash index", "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)", false},
-		{"add partial index", "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0", false},
 		{"add unique index", "CREATE UNIQUE INDEX unique_idx ON tab(composite_col)", false},
 
 		// Drop table is blocked
@@ -2420,9 +2420,17 @@ func TestPartialIndexes(t *testing.T) {
 	dbA.CheckQueryResultsRetry(t, "SELECT * FROM foo WHERE pi = 2", [][]string{{"1", "2", "hello"}})
 	dbA.CheckQueryResultsRetry(t, "SELECT * FROM foo WHERE pi = -2", [][]string{{"-1", "-2", "world"}})
 
+	// Check that dbA and dbB can add an additional partial index, enabled when using the sql writer.
+	dbA.Exec(t, "CREATE INDEX idx2 ON a.foo (pi) WHERE pk = 0")
+	dbB.Exec(t, "CREATE INDEX idx2 ON b.foo (pi) WHERE pk = 0")
+
 	// Check for partial indexes when using legacy kv writer.
 	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
 	dbA.ExpectErr(t, "cannot create logical replication stream: table foo has a partial index idx", "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo", dbBURL.String())
+
+	// With the kv writer set, we can no longer create partial indexes on the replicating tables.
+	dbA.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON a.foo (pi) WHERE pk = 0")
+	dbB.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON b.foo (pi) WHERE pk = 0")
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
@@ -2666,7 +2674,7 @@ func TestGetWriterType(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
 	t.Run("immediate-mode-pre-25.2", func(t *testing.T) {
@@ -2677,7 +2685,7 @@ func TestGetWriterType(t *testing.T) {
 		)
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
 	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
@@ -2686,14 +2694,14 @@ func TestGetWriterType(t *testing.T) {
 			clusterversion.PreviousRelease.Version(),
 			true, /* initializeVersion */
 		)
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeSQL))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 
-		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeLegacyKV))
+		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, writerTypeLegacyKV, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 }

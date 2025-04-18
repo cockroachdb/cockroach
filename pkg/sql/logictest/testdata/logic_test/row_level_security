@@ -688,7 +688,7 @@ select rls_statements from crdb_internal.create_statements where descriptor_name
 {"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
 
 query T
-select alter_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+select fk_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
 {}
 
@@ -805,7 +805,7 @@ CREATE TABLE public.roaches (
 )
 
 query TTT
-select rls_statements, alter_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
+select rls_statements, fk_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 {"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}  {}  CREATE TABLE public.roaches (
                                                                                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
@@ -829,7 +829,7 @@ select rls_statements from crdb_internal.create_statements where descriptor_name
 {}
 
 query T
-select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
+select fk_statements from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 {}
 
