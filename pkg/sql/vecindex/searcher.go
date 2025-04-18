@@ -50,6 +50,12 @@ func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults
 	}
 	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
 	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
+
+	// If the index is deterministic, then synchronously run the background worker
+	// to process any pending fixups.
+	if idx.Options().IsDeterministic {
+		s.idx.ProcessFixups()
+	}
 }
 
 // Search triggers a search over the index for the given vector, within the

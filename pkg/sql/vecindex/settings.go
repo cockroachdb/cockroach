@@ -15,6 +15,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 )
 
+// DeterministicFixupsSetting, if true, makes all background index operations
+// deterministic by:
+//  1. Using a fixed pseudo-random seed for random operations.
+//  2. Using a single background worker that processes fixups.
+//  3. Synchronously running the worker only at prescribed times, e.g. before
+//     running SearchForInsert or SearchForDelete.
+var DeterministicFixupsSetting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.vecindex.deterministic_fixups.enabled",
+	"set to true to make all background index operations deterministic, for testing",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
+
 // StalledOpTimeoutSetting specifies how long a split/merge operation can remain
 // in its current state before another fixup worker may attempt to assist. If
 // this is set too high, then a fixup can get stuck for too long. If it is set
@@ -63,5 +77,9 @@ func CheckEnabled(sv *settings.Values) error {
 
 // MakeVecConfig constructs a new VecConfig with Dims and Seed set.
 func MakeVecConfig(evalCtx *eval.Context, typ *types.T) vecpb.Config {
+	if DeterministicFixupsSetting.Get(&evalCtx.Settings.SV) {
+		// Create index with well-known seed and deterministic fixups.
+		return vecpb.Config{Dims: typ.Width(), Seed: 42, IsDeterministic: true}
+	}
 	return vecpb.Config{Dims: typ.Width(), Seed: evalCtx.GetRNG().Int63()}
 }

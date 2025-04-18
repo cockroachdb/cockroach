@@ -40,6 +40,12 @@ func (s *MutationSearcher) Init(idx *cspann.Index, txn *kv.Txn) {
 	s.idx = idx
 	s.txn.Init(idx.Store().(*vecstore.Store), txn)
 	s.idxCtx.Init(&s.txn)
+
+	// If the index is deterministic, then synchronously run the background worker
+	// to process any pending fixups.
+	if s.idx.Options().IsDeterministic {
+		s.idx.ProcessFixups()
+	}
 }
 
 // SearchForInsert triggers a search for the partition in which to insert the
