@@ -132,7 +132,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node ?] ? log files found
 [node 1] requesting ranges... received response... done
 [node 1] writing ranges... writing JSON output: debug/nodes/1/ranges.json... done
-[node 2] skipping node... writing binary output: debug/nodes/2.skipped... done
+[node 2] skipping excluded node
 [node 3] node status... writing JSON output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
 [node 3] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/3/crdb_internal.active_range_feeds.txt... done
