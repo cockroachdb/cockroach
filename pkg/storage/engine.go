@@ -1522,6 +1522,12 @@ func ScanLocks(
 	if bytes.Compare(start, end) >= 0 {
 		return locks, nil
 	}
+	if maxLocks < 0 {
+		return locks, nil
+	}
+	if targetBytes < 0 {
+		return locks, nil
+	}
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
@@ -1539,15 +1545,6 @@ func ScanLocks(
 	var lockBytes int64
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if maxLocks != 0 && int64(len(locks)) >= maxLocks {
-			break
-		}
-		if targetBytes != 0 && lockBytes >= targetBytes {
-			break
-		}
 		key, err := iter.EngineKey()
 		if err != nil {
 			return nil, err
@@ -1565,6 +1562,17 @@ func ScanLocks(
 		}
 		locks = append(locks, roachpb.MakeLock(meta.Txn, ltKey.Key, ltKey.Strength))
 		lockBytes += int64(len(ltKey.Key)) + int64(len(v))
+
+		// Check loop termination conditions, ahead of the next pebble iteration.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if maxLocks != 0 && int64(len(locks)) >= maxLocks {
+			break
+		}
+		if targetBytes != 0 && lockBytes >= targetBytes {
+			break
+		}
 	}
 	if err != nil {
 		return nil, err
