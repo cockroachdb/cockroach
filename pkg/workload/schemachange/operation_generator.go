@@ -5171,3 +5171,150 @@ func (og *operationGenerator) dropPolicy(ctx context.Context, tx pgx.Tx) (*opStm
 
 	return opStmt, nil
 }
+
+func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Try to find an existing policy to alter
+	policyWithInfo, policyExists, err := findExistingPolicy(ctx, tx, og)
+	if err != nil {
+		return nil, err
+	}
+
+	// Variable to track table existence
+	var tableExists bool = true
+
+	if !policyExists {
+		// Fall back to random table if no tables with policies were found
+		randomTable, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		policyWithInfo.table = *randomTable
+
+		// If we didn't get a real policy name, generate a random one
+		if policyWithInfo.policyName == "" {
+			policyWithInfo.policyName = fmt.Sprintf("dummy_policy_%s", og.newUniqueSeqNumSuffix())
+		}
+
+		// Check if table exists to include appropriate expected error
+		tableExists, err = og.tableExists(ctx, tx, randomTable)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Determine which ALTER POLICY features to include
+	alterType := og.randIntn(4) // 0-3 for different types of alterations
+
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("ALTER POLICY %s ON %s", policyWithInfo.policyName, &policyWithInfo.table))
+
+	hasRenameClause := false
+	hasToClause := false
+
+	var columns []string
+
+	switch alterType {
+	case 0: // RENAME TO
+		newName := fmt.Sprintf("policy_%s", og.newUniqueSeqNumSuffix())
+		sqlStatement.WriteString(fmt.Sprintf(" RENAME TO %s", newName))
+		hasRenameClause = true
+	case 1: // TO roles
+		// Try to get a real realUser first
+		realUser, err := og.getUser(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Define roles to grant the policy to
+		var roles string
+		if realUser != "" {
+			// Use the real realUser we found
+			roles = realUser
+		} else if og.randIntn(2) == 0 {
+			// Fall back to two options: PUBLIC or a generated dummy role
+			roles = "PUBLIC"
+		} else {
+			// Generate a random role name that doesn't exist
+			roles = fmt.Sprintf("dummy_role_%s", og.newUniqueSeqNumSuffix())
+		}
+
+		sqlStatement.WriteString(fmt.Sprintf(" TO %s", roles))
+		hasToClause = true
+	default: // USING and/or WITH CHECK expressions
+		// For case 2 and 3, we generate USING, WITH CHECK, or both
+		includeUsing := alterType == 2 || og.randIntn(2) == 0
+		includeWithCheck := alterType == 3 || og.randIntn(2) == 0
+
+		// If neither was selected, default to including USING
+		if !includeUsing && !includeWithCheck {
+			includeUsing = true
+		}
+
+		// Get columns for the table to reference in expressions
+		if tableExists {
+			columns, err = og.tableColumnsShuffled(ctx, tx, policyWithInfo.table.String())
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Generate expressions for USING and WITH CHECK
+		if includeUsing {
+			usingExpr := og.generatePolicyExpression(columns, -1) // -1 means no preferred column
+			sqlStatement.WriteString(fmt.Sprintf(" USING (%s)", usingExpr))
+		}
+
+		if includeWithCheck {
+			// Try to use a different column for WITH CHECK if possible
+			preferredColIdx := -1
+			if len(columns) > 1 && includeUsing {
+				preferredColIdx = og.randIntn(len(columns))
+			}
+
+			withCheckExpr := og.generatePolicyExpression(columns, preferredColIdx)
+			sqlStatement.WriteString(fmt.Sprintf(" WITH CHECK (%s)", withCheckExpr))
+		}
+	}
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: !policyExists},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	// Add potential errors
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		// If we're using a random role in the TO clause
+		{code: pgcode.UndefinedObject, condition: hasToClause},
+		// If we're renaming, the new name might already be in use
+		{code: pgcode.DuplicateObject, condition: hasRenameClause},
+	})
+
+	return opStmt, nil
+}
+
+// getUser returns a real username from the database.
+// It returns an empty string if no user is found or an error occurs.
+func (og *operationGenerator) getUser(ctx context.Context, tx pgx.Tx) (string, error) {
+	// Use a subquery with random() to get a random user
+	query := "SELECT username FROM [SHOW USERS] ORDER BY random() LIMIT 1"
+	rows, err := tx.Query(ctx, query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var realUser string
+	if rows.Next() {
+		if err := rows.Scan(&realUser); err != nil {
+			return "", err
+		}
+		og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
+		return realUser, nil
+	}
+
+	return "", nil // No users found
+}
