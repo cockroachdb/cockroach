@@ -461,20 +461,17 @@ func TestTxnWriteBufferCorrectlyAdjustsErrorsAfterBuffering(t *testing.T) {
 			require.NotNil(t, pErr.Index)
 			require.Equal(t, resErrIdx, pErr.Index.Index)
 
-			// Finish off the test by commiting the transaction and sanity checking the
-			// buffer is flushed as expected.
+			// The batch we sent encountered an error; nothing should have been
+			// buffered.
+			require.Empty(t, twb.testingBufferedWritesAsSlice())
+
+			// Don't commit transactions that have encountered an error.
 			ba = &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: &txn}
-			ba.Add(&kvpb.EndTxnRequest{Commit: true})
+			ba.Add(&kvpb.EndTxnRequest{Commit: false})
 
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				require.Len(t, ba.Requests, 4)
-
-				// We now expect the buffer to be flushed along with the commit.
-				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-				require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
-				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[3].GetInner())
+				require.Len(t, ba.Requests, 1)
 
 				br = ba.CreateReply()
 				br.Txn = ba.Txn
@@ -1076,10 +1073,10 @@ func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
 func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	testutils.RunTrueAndFalse(t, "condEvalSuccessful", func(t *testing.T, condEvalSuccessful bool) {
+		ctx := context.Background()
+		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 		twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
 			if condEvalSuccessful {
 				return nil
@@ -1118,11 +1115,11 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 			require.IsType(t, &kvpb.ConditionFailedError{}, pErr.GoError())
 		}
 
-		// Lastly, commit or rollback the transaction. A put should only be
-		// flushed if the condition evaluated successfully.
+		// Lastly, commit the transaction. A put should only be flushed if the
+		// condition evaluated successfully.
 		ba = &kvpb.BatchRequest{}
 		ba.Header = kvpb.Header{Txn: &txn}
-		ba.Add(&kvpb.EndTxnRequest{Commit: condEvalSuccessful})
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
 
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			if condEvalSuccessful {
