@@ -1975,6 +1975,8 @@ message AdminScatterResponse {
   // scattered
   int64 replicas_scattered_bytes = 5;
 
+  int64 num_replicas_moved = 6;
+
   // NB: if you add a field here, don't forget to update combine().
 }
 
