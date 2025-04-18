@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 	gosql "database/sql"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,7 +29,13 @@ func TestSampledStatsCollection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				SynchronousSQLStats: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	tt := s.ApplicationLayer()
 	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).localSqlStats
@@ -210,15 +215,15 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 	var collectedTxnStats []*sqlstats.RecordedTxnStats
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				SynchronousSQLStats: true,
+			},
 			SQLExecutor: &ExecutorTestingKnobs{
 				DisableProbabilisticSampling: true,
 				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats) {
 					// We won't run into a race here because we'll only observe
 					// txns from a single connection.
 					if txnStats.Application == testApp {
-						if strings.Contains(stmt, `SET application_name`) {
-							return
-						}
 						collectedTxnStats = append(collectedTxnStats, txnStats)
 					}
 				},
@@ -232,6 +237,7 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 	conn.Exec(t, "SET application_name = $1", testApp)
 
 	t.Run("do-sampling-when-container-not-full", func(t *testing.T) {
+		collectedTxnStats = nil
 		// All of these statements should be sampled because they are new
 		// fingerprints.
 		queries := []string{
@@ -257,9 +263,8 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 		require.False(t, collectedTxnStats[len(queries)-1].CollectedExecStats)
 	})
 
-	collectedTxnStats = nil
-
 	t.Run("skip-sampling-when-container-full", func(t *testing.T) {
+		collectedTxnStats = nil
 		// We'll set the in-memory container cap to 1 statement. The container
 		// will be full after the first statement is recorded, and thus each
 		// subsequent statement will be new to the container.
