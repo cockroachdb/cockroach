@@ -1239,3 +1239,175 @@ statement error duplicate key value violates unique constraint "uniq_json_expr_k
 INSERT INTO uniq_json VALUES
   (1, '{"a": "b"}'),
   (2, '{"a": "b"}')
+
+# Test that primary keys that are expressions are displayed correctly.
+subtest display_expressions_in_indexes
+
+# Test with a table where the primary key includes an expression in the middle
+statement ok
+CREATE TABLE expr_tab (
+  a INT,
+  b INT,
+  c STRING,
+  PRIMARY KEY (a, (b + 100), lower(c)),
+  INDEX ((a * 2), b),
+  FAMILY fam (a, b, c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
+----
+CREATE TABLE public.expr_tab (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT expr_tab_pkey PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC),
+  INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
+  FAMILY fam (a, b, c)
+)
+
+query TT
+SELECT c.conname, c.condef
+FROM pg_catalog.pg_constraint c
+JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
+WHERE t.relname = 'expr_tab'
+ORDER BY c.conname
+----
+expr_tab_pkey  PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC)
+
+# Test with a table where the primary key starts with an expression
+statement ok
+CREATE TABLE expr_tab2 (
+  a INT,
+  b INT,
+  c STRING,
+  PRIMARY KEY ((a + b), c),
+  INDEX ((c || 'suffix'), (a - b)),
+  FAMILY fam (a, b, c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
+----
+CREATE TABLE public.expr_tab2 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NOT NULL,
+  CONSTRAINT expr_tab2_pkey PRIMARY KEY ((a + b) ASC, c ASC),
+  INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
+  FAMILY fam (a, b, c)
+)
+
+query TT
+SELECT c.conname, c.condef
+FROM pg_catalog.pg_constraint c
+JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
+WHERE t.relname = 'expr_tab2'
+ORDER BY c.conname
+----
+expr_tab2_pkey  PRIMARY KEY ((a + b) ASC, c ASC)
+
+# Test with multiple expressions in primary key
+statement ok
+CREATE TABLE expr_tab3 (
+  a INT,
+  b INT,
+  c STRING,
+  PRIMARY KEY ((a + b), (b * 2), lower(c)),
+  UNIQUE INDEX ((b / 2), upper(c)),
+  FAMILY fam (a, b, c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
+----
+CREATE TABLE public.expr_tab3 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  CONSTRAINT expr_tab3_pkey PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC),
+  UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
+  FAMILY fam (a, b, c)
+)
+
+query TT
+SELECT c.conname, c.condef
+FROM pg_catalog.pg_constraint c
+JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
+WHERE t.relname = 'expr_tab3'
+ORDER BY c.conname
+----
+expr_tab3_expr_expr1_key  UNIQUE ((b / 2:::INT8) ASC, upper(c) ASC)
+expr_tab3_pkey            PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC)
+
+# Test with a primary key that's just a single expression
+statement ok
+CREATE TABLE expr_tab4 (
+  a INT,
+  b INT,
+  PRIMARY KEY ((a + b)),
+  INDEX ((a + 1)),
+  FAMILY fam (a, b)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
+----
+CREATE TABLE public.expr_tab4 (
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT expr_tab4_pkey PRIMARY KEY ((a + b) ASC),
+  INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
+  FAMILY fam (a, b)
+)
+
+query TT
+SELECT c.conname, c.condef
+FROM pg_catalog.pg_constraint c
+JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
+WHERE t.relname = 'expr_tab4'
+ORDER BY c.conname
+----
+expr_tab4_pkey  PRIMARY KEY ((a + b) ASC)
+
+# Test with both primary key and multiple secondary indexes with expressions
+statement ok
+CREATE TABLE expr_tab5 (
+  a INT,
+  b INT,
+  c STRING,
+  j JSON,
+  v VECTOR,
+  PRIMARY KEY ((a + b)),
+  INDEX ((a * b), (b - a)),
+  INVERTED INDEX ((j->'data')),
+  VECTOR INDEX ((v::VECTOR(3))),
+  FAMILY fam (a, b, c, j, v)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
+----
+CREATE TABLE public.expr_tab5 (
+  a INT8 NULL,
+  b INT8 NULL,
+  c STRING NULL,
+  j JSONB NULL,
+  v VECTOR NULL,
+  CONSTRAINT expr_tab5_pkey PRIMARY KEY ((a + b) ASC),
+  INDEX expr_tab5_expr_expr1_idx ((a * b) ASC, (b - a) ASC),
+  INVERTED INDEX expr_tab5_expr_idx ((j->'data':::STRING)),
+  VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
+  FAMILY fam (a, b, c, j, v)
+)
+
+query TT
+SELECT c.conname, c.condef
+FROM pg_catalog.pg_constraint c
+JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
+WHERE t.relname = 'expr_tab5'
+ORDER BY c.conname
+----
+expr_tab5_pkey  PRIMARY KEY ((a + b) ASC)
+
+subtest end

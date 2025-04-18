@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -997,7 +996,22 @@ func populateTableConstraints(
 				}
 				conoid = h.PrimaryKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), uwi)
 				contype = conTypePKey
-				condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
+				primaryIdxStr, err := catformat.IndexForDisplay(
+					ctx,
+					table,
+					&descpb.AnonymousTable,
+					table.GetPrimaryIndex(),
+					"", /* partition */
+					tree.FmtSimple,
+					p.EvalContext(),
+					p.SemaCtx(),
+					p.SessionData(),
+					catformat.IndexDisplayDefOnly,
+				)
+				if err != nil {
+					return err
+				}
+				condef = tree.NewDString(primaryIdxStr)
 			} else {
 				f := tree.NewFmtCtx(tree.FmtSimple)
 				conoid = h.UniqueConstraintOid(db.GetID(), sc.GetID(), table.GetID(), uwi)
