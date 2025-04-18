@@ -53,10 +53,11 @@ func (t T) SupportsStoring() bool {
 // SupportsOpClass is true if this index type allows columns to specify an
 // operator class, which defines an alternate set of operators used when sorting
 // and querying those columns.
-// NOTE: Currently, only inverted indexes support operator classes, and only on
-// the last column of the index.
+//
+// NOTE: Currently, only inverted and vector indexes support operator classes,
+// and only on the last column of the index.
 func (t T) SupportsOpClass() bool {
-	return t == INVERTED
+	return t == INVERTED || t == VECTOR
 }
 
 // ErrorText describes the type of the index using the phrase "an inverted

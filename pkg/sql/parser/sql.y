@@ -12394,7 +12394,7 @@ opt_index_access_method:
         val = idxtype.INVERTED
       case "btree":
         val = idxtype.FORWARD
-      case "cspann":
+      case "cspann", "hnsw":
         val = idxtype.VECTOR
       case "hash", "spgist", "brin":
         return unimplemented(sqllex, "index using " + $2)

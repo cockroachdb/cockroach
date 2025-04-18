@@ -219,7 +219,7 @@ like_indexes  CREATE TABLE public.like_indexes (
                 UNIQUE INDEX foo (b DESC, c ASC),
                 INDEX like_table_c_idx (c ASC) STORING (j),
                 INVERTED INDEX like_table_j_idx (j),
-                VECTOR INDEX like_table_v_idx (v)
+                VECTOR INDEX like_table_v_idx (v vector_l2_ops)
               )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -280,7 +280,7 @@ like_all  CREATE TABLE public.like_all (
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            VECTOR INDEX like_table_v_idx (v),
+            VECTOR INDEX like_table_v_idx (v vector_l2_ops),
             CONSTRAINT check_a CHECK (a > 3:::INT8),
             CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
             CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -308,7 +308,7 @@ like_mixed  CREATE TABLE public.like_mixed (
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
               INVERTED INDEX like_table_j_idx (j),
-              VECTOR INDEX like_table_v_idx (v)
+              VECTOR INDEX like_table_v_idx (v vector_l2_ops)
             )
 
 statement ok
