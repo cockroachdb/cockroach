@@ -44,8 +44,12 @@ import (
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Check if sql_safe_updates is enabled and this is a vector index
-	if n.Type == idxtype.VECTOR && b.EvalCtx().SessionData().SafeUpdates {
-		panic(pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+	if n.Type == idxtype.VECTOR {
+		if b.EvalCtx().SessionData().SafeUpdates {
+			panic(pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+		} else {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf("CREATE VECTOR INDEX will disable writes to the table while the index is being built"))
+		}
 	}
 
 	b.IncrementSchemaChangeCreateCounter("index")
