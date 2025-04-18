@@ -324,3 +324,9 @@ func (i *SQLStatsIngester) flushBuffer(
 		sink.ObserveTransaction(ctx, transaction, *statements)
 	}
 }
+
+// GetBufferSize returns the current number of events in the buffer.
+// This is useful for testing to observe when the buffer has been flushed.
+func (i *SQLStatsIngester) GetBufferSize() int64 {
+	return i.guard.GetBufferSize()
+}

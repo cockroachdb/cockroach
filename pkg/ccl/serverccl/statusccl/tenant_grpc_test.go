@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -54,6 +55,12 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 	defer connTenant.Close()
 
+	// Wait for some statements to appear.
+	conn := sqlutils.MakeSQLRunner(connTenant)
+	sqlstatstestutil.WaitForStatementStatsCountAtLeast(t, conn, 1, sqlstatstestutil.StatementFilter{
+		AllowInternal: true,
+	})
+
 	t.Logf("subtests starting")
 
 	t.Run("gRPC is running", func(t *testing.T) {
@@ -85,6 +92,10 @@ func TestTenantGRPCServices(t *testing.T) {
 		TestingKnobs: testingKnobs,
 	})
 	defer connTenant2.Close()
+
+	sqlstatstestutil.WaitForStatementStatsCountEqual(t, sqlRunner, 1, sqlstatstestutil.StatementFilter{
+		Query: "INSERT INTO test VALUES (_)",
+	})
 
 	t.Run("statements endpoint fans out request to multiple pods", func(t *testing.T) {
 		resp, err := httpClient.Get(tenant2.AdminURL().WithPath("/_status/statements").String())
