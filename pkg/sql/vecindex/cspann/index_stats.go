@@ -25,7 +25,7 @@ const statsAlpha = 0.01
 const statsReportingInterval = 100
 
 // mergeStatsFunc defines the function called by the stats manager when it needs
-// to read and update global statistics.
+// to read and update global statistics. If skipMerge is true,
 type mergeStatsFunc func(ctx context.Context, stats *IndexStats, skipMerge bool) error
 
 // statsManager maintains locally-cached statistics about the vector index that
@@ -38,6 +38,11 @@ type mergeStatsFunc func(ctx context.Context, stats *IndexStats, skipMerge bool)
 type statsManager struct {
 	// mergeStats is called to read and update global statistics.
 	mergeStats mergeStatsFunc
+
+	// skipMerge is true if the stats manager should not merge local statistics
+	// with global statistics. This is used when the index is operating in a
+	// read-only context.
+	skipMerge bool
 
 	// addRemoveCount counts the number of vectors added to the index or removed
 	// from it since the last stats merge.
@@ -55,11 +60,13 @@ type statsManager struct {
 }
 
 // Init initializes the stats manager for use.
-func (sm *statsManager) Init(ctx context.Context, mergeStats mergeStatsFunc) error {
+func (sm *statsManager) Init(ctx context.Context, mergeStats mergeStatsFunc, skipMerge bool) error {
 	sm.mergeStats = mergeStats
+	sm.skipMerge = skipMerge
 
 	// Fetch global statistics to be used as the initial starting point for local
-	// statistics.
+	// statistics. Note: passing skipMerge=true means the operation will be
+	// read-only.
 	err := sm.mergeStats(ctx, &sm.mu.stats, true /* skipMerge */)
 	if err != nil {
 		return errors.Wrap(err, "fetching starting stats")
@@ -98,7 +105,7 @@ func (sm *statsManager) OnAddOrRemoveVector(ctx context.Context) error {
 	}
 
 	// Merge local stats with store stats.
-	err := sm.mergeStats(ctx, &stats, false /* skipMerge */)
+	err := sm.mergeStats(ctx, &stats, sm.skipMerge)
 	if err != nil {
 		return errors.Wrap(err, "merging stats")
 	}

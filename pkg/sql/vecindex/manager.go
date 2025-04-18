@@ -177,7 +177,7 @@ func (m *Manager) GetWithDesc(
 			}
 
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
+				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper, false /* readOnly */)
 		},
 	)
 }
@@ -207,7 +207,7 @@ func (m *Manager) Get(
 			// passed to cspann.NewIndex, and we don't want that to be the context of
 			// the Get call.
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
+				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper, false /* readOnly */)
 		},
 	)
 }

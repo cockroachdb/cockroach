@@ -137,6 +137,9 @@ type FixupProcessor struct {
 	// minDelay specifies the minimum delay for insert and delete operations.
 	// This is used for testing.
 	minDelay time.Duration
+	// readOnly is true if the index is limited to read-only operations. If it is
+	// set, fixups are discarded.
+	readOnly bool
 
 	// onSuccessfulSplit is called when a partition is split without error.
 	onSuccessfulSplit func()
@@ -193,9 +196,9 @@ type FixupProcessor struct {
 // Init initializes the fixup processor. The stopper is used to start new
 // background workers. If "seed" is non-zero, then the fixup processor will use
 // a deterministic random number generator. Otherwise, it will use the global
-// random number generator.
+// random number generator. If "readOnly" is true, then fixups are discarded.
 func (fp *FixupProcessor) Init(
-	ctx context.Context, stopper *stop.Stopper, index *Index, seed int64,
+	ctx context.Context, stopper *stop.Stopper, index *Index, seed int64, readOnly bool,
 ) {
 	// Background workers should spin down when the stopper begins to quiesce.
 	// Also save the cancel function so that workers can be shut down
@@ -204,6 +207,7 @@ func (fp *FixupProcessor) Init(
 	fp.stopper = stopper
 	fp.index = index
 	fp.seed = seed
+	fp.readOnly = readOnly
 
 	// Initialize the pacer with initial allowed ops/sec proportional to the
 	// number of processors.
@@ -378,6 +382,12 @@ func (fp *FixupProcessor) Process(discard bool) {
 // already a duplicate fixup that's pending. It also starts a background worker
 // to process the fixup, if needed and allowed.
 func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
+	if fp.readOnly {
+		// Don't enqueue fixups if the index is read-only.
+		log.VEvent(ctx, 2, "discarding fixup because index is read-only")
+		return
+	}
+
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 

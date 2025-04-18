@@ -80,7 +80,10 @@ func TestSearcher(t *testing.T) {
 		BaseBeamSize:     1,
 		IsDeterministic:  true,
 	}
-	idx, err := cspann.NewIndex(ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper())
+	const readOnly = false
+	idx, err := cspann.NewIndex(
+		ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper(), readOnly,
+	)
 	require.NoError(t, err)
 
 	tx := internalDB.KV().NewTxn(ctx, "searcher")
