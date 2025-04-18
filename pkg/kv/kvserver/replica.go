@@ -221,14 +221,19 @@ func newLeaderlessWatcher(r *Replica) *leaderlessWatcher {
 	}
 }
 
+// Err implements the signaller interface.
 func (lw *leaderlessWatcher) Err() error {
 	return lw.err
 }
 
+// C implements the signaller interface.
 func (lw *leaderlessWatcher) C() <-chan struct{} {
 	return lw.closedChannel
 }
 
+// IsUnavailable returns true if the replica is considered unavailable.
+// Unavailability is defined as being leaderless for a long time, where long is
+// defined by the ReplicaUnavailableThreshold.
 func (lw *leaderlessWatcher) IsUnavailable() bool {
 	lw.mu.RLock()
 	defer lw.mu.RUnlock()
