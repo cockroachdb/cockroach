@@ -235,6 +235,49 @@ func (lw *leaderlessWatcher) IsUnavailable() bool {
 	return lw.mu.unavailable
 }
 
+// refreshUnavailableState refreshes the unavailable state on the leaderless
+// watcher. Replicas are considered unavailable if they have been leaderless for
+// a long time, where long is defined by the ReplicaUnavailableThreshold.
+func (lw *leaderlessWatcher) refreshUnavailableState(
+	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
+) {
+	lw.mu.Lock()
+	defer lw.mu.Unlock()
+
+	threshold := ReplicaLeaderlessUnavailableThreshold.Get(&st.SV)
+	if threshold == time.Duration(0) {
+		// The leaderless watcher is disabled. It's important to reset the
+		// leaderless watcher when it's disabled to reset any replica that was
+		// marked as unavailable before the watcher was disabled.
+		lw.resetLocked()
+		return
+	}
+
+	if postTickLead != raft.None {
+		// If we know about the leader, reset the leaderless timer, and mark the
+		// replica as available.
+		lw.resetLocked()
+	} else if lw.mu.leaderlessTimestamp.IsZero() {
+		// If we don't know about the leader, and we haven't been leaderless before,
+		// mark the time we became leaderless.
+		lw.mu.leaderlessTimestamp = nowPhysicalTime
+	} else if !lw.mu.unavailable {
+		// At this point we know that we have been leaderless for some time, and we
+		// haven't marked the replica as unavailable yet. Make sure we didn't exceed
+		// the threshold. Otherwise, mark the replica as unavailable.
+		durationSinceLeaderless := nowPhysicalTime.Sub(lw.mu.leaderlessTimestamp)
+		if durationSinceLeaderless >= threshold {
+			err := errors.Errorf("have been leaderless for %.2fs, setting the "+
+				"leaderless watcher replica's state as unavailable",
+				durationSinceLeaderless.Seconds())
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.VEventf(ctx, 1, "%s", err)
+			}
+			lw.mu.unavailable = true
+		}
+	}
+}
+
 func (lw *leaderlessWatcher) resetLocked() {
 	lw.mu.leaderlessTimestamp = time.Time{}
 	lw.mu.unavailable = false
