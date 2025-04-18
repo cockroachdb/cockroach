@@ -42,6 +42,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func checkGetResults(t *testing.T, expected map[string][]byte, results ...kv.Result) {
+	for _, result := range results {
+		require.Equal(t, 1, len(result.Rows))
+		require.Equal(t, expected[string(result.Rows[0].Key)], result.Rows[0].ValueBytes())
+	}
+	require.Len(t, expected, len(results))
+}
+
 // TestTxnDBBasics verifies that a simple transaction can be run and
 // either committed or aborted. On commit, mutations are visible; on
 // abort, mutations are never visible. During the txn, verify that
@@ -1037,19 +1045,74 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 func TestTxnContinueAfterCputError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	s := createTestDB(t)
-	defer s.Stop()
 
-	txn := s.DB.NewTxn(ctx, "test txn")
-	// Note: Since we're expecting the CPut to fail, the massaging done by
-	// StrToCPutExistingValue() is not actually necessary.
-	expVal := kvclientutils.StrToCPutExistingValue("dummy")
-	err := txn.CPut(ctx, "a", "val", expVal)
-	require.IsType(t, &kvpb.ConditionFailedError{}, err)
+	testutils.RunTrueAndFalse(t, "bufferedWritesEnabled", func(t *testing.T, bufferedWritesEnabled bool) {
+		ctx := context.Background()
+		s := createTestDB(t)
+		defer s.Stop()
 
-	require.NoError(t, txn.Put(ctx, "a", "b'"))
-	require.NoError(t, txn.Commit(ctx))
+		txn := s.DB.NewTxn(ctx, "test txn")
+
+		if bufferedWritesEnabled {
+			txn.SetBufferedWritesEnabled(true)
+		}
+
+		// Note: Since we're expecting the CPut to fail, the massaging done by
+		// StrToCPutExistingValue() is not actually necessary.
+		expVal := kvclientutils.StrToCPutExistingValue("dummy")
+		err := txn.CPut(ctx, "a", "val", expVal)
+		require.IsType(t, &kvpb.ConditionFailedError{}, err)
+
+		// Write to a different key.
+		require.NoError(t, txn.Put(ctx, "b", "b'"))
+		require.NoError(t, txn.Commit(ctx))
+
+		// We've successfully commited the transaction. The write to key "b"
+		// should be visible whereas the write to keyA shouldn't.
+		val, err := s.DB.Get(ctx, "a")
+		require.NoError(t, err)
+		require.False(t, val.Exists())
+
+		val, err = s.DB.Get(ctx, "b")
+		require.NoError(t, err)
+		require.Equal(t, "b'", string(val.ValueBytes()))
+	})
+}
+
+// TestTxnDeleteResponse verifies that the Delete response correctly includes
+// the keys that were deleted. Underneath the hood, this relies on
+// DeleteResponse.FoundKeys to be set correctly.
+func TestTxnDeleteResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "bufferedWritesEnabled", func(t *testing.T, bufferedWritesEnabled bool) {
+		ctx := context.Background()
+		s := createTestDB(t)
+		defer s.Stop()
+
+		txn := s.DB.NewTxn(ctx, "test txn")
+
+		if bufferedWritesEnabled {
+			txn.SetBufferedWritesEnabled(true)
+		}
+
+		err := txn.Put(ctx, "a", "val")
+		require.NoError(t, err)
+
+		// Delete the key that we just wrote.
+		deleted, err := txn.Del(ctx, "a")
+		require.NoError(t, err)
+		require.Len(t, deleted, 1)
+		require.Equal(t, roachpb.Key("a"), deleted[0])
+
+		// Delete a virgin key.
+		deleted, err = txn.Del(ctx, "b")
+		require.NoError(t, err)
+		require.Empty(t, deleted)
+
+		require.NoError(t, txn.Commit(ctx))
+	})
 }
 
 // Test that a transaction can be used after a locking request returns a
@@ -2013,7 +2076,6 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				if expErr {
 					require.Error(t, err)
 					require.IsType(t, &kvpb.ConditionFailedError{}, err)
-					return err
 				} else {
 					require.NoError(t, err)
 				}
@@ -2025,10 +2087,11 @@ func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
 				}
 			})
 
-			if commit && !expErr {
+			if commit {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
+				testutils.IsError(err, "abort")
 			}
 
 			// Verify the values are visible only if the transaction commited
@@ -2141,4 +2204,86 @@ func TestTxnBufferedWriteRetriesCorrectly(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(keys))
 	})
+}
+
+// TestTxnBufferedWriteReadYourOwnWrites tests that read-your-own-writes are
+// served correctly from the transaction's buffer. We test two cases:
+// 1. The write that needs to be observed was part of an earlier batch.
+// 2. The write that needs to be observed was part of the same batch.
+func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s := createTestDB(t)
+	defer s.Stop()
+
+	value1 := []byte("value1")
+	value21 := []byte("value21")
+	value22 := []byte("value22")
+	value3 := []byte("value3")
+
+	keyA := []byte("keyA")
+	keyB := []byte("keyB")
+	keyC := []byte("keyC")
+
+	// Before the test begins, write a value to keyC.
+	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+	require.NoError(t, txn.Put(ctx, keyC, value3))
+	require.NoError(t, txn.Commit(ctx))
+
+	err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetBufferedWritesEnabled(true)
+
+		// Put transactional value at keyA.
+		if err := txn.Put(ctx, keyA, value1); err != nil {
+			return err
+		}
+
+		// Construct a batch that contains two Gets -- one on keyA, which will be
+		// served from the buffer, and another on keyC, which will be served by
+		// the server.
+		b := txn.NewBatch()
+		b.Get(keyA)
+		b.Get(keyC)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		expected := map[string][]byte{
+			"keyA": value1,
+			"keyC": value3,
+		}
+		checkGetResults(t, expected, b.Results...)
+
+		// Next, construct a batch that contains both Puts and Gets to keyB. The Get
+		// should see the value written by the Put preceding it in the batch.
+		b = txn.NewBatch()
+		b.Get(keyB)
+		b.Put(keyB, value21)
+		b.Get(keyB)
+		b.Put(keyB, value22)
+		b.Get(keyB)
+
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		checkGetResults(t, map[string][]byte{
+			"keyB": nil,
+		},
+			b.Results[0],
+		)
+		checkGetResults(t, map[string][]byte{
+			"keyB": value21,
+		},
+			b.Results[2],
+		)
+		checkGetResults(t, map[string][]byte{
+			"keyB": value22,
+		},
+			b.Results[4],
+		)
+
+		return nil
+	})
+	require.NoError(t, err)
 }
