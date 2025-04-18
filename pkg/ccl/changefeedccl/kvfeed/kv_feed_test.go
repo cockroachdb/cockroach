@@ -144,6 +144,7 @@ func TestKVFeed(t *testing.T) {
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
+			0, /* consumerID */
 			tc.initialHighWater, tc.endTime,
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
