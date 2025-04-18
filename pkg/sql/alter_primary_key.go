@@ -55,11 +55,11 @@ func (p *planner) AlterPrimaryKey(
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
 	// Check if sql_safe_updates is enabled and the table has vector indexes
-	if p.EvalContext().SessionData().SafeUpdates {
-		for _, idx := range tableDesc.AllIndexes() {
-			if idx.GetType() == idxtype.VECTOR {
-				return pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt")
-			}
+	if len(tableDesc.VectorIndexes()) > 0 {
+		if p.EvalContext().SessionData().SafeUpdates {
+			return pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt")
+		} else {
+			p.BufferClientNotice(ctx, pgnotice.Newf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
 		}
 	}
 

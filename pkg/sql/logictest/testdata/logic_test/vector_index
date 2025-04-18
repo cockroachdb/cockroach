@@ -26,11 +26,14 @@ ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 statement ok
 SET sql_safe_updates = false
 
-statement ok
+statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX ON simple (vec1)
 
+statement notice ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt
+ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
+
 # Alternate syntax.
-statement ok
+statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE INDEX ON simple USING cspann (vec1 ASC);
 
 query TT
@@ -40,9 +43,10 @@ simple  CREATE TABLE public.simple (
           a INT8 NOT NULL,
           b INT8 NOT NULL,
           vec1 VECTOR(3) NULL,
-          CONSTRAINT simple_pkey PRIMARY KEY (a ASC),
+          CONSTRAINT simple_pkey PRIMARY KEY (b ASC),
           VECTOR INDEX simple_vec1_idx (vec1),
           VECTOR INDEX simple_vec1_idx1 (vec1),
+          UNIQUE INDEX simple_a_key (a ASC),
           VECTOR INDEX simple_vec1_idx2 (vec1),
           FAMILY fam_0_a_vec1_b (a, vec1, b)
         )
@@ -68,7 +72,7 @@ CREATE TABLE alt_syntax (
   FAMILY (a, vec1)
 )
 
-statement ok
+statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX another_index ON alt_syntax (vec1)
 
 query TT
@@ -357,7 +361,7 @@ INSERT INTO backfill_test VALUES
   (2, 'jill', 20, '[4.0, 5.0, 6.0]', '[6.0, 5.0, 4.0]'),
   (3, 'ash',  30, '[7.0, 8.0, 9.0]', '[9.0, 8.0, 7.0]');
 
-statement ok
+statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX ON backfill_test (enc)
 
 query ITITT
@@ -409,7 +413,7 @@ SELECT * FROM backfill_test@backfill_test_enc_idx ORDER BY enc <-> '[1.0, 2.0, 3
 3  ash   30  [7,8,9]    [9,8,7]
 6  ash   60  [7.5,8,9]  [9,8,7.5]
 
-statement ok
+statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE VECTOR INDEX ON backfill_test (username, prefix_enc)
 
 query ITITT
