@@ -208,9 +208,9 @@ type leaderlessWatcher struct {
 	closedChannel chan struct{}
 }
 
-// NewLeaderlessWatcher initializes a new leaderlessWatcher with the default
+// newLeaderlessWatcher initializes a new leaderlessWatcher with the default
 // values.
-func NewLeaderlessWatcher(r *Replica) *leaderlessWatcher {
+func newLeaderlessWatcher(r *Replica) *leaderlessWatcher {
 	closedCh := make(chan struct{})
 	close(closedCh)
 	return &leaderlessWatcher{
