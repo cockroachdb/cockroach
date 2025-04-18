@@ -346,14 +346,14 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
 
 		// Create non-root partition with some vectors in it.
-		testPartitionKey, _ := suite.createTestPartition(store, treeKey)
+		testPartitionKey, testPartition := suite.createTestPartition(store, treeKey)
 
 		// Create another partition.
 		testPartitionKey2 := cspann.PartitionKey(20)
 		metadata := cspann.PartitionMetadata{
 			Level:        cspann.SecondLevel,
 			Centroid:     vector.T{2, 4},
-			StateDetails: cspann.MakeReadyDetails(),
+			StateDetails: cspann.MakeSplittingDetails(10, 20),
 		}
 		suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, testPartitionKey2, metadata))
 		vectors := vector.MakeSet(2)
@@ -368,9 +368,28 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 
 		suite.NoError(store.RunTransaction(suite.ctx, func(txn cspann.Txn) error {
 			searchSet := cspann.SearchSet{MaxResults: 2}
-			toSearch := []cspann.PartitionToSearch{{Key: testPartitionKey}, {Key: testPartitionKey2}}
+			toSearch := []cspann.PartitionToSearch{
+				{Key: testPartitionKey},
+				{Key: cspann.PartitionKey(99)}, // Partition does not exist.
+				{Key: testPartitionKey2},
+			}
 			err := txn.SearchPartitions(suite.ctx, treeKey, toSearch, vector.T{6, 1}, &searchSet)
 			suite.NoError(err)
+
+			// Validate partition info.
+			suite.Equal(cspann.SecondLevel, toSearch[0].Level)
+			suite.Equal(testPartition.Metadata().StateDetails, toSearch[0].StateDetails)
+			suite.Equal(3, toSearch[0].Count)
+
+			suite.Equal(cspann.InvalidLevel, toSearch[1].Level)
+			suite.Equal(cspann.PartitionStateDetails{}, toSearch[1].StateDetails)
+			suite.Equal(0, toSearch[1].Count)
+
+			suite.Equal(cspann.SecondLevel, toSearch[2].Level)
+			suite.Equal(metadata.StateDetails, toSearch[2].StateDetails)
+			suite.Equal(2, toSearch[2].Count)
+
+			// Validate search results.
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 4.2, ErrorBound: 50.99, CentroidDistance: 7.21,
 				ParentPartitionKey: testPartitionKey2, ChildKey: partitionKey4, ValueBytes: valueBytes4}
@@ -378,10 +397,7 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 				QuerySquaredDistance: 8, ErrorBound: 0, CentroidDistance: 0,
 				ParentPartitionKey: testPartitionKey, ChildKey: partitionKey3, ValueBytes: valueBytes3}
 			suite.Equal(cspann.SearchResults{result1, result2}, RoundResults(searchSet.PopResults(), 2))
-			suite.Equal(cspann.SecondLevel, toSearch[0].Level)
-			suite.Equal(3, toSearch[0].Count)
-			suite.Equal(cspann.SecondLevel, toSearch[1].Level)
-			suite.Equal(2, toSearch[1].Count)
+
 			return nil
 		}))
 	}
