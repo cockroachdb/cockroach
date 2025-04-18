@@ -82,9 +82,7 @@ func (vm *VectorIndexUpdateHelper) initImpl(
 			if vm.PutPartitionKeys == nil {
 				vm.PutPartitionKeys = make(map[descpb.IndexID]tree.Datum)
 			}
-			if putPartitionKeys[valIdx] != tree.DNull {
-				vm.PutPartitionKeys[idx.GetID()] = putPartitionKeys[valIdx]
-			}
+			vm.PutPartitionKeys[idx.GetID()] = putPartitionKeys[valIdx]
 		}
 
 		// Retrieve the quantized vector, if it exists.
@@ -92,9 +90,7 @@ func (vm *VectorIndexUpdateHelper) initImpl(
 			if vm.PutQuantizedVecs == nil {
 				vm.PutQuantizedVecs = make(map[descpb.IndexID]tree.Datum)
 			}
-			if putQuantizedVecs[valIdx] != tree.DNull {
-				vm.PutQuantizedVecs[idx.GetID()] = putQuantizedVecs[valIdx]
-			}
+			vm.PutQuantizedVecs[idx.GetID()] = putQuantizedVecs[valIdx]
 		}
 
 		// Retrieve the partition key value for delete, if it exists.
@@ -102,9 +98,7 @@ func (vm *VectorIndexUpdateHelper) initImpl(
 			if vm.DelPartitionKeys == nil {
 				vm.DelPartitionKeys = make(map[descpb.IndexID]tree.Datum)
 			}
-			if delPartitionKeys[valIdx] != tree.DNull {
-				vm.DelPartitionKeys[idx.GetID()] = delPartitionKeys[valIdx]
-			}
+			vm.DelPartitionKeys[idx.GetID()] = delPartitionKeys[valIdx]
 		}
 
 		valIdx++

@@ -1382,7 +1382,14 @@ func encodeSecondaryIndexKeyWithKeyPrefix(
 		secondaryIndexKey, err = encodeVectorIndexKey(
 			secondaryIndex, colMap, values, keyPrefix, vh,
 		)
-		secondaryKeys = [][]byte{secondaryIndexKey}
+		// This can happen if the search returns a NULL partition, which means the
+		// partition was not found in the DELETE case or the vector being inserted
+		// is NULL.
+		if secondaryIndexKey == nil {
+			secondaryKeys = [][]byte{}
+		} else {
+			secondaryKeys = [][]byte{secondaryIndexKey}
+		}
 	}
 	return secondaryKeys, containsNull, err
 }
