@@ -330,7 +330,7 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 	withApp1 := sqlstatstestutil.StatementFilter{App: "app1"}
 	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1, withApp1)
 
-	sqlDB.CheckQueryResults(t, `
+	obsConn.CheckQueryResults(t, `
 SELECT
   key, count
 FROM
@@ -344,7 +344,7 @@ WHERE
 	server.SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, tc.ApplicationLayer(0).AppStopper())
 
 	// Check that the in-memory stats now do not contain the flushed stats.
-	sqlDB.CheckQueryResults(t, `
+	obsConn.CheckQueryResults(t, `
 SELECT
   key, count
 FROM
@@ -356,7 +356,7 @@ WHERE
 	sqlDB.Exec(t, "SELECT 1 WHERE 1 = 1")
 	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1, withApp1)
 
-	sqlDB.CheckQueryResults(t, `
+	obsConn.CheckQueryResults(t, `
 SELECT
   key, count
 FROM
@@ -458,14 +458,14 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
+		nil, /* discardedStatsCount */
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
 	)
 
-	// TODO(xinhaoz): We'll come back and add the sql stats sink once we
-	// enable the SQL stats ingestion for sql stats.
-	ingester := sslocal.NewSQLStatsIngester(nil /* testing knobs */)
+	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlStats)
+	ingester.Start(ctx, stopper)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
@@ -474,8 +474,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		ingester,
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		false, /* underOuterTxn */
-		nil,   /* knobs */
+		nil, /* knobs */
 	)
 
 	recordStats := func(testCase *tc) {
@@ -484,22 +483,19 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		statsCollector.StartTransaction()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
-			err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+			statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 				FingerprintID: stmtFingerprintID,
 				Query:         fingerprint,
 				ImplicitTxn:   testCase.implicit,
 			})
-			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
 
 		txnFingerprintID = appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
-		statsCollector.EndTransaction(ctx, txnFingerprintID)
-		err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+		statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 			FingerprintID:  txnFingerprintID,
 			UserNormalized: username.RootUser,
 		})
-		require.NoError(t, err)
 	}
 
 	for _, tc := range testCases {
@@ -589,20 +585,20 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
+			nil, /* discardedStatsCount */
 			monitor,
 			nil,
 			nil,
 		)
-		ingester := sslocal.NewSQLStatsIngester(nil /* knobs */)
+		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlStats)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,
 			ingester,
 			sessionphase.NewTimes(),
-			nil,
-			false,
-			nil,
+			sqlStats.GetCounters(),
+			nil, /* knobs */
 		)
 
 		ingester.Start(ctx, stopper)
@@ -612,21 +608,18 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			txnFingerprintIDHash := util.MakeFNV64()
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
-				err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+				statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 					FingerprintID: stmtFingerprintID,
 					Query:         fingerprint,
 				})
-				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
-			statsCollector.EndTransaction(ctx, transactionFingerprintID)
-			err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+			statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 				FingerprintID:  transactionFingerprintID,
 				UserNormalized: username.RootUser,
 			})
-			require.NoError(t, err)
 
 			// Make sure we see the counts we expect.
 			expectedCount := txn.expectedStatsCountWhenEnabled
@@ -2077,6 +2070,7 @@ func createNewSqlStats() *sslocal.SQLStats {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
+		nil, /* discardedStatsCount */
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */

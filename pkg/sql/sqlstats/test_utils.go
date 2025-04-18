@@ -71,6 +71,11 @@ type TestingKnobs struct {
 
 	// OnIngesterFlush is a callback that is triggered when the ingester
 	OnIngesterFlush func()
+
+	// SynchronousSQLStats if true, will make the SQL stats flush writing synchronously
+	// with sql execution. This is useful for tests that just want to assert on the
+	// collected stats rather than validating the collection process itself.
+	SynchronousSQLStats bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
