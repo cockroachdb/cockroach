@@ -345,6 +345,6 @@ var DefaultLaggingRangesPollingInterval = 1 * time.Minute
 var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.ApplicationLevel,
 	"changefeed.resolved_timestamp.granularity",
-	"the granularity at which changefeed progress are quantized to make tracking more efficient",
-	0,
+	"the granularity at which changefeed progress is quantized to make tracking more efficient",
+	time.Duration(metamorphic.ConstantWithTestRange("changefeed.resolved_timestamp.granularity", 0, 0, 20))*time.Second,
 )
