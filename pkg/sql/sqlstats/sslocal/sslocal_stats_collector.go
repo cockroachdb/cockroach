@@ -163,7 +163,7 @@ func (s *StatsCollector) RecordStatement(_ctx context.Context, value *sqlstats.R
 	if !s.sendStats {
 		return
 	}
-	s.statsIngester.IngestStatement(value)
+	s.statsIngester.BufferStatement(value)
 }
 
 // RecordTransaction sends the transaction statistics to the stats ingester.
@@ -172,7 +172,7 @@ func (s *StatsCollector) RecordTransaction(_ctx context.Context, value *sqlstats
 		return
 	}
 
-	s.statsIngester.IngestTransaction(value)
+	s.statsIngester.BufferTransaction(value)
 }
 
 func (s *StatsCollector) EnabledForTransaction() bool {

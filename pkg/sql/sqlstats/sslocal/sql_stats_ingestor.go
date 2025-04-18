@@ -84,8 +84,8 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
-// SQLStatsIngester buffers the "events" it sees (via IngestStatement
-// and IngestTransaction) and passes them along to the underlying registry
+// SQLStatsIngester buffers the "events" it sees (via BufferStatement
+// and BufferTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
 //
@@ -207,7 +207,7 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 	}
 }
 
-func (i *SQLStatsIngester) IngestStatement(statement *sqlstats.RecordedStmtStats) {
+func (i *SQLStatsIngester) BufferStatement(statement *sqlstats.RecordedStmtStats) {
 	if i.testingKnobs != nil && i.testingKnobs.IngesterStmtInterceptor != nil {
 		i.testingKnobs.IngesterStmtInterceptor(statement.SessionID, statement)
 		return
@@ -220,7 +220,7 @@ func (i *SQLStatsIngester) IngestStatement(statement *sqlstats.RecordedStmtStats
 	})
 }
 
-func (i *SQLStatsIngester) IngestTransaction(transaction *sqlstats.RecordedTxnStats) {
+func (i *SQLStatsIngester) BufferTransaction(transaction *sqlstats.RecordedTxnStats) {
 	if i.testingKnobs != nil && i.testingKnobs.IngesterTxnInterceptor != nil {
 		i.testingKnobs.IngesterTxnInterceptor(transaction.SessionID, transaction)
 		return
