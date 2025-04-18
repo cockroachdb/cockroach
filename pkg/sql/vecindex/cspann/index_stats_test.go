@@ -28,7 +28,7 @@ func TestStatsManager(t *testing.T) {
 	}
 
 	var stats statsManager
-	require.NoError(t, stats.Init(ctx, mergeStats))
+	require.NoError(t, stats.Init(ctx, mergeStats, false /* skipMerge */))
 	require.Equal(t, "1 levels, 1 partitions.\nCV stats:\n", stats.Format())
 	require.True(t, skippedMerge)
 
