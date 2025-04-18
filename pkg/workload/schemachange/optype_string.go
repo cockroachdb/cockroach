@@ -53,13 +53,15 @@ func _() {
 	_ = x[createTableAs-37]
 	_ = x[createView-38]
 	_ = x[createFunction-39]
-	_ = x[commentOn-40]
-	_ = x[dropFunction-41]
-	_ = x[dropIndex-42]
-	_ = x[dropSchema-43]
-	_ = x[dropSequence-44]
-	_ = x[dropTable-45]
-	_ = x[dropView-46]
+	_ = x[createPolicy-40]
+	_ = x[commentOn-41]
+	_ = x[dropFunction-42]
+	_ = x[dropIndex-43]
+	_ = x[dropSchema-44]
+	_ = x[dropSequence-45]
+	_ = x[dropTable-46]
+	_ = x[dropView-47]
+	_ = x[dropPolicy-48]
 }
 
 func (i opType) String() string {
@@ -144,6 +146,8 @@ func (i opType) String() string {
 		return "createView"
 	case createFunction:
 		return "createFunction"
+	case createPolicy:
+		return "createPolicy"
 	case commentOn:
 		return "commentOn"
 	case dropFunction:
@@ -158,6 +162,8 @@ func (i opType) String() string {
 		return "dropTable"
 	case dropView:
 		return "dropView"
+	case dropPolicy:
+		return "dropPolicy"
 	default:
 		return "opType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
