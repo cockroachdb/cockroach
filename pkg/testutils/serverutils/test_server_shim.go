@@ -26,9 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/replication"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -518,4 +523,29 @@ func WaitForTenantCapabilities(
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// WaitForStandbyTenantReplication sets the "AsOf" time for a standby reader
+// tenant, and then waits until replication has caught up to that time.
+// It returns the chosen "AsOf" timestamp.
+func WaitForStandbyTenantReplication(
+	t TestFataler, ctx context.Context, ts TestServerInterface, dstTenant ApplicationLayerInterface,
+) (asOf hlc.Timestamp) {
+	asOf = ts.Clock().Now()
+	dstInternal := dstTenant.InternalDB().(descs.DB)
+	err := replication.SetupOrAdvanceStandbyReaderCatalog(
+		ctx, TestTenantID(), asOf, dstInternal, dstTenant.ClusterSettings(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := ts.Clock().Now()
+	lm := dstTenant.LeaseManager().(*lease.Manager)
+	testutils.SucceedsSoon(t, func() error {
+		if lm.GetSafeReplicationTS().Less(now) {
+			return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
+		}
+		return nil
+	})
+	return asOf
 }

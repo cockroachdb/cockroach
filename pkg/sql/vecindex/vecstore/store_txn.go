@@ -66,6 +66,11 @@ func (tx *Txn) Init(store *Store, kv *kv.Txn) {
 func (tx *Txn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
+	if forUpdate && tx.store.ReadOnly() {
+		return cspann.PartitionMetadata{}, errors.AssertionFailedf(
+			"cannot lock partition metadata in read-only mode")
+	}
+
 	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
 
 	// By acquiring a shared lock on metadata key, we prevent splits/merges of
@@ -143,6 +148,10 @@ func (tx *Txn) AddToPartition(
 	childKey cspann.ChildKey,
 	valueBytes cspann.ValueBytes,
 ) error {
+	if tx.store.ReadOnly() {
+		return errors.AssertionFailedf("cannot add to partition in read-only mode")
+	}
+
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
@@ -201,6 +210,10 @@ func (tx *Txn) RemoveFromPartition(
 	level cspann.Level,
 	childKey cspann.ChildKey,
 ) error {
+	if tx.store.ReadOnly() {
+		return errors.AssertionFailedf("cannot remove from partition in read-only mode")
+	}
+
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 

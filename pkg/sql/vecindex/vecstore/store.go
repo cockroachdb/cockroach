@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -32,11 +33,8 @@ type Store struct {
 	db descs.DB // Used to generate new partition IDs
 	kv *kv.DB
 
-	// Used for generating prefixes and reading from the PK to get full length
-	// vectors.
-	codec   keys.SQLCodec
-	tableID catid.DescID
-	indexID catid.IndexID
+	// readOnly is true if the store does not accept writes.
+	readOnly bool
 
 	// The root partition always uses the UnQuantizer while other partitions may
 	// use any quantizer.
@@ -61,9 +59,10 @@ var _ cspann.Store = (*Store)(nil)
 // in unit tests where full vector index creation capabilities aren't
 // necessarily available.
 func NewWithColumnID(
+	ctx context.Context,
 	db descs.DB,
 	quantizer quantize.Quantizer,
-	codec keys.SQLCodec,
+	defaultCodec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexID catid.IndexID,
 	vectorColumnID descpb.ColumnID,
@@ -71,23 +70,33 @@ func NewWithColumnID(
 	ps = &Store{
 		db:             db,
 		kv:             db.KV(),
-		codec:          codec,
-		tableID:        tableDesc.GetID(),
-		indexID:        indexID,
 		rootQuantizer:  quantize.NewUnQuantizer(quantizer.GetDims()),
 		quantizer:      quantizer,
 		minConsistency: kvpb.INCONSISTENT,
 		emptyVec:       make(vector.T, quantizer.GetDims()),
 	}
 
+	codec := defaultCodec
+	tableID := tableDesc.GetID()
 	pk := tableDesc.GetPrimaryIndex()
-	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), indexID)
-	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), pk.GetID())
+	if ext := tableDesc.ExternalRowData(); ext != nil {
+		// The table is external, so use the external codec and table ID. Also set
+		// the index to read-only.
+		log.VInfof(ctx, 2,
+			"table %d is external, using read-only mode for vector index %d",
+			tableDesc.GetID(), indexID,
+		)
+		ps.readOnly = true
+		codec = keys.MakeSQLCodec(ext.TenantID)
+		tableID = ext.TableID
+	}
+	ps.prefix = rowenc.MakeIndexKeyPrefix(codec, tableID, indexID)
+	ps.pkPrefix = rowenc.MakeIndexKeyPrefix(codec, tableID, pk.GetID())
 
 	ps.colIdxMap.Set(vectorColumnID, 0)
 	err = rowenc.InitIndexFetchSpec(
 		&ps.fetchSpec,
-		ps.codec,
+		codec,
 		tableDesc,
 		pk,
 		[]descpb.ColumnID{vectorColumnID},
@@ -128,13 +137,19 @@ func New(
 
 	vectorColumnID := index.VectorColumnID()
 
-	return NewWithColumnID(db, quantizer, codec, tableDesc, indexID, vectorColumnID)
+	return NewWithColumnID(ctx, db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
 // SetConsistency sets the minimum consistency level to use when reading
 // partitions. This is set to a higher level for deterministic tests.
 func (s *Store) SetMinimumConsistency(consistency kvpb.ReadConsistencyType) {
 	s.minConsistency = consistency
+}
+
+// ReadOnly is part of the cspann.Store interface. It returns true if the store
+// does not allow writes.
+func (s *Store) ReadOnly() bool {
+	return s.readOnly
 }
 
 // RunTransaction is part of the cspann.Store interface. It runs a function in
@@ -199,6 +214,9 @@ func (s *Store) EstimatePartitionCount(
 
 // MergeStats is part of the cspann.Store interface.
 func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMerge bool) error {
+	if !skipMerge && s.ReadOnly() {
+		return errors.AssertionFailedf("cannot merge stats in read-only mode")
+	}
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil
@@ -209,6 +227,9 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 func (s *Store) TryDeletePartition(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) error {
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot delete partition in read-only mode")
+	}
 	// Delete the metadata key and all vector keys in the partition.
 	b := s.kv.NewBatch()
 	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
@@ -232,6 +253,9 @@ func (s *Store) TryCreateEmptyPartition(
 	partitionKey cspann.PartitionKey,
 	metadata cspann.PartitionMetadata,
 ) error {
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot create partition in read-only mode")
+	}
 	meta := vecencoding.EncodeMetadataValue(metadata)
 	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
 	if err := s.kv.CPut(ctx, metadataKey, meta, nil /* expValue */); err != nil {
@@ -287,6 +311,9 @@ func (s *Store) TryUpdatePartitionMetadata(
 	metadata cspann.PartitionMetadata,
 	expected cspann.PartitionMetadata,
 ) error {
+	if s.ReadOnly() {
+		return errors.AssertionFailedf("cannot update partition in read-only mode")
+	}
 	metadataKey := vecencoding.EncodeMetadataKey(s.prefix, treeKey, partitionKey)
 	encodedMetadata := vecencoding.EncodeMetadataValue(metadata)
 	encodedExpected := vecencoding.EncodeMetadataValue(expected)
@@ -311,6 +338,9 @@ func (s *Store) TryAddToPartition(
 	valueBytes []cspann.ValueBytes,
 	expected cspann.PartitionMetadata,
 ) (added bool, err error) {
+	if s.ReadOnly() {
+		return added, errors.AssertionFailedf("cannot add to partition in read-only mode")
+	}
 	return added, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Acquire a shared lock on the partition, to ensure that another agent
 		// doesn't modify it. Also, this will be used to verify expected metadata.
@@ -406,6 +436,9 @@ func (s *Store) TryRemoveFromPartition(
 	childKeys []cspann.ChildKey,
 	expected cspann.PartitionMetadata,
 ) (removed bool, err error) {
+	if s.ReadOnly() {
+		return removed, errors.AssertionFailedf("cannot remove from partition in read-only mode")
+	}
 	return removed, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Acquire a shared lock on the partition, to ensure that another agent
 		// doesn't modify it. Also, this will be used to verify expected metadata.
@@ -463,6 +496,9 @@ func (s *Store) TryClearPartition(
 	partitionKey cspann.PartitionKey,
 	expected cspann.PartitionMetadata,
 ) (count int, err error) {
+	if s.ReadOnly() {
+		return count, errors.AssertionFailedf("cannot clear partition in read-only mode")
+	}
 	return count, s.kv.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Acquire a shared lock on the partition, to ensure that another agent
 		// doesn't modify it. Also, this will be used to verify expected metadata.
