@@ -796,8 +796,9 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 		// TODO(arul): remove this field entirely.
 		ExpToEpochEquiv: true,
 		// TODO(radu): remove this field entirely.
-		MinExpirationSupported: true,
-		RangeLeaseDuration:     r.store.cfg.RangeLeaseDuration,
+		MinExpirationSupported:   true,
+		RangeLeaseDuration:       r.store.cfg.RangeLeaseDuration,
+		FortificationGracePeriod: r.store.cfg.FortificationGracePeriod,
 	}
 }
 
