@@ -1512,7 +1512,7 @@ func (r *Replica) tick(
 
 	// Refresh the unavailability state on the leaderlessWatcher.
 	r.LeaderlessWatcher.refreshUnavailableState(
-		ctx, postTickStatus.Lead, nowPhysicalTime, r.store.cfg.Settings,
+		ctx, postTickStatus.Lead, nowPhysicalTime, r.store.cfg.Settings, r.replicaUnavailableErrorRLocked,
 	)
 
 	if preTickStatus.RaftState != postTickStatus.RaftState {
