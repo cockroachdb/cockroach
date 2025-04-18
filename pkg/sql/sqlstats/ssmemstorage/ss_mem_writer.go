@@ -270,3 +270,7 @@ func (s *Container) recordTransactionHighLevelStats(
 	}
 	s.txnCounts.recordTransactionCounts(transactionTimeSec, committed, implicit)
 }
+
+func (s *Container) ApplicationName() string {
+	return s.appName
+}
