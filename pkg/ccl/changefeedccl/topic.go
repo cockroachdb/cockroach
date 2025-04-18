@@ -173,22 +173,12 @@ func (tn *TopicNamer) Each(fn func(string) error) error {
 	return nil
 }
 
-// A nil topic descriptor means we're building solely from the spec
-// and should use placeholders if necessary. Only necessary in the
-// EACH_FAMILY case as in the COLUMN_FAMILY case we know the name from
-// the spec.
 func (tn *TopicNamer) makeName(s changefeedbase.Target, td TopicDescriptor) (string, error) {
 	switch s.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
 		return tn.nameFromComponents(s.StatementTimeName), nil
-	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY, jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
 		return tn.nameFromComponents(s.StatementTimeName, s.FamilyName), nil
-	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-		if td == nil {
-			return tn.nameFromComponents(s.StatementTimeName, familyPlaceholder), nil
-		}
-		name, components := td.GetNameComponents()
-		return tn.nameFromComponents(name, components...), nil
 	default:
 		return "", errors.AssertionFailedf("unrecognized type %s", s.Type)
 	}
