@@ -147,7 +147,7 @@ sum(cgo_total) as cgo_total,</query>
         <title>The number of Goroutines across all nodes. This count should rise and fall based on load.</title>
         <search>
           <query>| mstats sum(sys_goroutines)  as x
-where index=$index_name$ AND cluster_id=$cluster_id$   span=10s
+where index=$index_name$ AND cluster_id=$cluster_id$   span=10s by net.host.name
 |timechart span=10s  
 sum(x) as goroutine_count</query>
           <earliest>$Time_range.earliest$</earliest>
@@ -225,7 +225,7 @@ WHERE index=$index_name$ AND cluster_id=$cluster_id$  span=10s by net.host.name
         <search>
           <query>| mstats 
 rate_sum(sys_gc_count) as x 
-WHERE index=$index_name$ AND cluster_id=$cluster_id$  span=10s
+WHERE index=$index_name$ AND cluster_id=$cluster_id$  span=10s by net.host.name
 | timechart  span=10s sum(x) as gc_runs</query>
           <earliest>$Time_range.earliest$</earliest>
           <latest>$Time_range.latest$</latest>
@@ -273,12 +273,12 @@ WHERE index=$index_name$ AND cluster_id=$cluster_id$  span=10s
     <panel>
       <title>GC Pause Time</title>
       <chart>
-        <title>The amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.</title>
+        <title>The amount of time Go’s garbage collector spent in stop-the-world pauses per second across all nodes. During stop-the-world garbage collection phases (sweep termination and mark termination), application code execution is paused.</title>
         <search>
           <query>| mstats 
 rate_sum(sys_gc_pause_ns) as x 
 WHERE index=$index_name$ AND cluster_id=$cluster_id$  
-span=10s
+span=10s by net.host.name
 | eval x=round(x/1000/1000, 4)
 | timechart span=10s sum(x) as gc_pause_time</query>
           <earliest>$Time_range.earliest$</earliest>
