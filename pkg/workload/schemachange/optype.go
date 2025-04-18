@@ -122,6 +122,7 @@ const (
 	createTableAs       // CREATE TABLE <table> AS <def>
 	createView          // CREATE VIEW <view> AS <def>
 	createFunction      // CREATE FUNCTION <function> ...
+	createPolicy        // CREATE POLICY <policy> ON <table> [TO <roles>] [USING (<using_expr>)] [WITH CHECK (<check_expr>)]
 
 	// COMMENT ON ...
 
@@ -135,6 +136,7 @@ const (
 	dropSequence // DROP SEQUENCE <sequence>
 	dropTable    // DROP TABLE <table>
 	dropView     // DROP VIEW <view>
+	dropPolicy   // DROP POLICY [IF EXISTS] <policy> ON <table>
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
@@ -241,12 +243,14 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createTypeEnum:                    (*operationGenerator).createEnum,
 	createTypeComposite:               (*operationGenerator).createCompositeType,
 	createView:                        (*operationGenerator).createView,
+	createPolicy:                      (*operationGenerator).createPolicy,
 	dropFunction:                      (*operationGenerator).dropFunction,
 	dropIndex:                         (*operationGenerator).dropIndex,
 	dropSchema:                        (*operationGenerator).dropSchema,
 	dropSequence:                      (*operationGenerator).dropSequence,
 	dropTable:                         (*operationGenerator).dropTable,
 	dropView:                          (*operationGenerator).dropView,
+	dropPolicy:                        (*operationGenerator).dropPolicy,
 	renameIndex:                       (*operationGenerator).renameIndex,
 	renameSequence:                    (*operationGenerator).renameSequence,
 	renameTable:                       (*operationGenerator).renameTable,
@@ -286,6 +290,7 @@ var opWeights = []int{
 	commentOn:                         1,
 	createFunction:                    1,
 	createIndex:                       1,
+	createPolicy:                      10,
 	createSchema:                      1,
 	createSequence:                    1,
 	createTable:                       10,
@@ -295,6 +300,7 @@ var opWeights = []int{
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,
+	dropPolicy:                        5,
 	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
@@ -334,4 +340,6 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,
 	dropView:                          clusterversion.MinSupported,
+	createPolicy:                      clusterversion.V25_2,
+	dropPolicy:                        clusterversion.V25_2,
 }
