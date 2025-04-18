@@ -88,6 +88,10 @@ const (
 	alterFunctionRename    // ALTER FUNCTION <function> RENAME TO <name>
 	alterFunctionSetSchema // ALTER FUNCTION <function> SET SCHEMA <schema>
 
+	// ALTER POLICY ...
+
+	alterPolicy // ALTER POLICY <policy> ON <table> <def>
+
 	// ALTER TABLE <table> ...
 
 	alterTableAddColumn               // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -116,13 +120,13 @@ const (
 	createTypeEnum      // CREATE TYPE <type> ENUM AS <def>
 	createTypeComposite // CREATE TYPE <type> AS <def>
 	createIndex         // CREATE INDEX <index> ON <table> <def>
+	createPolicy        // CREATE POLICY <policy> ON <table> <def>
 	createSchema        // CREATE SCHEMA <schema>
 	createSequence      // CREATE SEQUENCE <sequence> <def>
 	createTable         // CREATE TABLE <table> <def>
 	createTableAs       // CREATE TABLE <table> AS <def>
 	createView          // CREATE VIEW <view> AS <def>
 	createFunction      // CREATE FUNCTION <function> ...
-	createPolicy        // CREATE POLICY <policy> ON <table> [TO <roles>] [USING (<using_expr>)] [WITH CHECK (<check_expr>)]
 
 	// COMMENT ON ...
 
@@ -132,11 +136,11 @@ const (
 
 	dropFunction // DROP FUNCTION <function>
 	dropIndex    // DROP INDEX <index>@<table>
+	dropPolicy   // DROP POLICY [IF EXISTS] <policy> ON <table>
 	dropSchema   // DROP SCHEMA <schema>
 	dropSequence // DROP SEQUENCE <sequence>
 	dropTable    // DROP TABLE <table>
 	dropView     // DROP VIEW <view>
-	dropPolicy   // DROP POLICY [IF EXISTS] <policy> ON <table>
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
@@ -216,6 +220,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterDatabaseSurvivalGoal:         (*operationGenerator).survive,
 	alterFunctionRename:               (*operationGenerator).alterFunctionRename,
 	alterFunctionSetSchema:            (*operationGenerator).alterFunctionSetSchema,
+	alterPolicy:                       (*operationGenerator).alterPolicy,
 	alterTableAddColumn:               (*operationGenerator).addColumn,
 	alterTableAddConstraint:           (*operationGenerator).addConstraint,
 	alterTableAddConstraintForeignKey: (*operationGenerator).addForeignKeyConstraint,
@@ -271,6 +276,7 @@ var opWeights = []int{
 	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
 	alterFunctionRename:               1,
 	alterFunctionSetSchema:            1,
+	alterPolicy:                       1,
 	alterTableAddColumn:               1,
 	alterTableAddConstraintForeignKey: 1,
 	alterTableAddConstraintUnique:     1,
@@ -320,6 +326,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	selectStmt: clusterversion.MinSupported,
 	validate:   clusterversion.MinSupported,
 
+	alterPolicy:                       clusterversion.V25_2,
 	alterTableAddColumn:               clusterversion.MinSupported,
 	alterTableAddConstraintForeignKey: clusterversion.MinSupported,
 	alterTableAddConstraintUnique:     clusterversion.MinSupported,
