@@ -195,10 +195,10 @@ type leaderlessWatcher struct {
 		// unavailable is set to true if the replica is leaderless for a long time
 		// (longer than ReplicaLeaderlessUnavailableThreshold).
 		unavailable bool
-	}
 
-	// err is the error returned when the replica is leaderless for a long time.
-	err error
+		// err is the error returned when the replica is leaderless for a long time.
+		err error
+	}
 
 	// closedChannel is an already closed channel. Requests will use it to know
 	// that the replica is leaderless, and can be considered unavailable. This
@@ -208,22 +208,21 @@ type leaderlessWatcher struct {
 	closedChannel chan struct{}
 }
 
-// newLeaderlessWatcher initializes a new leaderlessWatcher with the default
-// values.
-func newLeaderlessWatcher(r *Replica) *leaderlessWatcher {
+// newLeaderlessWatcher constructs and returns a new leaderlessWatcher.
+func newLeaderlessWatcher() *leaderlessWatcher {
 	closedCh := make(chan struct{})
 	close(closedCh)
 	return &leaderlessWatcher{
-		err: r.replicaUnavailableError(
-			errors.Errorf("replica has been leaderless for %s",
-				ReplicaLeaderlessUnavailableThreshold.Get(&r.store.cfg.Settings.SV))),
 		closedChannel: closedCh,
 	}
 }
 
 // Err implements the signaller interface.
 func (lw *leaderlessWatcher) Err() error {
-	return lw.err
+	lw.mu.RLock()
+	defer lw.mu.RUnlock()
+
+	return lw.mu.err
 }
 
 // C implements the signaller interface.
@@ -237,6 +236,11 @@ func (lw *leaderlessWatcher) C() <-chan struct{} {
 func (lw *leaderlessWatcher) IsUnavailable() bool {
 	lw.mu.RLock()
 	defer lw.mu.RUnlock()
+
+	// The error is set iff the replica is unavailable. Sanity check.
+	if lw.mu.unavailable == (lw.mu.err == nil) {
+		panic("unavailable implies error is set")
+	}
 	return lw.mu.unavailable
 }
 
@@ -244,7 +248,11 @@ func (lw *leaderlessWatcher) IsUnavailable() bool {
 // watcher. Replicas are considered unavailable if they have been leaderless for
 // a long time, where long is defined by the ReplicaUnavailableThreshold.
 func (lw *leaderlessWatcher) refreshUnavailableState(
-	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
+	ctx context.Context,
+	postTickLead raftpb.PeerID,
+	nowPhysicalTime time.Time,
+	st *cluster.Settings,
+	newReplicaUnavailableError func(error) error,
 ) {
 	lw.mu.Lock()
 	defer lw.mu.Unlock()
@@ -272,13 +280,20 @@ func (lw *leaderlessWatcher) refreshUnavailableState(
 		// the threshold. Otherwise, mark the replica as unavailable.
 		durationSinceLeaderless := nowPhysicalTime.Sub(lw.mu.leaderlessTimestamp)
 		if durationSinceLeaderless >= threshold {
-			err := errors.Errorf("have been leaderless for %.2fs, setting the "+
-				"leaderless watcher replica's state as unavailable",
-				durationSinceLeaderless.Seconds())
 			if log.ExpensiveLogEnabled(ctx, 1) {
+				err := errors.Errorf("have been leaderless for %.2fs, setting the "+
+					"leaderless watcher replica's state as unavailable",
+					durationSinceLeaderless.Seconds())
 				log.VEventf(ctx, 1, "%s", err)
 			}
+			// Transition to being unavailable.
 			lw.mu.unavailable = true
+			// Now that we're transitioning to being unavailable, construct and cache
+			// the associated error.
+			lw.mu.err = newReplicaUnavailableError(
+				errors.Errorf("replica has been leaderless for %s",
+					ReplicaLeaderlessUnavailableThreshold.Get(&st.SV)),
+			)
 		}
 	}
 }
@@ -286,6 +301,7 @@ func (lw *leaderlessWatcher) refreshUnavailableState(
 func (lw *leaderlessWatcher) resetLocked() {
 	lw.mu.leaderlessTimestamp = time.Time{}
 	lw.mu.unavailable = false
+	lw.mu.err = nil
 }
 
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
@@ -2816,6 +2832,17 @@ func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClos
 // It is a test-only helper method.
 func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
 	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+}
+
+// RefreshLeaderlessWatcherUnavailableStateForTesting refreshes the replica's
+// leaderlessWatcher's unavailable state. Intended for tests.
+func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
+	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.LeaderlessWatcher.refreshUnavailableState(ctx, postTickLead, nowPhysicalTime, st, r.replicaUnavailableErrorRLocked)
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
