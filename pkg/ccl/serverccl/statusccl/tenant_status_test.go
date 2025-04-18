@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -434,12 +434,18 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_t`},
 	}
 
+	_, err := sqlDB.Exec(`SET application_name = 'tenant'`)
+	require.NoError(t, err)
 	for _, stmt := range testCaseTenant {
 		_, err := sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
 
-	err := sqlDB.Close()
+	conn := sqlutils.MakeSQLRunner(tenant.SQLConn(t))
+	sqlstatstestutil.WaitForStatementStatsCountAtLeast(t, conn, len(testCaseTenant),
+		sqlstatstestutil.StatementFilter{App: "tenant"})
+
+	err = sqlDB.Close()
 	require.NoError(t, err)
 
 	testCaseNonTenant := []testCase{
@@ -455,10 +461,18 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	sqlDB = systemLayer.SQLConn(t)
 
+	_, err = sqlDB.Exec(`SET application_name = 'system'`)
+	require.NoError(t, err)
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
+
+	conn = sqlutils.MakeSQLRunner(systemLayer.SQLConn(t))
+	sqlstatstestutil.WaitForStatementStatsCountAtLeast(t, conn, len(testCaseTenant), sqlstatstestutil.StatementFilter{
+		App: "system",
+	})
+
 	err = sqlDB.Close()
 	require.NoError(t, err)
 
@@ -506,9 +520,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 				// be automatically retried, confusing the test success check.
 				continue
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
+			if respStatement.Key.KeyData.App != "tenant" && respStatement.Key.KeyData.App != "system" {
 				continue
 			}
 			actualStatements = append(actualStatements, respStatement.Key.KeyData.Query)
@@ -589,6 +601,9 @@ func testResetSQLStatsRPCForTenant(
 				testTenantConn.Exec(t, stmt)
 				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
 			}
+
+			sqlstatstestutil.WaitForStatementStatsCountAtLeast(t, testTenantConn, 1,
+				sqlstatstestutil.StatementFilter{Query: "SELECT _, _, _"})
 
 			if flushed {
 				testTenantServer := testTenant.TenantSQLServer()

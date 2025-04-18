@@ -554,6 +554,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/tablemetadatacache",
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/storage",

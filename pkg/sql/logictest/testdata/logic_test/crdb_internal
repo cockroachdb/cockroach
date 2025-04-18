@@ -780,6 +780,8 @@ DROP SEQUENCE s
 statement ok
 RESET application_name
 
+wait-for-stmt-stats 5 test_max_retry
+
 # Note: in the following test, five rows of output are expected:
 # - one for the SELECT statements that failed with a retry error, as well as
 #   the retry attempt that succeeded without an error.
@@ -1005,7 +1007,9 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames
+wait-for-txn-stats 5 test_txn_statistics
+
+query ITTTI colnames retry
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics' ORDER BY key
 ----
 node_id  application_name     key                   statement_ids                                                  count

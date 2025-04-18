@@ -403,6 +403,7 @@ SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-509618906946614289
 /Table/32/???/9/6/81
 
 subtest max_retry_counter
+
 # Verify that the max_retry counter in statement stats actually increases with retries.
 
 statement ok
@@ -421,6 +422,8 @@ DROP SEQUENCE s
 
 statement ok
 RESET application_name
+
+wait-for-stmt-stats 5 test_max_retry
 
 # Note: in the following test, three rows of output are expected:
 # - one for the SELECT statements that failed with a retry error,
@@ -488,6 +491,7 @@ SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 
 # Test the virtual index as well.
 
+subtest txn_statistics
 statement ok
 SET application_name = "test_txn_statistics"
 
@@ -508,6 +512,8 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 
 statement ok
 SELECT * FROM t_53504
+
+wait-for-txn-stats 5 test_txn_statistics
 
 query ITTTI colnames,rowsort
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'

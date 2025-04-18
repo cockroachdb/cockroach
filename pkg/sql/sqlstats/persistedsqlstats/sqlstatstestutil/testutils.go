@@ -7,7 +7,9 @@ package sqlstatstestutil
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
+	"github.com/cockroachdb/errors"
 )
 
 // GetRandomizedCollectedStatementStatisticsForTest returns a
@@ -292,4 +297,217 @@ VALUES ($1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 	)
 
 	return err
+}
+
+type comparisonFunc func(actual, expected int) (bool, string)
+
+type StatementFilter struct {
+	// Application the statement ran in.
+	App string
+	// The representative query.
+	Query         string
+	ExecCount     int
+	AllowInternal bool
+}
+
+func (f StatementFilter) String() string {
+	var filters []string
+	if f.App != "" {
+		filters = append(filters, "app="+f.App)
+	}
+	if f.Query != "" {
+		filters = append(filters, "query="+f.Query)
+	}
+	if f.ExecCount > 0 {
+		filters = append(filters, fmt.Sprintf("exec_count=%d", f.ExecCount))
+	}
+	if f.AllowInternal {
+		filters = append(filters, "allow_internal")
+	}
+	return strings.Join(filters, ",")
+}
+
+// waitForStatementStatsCount waits for statement statistics to match a specific condition
+func waitForStatementStatsCount(
+	t *testing.T,
+	conn *sqlutils.SQLRunner,
+	expectedCount int,
+	comparisonFn comparisonFunc,
+	filters ...StatementFilter,
+) {
+	t.Helper()
+
+	var filter StatementFilter
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
+
+	// Build the query.
+	var query safesql.Query
+	query.Append("SELECT count(*) ")
+
+	if filter.ExecCount > 0 {
+		query.Append(", COALESCE(sum((statistics -> 'statistics' ->> 'cnt')::INT), 0)")
+	}
+
+	query.Append(" FROM crdb_internal.cluster_statement_statistics WHERE 1=1")
+
+	if filter.App == "" && !filter.AllowInternal {
+		query.Append(" AND app_name NOT LIKE '%internal-%' ")
+	} else if filter.App != "" {
+		query.Append(" AND app_name = $", filter.App)
+	}
+
+	if filter.Query != "" {
+		query.Append(" AND metadata ->> 'query' = $", filter.Query)
+	}
+
+	q := query.String()
+	args := query.QueryArguments()
+	testutils.SucceedsWithin(t, func() error {
+		var count, execCount int
+		row := conn.QueryRow(t, q, args...)
+		if filter.ExecCount > 0 {
+			row.Scan(&count, &execCount)
+		} else {
+			// We only need to scan the first column into count.
+			row.Scan(&count)
+		}
+		matches, err := comparisonFn(count, expectedCount)
+		if !matches {
+			return errors.Errorf("%s filters=%s", err, filter.String())
+		}
+
+		if filter.ExecCount > 0 && execCount < filters[0].ExecCount {
+			return errors.Errorf("expected exec count of at least %d, got %d. filters=%s",
+				filters[0].ExecCount, execCount, filter.String())
+		}
+
+		return nil
+	}, 5*time.Second)
+}
+
+// WaitForStatementStatsCountAtLeast waits for statement statistics count to be >= expectedCount
+func WaitForStatementStatsCountAtLeast(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int, filters ...StatementFilter,
+) {
+	t.Helper()
+	waitForStatementStatsCount(t, conn, expectedCount,
+		func(actual, expected int) (bool, string) {
+			return actual >= expected, fmt.Sprintf("expected at least %d statement(s), got %d", expected, actual)
+		},
+		filters...)
+}
+
+// WaitForStatementStatsCountEqual waits for statement statistics count to be == expectedCount
+func WaitForStatementStatsCountEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int, filters ...StatementFilter,
+) {
+	t.Helper()
+	waitForStatementStatsCount(t, conn, expectedCount,
+		func(actual, expected int) (bool, string) {
+			return actual == expected, fmt.Sprintf("expected %d statement(s), got %d", expected, actual)
+		},
+		filters...)
+}
+
+type TransactionFilter struct {
+	// Application the transaction ran in.
+	App           string
+	ExecCount     int
+	AllowInternal bool
+}
+
+func (f TransactionFilter) String() string {
+	var filters []string
+	if f.App != "" {
+		filters = append(filters, "app="+f.App)
+	}
+	if f.ExecCount > 0 {
+		filters = append(filters, fmt.Sprintf("exec_count=%d", f.ExecCount))
+	}
+	if f.AllowInternal {
+		filters = append(filters, "allow_internal")
+	}
+	return strings.Join(filters, ",")
+}
+
+func waitForTransactionStatsCount(
+	t *testing.T,
+	conn *sqlutils.SQLRunner,
+	expectedCount int,
+	comparisonFn comparisonFunc,
+	filters ...TransactionFilter,
+) {
+	t.Helper()
+
+	var filter TransactionFilter
+	if len(filters) > 0 {
+		filter = filters[0]
+	}
+	verifyExecCount := filter.ExecCount > 0
+
+	// Build the query.
+	var query safesql.Query
+	query.Append("SELECT count(*)")
+
+	if verifyExecCount {
+		query.Append(", COALESCE(sum((statistics -> 'statistics' ->> 'cnt')::INT), 0)")
+	}
+
+	query.Append(" FROM crdb_internal.cluster_transaction_statistics WHERE 1=1")
+
+	if filter.App == "" && !filter.AllowInternal {
+		query.Append(" AND app_name NOT LIKE '%internal-%' ")
+	} else if filter.App != "" {
+		query.Append(" AND app_name = $", filter.App)
+
+	}
+
+	q := query.String()
+	args := query.QueryArguments()
+	testutils.SucceedsWithin(t, func() error {
+		var count, execCount int
+		row := conn.QueryRow(t, q, args...)
+
+		if verifyExecCount {
+			row.Scan(&count, &execCount)
+		} else {
+			// We only need to scan the first column into count.
+			row.Scan(&count)
+		}
+
+		matches, err := comparisonFn(count, expectedCount)
+		if !matches {
+			return errors.Errorf("%s filters=%s", err, filter.String())
+		}
+		if verifyExecCount && execCount < filters[0].ExecCount {
+			return errors.Errorf("expected exec count of at least %d, got %d", filters[0].ExecCount, execCount)
+		}
+		return nil
+	}, 5*time.Second)
+}
+
+// WaitForTransactionStatsCountAtLeast waits for transaction statistics count to be >= expectedCount
+func WaitForTransactionStatsCountAtLeast(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int, filters ...TransactionFilter,
+) {
+	t.Helper()
+	waitForTransactionStatsCount(t, conn, expectedCount,
+		func(actual, expected int) (bool, string) {
+			return actual >= expected, fmt.Sprintf("expected at least %d transaction(s), got %d", expected, actual)
+		},
+		filters...)
+}
+
+// WaitForTransactionStatsCountEqual waits for transaction statistics count to be == expectedCount
+func WaitForTransactionStatsCountEqual(
+	t *testing.T, conn *sqlutils.SQLRunner, expectedCount int, filters ...TransactionFilter,
+) {
+	t.Helper()
+	waitForTransactionStatsCount(t, conn, expectedCount,
+		func(actual, expected int) (bool, string) {
+			return actual == expected, fmt.Sprintf("expected %d transaction(s), got %d", expected, actual)
+		},
+		filters...)
 }

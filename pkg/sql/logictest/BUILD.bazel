@@ -82,6 +82,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

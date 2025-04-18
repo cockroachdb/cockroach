@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -53,6 +54,12 @@ func TestTenantGRPCServices(t *testing.T) {
 		TestingKnobs: testingKnobs,
 	})
 	defer connTenant.Close()
+
+	// Wait for some statements to appear.
+	conn := sqlutils.MakeSQLRunner(connTenant)
+	sqlstatstestutil.WaitForStatementStatsCountAtLeast(t, conn, 1, sqlstatstestutil.StatementFilter{
+		AllowInternal: true,
+	})
 
 	t.Logf("subtests starting")
 

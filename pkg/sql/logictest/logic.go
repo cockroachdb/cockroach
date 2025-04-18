@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -429,6 +430,14 @@ import (
 //  - retry_duration <duration>
 //    Specifies the amount of time to retry when using the retry directive.
 //    Defaults to testutils.DefaultSucceedsSoonDuration (45 seconds).
+//
+//  - wait-for-stmt-stats <count> <app>
+//    Waits for the specified number of fingerprints from the given app to appear
+//   in crdb_internal.cluster_statement_statistics.
+//
+//  - wait-for-txn-stats <count> <app>
+//    Waits for the specified number of fingerprints from the given app to appear
+//   in crdb_internal.cluster_transaction_statistics.
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -3415,6 +3424,55 @@ func (t *logicTest) processSubtest(
 				upgradeNode(nodeIdx)
 			}
 
+		case "wait-for-stmt-stats":
+			// New connection for observer query.
+			conn, err := t.db.Conn(context.Background())
+			if err != nil {
+				return err
+			}
+			observerConn := sqlutils.MakeSQLRunner(conn)
+			if len(fields) < 2 {
+				return errors.Errorf("wait-for-stmt-stats requires a count argument")
+			}
+			count, err := strconv.Atoi(fields[1])
+			if err != nil {
+				return errors.Errorf("wait-for-stmt-stats requires an integer count argument")
+			}
+
+			var app string
+			if len(fields) >= 3 {
+				app = fields[2]
+			}
+
+			filters := sqlstatstestutil.StatementFilter{
+				App: app,
+			}
+			sqlstatstestutil.WaitForStatementStatsCountAtLeast(t.rootT, observerConn, count, filters)
+			return conn.Close()
+		case "wait-for-txn-stats":
+			conn, err := t.db.Conn(context.Background())
+			if err != nil {
+				return err
+			}
+			observer := sqlutils.MakeSQLRunner(conn)
+
+			if len(fields) < 2 {
+				return errors.Errorf("wait-for-txn-stats requires a count argument")
+			}
+			count, err := strconv.Atoi(fields[1])
+			if err != nil {
+				return errors.Errorf("wait-for-txn-stats requires an integer count argument")
+			}
+			var app string
+			if len(fields) >= 3 {
+				app = fields[2]
+			}
+
+			filters := sqlstatstestutil.TransactionFilter{
+				App: app,
+			}
+			sqlstatstestutil.WaitForTransactionStatsCountAtLeast(t.rootT, observer, count, filters)
+			return conn.Close()
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,

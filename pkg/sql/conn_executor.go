@@ -727,6 +727,11 @@ func (s *Server) GetReportedSQLStatsProvider() *sslocal.SQLStats {
 	return s.reportedStats
 }
 
+// GetSQLStatsIngester returns the sqlstats.Ingester for the current sql.Server.
+func (s *Server) GetSQLStatsIngester() *sslocal.SQLStatsIngester {
+	return s.sqlStatsIngester
+}
+
 // GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
 func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 	return s.txnIDCache
