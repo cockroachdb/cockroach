@@ -24,7 +24,6 @@ RUN apt-get update \
     netbase \
     openjdk-8-jre \
     openssh-client \
-    patchelf \
     python-is-python3 \
     python3 \
     python3.8-venv \
@@ -91,6 +90,15 @@ RUN case ${TARGETPLATFORM} in \
  unzip awscliv2.zip && \
  ./aws/install && \
  rm -rf aws awscliv2.zip
+
+RUN case ${TARGETPLATFORM} in \
+    "linux/amd64") ARCH=x86_64; SHASUM=ce84f2447fb7a8679e58bc54a20dc2b01b37b5802e12c57eece772a6f14bf3f0 ;; \
+    "linux/arm64") ARCH=aarch64; SHASUM=ae13e2effe077e829be759182396b931d8f85cfb9cfe9d49385516ea367ef7b2 ;; \
+  esac && \
+ curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$ARCH.tar.gz" -o "patchelf.tar.gz" && \
+ echo "$SHASUM patchelf.tar.gz" | sha256sum -c - && \
+ tar --strip-components=1 -C /usr -xzf patchelf.tar.gz && \
+ rm -rf patchelf.tar.gz
 
 # Install Bazelisk as Bazel.
 # NOTE: you should keep this in sync with build/packer/teamcity-agent.sh and
