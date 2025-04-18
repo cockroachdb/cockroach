@@ -1060,7 +1060,15 @@ message SchemaChangeDetails {
 
   sessiondatapb.SessionData session_data = 13;
 
-  // Next id 14.
+  // SchemaLockedDescIDs are descriptors that should have schema_locked set on
+  // them after the schema change.
+  repeated uint32 schema_locked_desc_ids = 14 [(gogoproto.customname) = "SchemaLockedDescIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+
+  // SchemaLockedUpdates are the initial set of updates that should be applied
+  // before the schema change does any work.
+  repeated cockroach.sql.sqlbase.TableDescriptor schema_locked_updates = 15  [(gogoproto.customname) = "SchemaLockedUpdates"];
+
+  // Next id 16.
 }
 
 message SchemaChangeProgress {

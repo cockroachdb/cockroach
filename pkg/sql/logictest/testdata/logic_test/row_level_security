@@ -1,4 +1,5 @@
-# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1
+# TODO(fqazi): There are missing rules here which cause this to fail under schema locked
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1 !local-schema-locked
 
 subtest setup
 

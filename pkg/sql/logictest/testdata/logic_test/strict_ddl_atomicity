@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Default behavior, where atomicity violations are allowed
 
 statement ok

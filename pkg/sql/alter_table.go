@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -101,7 +102,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// Disallow schema changes if this table's schema is locked, unless it is to
 	// set/reset the "schema_locked" storage parameter.
-	if err = checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err = p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -460,7 +461,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				for _, updated := range affected {
 					// Disallow schema change if the FK references a table whose schema is
 					// locked.
-					if err := checkSchemaChangeIsAllowed(updated, n.n); err != nil {
+					if err := params.p.checkSchemaChangeIsAllowed(params.ctx, updated, n.n); err != nil {
 						return err
 					}
 					if err := params.p.writeSchemaChange(
@@ -2341,16 +2342,59 @@ func (p *planner) tryRemoveFKBackReferences(
 // checkSchemaChangeIsAllowed checks if a schema change is allowed on
 // this table. A schema change is disallowed if one of the following is true:
 //   - The schema_locked table storage parameter is true, and this statement is
-//     not modifying the value of schema_locked.
+//     cannot set schema_locked automatically via a whitelist.
 //   - The table is referenced by logical data replication jobs, and the statement
 //     is not in the allow list of LDR schema changes.
-func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) (ret error) {
-	if desc == nil {
+func (p *planner) checkSchemaChangeIsAllowed(
+	ctx context.Context, desc catalog.TableDescriptor, n tree.Statement,
+) (ret error) {
+	// Adding descriptors can be skipped.
+	if desc == nil || desc.Adding() || p.descCollection.IsNewUncommitedDescriptor(desc.GetID()) {
 		return nil
 	}
-	if desc.IsSchemaLocked() && !tree.IsSetOrResetSchemaLocked(n) {
+	// Check if this schema change is on the allowed list, which will only
+	// be simple non-back filling schema changes. All commands except set/reset
+	// schema_locked are unsupported before 25.2
+	unsupportedCmd := !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_2) &&
+		!tree.IsSetOrResetSchemaLocked(n)
+	requiresModifiedJob := false
+	switch stmt := n.(type) {
+	case *tree.AlterTable:
+		for _, cmd := range stmt.Cmds {
+			switch cmd.(type) {
+			case *tree.AlterTableDropStored, *tree.AlterTableValidateConstraint:
+				requiresModifiedJob = true
+			case *tree.AlterTableRenameColumn, *tree.AlterTableRenameConstraint,
+				*tree.AlterTableSetStorageParams, *tree.AlterTableInjectStats,
+				*tree.AlterTableResetStorageParams, *tree.AlterTablePartitionByTable,
+				*tree.AlterTableSetOnUpdate, *tree.AlterTableDropNotNull,
+				*tree.AlterTableSetVisible:
+			default:
+				unsupportedCmd = true
+			}
+		}
+	case *tree.AlterIndex, *tree.DropTable, *tree.RenameColumn, *tree.RenameIndex,
+		*tree.RenameTable:
+	default:
+		unsupportedCmd = true
+	}
+	// Implicit txns with single statements are allowed to manipulate
+	// schema_locked automatically. Schema locked has its own error in
+	// this case so allow it to bypass.
+	if !tree.IsSetOrResetSchemaLocked(n) &&
+		requiresModifiedJob && (!p.extendedEvalCtx.TxnIsSingleStmt || !p.extendedEvalCtx.TxnImplicit) {
+		unsupportedCmd = true
+	}
+	if desc.IsSchemaLocked() && unsupportedCmd {
 		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
 	}
+	// In the extended context track that we have evaluated a statement,
+	// that needs to unset schema_locked. This will drive extra commit
+	// logic to modify the schema change state.
+	p.extendedEvalCtx.ResetSchemaLockedOnCommit = desc.IsSchemaLocked() && requiresModifiedJob &&
+		!tree.IsSetOrResetSchemaLocked(n)
+	p.extendedEvalCtx.SchemaLockedBypassed = desc.IsSchemaLocked()
+
 	if len(desc.TableDesc().LDRJobIDs) > 0 {
 		var virtualColNames []string
 		for _, col := range desc.NonDropColumns() {

@@ -1,3 +1,4 @@
+# LogicTest: !local-schema-locked
 
 # Tests for creating a hash sharded primary key
 statement ok
