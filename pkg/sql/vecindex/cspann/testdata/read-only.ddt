@@ -1,0 +1,105 @@
+# ----------------------------------------------------------------------
+# Test a read-only index.
+# ----------------------------------------------------------------------
+load-index min-partition-size=1 max-partition-size=4 beam-size=2 read-only
+• 1 (0, 0)
+│
+├───• 2 (8.5, 5.5)
+│   │
+│   ├───• vec6 (14, 1)
+│   ├───• vec2 (3, 10)
+│   ├───• vec9 (5, 2)
+│   ├───• vec12 (10, 10)
+│   └───• vec14 (8, 12)
+│
+├───• 5 (1, 6.25)
+│   │
+│   ├───• vec5 (3, 6)
+│   ├───• vec4 (2, 7)
+│   ├───• vec3 (-2, 8)
+│   ├───• vec8 (1, 4)
+│   ├───• vec10 (1, 8)
+│   └───• vec11 (3, 5)
+│
+└───• 4 (0, -0.5)
+    │
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
+
+----
+Loaded 13 vectors.
+
+# Searching the index should not trigger fixups.
+search max-results=2 beam-size=3
+(1, 6)
+----
+vec4: 2 (centroid=1.25)
+vec10: 4 (centroid=1.75)
+vec5: 4 (centroid=2.02)
+vec8: 4 (centroid=2.25)
+13 leaf vectors, 16 vectors, 5 full vectors, 4 partitions
+
+format-tree
+----
+• 1 (0, 0)
+│
+├───• 2 (8.5, 5.5)
+│   │
+│   ├───• vec6 (14, 1)
+│   ├───• vec2 (3, 10)
+│   ├───• vec9 (5, 2)
+│   ├───• vec12 (10, 10)
+│   └───• vec14 (8, 12)
+│
+├───• 5 (1, 6.25)
+│   │
+│   ├───• vec5 (3, 6)
+│   ├───• vec4 (2, 7)
+│   ├───• vec3 (-2, 8)
+│   ├───• vec8 (1, 4)
+│   ├───• vec10 (1, 8)
+│   └───• vec11 (3, 5)
+│
+└───• 4 (0, -0.5)
+    │
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
+
+search max-results=3 beam-size=3
+(8, 5)
+----
+vec9: 18 (centroid=4.95)
+vec11: 25 (centroid=2.36)
+vec5: 26 (centroid=2.02)
+13 leaf vectors, 16 vectors, 10 full vectors, 4 partitions
+
+format-tree
+----
+• 1 (0, 0)
+│
+├───• 2 (8.5, 5.5)
+│   │
+│   ├───• vec6 (14, 1)
+│   ├───• vec2 (3, 10)
+│   ├───• vec9 (5, 2)
+│   ├───• vec12 (10, 10)
+│   └───• vec14 (8, 12)
+│
+├───• 5 (1, 6.25)
+│   │
+│   ├───• vec5 (3, 6)
+│   ├───• vec4 (2, 7)
+│   ├───• vec3 (-2, 8)
+│   ├───• vec8 (1, 4)
+│   ├───• vec10 (1, 8)
+│   └───• vec11 (3, 5)
+│
+└───• 4 (0, -0.5)
+    │
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
+
+metrics
+----
+0 successful splits
+0 pending splits/merges

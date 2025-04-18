@@ -653,6 +653,9 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 
 		case "beam-size":
 			s.Options.BaseBeamSize = s.parseInt(arg)
+
+		case "read-only":
+			s.Options.ReadOnly = s.parseFlag(arg)
 		}
 	}
 
