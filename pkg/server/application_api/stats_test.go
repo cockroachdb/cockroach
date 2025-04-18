@@ -7,7 +7,6 @@ package application_api_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -75,6 +75,14 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1)`, 2); err != nil {
 		t.Fatal(err)
 	}
+
+	conn := sqlutils.MakeSQLRunner(sqlDB)
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, 1,
+		sqlstatstestutil.StatementFilter{
+			ExecCount: 2,
+			Query:     "INSERT INTO t.test VALUES (_)",
+		})
+
 	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 	// Ensure that our SQL statement data was not affected by the telemetry report.
@@ -129,6 +137,8 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 		sqlConn.Exec(t, tc.stmt)
 	}
 
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlConn, len(tcs))
+
 	statusServer := s.StatusServer().(serverpb.StatusServer)
 	sqlServer := s.SQLServer().(*sql.Server)
 	sqlServer.GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
@@ -175,6 +185,7 @@ func TestSQLStatCollection(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	obsConn := sqlutils.MakeSQLRunner(srv.SQLConn(t))
 	sqlServer := srv.ApplicationLayer().SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
@@ -191,6 +202,12 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
+
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 3,
+		sqlstatstestutil.StatementFilter{
+			App:       hashedAppName,
+			ExecCount: 5,
+		})
 
 	// Collect stats from the SQL server and ensure our queries are present.
 	stats, err := sqlServer.GetScrubbedStmtStats(ctx)
@@ -245,6 +262,12 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (5);`)
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (6);`)
 	sqlRunner.Exec(t, `CREATE USER us WITH PASSWORD 'pass';`)
+
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 2,
+		sqlstatstestutil.StatementFilter{
+			App:       hashedAppName,
+			ExecCount: 4,
+		})
 
 	// Find and record the stats for our second query.
 	stats, err = sqlServer.GetScrubbedStmtStats(ctx)
@@ -305,15 +328,6 @@ func TestSQLStatCollection(t *testing.T) {
 	}
 }
 
-func populateStats(t *testing.T, sqlDB *gosql.DB) {
-	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlRunner.Exec(t, `CREATE DATABASE t;`)
-	sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
-	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
-	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
-	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
-}
-
 func TestClusterResetSQLStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -335,9 +349,13 @@ func TestClusterResetSQLStats(t *testing.T) {
 			gateway := testCluster.Server(1 /* idx */).ApplicationLayer()
 			status := gateway.StatusServer().(serverpb.SQLStatusServer)
 
-			sqlDB := gateway.SQLConn(t)
+			sqlRunner := sqlutils.MakeSQLRunner(gateway.SQLConn(t))
+			sqlRunner.Exec(t, `CREATE DATABASE t;`)
+			sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (2);`)
+			sqlRunner.Exec(t, `INSERT INTO t.test VALUES (3);`)
 
-			populateStats(t, sqlDB)
 			if flushed {
 				gateway.SQLServer().(*sql.Server).
 					GetSQLStatsProvider().MaybeFlush(ctx, gateway.AppStopper())
@@ -407,6 +425,9 @@ func TestScrubbedReportingStatsLimit(t *testing.T) {
 	sqlRunner.Exec(t, `UPDATE t.test SET x=5 WHERE x=1`)
 	sqlRunner.Exec(t, `SELECT * FROM t.test`)
 	sqlRunner.Exec(t, `DELETE FROM t.test WHERE x=5`)
+
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlRunner, 6,
+		sqlstatstestutil.StatementFilter{App: hashedAppName})
 
 	// verify that with low limit, number of stats is within that limit
 	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
