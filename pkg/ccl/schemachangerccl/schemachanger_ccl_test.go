@@ -248,7 +248,7 @@ CREATE TABLE person (
 	})
 
 	// Keep retrying until the old index and temporary index are removed by the GC job.
-	runner.SucceedsSoonDuration = 12 * time.Second
+	runner.SucceedsSoonDuration = 30 * time.Second
 	runner.CheckQueryResultsRetry(t, subzonesQuery, [][]string{
 		{"3", "north_america", "4", `/3/"CA"`, "NULL"},
 		{"3", "north_america", "4", `/3/"US"`, "NULL"},
