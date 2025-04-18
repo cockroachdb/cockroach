@@ -1511,7 +1511,7 @@ func (r *Replica) tick(
 	postTickStatus := r.mu.internalRaftGroup.BasicStatus()
 
 	// Refresh the unavailability state on the leaderlessWatcher.
-	r.LeaderlessWatcher.refreshUnavailableState(
+	r.LeaderlessWatcher.refreshUnavailableStateReplicaMuRLocked(
 		ctx, postTickStatus.Lead, nowPhysicalTime, r.store.cfg.Settings,
 	)
 
