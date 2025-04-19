@@ -1065,12 +1065,23 @@ func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfi
 	hostName := u.Hostname()
 	// saslUser="$ConnectionString"
 	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
-	sharedAccessKeyName := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	var sharedAccessKeyName string
+	sharedAccessKeyName = u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	// Param wasn't consumed trying to consume it by camel case name
+	if sharedAccessKeyName == `` {
+		sharedAccessKeyName = u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyNameCamel)
+	}
 	if sharedAccessKeyName == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
 	}
-	sharedAccessKey := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
+
+	var sharedAccessKey string
+	sharedAccessKey = u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
+	// Param wasn't consumed trying to consume it by camel case name
+	if sharedAccessKey == `` {
+		sharedAccessKey = u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyCamel)
+	}
 	if sharedAccessKey == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
