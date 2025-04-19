@@ -249,7 +249,8 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 	}
 
 	var err error
-	m.index, err = cspann.NewIndex(ctx, m.store, quantizer, seed, &m.options, m.stopper)
+	const readOnly = false
+	m.index, err = cspann.NewIndex(ctx, m.store, quantizer, seed, &m.options, m.stopper, readOnly)
 	m.index.Fixups().OnSuccessfulSplit(func() {
 		m.successfulSplits.Add(1)
 	})

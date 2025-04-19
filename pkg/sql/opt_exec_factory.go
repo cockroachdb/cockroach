@@ -1865,7 +1865,9 @@ func (ef *execFactory) ConstructVectorSearch(
 
 	// Encode the prefix constraint as a list of roachpb.Keys.
 	var sb span.Builder
-	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb.InitAllowingExternalRowData(
+		ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc,
+	)
 	prefixKeys, err := sb.KeysFromVectorPrefixConstraint(ef.ctx, prefixConstraint)
 	if err != nil {
 		return nil, err

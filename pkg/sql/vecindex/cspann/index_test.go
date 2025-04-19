@@ -638,6 +638,7 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
 	}
+	var readOnly bool
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "min-partition-size":
@@ -654,13 +655,18 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 
 		case "beam-size":
 			s.Options.BaseBeamSize = s.parseInt(arg)
+
+		case "read-only":
+			readOnly = s.parseFlag(arg)
 		}
 	}
 
 	const seed = 42
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed)
 	s.MemStore = memstore.New(s.Quantizer, seed)
-	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper)
+	s.Index, err = cspann.NewIndex(
+		s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper, readOnly,
+	)
 	require.NoError(s.T, err)
 
 	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
@@ -888,11 +894,14 @@ func TestRandomizeVector(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	const readOnly = false
 	const dims = 97
 	const count = 5
 	quantizer := quantize.NewRaBitQuantizer(dims, 46)
 	inMemStore := memstore.New(quantizer, 42)
-	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
+	index, err := cspann.NewIndex(
+		ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper, readOnly,
+	)
 	require.NoError(t, err)
 
 	// Generate random vectors with exponentially increasing norms, in order
@@ -968,10 +977,11 @@ func TestIndexConcurrency(t *testing.T) {
 			BaseBeamSize:     2,
 			QualitySamples:   4,
 		}
+		const readOnly = false
 		seed := int64(i)
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
 		store := memstore.New(quantizer, seed)
-		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
+		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper, readOnly)
 		require.NoError(t, err)
 
 		buildIndex(ctx, t, store, index, vectors, primaryKeys)

@@ -182,12 +182,13 @@ type Index struct {
 // NewIndex constructs a new vector index instance. Typically, only one Index
 // instance should be created for each index in the process.
 //
-// NOTE: It's important that the index is always initialized with the same seed,
+// * It's important that the index is always initialized with the same seed,
 // first at the time of creation and then every time it's used.
-//
-// NOTE: If "stopper" is not nil, then the index will start a background
+// * If "stopper" is not nil, then the index will start a background
 // goroutine to process index fixups. When the index is no longer needed, the
 // caller must call Close to shut down the background goroutine.
+// * If "readOnly" is true, then the index will not perform any fixups, nor will
+// it update global statistics.
 func NewIndex(
 	ctx context.Context,
 	store Store,
@@ -195,6 +196,7 @@ func NewIndex(
 	seed int64,
 	options *IndexOptions,
 	stopper *stop.Stopper,
+	readOnly bool,
 ) (*Index, error) {
 	vi := &Index{
 		options:       *options,
@@ -267,9 +269,9 @@ func NewIndex(
 		// Default to a max of one worker per processor.
 		vi.options.MaxWorkers = runtime.GOMAXPROCS(-1)
 	}
-	vi.fixups.Init(ctx, stopper, vi, fixupSeed)
+	vi.fixups.Init(ctx, stopper, vi, fixupSeed, readOnly)
 
-	if err := vi.stats.Init(ctx, store.MergeStats); err != nil {
+	if err := vi.stats.Init(ctx, store.MergeStats, readOnly); err != nil {
 		return nil, err
 	}
 
