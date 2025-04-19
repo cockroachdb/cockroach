@@ -121,8 +121,9 @@ func TestVecindexConcurrency(t *testing.T) {
 		// Query for a vector while inserts happen in the background.
 		if insertCount.Load() > 0 {
 			var id int
+			vec := vectors.At(vecOffset % vectors.Count)
 			row := runner.QueryRow(t,
-				`SELECT id FROM t ORDER BY v <-> $1 LIMIT 1`, vectors.At(vecOffset).String())
+				`SELECT id FROM t ORDER BY v <-> $1 LIMIT 1`, vec.String())
 			row.Scan(&id)
 			vecOffset++
 		}
