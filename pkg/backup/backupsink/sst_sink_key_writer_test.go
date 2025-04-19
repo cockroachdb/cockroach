@@ -481,6 +481,48 @@ func TestEnforceFileSSTSinkAssumeNotMidRow(t *testing.T) {
 	})
 }
 
+func TestSSTSinkWriterSafeAgainstKeyMutation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	sink, _ := sstSinkKeyWriterTestSetup(t, st, execinfrapb.ElidePrefix_TenantAndTable)
+	defer func() {
+		require.NoError(t, sink.Close())
+	}()
+
+	mutateSpan := func(span *roachpb.Span) {
+		span.Key = append(span.Key[:0], make([]byte, len(span.Key))...)
+		span.EndKey = append(span.EndKey[:0], make([]byte, len(span.EndKey))...)
+	}
+
+	t.Run("safe on reset on new span", func(t *testing.T) {
+		keySet := newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}})
+		require.NoError(t, sink.Reset(ctx, keySet.span))
+		require.Len(t, sink.flushedFiles, 1)
+		originalSpan := sink.flushedFiles[0].Span.Clone()
+		mutateSpan(&keySet.span)
+		require.Equal(t, originalSpan, sink.flushedFiles[0].Span)
+		require.NoError(t, sink.Flush(ctx))
+	})
+
+	t.Run("safe on reset on extending span", func(t *testing.T) {
+		keySet := newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}})
+		extendingSet := newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}})
+		require.NoError(t, sink.Reset(ctx, keySet.span))
+		require.NoError(t, sink.WriteKey(ctx, keySet.kvs[0].key, keySet.kvs[0].value))
+		sink.AssumeNotMidRow()
+
+		require.NoError(t, sink.Reset(ctx, extendingSet.span))
+		require.Len(t, sink.flushedFiles, 1)
+		originalSpan := sink.flushedFiles[0].Span.Clone()
+		mutateSpan(&extendingSet.span)
+		require.Equal(t, originalSpan, sink.flushedFiles[0].Span)
+		require.NoError(t, sink.Flush(ctx))
+	})
+}
+
 func sstSinkKeyWriterTestSetup(
 	t *testing.T, settings *cluster.Settings, elideMode execinfrapb.ElidePrefix,
 ) (*SSTSinkKeyWriter, cloud.ExternalStorage) {
