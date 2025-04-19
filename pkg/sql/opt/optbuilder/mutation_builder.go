@@ -1218,6 +1218,9 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(op opt.Operator) {
 func (mb *mutationBuilder) buildVectorMutationSearch(
 	input memo.RelExpr, index cat.Index, partitionCol, quantizedVecCol opt.ColumnID, isIndexPut bool,
 ) memo.RelExpr {
+	if index.IsTemporaryIndexForBackfill() {
+		panic(unimplemented.NewWithIssue(144443, "Cannot write to a vector index while it is being built"))
+	}
 	getCol := func(colOrd int) (colID opt.ColumnID) {
 		// Check in turn if the column is being upserted, inserted, updated, or
 		// fetched.
