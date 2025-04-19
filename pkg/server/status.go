@@ -7,7 +7,6 @@ package server
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
@@ -20,7 +19,6 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -3055,10 +3053,6 @@ func (s *systemStatusServer) localHotRanges(
 		return nil, err
 	}
 
-	// sort the slices by cpu
-	slices.SortFunc(resp.Ranges, func(a, b *serverpb.HotRangesResponseV2_HotRange) int {
-		return cmp.Compare(a.CPUTimePerSecond, b.CPUTimePerSecond)
-	})
 	// truncate the response if localLimit is set
 	if localLimit != 0 && localLimit < len(resp.Ranges) {
 		resp.Ranges = resp.Ranges[:localLimit]
