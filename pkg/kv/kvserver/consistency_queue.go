@@ -27,7 +27,6 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
 	24*time.Hour,
-	settings.NonNegativeDuration,
 )
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(

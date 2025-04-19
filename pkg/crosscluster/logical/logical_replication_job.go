@@ -57,8 +57,7 @@ var (
 		settings.ApplicationLevel,
 		"logical_replication.consumer.job_checkpoint_frequency",
 		"controls the frequency with which the job updates their progress; if 0, disabled",
-		10*time.Second,
-		settings.NonNegativeDuration)
+		10*time.Second)
 
 	// heartbeatFrequency controls frequency the stream replication
 	// destination cluster sends heartbeat to the source cluster to keep
@@ -69,7 +68,6 @@ var (
 		"controls frequency the stream replication destination cluster sends heartbeat "+
 			"to the source cluster to keep the stream alive",
 		30*time.Second,
-		settings.NonNegativeDuration,
 	)
 )
 

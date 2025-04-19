@@ -35,7 +35,6 @@ var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
 	"the duration allowed for a single node to return span stats data before"+
 		" the request is cancelled; if set to 0, there is no timeout",
 	time.Minute,
-	settings.NonNegativeDuration,
 )
 
 const defaultRangeStatsBatchLimit = 100

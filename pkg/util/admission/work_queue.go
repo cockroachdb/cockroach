@@ -130,43 +130,30 @@ var epochLIFOEpochDuration = settings.RegisterDurationSetting(
 	"admission.epoch_lifo.epoch_duration",
 	"the duration of an epoch, for epoch-LIFO admission control ordering",
 	epochLength,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: epoch duration is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_closing_delta_duration",
 	"the delta duration before closing an epoch, for epoch-LIFO admission control ordering",
 	epochClosingDelta,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: epoch closing delta is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo",
 	"the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering",
 	maxQueueDelayToSwitchToLifo,
-	settings.WithValidateDuration(func(v time.Duration) error {
-		if v < time.Millisecond {
-			return errors.Errorf("epoch-LIFO: queue delay threshold is too small")
-		}
-		return nil
-	}), settings.WithPublic)
+	settings.DurationWithMinimum(time.Millisecond),
+	settings.WithPublic)
 
 var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"admission.replication_control.range_sequencer_gc_threshold",
 	"the inactive duration for a range sequencer after it's garbage collected",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 // WorkInfo provides information that is used to order work within an WorkQueue.

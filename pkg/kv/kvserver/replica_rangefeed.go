@@ -55,7 +55,6 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	3*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -69,7 +68,6 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
 	1*time.Millisecond,
-	settings.NonNegativeDuration,
 )
 
 // RangeFeedUseScheduler controls type of rangefeed processor is used to process

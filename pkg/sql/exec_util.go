@@ -274,7 +274,8 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 		"note that enabling this may have a negative performance impact; "+
 		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
 		"because it applies to all statements within a transaction as well as "+
-		"client communication (e.g. retries)", 0,
+		"client communication (e.g. retries)",
+	0,
 	settings.WithPublic)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -459,7 +460,6 @@ var clusterStatementTimeout = settings.RegisterDurationSetting(
 		"duration a query is permitted to run before it is canceled; if set to 0, "+
 		"there is no timeout",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterLockTimeout = settings.RegisterDurationSetting(
@@ -471,7 +471,6 @@ var clusterLockTimeout = settings.RegisterDurationSetting(
 		"a lock on a key or while blocking on an existing lock in order to "+
 		"perform a non-locking read on a key; if set to 0, there is no timeout",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
@@ -482,7 +481,6 @@ var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 		"duration a session is permitted to idle before the session is terminated; "+
 		"if set to 0, there is no timeout",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
@@ -492,7 +490,6 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 		"duration a session is permitted to idle in a transaction before the "+
 		"session is terminated; if set to 0, there is no timeout",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // TODO(rytaft): remove this once unique without index constraints are fully
