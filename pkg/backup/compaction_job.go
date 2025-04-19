@@ -84,6 +84,8 @@ func maybeStartCompactionJob(
 		return 0, errors.New("custom incremental storage location not supported for compaction")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
+	case len(triggerJob.URIsByLocalityKV) != 0:
+		return 0, errors.New("locality aware backups not supported for compaction")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
