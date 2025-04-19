@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------
 # Search tree with multiple partitions and duplicate data.
 # ----------------------------------------------------------------------
-new-index dims=2 min-partition-size=1 max-partition-size=4 beam-size=2
+new-index dims=2 min-partition-size=1 max-partition-size=4 beam-size=1
 vec1: (1, 2)
 vec2: (7, 4)
 vec3: (4, 3)
@@ -67,6 +67,12 @@ search-for-delete
 vec100: (1, 2)
 ----
 vec100: vector not found
+
+# Search for vector with wrong value, which forces internal retry.
+search-for-delete
+vec1:(0, 9)
+----
+vec1: partition 7
 
 # Search for duplicate vector.
 search-for-delete
