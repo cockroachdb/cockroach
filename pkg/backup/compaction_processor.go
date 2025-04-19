@@ -395,6 +395,9 @@ func compactSpanEntry(
 ) error {
 	defer sstIter.cleanup()
 	entry := sstIter.entry
+	if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
+		return err
+	}
 	prefix, err := backupsink.ElidedPrefix(entry.Span.Key, entry.ElidedPrefix)
 	if err != nil {
 		return err
