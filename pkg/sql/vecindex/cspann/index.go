@@ -578,8 +578,8 @@ type updateFunc func(ctx context.Context, idxCtx *Context, result *SearchResult)
 func (vi *Index) searchForUpdateHelper(
 	ctx context.Context, idxCtx *Context, fn updateFunc, deleteKey KeyBytes,
 ) (*SearchResult, error) {
-	const maxInsertAttempts = 16;
-	const maxDeleteAttempts = 3;
+	const maxInsertAttempts = 16
+	const maxDeleteAttempts = 3
 	var maxAttempts int
 
 	idxCtx.tempSearchSet.Clear()
@@ -1047,8 +1047,12 @@ func ensureSliceCap[T any](s []T, c int) []T {
 // ensureSliceLen returns a slice of the given length and generic type. If the
 // existing slice has enough capacity, that slice is returned after adjusting
 // its length. Otherwise, a new, larger slice is allocated.
+// NOTE: Every element of the new slice is uninitialized; callers are
+// responsible for initializing the memory.
 func ensureSliceLen[T any](s []T, l int) []T {
-	if cap(s) < l {
+	// In test builds, always allocate new memory, to catch bugs where callers
+	// assume existing slice elements will be copied.
+	if cap(s) < l || buildutil.CrdbTestBuild {
 		return make([]T, l)
 	}
 	return s[:l]
