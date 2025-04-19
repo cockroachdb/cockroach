@@ -322,8 +322,13 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 					break
 				}
 				// It is possible for the search not to find the target index entry, in
-				// which case the result is nil.
-				partitionKey = v.searcher.PartitionKey()
+				// which case the result is nil. In this case, we leave the partition key
+				// as NULL to signal to rowenc that we didn't find a partition key, but that
+				// it's okay since it's expected that this can happen due to fixups moving
+				// vector index entries around.
+				if v.searcher.PartitionKey() != nil {
+					partitionKey = v.searcher.PartitionKey()
+				}
 			}
 		}
 		row = append(row, rowenc.DatumToEncDatum(types.Int, partitionKey))
