@@ -1222,12 +1222,6 @@ func (ds *DistSender) Send(
 		splitET = true
 	}
 	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
-	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
-		// We already verified above that the batch contains only scan requests of the same type.
-		// Such a batch should never need splitting.
-		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting",
-			redact.Safe(ba.MaxSpanRequestKeys), redact.Safe(ba.TargetBytes))
-	}
 	var singleRplChunk [1]*kvpb.BatchResponse
 	rplChunks := singleRplChunk[:0:1]
 
