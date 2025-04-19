@@ -946,7 +946,7 @@ func TestIndexConcurrency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// Load features.
-	features := testutils.LoadFeatures(t, 1000)
+	features := testutils.LoadFeatures(t, 2000)
 
 	// Trim feature dimensions from 512 to 4, in order to make the test run
 	// faster and hit more interesting concurrency combinations.
@@ -962,6 +962,8 @@ func TestIndexConcurrency(t *testing.T) {
 	for i := range 10 {
 		log.Infof(ctx, "iteration %d", i)
 
+		// Set small partition size and beam size to trigger frequent splits and
+		// merges.
 		options := cspann.IndexOptions{
 			MinPartitionSize: 2,
 			MaxPartitionSize: 8,
@@ -974,10 +976,10 @@ func TestIndexConcurrency(t *testing.T) {
 		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
 		require.NoError(t, err)
 
-		buildIndex(ctx, t, store, index, vectors, primaryKeys)
+		expected := buildIndex(ctx, t, store, index, vectors, primaryKeys)
 
 		vectorCount := validateIndex(ctx, t, store)
-		require.Equal(t, vectors.Count, vectorCount)
+		require.Equal(t, expected, vectorCount)
 
 		index.Close()
 	}
@@ -990,11 +992,11 @@ func buildIndex(
 	index *cspann.Index,
 	vectors vector.Set,
 	primaryKeys []cspann.KeyBytes,
-) {
-	var insertCount atomic.Uint64
+) int {
+	var insertCount, deleteCount atomic.Uint64
 
 	// Insert block of vectors within the scope of a transaction.
-	insertBlock := func(idxCtx *cspann.Context, start, end int) {
+	insertVectors := func(idxCtx *cspann.Context, start, end int) {
 		for i := start; i < end; i++ {
 			commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 				idxCtx.Init(txn)
@@ -1006,7 +1008,17 @@ func buildIndex(
 		}
 	}
 
-	// Insert vectors into the store on multiple goroutines.
+	deleteVector := func(idxCtx *cspann.Context, vec vector.T, key cspann.KeyBytes) {
+		commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
+			idxCtx.Init(txn)
+			require.NoError(t, index.Delete(ctx, idxCtx, nil /* treeKey */, vec, key))
+			store.DeleteVector(key)
+		})
+		deleteCount.Add(1)
+	}
+
+	// Insert vectors into the store on multiple goroutines. Delete the first
+	// vector in each block.
 	var wait sync.WaitGroup
 	procs := runtime.GOMAXPROCS(-1)
 	countPerProc := (vectors.Count + procs) / procs
@@ -1021,10 +1033,16 @@ func buildIndex(
 			// block of vectors. Run any pending fixups after each block.
 			var idxCtx cspann.Context
 			for j := start; j < end; j += blockSize {
-				insertBlock(&idxCtx, j, min(j+blockSize, end))
+				insertVectors(&idxCtx, j, min(j+blockSize, end))
+				deleteVector(&idxCtx, vectors.At(j), primaryKeys[j])
 				index.ProcessFixups()
 			}
 		}(i, end)
+	}
+
+	logProgress := func() {
+		log.Infof(ctx, "%d vectors inserted, %d vectors deleted",
+			insertCount.Load(), deleteCount.Load())
 	}
 
 	info := log.Every(time.Second)
@@ -1032,7 +1050,7 @@ func buildIndex(
 		time.Sleep(10 * time.Millisecond)
 
 		if info.ShouldLog() {
-			log.Infof(ctx, "%d vectors inserted", insertCount.Load())
+			logProgress()
 		}
 
 		// Fail on foreground goroutine if any background goroutines failed.
@@ -1046,7 +1064,9 @@ func buildIndex(
 	// Process any remaining fixups.
 	index.ProcessFixups()
 
-	log.Infof(ctx, "%d vectors inserted", vectors.Count)
+	logProgress()
+
+	return int(insertCount.Load() - deleteCount.Load())
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
@@ -1083,15 +1103,13 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 				refs := make([]cspann.VectorWithKey, len(childKeys))
 				for i := range childKeys {
 					refs[i].Key = childKeys[i]
-					deDup.TryAdd(childKeys[i])
 				}
 				err := txn.GetFullVectors(ctx, treeKey, refs)
 				require.NoError(t, err)
 				for i := range refs {
-					if refs[i].Vector == nil {
-						panic("vector is nil")
+					if refs[i].Vector != nil {
+						deDup.TryAdd(refs[i].Key)
 					}
-					require.NotNil(t, refs[i].Vector)
 				}
 			})
 
