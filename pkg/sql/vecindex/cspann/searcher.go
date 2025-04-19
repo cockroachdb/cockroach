@@ -72,7 +72,7 @@ func (s *searcher) Init(idx *Index, idxCtx *Context, searchSet *SearchSet) {
 func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 	if len(s.levels) == 0 {
 		s.levels = ensureSliceLen(s.levels, 1)
-		root := &s.levels[0]
+		root := &s.levelStorage[0]
 		root.Init(s.idx, s.idxCtx, nil /* parent */, &s.searchSet.Stats)
 
 		// Return enough search results to ensure that:
@@ -105,6 +105,7 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 		// Set up remainder of searchers now that we know the root's level.
 		n := int(root.Level()-s.idxCtx.level) + 1
 		s.levels = ensureSliceLen(s.levels, n)
+		s.levels[0] = *root
 		for i := 1; i < n; i++ {
 			var maxResults, maxExtraResults int
 			var matchKey KeyBytes
@@ -238,6 +239,9 @@ func (s *levelSearcher) Init(
 		searchSet: s.searchSet, // Preserve existing searchSet memory.
 	}
 	if parent != nil {
+		if parent.Level() == InvalidLevel {
+			panic(errors.AssertionFailedf("parent level cannot be InvalidLevel"))
+		}
 		s.level = parent.Level() - 1
 	}
 
@@ -293,17 +297,28 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 	// overlap with the previous batch, in terms of ordering and duplicates.
 	s.searchSet.Clear()
 
-	if firstBatch || len(s.parentResults) < s.beamSize {
-		// Get more results from parent to fetch the next batch of child results.
+	if firstBatch {
+		ok, err := s.parent.NextBatch(ctx)
+		if err != nil || !ok {
+			return ok, err
+		}
+		s.parentResults = s.parent.SearchSet().PopResults()
+	} else if len(s.parentResults) < s.beamSize {
+		// Get more results from parent to try and fill the beam size.
 		parentResults := s.parent.SearchSet().PopResults()
 		if len(parentResults) == 0 {
 			// Get next batch of results from parent.
 			ok, err := s.parent.NextBatch(ctx)
-			if err != nil || !ok {
-				return ok, err
+			if err != nil {
+				return false, err
 			}
-			s.parentResults = s.parent.SearchSet().PopResults()
-		} else if len(s.parentResults) == 0 {
+			if !ok && len(s.parentResults) == 0 {
+				// Only exit if there are no more results to process.
+				return false, nil
+			}
+			parentResults = s.parent.SearchSet().PopResults()
+		}
+		if len(s.parentResults) == 0 {
 			s.parentResults = parentResults
 		} else {
 			s.parentResults = append(s.parentResults, parentResults...)
@@ -405,7 +420,10 @@ func (s *levelSearcher) searchChildPartitions(
 		s.stats.SearchedPartition(level, count)
 
 		// If searching for vector to delete, skip partitions that are in a state
-		// that does not allow add and remove operations.
+		// that does not allow add and remove operations. This is not possible to
+		// do here for the insert case, because we do not actually search the
+		// partition in which to insert; we only search its parent and never get
+		// the metadata for the insert partition itself.
 		// TODO(andyk): This should probably be checked in the Store, perhaps by
 		// passing a "forUpdate" parameter to SearchPartitions, so that the Store
 		// doesn't even add vectors from partitions that do not allow updates.
