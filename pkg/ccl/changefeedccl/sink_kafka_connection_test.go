@@ -471,6 +471,11 @@ func TestAzureKafkaDefaults(t *testing.T) {
 			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?shared_access_key_name=saspolicyhistory&shared_access_key=q%2BSecretRedacted%3D",
 			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
 		},
+		{
+			name:     "test camel case to snake case param names fallback",
+			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?SharedAccessKeyName=saspolicyhistory&SharedAccessKey=q%2BSecretRedacted%3D",
+			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
+		},
 	}
 	t.Run("sarama", func(t *testing.T) {
 		for _, tc := range cases {
