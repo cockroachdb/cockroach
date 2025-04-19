@@ -52,6 +52,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
@@ -65,6 +66,7 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/rowenc",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",

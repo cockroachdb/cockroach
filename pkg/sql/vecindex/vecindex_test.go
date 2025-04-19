@@ -16,9 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -116,4 +121,82 @@ func buildIndex(
 	}
 
 	wait.Wait()
+}
+
+// TestVecindexDeletion tests that rows can be properly deleted from a vector index.
+func TestVecindexDeletion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	// Enable vector indexes.
+	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
+	// Construct the table.
+	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")
+
+	// Load a small set of vectors for testing.
+	vectors := testutils.LoadFeatures(t, 10)
+
+	// Insert the vectors.
+	for i := 0; i < vectors.Count; i++ {
+		runner.Exec(t, "INSERT INTO t (id, v) VALUES ($1, $2)", i, vectors.At(i).String())
+	}
+
+	// Verify the vectors were inserted.
+	var count int
+	runner.QueryRow(t, "SELECT count(*) FROM t").Scan(&count)
+	if count != vectors.Count {
+		t.Errorf("expected %d rows, got %d", vectors.Count, count)
+	}
+
+	// Get the table descriptor to find the vector index ID.
+	var tableID uint32
+	runner.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
+
+	// Get the index ID from crdb_internal.table_indexes
+	var indexID uint32
+	runner.QueryRow(t, "SELECT index_id FROM crdb_internal.table_indexes WHERE descriptor_id = $1 AND index_name = 't_v_idx'", tableID).Scan(&indexID)
+	if indexID == 0 {
+		t.Fatal("vector index not found")
+	}
+
+	// Start a KV transaction to manually delete the vector index keys.
+	db := srv.DB()
+	txn := db.NewTxn(ctx, "delete-vector-index-keys")
+
+	// Delete all vector index keys for the table.
+	codec := srv.ApplicationLayer().Codec()
+	prefix := rowenc.MakeIndexKeyPrefix(codec, descpb.ID(tableID), descpb.IndexID(indexID))
+	prefix = vecencoding.EncodePartitionKey(prefix, cspann.RootKey)
+	prefix = vecencoding.EncodePartitionLevel(prefix, cspann.LeafLevel)
+	key := roachpb.Key(prefix)
+	if _, err := txn.DelRange(ctx, key.Next(), key.PrefixEnd(), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete rows one at a time and verify the count after each deletion.
+	for i := 0; i < vectors.Count; i++ {
+		runner.Exec(t, "DELETE FROM t WHERE id = $1", i)
+
+		// Verify the count after each deletion
+		runner.QueryRow(t, "SELECT count(*) FROM t").Scan(&count)
+		expectedCount := vectors.Count - (i + 1)
+		if count != expectedCount {
+			t.Errorf("after deleting id %d: expected %d rows, got %d", i, expectedCount, count)
+		}
+	}
+
+	// Final verification that table is empty
+	runner.QueryRow(t, "SELECT count(*) FROM t").Scan(&count)
+	if count != 0 {
+		t.Errorf("expected 0 rows after all deletions, got %d", count)
+	}
 }
