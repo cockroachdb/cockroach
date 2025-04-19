@@ -97,7 +97,6 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 		"one which is underreplicated or has a replica on a decommissioning store, "+
 		"disabled when set to 0",
 	0,
-	settings.NonNegativeDuration,
 )
 
 var (

@@ -38,7 +38,6 @@ var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithName("sql.distsql.flow_stream.timeout"),
 )
 

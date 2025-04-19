@@ -56,7 +56,6 @@ var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 	"sql.insights.anomaly_detection.latency_threshold",
 	"statements must surpass this threshold to trigger anomaly detection and identification",
 	50*time.Millisecond,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // AnomalyDetectionMemoryLimit restricts the overall memory available for

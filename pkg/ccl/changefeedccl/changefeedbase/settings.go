@@ -23,7 +23,6 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the table descriptors",
 	1*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // DefaultMinCheckpointFrequency is the default frequency to flush sink.
@@ -53,7 +52,6 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	"changefeed.slow_span_log_threshold",
 	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings",
 	0,
-	settings.NonNegativeDuration,
 )
 
 // IdleTimeout controls how long the changefeed will wait for a new KV being
@@ -63,7 +61,6 @@ var IdleTimeout = settings.RegisterDurationSetting(
 	"changefeed.idle_timeout",
 	"a changefeed will mark itself idle if no changes have been emitted for greater than this duration; if 0, the changefeed will never be marked idle",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithName("changefeed.auto_idle.timeout"),
 )
 
@@ -75,7 +72,6 @@ var SpanCheckpointInterval = settings.RegisterDurationSetting(
 	"interval at which span-level checkpoints will be written; "+
 		"if 0, span-level checkpoints are disabled",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithName("changefeed.span_checkpoint.interval"),
 )
 
@@ -90,7 +86,6 @@ var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 		"to save leading span progress is written; if 0, span-level checkpoints "+
 		"due to lagging spans is disabled",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 	settings.WithName("changefeed.span_checkpoint.lag_threshold"),
 )
@@ -185,7 +180,6 @@ var ResolvedTimestampMinUpdateInterval = settings.RegisterDurationSetting(
 		"updated again; default of 0 means no minimum interval is enforced but "+
 		"updating will still be limited by the average time it takes to checkpoint progress",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 	settings.WithName("changefeed.resolved_timestamp.min_update_interval"),
 )
@@ -227,7 +221,6 @@ var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	"changefeed.protect_timestamp.max_age",
 	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
 	4*24*time.Hour,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
@@ -328,7 +321,7 @@ var UsageMetricsReportingInterval = settings.RegisterDurationSetting(
 	"changefeed.usage.reporting_interval",
 	"the interval at which the changefeed calculates and updates its usage metric",
 	5*time.Minute,
-	settings.PositiveDuration, settings.DurationInRange(2*time.Minute, 50*time.Minute),
+	settings.DurationInRange(2*time.Minute, 50*time.Minute),
 )
 
 // UsageMetricsReportingTimeoutPercent is the percent of
@@ -354,5 +347,4 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	"changefeed.resolved_timestamp.granularity",
 	"the granularity at which changefeed progress are quantized to make tracking more efficient",
 	0,
-	settings.NonNegativeDuration,
 )

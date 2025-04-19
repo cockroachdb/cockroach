@@ -33,12 +33,7 @@ var samplePeriod = settings.RegisterDurationSetting(
 	"scheduler_latency.sample_period",
 	"controls the duration between consecutive scheduler latency samples",
 	100*time.Millisecond,
-	settings.WithValidateDuration(func(period time.Duration) error {
-		if period < time.Millisecond {
-			return fmt.Errorf("minimum sample period is %s, got %s", time.Millisecond, period)
-		}
-		return nil
-	}),
+	settings.DurationWithMinimum(time.Millisecond),
 )
 
 var sampleDuration = settings.RegisterDurationSetting(
@@ -46,12 +41,7 @@ var sampleDuration = settings.RegisterDurationSetting(
 	"scheduler_latency.sample_duration",
 	"controls the duration over which each scheduler latency sample is a measurement over",
 	2500*time.Millisecond,
-	settings.WithValidateDuration(func(duration time.Duration) error {
-		if duration < 100*time.Millisecond {
-			return fmt.Errorf("minimum sample duration is %s, got %s", 100*time.Millisecond, duration)
-		}
-		return nil
-	}),
+	settings.DurationWithMinimum(100*time.Millisecond),
 )
 
 var schedulerLatency = metric.Metadata{

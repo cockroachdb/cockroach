@@ -38,7 +38,6 @@ var traceKVLogFrequency = settings.RegisterDurationSetting(
 	"changefeed.cdcevent.trace_kv.log_frequency",
 	"controls how frequently KVs are logged when KV tracing is enabled",
 	500*time.Millisecond,
-	settings.NonNegativeDuration,
 )
 
 // rowFetcherCache maintains a cache of single table row.Fetchers. Given a key

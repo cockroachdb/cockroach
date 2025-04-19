@@ -45,7 +45,6 @@ var MinimumInterval = settings.RegisterDurationSetting(
 		"flush operation starts within less than the minimum interval, the flush "+
 		"operation will be aborted",
 	0,
-	settings.NonNegativeDuration,
 )
 
 // DiscardInMemoryStatsWhenFlushDisabled is the cluster setting that allows the
@@ -150,5 +149,4 @@ var SQLStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
 	"controls what interval the check is done if the statement and "+
 		"transaction statistics tables have grown past sql.stats.persisted_rows.max",
 	1*time.Hour,
-	settings.NonNegativeDuration,
 )
