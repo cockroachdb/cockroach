@@ -353,6 +353,6 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.ApplicationLevel,
 	"changefeed.resolved_timestamp.granularity",
 	"the granularity at which changefeed progress are quantized to make tracking more efficient",
-	0,
+	time.Duration(metamorphic.ConstantWithTestRange("changefeed.resolved_timestamp.granularity", 10, 0, 20))*time.Second,
 	settings.NonNegativeDuration,
 )
