@@ -741,8 +741,7 @@ func (p *planner) CheckPrivilegeForTableID(
 	return p.CheckPrivilegeForUser(ctx, desc, privilege, p.User())
 }
 
-// LookupTableByID looks up a table, by the given descriptor ID. Based on the
-// CommonLookupFlags, it could use or skip the Collection cache.
+// LookupTableByID looks up a table, by the given descriptor ID.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
@@ -751,6 +750,28 @@ func (p *planner) LookupTableByID(
 		return nil, err
 	}
 	return table, nil
+}
+
+// LookupSchemaByID looks up a schema by the given descriptor ID.
+func (p *planner) LookupSchemaByID(
+	ctx context.Context, schemaID descpb.ID,
+) (catalog.SchemaDescriptor, error) {
+	schema, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Schema(ctx, schemaID)
+	if err != nil {
+		return nil, err
+	}
+	return schema, nil
+}
+
+// LookupDatabaseByID looks up a database by the given descriptor ID.
+func (p *planner) LookupDatabaseByID(
+	ctx context.Context, databaseID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	database, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Database(ctx, databaseID)
+	if err != nil {
+		return nil, err
+	}
+	return database, nil
 }
 
 // SessionData is part of the PlanHookState interface.
