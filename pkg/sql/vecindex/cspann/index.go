@@ -361,19 +361,23 @@ func (vi *Index) Insert(
 
 // Delete attempts to remove a vector from the index, given its value and
 // primary key. This is called within the scope of a transaction so that the
-// index does not appear to change during the delete.
+// index does not appear to change during the delete. It returns true if the
+// vector was removed from the index.
 //
 // NOTE: Delete may not be able to locate the vector in the index, meaning a
 // "dangling vector" reference will be left in the tree. Vector index methods
 // handle this rare case by joining quantized vectors in the tree with their
 // corresponding full vector from the primary index (which cannot "dangle")
 // before returning search results. For details, see Index.getFullVectors.
+//
+// NOTE: Even if the vector is removed, there may still be duplicate dangling
+// instances of the vector still remaining in the index.
 func (vi *Index) Delete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
-) error {
+) (deleted bool, err error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
-		return err
+		return false, err
 	}
 
 	vi.setupDeleteContext(idxCtx, treeKey, vec)
@@ -384,8 +388,8 @@ func (vi *Index) Delete(
 			result.ParentPartitionKey, idxCtx.level, result.ChildKey)
 	}
 
-	_, err := vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key)
-	return err
+	result, err := vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key)
+	return result != nil, err
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -613,11 +617,10 @@ func (vi *Index) searchForUpdateHelper(
 			attempts++
 			ok, err := idxCtx.search.Next(ctx)
 			if err != nil {
-				log.Infof(ctx, "error during update: %v\n", err)
+				log.Infof(ctx, "error during update: %v", err)
 				return nil, errors.Wrapf(err, "searching for partition to update")
 			}
 			if !ok {
-				log.Infof(ctx, "could not find result: %v\n", result)
 				break
 			}
 			continue
@@ -669,6 +672,8 @@ func (vi *Index) searchForUpdateHelper(
 
 	if result == nil {
 		// Inserts are expected to find a partition.
+		// TODO(andyk): Should we make this error retryable server-side and/or by
+		// the user?
 		err := errors.Errorf(
 			"search failed to find a partition (level=%d) that allows inserts", idxCtx.level)
 		return nil, errors.CombineErrors(err, lastError)
