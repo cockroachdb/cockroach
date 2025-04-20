@@ -112,6 +112,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.LinkExternalSstable
 	case *RequestUnion_Excise:
 		return t.Excise
+	case *RequestUnion_FlushLockTable:
+		return t.FlushLockTable
 	default:
 		return nil
 	}
@@ -218,6 +220,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.LinkExternalSstable
 	case *ResponseUnion_Excise:
 		return t.Excise
+	case *ResponseUnion_FlushLockTable:
+		return t.FlushLockTable
 	default:
 		return nil
 	}
@@ -328,6 +332,8 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_LinkExternalSstable{t}
 	case *ExciseRequest:
 		union = &RequestUnion_Excise{t}
+	case *FlushLockTableRequest:
+		union = &RequestUnion_FlushLockTable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
@@ -437,13 +443,15 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_LinkExternalSstable{t}
 	case *ExciseResponse:
 		union = &ResponseUnion_Excise{t}
+	case *FlushLockTableResponse:
+		union = &ResponseUnion_FlushLockTable{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
 
-type reqCounts [50]int32
+type reqCounts [51]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -551,6 +559,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[48]++
 		case *RequestUnion_Excise:
 			counts[49]++
+		case *RequestUnion_FlushLockTable:
+			counts[50]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -609,6 +619,7 @@ var requestNames = []string{
 	"IsSpanEmpty",
 	"LinkExternalSstable",
 	"Excise",
+	"FlushLockTable",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -844,6 +855,10 @@ type exciseResponseAlloc struct {
 	union ResponseUnion_Excise
 	resp  ExciseResponse
 }
+type flushLockTableResponseAlloc struct {
+	union ResponseUnion_FlushLockTable
+	resp  FlushLockTableResponse
+}
 
 func allocBatchResponse(nResps int) *BatchResponse {
 	if nResps <= 1 {
@@ -938,6 +953,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf47 []isSpanEmptyResponseAlloc
 	var buf48 []linkExternalSSTableResponseAlloc
 	var buf49 []exciseResponseAlloc
+	var buf50 []flushLockTableResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1291,6 +1307,13 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf49[0].union.Excise = &buf49[0].resp
 			br.Responses[i].Value = &buf49[0].union
 			buf49 = buf49[1:]
+		case *RequestUnion_FlushLockTable:
+			if buf50 == nil {
+				buf50 = make([]flushLockTableResponseAlloc, counts[50])
+			}
+			buf50[0].union.FlushLockTable = &buf50[0].resp
+			br.Responses[i].Value = &buf50[0].union
+			buf50 = buf50[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1401,6 +1424,8 @@ func CreateRequest(method Method) Request {
 		return &LinkExternalSSTableRequest{}
 	case Excise:
 		return &ExciseRequest{}
+	case FlushLockTable:
+		return &FlushLockTableRequest{}
 	default:
 		panic(fmt.Sprintf("unsupported method: %+v", method))
 	}
