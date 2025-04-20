@@ -13,6 +13,18 @@
 =>
 (InlineWith $binding $input $withPrivate)
 
+# PushFilterIntoWith pushes filters that only reference columns from a With
+# binding into the binding itself. This is especially useful for CTEs with
+# union operations, where the filters can be pushed into both sides of the
+# union to enable index usage.
+[PushFilterIntoWith, Normalize]
+(Select
+    (With $binding:* $input:* $withPrivate:*)
+    $filter:*
+)
+=>
+(PushFilterIntoWith $binding $input $withPrivate (SingletonFilter $filter))
+
 # ApplyLimitToRecursiveCTEScan updates the properties of the recursive with
 # scans in the input of a recursive CTE to reflect a limit that applies to
 # all iterations.
