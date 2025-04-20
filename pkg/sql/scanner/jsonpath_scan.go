@@ -18,7 +18,7 @@ type JSONPathScanner struct {
 // Scan scans the next token and populates its information into lval.
 // This scan function contains rules for jsonpath.
 func (s *JSONPathScanner) Scan(lval ScanSymType) {
-	ch, skipWhiteSpace := s.scanSetup(lval)
+	ch, skipWhiteSpace := s.scanSetup(lval, false /* allowComments */)
 	if skipWhiteSpace {
 		return
 	}

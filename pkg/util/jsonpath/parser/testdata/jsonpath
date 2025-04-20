@@ -471,7 +471,7 @@ $."abc".*."def".* -- normalized!
 parse
 -1
 ----
-(-1) -- normalized!
+-1
 
 parse
 - "hello"
@@ -491,7 +491,7 @@ parse
 parse
 1 + 2 * -4
 ----
-(1 + (2 * (-4))) -- normalized!
+(1 + (2 * -4)) -- normalized!
 
 error
 $ ? (@ like_regex "(invalid pattern")
@@ -599,41 +599,89 @@ $.a.type()
 ----
 $."a".type() -- normalized!
 
-# postgres allows floats as array indexes
-# parse
-# $.abc[1.0]
-# ----
+# Postgres outputs $."abc"[1.0]. This might be a limitation of the apd library.
+parse
+$.abc[1.0]
+----
+$."abc"[1] -- normalized!
 
-# parse
-# $.abc[1.1]
-# ----
+parse
+$.abc[1.1]
+----
+$."abc"[1.1] -- normalized!
 
-# in postgres this becomes $."a"[1000000000]
-# parse
-# $.abc[1e9]
-# ----
+# Postgres outputs $."abc"[1000000000].
+parse
+$.abc[1e9]
+----
+$."abc"[1E+9] -- normalized!
 
-# parse
-# $.abc[0.0]
-# ----
+# Postgres outputs $."abc"[0.0].
+parse
+$.abc[0.0]
+----
+$."abc"[0] -- normalized!
 
-# postgres allows negatives as array indexes
-# parse
-# $.abc[-0]
-# ----
+parse
+$.abc[-0]
+----
+$."abc"[0] -- normalized!
 
-# parse
-# $.abc[-1.99]
-# ----
+parse
+$.abc[-1.99]
+----
+$."abc"[-1.99] -- normalized!
 
-# parse
-# $[1.999999999999999]
-# ----
+parse
+$[1.999999999999999]
+----
+$[1.999999999999999]
+
+parse
+$[null]
+----
+$[null]
+
+parse
++1
+----
+1 -- normalized!
+
+parse
+++1
+----
+1 -- normalized!
+
+parse
++++1
+----
+1 -- normalized!
+
+parse
+- -1
+----
+1 -- normalized!
+
+parse
+- - -1
+----
+-1 -- normalized!
+
+parse
+(1--123).type()
+----
+(1 - -123).type() -- normalized!
+
+parse
+(1-+-123).type()
+----
+(1 - -123).type() -- normalized!
+
+parse
+(1+-+-123).type()
+----
+(1 + 123).type() -- normalized!
 
 # parse
 # $.1a
-# ----
-
-# parse
-# $[null]
 # ----

@@ -21,7 +21,7 @@ type PLpgSQLScanner struct {
 // Scan scans the next token and populates its information into lval.
 // This scan function contains rules for plpgsql.
 func (s *PLpgSQLScanner) Scan(lval ScanSymType) {
-	ch, skipWhiteSpace := s.scanSetup(lval)
+	ch, skipWhiteSpace := s.scanSetup(lval, true /* allowComments */)
 
 	if skipWhiteSpace {
 		return
