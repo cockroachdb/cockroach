@@ -76,7 +76,7 @@ type SecurityContext struct {
 	certnames.Locator
 	security.TLSSettings
 	config                 SecurityContextOptions
-	tenID                  roachpb.TenantID
+	tenantIdentity         roachpb.TenantIdentity
 	capabilitiesAuthorizer tenantcapabilities.Authorizer
 	lazy                   struct {
 		// The certificate manager. Must be accessed through GetCertificateManager.
@@ -93,19 +93,23 @@ type SecurityContext struct {
 func NewSecurityContext(
 	cfg SecurityContextOptions,
 	tlsSettings security.TLSSettings,
-	tenID roachpb.TenantID,
+	tenantIdentity roachpb.TenantIdentity,
 	capabilitiesAuthorizer tenantcapabilities.Authorizer,
 ) *SecurityContext {
-	if tenID.ToUint64() == 0 {
-		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
+	if !tenantIdentity.IsSet() {
+		panic(errors.AssertionFailedf("programming error: tenant identity not defined"))
 	}
 	return &SecurityContext{
 		Locator:                certnames.MakeLocator(cfg.SSLCertsDir),
 		TLSSettings:            tlsSettings,
 		config:                 cfg,
-		tenID:                  tenID,
+		tenantIdentity:         tenantIdentity,
 		capabilitiesAuthorizer: capabilitiesAuthorizer,
 	}
+}
+
+func (ctx *SecurityContext) GetTenantIdentity() roachpb.TenantIdentity {
+	return ctx.tenantIdentity
 }
 
 // GetCertificateManager returns the certificate manager, initializing it
@@ -114,8 +118,8 @@ func NewSecurityContext(
 func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManager, error) {
 	ctx.lazy.certificateManager.Do(func() {
 		var opts []security.Option
-		if !(ctx.useNodeAuth || ctx.tenID == roachpb.SystemTenantID) {
-			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))
+		if !(ctx.useNodeAuth || ctx.tenantIdentity.IsSystem()) {
+			opts = append(opts, security.ForTenant(ctx.tenantIdentity))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
 			security.NewCertificateManager(ctx.config.SSLCertsDir, ctx, opts...)
