@@ -256,7 +256,7 @@ type SQLCounter struct {
 }
 
 var _ metric.Iterable = (*SQLCounter)(nil)
-var _ metric.PrometheusIterable = (*SQLCounter)(nil)
+var _ metric.PrometheusConfigurable = (*SQLCounter)(nil)
 var _ metric.PrometheusExportable = (*SQLCounter)(nil)
 
 // NewSQLCounter constructs a new SQLCounter.
