@@ -223,10 +223,19 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration,
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
-		d.cWID = p.config.wPart.randActive(rng)
-		// Find a cWID != w_id if there's more than 1 configured warehouse.
-		for d.cWID == wID && p.config.activeWarehouses > 1 {
+		if len(p.config.multiRegionCfg.regions) > 0 {
+			// For multi-region configurations, use the multi-region partitioner
+			d.cWID = p.config.wMRPart.randActive(rng)
+			// Find a cWID != w_id if there's more than 1 configured warehouse.
+			for d.cWID == wID && p.config.activeWarehouses > 1 {
+				d.cWID = p.config.wMRPart.randActive(rng)
+			}
+		} else {
 			d.cWID = p.config.wPart.randActive(rng)
+			// Find a cWID != w_id if there's more than 1 configured warehouse.
+			for d.cWID == wID && p.config.activeWarehouses > 1 {
+				d.cWID = p.config.wPart.randActive(rng)
+			}
 		}
 		p.config.auditor.Lock()
 		p.config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
