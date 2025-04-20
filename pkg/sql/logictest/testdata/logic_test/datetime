@@ -567,7 +567,7 @@ SELECT k, extract(element, input::timestamp) = extract_result, date_part(element
 51  true  true  0
 52  true  true  2.457429823996599e+06
 
-query error extract\(\): unsupported timespan: nansecond
+query error unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
 
 query error unknown unit "nanosecond"
@@ -632,7 +632,7 @@ SELECT k, extract(element, input::timestamptz) = extract_result, extract(element
 51  true  0
 52  true  2.457429823996599e+06
 
-query error extract\(\): unsupported timespan: nansecond
+query error unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
 
 query R
@@ -1719,7 +1719,7 @@ infinity  -infinity
 statement ok
 CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 INSERT INTO timestamps VALUES ('tomorrow')
 
 statement ok
@@ -1887,13 +1887,13 @@ SELECT parse_timestamp('01-02-2020 01:02:03', 'postgres')
 query error could not parse
 SELECT parse_timestamp('foo')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('now')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('tomorrow')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('now', 'mdy')
 
 statement error only ISO style is supported
@@ -1929,10 +1929,10 @@ ORDER BY pk
 statement error only ISO style is supported
 SELECT parse_date('01-02-2020 01:02:03', 'postgres')
 
-query error parse_date\(\): relative dates are not supported
+query error relative dates are not supported
 SELECT parse_date('now')
 
-query error parse_date\(\): relative dates are not supported
+query error relative dates are not supported
 SELECT parse_date('tomorrow', 'iso,mdy')
 
 query TTTT
@@ -2042,7 +2042,7 @@ SELECT make_date(-2013, 7, 15)
 make_date
 -2013-07-15 00:00:00 +0000 +0000
 
-statement error pgcode 22008 pq: make_date\(\): year value of 0 is not valid
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_date(0, 11, 11)
 
 subtest end
@@ -2079,7 +2079,7 @@ select make_timestamp(1, 1, 1, 0, 0, 0.1234);
 ----
 0001-01-01 00:00:00.1234 +0000 +0000
 
-statement error pgcode 22008 pq: make_timestamp\(\): year value of 0 is not valid
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
 
 subtest end
@@ -2125,13 +2125,13 @@ select make_timestamptz(2020, 1, 1, 0, 0, 0.1234, 'America/New_York');
 ----
 2020-01-01 00:00:00.1234 -0500 EST
 
-statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
 
-statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
 
-statement error pgcode 22023 pq: make_timestamptz\(\): could not parse "No" as time zone
+statement error pgcode 22023 pq: could not parse "No" as time zone
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
 
 subtest end
@@ -2146,7 +2146,7 @@ SELECT date_trunc('day', '2001-02-16 20:38:40+00'::timestamptz, 'Australia/Sydne
 statement error pgcode 22008 pq: date_trunc\(\): parsing as type timestamp: field month value 0 is out of range
 SELECT date_trunc('day', '0-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney');
 
-statement error pgcode 22023 pq: date_trunc\(\): could not parse "No" as time zone
+statement error pgcode 22023 pq: could not parse "No" as time zone
 SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
 
 subtest end

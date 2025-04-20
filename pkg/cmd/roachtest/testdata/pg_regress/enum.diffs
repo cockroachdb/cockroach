@@ -331,7 +331,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
 - {red,orange,yellow,green,blue,purple}
 -(1 row)
 -
-+ERROR:  enum_range(): both arguments cannot be NULL
++ERROR:  both arguments cannot be NULL
  --
  -- User functions, can't test perl/python etc here since may not be compiled.
  --

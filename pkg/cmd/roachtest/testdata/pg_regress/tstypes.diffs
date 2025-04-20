@@ -19,7 +19,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tstypes.out --lab
 - 'AB\\c' '\\as' 'ab\\\\c' 'ab\\c' 'abc'
 -(1 row)
 -
-+ERROR:  tsvectorout(): unimplemented
++ERROR:  unimplemented
  SELECT '''w'':4A,3B,2C,1D,5 a:8';
         ?column?        
  -----------------------

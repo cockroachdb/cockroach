@@ -174,7 +174,7 @@ SELECT 1
 exec
 SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
 ----
-ERROR: crdb_internal.deserialize_session(): prepared statement "s2" already exists (SQLSTATE 42P05)
+ERROR: prepared statement "s2" already exists (SQLSTATE 42P05)
 
 # Test if the LRU list of prepared statements is preserved during migration.
 
