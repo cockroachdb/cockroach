@@ -3485,7 +3485,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		if ex.executorType == executorTypeExec {
 			// Check if a PCR reader catalog timestamp is set, which
 			// will cause to turn all txns into system time queries.
-			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() {
+			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() { // TODO: This is 0.7% of allocations.
 				return tree.ReadOnly, now, &newTS, nil
 			}
 		}
@@ -3641,12 +3641,12 @@ func (ex *connExecutor) beginImplicitTxn(
 	// an AOST clause. In these cases the clause is evaluated and applied
 	// when the command is evaluated again.
 	noBeginStmt := (*tree.BeginTransaction)(nil)
-	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt) // TODO: This is 1.5% of allocations.
 	if err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
 	return eventStartImplicitTxn,
-		makeEventTxnStartPayload(
+		makeEventTxnStartPayload( // TODO: This is 0.7% of allocations (somewhere in this return expression).
 			ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 			mode,
 			sqlTs,

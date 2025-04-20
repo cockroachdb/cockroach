@@ -259,7 +259,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		}
 
 		txnID = ts.mu.txn.ID()
-		sp.SetTag("txn", attribute.StringValue(txnID.String()))
+		sp.SetTag("txn", attribute.StringValue(txnID.String())) // TODO: ~0.9% of allocations to turn txnID into a string.
 		ts.mu.txnStart = crtime.NowMono()
 		ts.mu.autoRetryCounter = 0
 		ts.mu.autoRetryReason = nil
