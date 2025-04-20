@@ -615,6 +615,8 @@ func TestAllocatorFullDiskError(t *testing.T) {
 		t,
 	)
 
+	//time.Sleep(time.Second)
+
 	result, _, err := a.AllocateVoter(
 		ctx,
 		sp,
@@ -9272,10 +9274,10 @@ func exampleRebalancing(
 	}, nil)
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
-		func(_ string, _ roachpb.Value) { wg.Done() },
-		// Redundant callbacks are required by this test.
-		gossip.Redundant)
+	//g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+	//	func(_ string, _ roachpb.Value) { wg.Done() },
+	//	// Redundant callbacks are required by this test.
+	//	gossip.Redundant)
 
 	// Initialize testStores.
 	initTestStores(
@@ -9298,19 +9300,36 @@ func exampleRebalancing(
 	const generations = 100
 	for i := 0; i < generations; i++ {
 		// First loop through test stores and add data.
-		wg.Add(len(testStores))
+		//wg.Add(len(testStores))
 		for j := 0; j < len(testStores); j++ {
 			// Add a pretend range to the testStore if there's already one.
 			if testStores[j].Capacity.RangeCount > 0 {
 				testStores[j].add(alloc.randGen.Int63n(1<<20), 0)
 			}
-			if err := g.AddInfoProto(
+			if err := g.TestingAddInfoProto(
 				gossip.MakeStoreDescKey(roachpb.StoreID(j)),
 				&testStores[j].StoreDescriptor,
 				0,
+				func() { wg.Add(1) },
+				func(key string, value roachpb.Value) {
+					wg.Done()
+				},
 			); err != nil {
 				panic(err)
 			}
+
+			//for i, storeDesc := range storeDescs {
+			//	if err := sg.g.TestingAddInfoProto(gossip.MakeStoreDescKey(storeIDs[i]), storeDesc, 0, func() {
+			//		sg.group.Add(1)
+			//	}, func(key string, value roachpb.Value) {
+			//		sg.group.Done()
+			//	}); err != nil {
+			//		t.Fatal(err)
+			//	}
+			//}
+			//
+			//sg.group.Wait()
+
 		}
 		wg.Wait()
 
