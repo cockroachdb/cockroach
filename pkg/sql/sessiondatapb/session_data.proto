@@ -17,6 +17,8 @@ import "google/protobuf/duration.proto";
 // required to be propagated to the remote nodes for the correct execution of
 // DistSQL flows.
 message SessionData {
+    option (gogoproto.equal) = true;
+
   // Database indicates the "current" database for the purpose of resolving
   // names.
   string database = 1;
@@ -148,6 +150,8 @@ message SessionData {
 // DataConversionConfig contains the parameters that influence the output
 // of certain data types as strings or bytes.
 message DataConversionConfig {
+    option (gogoproto.equal) = true;
+
   // BytesEncodeFormat indicates how to encode byte arrays when converting to
   // string.
   BytesEncodeFormat bytes_encode_format = 1;
@@ -187,8 +191,11 @@ enum VectorizeExecMode {
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.
 message SequenceState {
+  option (gogoproto.equal) = true;
+
   // Seq represents the last value of one sequence modified by the session.
   message Seq {
+    option (gogoproto.equal) = true;
     uint32 seq_id = 1 [(gogoproto.customname) = "SeqID"];
     int64 latest_val = 2;
   }
