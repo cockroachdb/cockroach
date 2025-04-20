@@ -195,10 +195,13 @@ type leaderlessWatcher struct {
 		// unavailable is set to true if the replica is leaderless for a long time
 		// (longer than ReplicaLeaderlessUnavailableThreshold).
 		unavailable bool
+
+		// err is the error returned when the replica is leaderless for a long time.
+		err error
 	}
 
-	// err is the error returned when the replica is leaderless for a long time.
-	err error
+	// replica is the Replica for which the leaderlessWatcher was created.
+	replica *Replica
 
 	// closedChannel is an already closed channel. Requests will use it to know
 	// that the replica is leaderless, and can be considered unavailable. This
@@ -208,36 +211,108 @@ type leaderlessWatcher struct {
 	closedChannel chan struct{}
 }
 
-// NewLeaderlessWatcher initializes a new leaderlessWatcher with the default
+// newLeaderlessWatcher initializes a new leaderlessWatcher with the default
 // values.
-func NewLeaderlessWatcher(r *Replica) *leaderlessWatcher {
+func newLeaderlessWatcher(r *Replica) *leaderlessWatcher {
 	closedCh := make(chan struct{})
 	close(closedCh)
 	return &leaderlessWatcher{
-		err: r.replicaUnavailableError(
-			errors.Errorf("replica has been leaderless for %s",
-				ReplicaLeaderlessUnavailableThreshold.Get(&r.store.cfg.Settings.SV))),
+		replica:       r,
 		closedChannel: closedCh,
 	}
 }
 
+// Err implements the signaller interface.
 func (lw *leaderlessWatcher) Err() error {
-	return lw.err
+	lw.mu.RLock()
+	defer lw.mu.RUnlock()
+
+	if !lw.mu.unavailable {
+		return errors.AssertionFailedf("should not call Err if the replica isn't unavailable")
+	}
+	return lw.mu.err
 }
 
+// C implements the signaller interface.
 func (lw *leaderlessWatcher) C() <-chan struct{} {
 	return lw.closedChannel
 }
 
+// IsUnavailable returns true if the replica is considered unavailable.
+// Unavailability is defined as being leaderless for a long time, where long is
+// defined by the ReplicaUnavailableThreshold.
 func (lw *leaderlessWatcher) IsUnavailable() bool {
 	lw.mu.RLock()
 	defer lw.mu.RUnlock()
+
+	// The error is set iff the replica is unavailable. Sanity check.
+	if lw.mu.unavailable == (lw.mu.err == nil) {
+		panic("unavailable implies error is set")
+	}
 	return lw.mu.unavailable
+}
+
+// refreshUnavailableState refreshes the unavailable state on the leaderless
+// watcher. Replicas are considered unavailable if they have been leaderless for
+// a long time, where long is defined by the ReplicaUnavailableThreshold.
+func (lw *leaderlessWatcher) refreshUnavailableState(
+	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
+) {
+	lw.mu.Lock()
+	defer lw.mu.Unlock()
+
+	threshold := ReplicaLeaderlessUnavailableThreshold.Get(&st.SV)
+	if threshold == time.Duration(0) {
+		// The leaderless watcher is disabled. It's important to reset the
+		// leaderless watcher when it's disabled to reset any replica that was
+		// marked as unavailable before the watcher was disabled.
+		lw.resetLocked()
+		return
+	}
+
+	if postTickLead != raft.None {
+		// If we know about the leader, reset the leaderless timer, and mark the
+		// replica as available.
+		lw.resetLocked()
+	} else if lw.mu.leaderlessTimestamp.IsZero() {
+		// If we don't know about the leader, and we haven't been leaderless before,
+		// mark the time we became leaderless.
+		lw.mu.leaderlessTimestamp = nowPhysicalTime
+	} else if !lw.mu.unavailable {
+		// At this point we know that we have been leaderless for some time, and we
+		// haven't marked the replica as unavailable yet. Make sure we didn't exceed
+		// the threshold. Otherwise, mark the replica as unavailable.
+		durationSinceLeaderless := nowPhysicalTime.Sub(lw.mu.leaderlessTimestamp)
+		if durationSinceLeaderless >= threshold {
+			err := errors.Errorf("have been leaderless for %.2fs, setting the "+
+				"leaderless watcher replica's state as unavailable",
+				durationSinceLeaderless.Seconds())
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.VEventf(ctx, 1, "%s", err)
+			}
+			lw.mu.unavailable = true
+		}
+		// Now that we're transitioning to being unavailable, construct and cache
+		// the associated error.
+		lw.mu.err = lw.replica.replicaUnavailableError(
+			errors.Errorf("replica has been leaderless for %s",
+				ReplicaLeaderlessUnavailableThreshold.Get(&st.SV)),
+		)
+	}
+}
+
+// TestingRefreshUnavailableState is a wrapper around refreshUnavailableState
+// exposed for testing purposes.
+func (lw *leaderlessWatcher) TestingRefreshUnavailableState(
+	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
+) {
+	lw.refreshUnavailableState(ctx, postTickLead, nowPhysicalTime, st)
 }
 
 func (lw *leaderlessWatcher) resetLocked() {
 	lw.mu.leaderlessTimestamp = time.Time{}
 	lw.mu.unavailable = false
+	lw.mu.err = nil
 }
 
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
