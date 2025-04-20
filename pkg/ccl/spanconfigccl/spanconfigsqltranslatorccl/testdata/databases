@@ -34,16 +34,16 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5
-/Table/11{0-1}                             num_replicas=7
+/Table/10{6-7}                             num_replicas=7 num_voters=5 voter_constraints=[]
+/Table/11{0-1}                             num_replicas=7 voter_constraints=[]
 
 # Translating the tables in the database individually should result in the same
 # config as above.
 
 translate database=db table=t1
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5
+/Table/10{6-7}                             num_replicas=7 num_voters=5 voter_constraints=[]
 
 translate database=db table=t2
 ----
-/Table/11{0-1}                             num_replicas=7
+/Table/11{0-1}                             num_replicas=7 voter_constraints=[]
