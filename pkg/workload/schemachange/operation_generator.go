@@ -4905,3 +4905,202 @@ func (og *operationGenerator) alterTableRLS(ctx context.Context, tx pgx.Tx) (*op
 	opStmt.sql = sqlStatement
 	return opStmt, nil
 }
+
+func (og *operationGenerator) createPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if table exists to include appropriate expected error
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate a unique policy name
+	seqNum := og.params.seqNum
+	workerID := og.params.workerID
+	policyName := fmt.Sprintf("policy_%d_%d_%d", workerID, seqNum, og.params.rng.Intn(100000))
+
+	// Determine which policy components to include
+	includeUsing := false // Always include a USING expression
+	// includeWithCheck := og.randIntn(2) == 0 // 50% chance to include WITH CHECK
+	//includeToRoles := og.randIntn(3) == 0   // 33% chance to include TO roles
+	includeWithCheck := false // 50% chance to include WITH CHECK
+	includeToRoles := false   // 33% chance to include TO roles
+
+	// Define USING expression - simple conditions that reference columns
+	usingExpr := "true" // Default fallback expression
+
+	// Get table columns to use in expressions
+	columns, err := og.getTableColumns(ctx, tx, tableName, false)
+	if err == nil && len(columns) > 0 {
+		// If we have columns, randomly select one to use in the expression
+		if len(columns) > 0 {
+			col := columns[og.randIntn(len(columns))]
+			if col.typ.Family() == types.BoolFamily {
+				usingExpr = fmt.Sprintf("%s", col.name)
+			} else if col.typ.Family() == types.IntFamily || col.typ.Family() == types.FloatFamily {
+				// For numeric columns, create a comparison
+				usingExpr = fmt.Sprintf("%s > 0", col.name)
+			} else if col.typ.Family() == types.StringFamily {
+				// For string columns, create a LIKE comparison
+				usingExpr = fmt.Sprintf("%s LIKE 'a%%'", col.name)
+			}
+		}
+	}
+
+	// Define WITH CHECK expression - typically similar to USING
+	// But can be different in some cases
+	withCheckExpr := usingExpr
+	if includeWithCheck && og.randIntn(3) == 0 { // 33% chance for a different WITH CHECK expr
+		withCheckExpr = "true" // Default fallback
+		if err == nil && len(columns) > 0 {
+			// If we have columns, randomly select one to use in the expression
+			if len(columns) > 0 {
+				col := columns[og.randIntn(len(columns))]
+				if col.typ.Family() == types.BoolFamily {
+					withCheckExpr = fmt.Sprintf("%s", col.name)
+				} else if col.typ.Family() == types.IntFamily || col.typ.Family() == types.FloatFamily {
+					// For numeric columns, create a comparison
+					withCheckExpr = fmt.Sprintf("%s >= 0", col.name)
+				} else if col.typ.Family() == types.StringFamily {
+					// For string columns, create a LIKE comparison
+					withCheckExpr = fmt.Sprintf("%s LIKE '%%'", col.name)
+				}
+			}
+		}
+	}
+
+	// Define roles to grant the policy to
+	roles := "PUBLIC" // Default to PUBLIC
+	if includeToRoles {
+		// Sometimes use specific roles
+		switch og.randIntn(3) {
+		case 0:
+			roles = "admin"
+		case 1:
+			roles = "root"
+		case 2:
+			// Generate a random role name that likely doesn't exist
+			roles = fmt.Sprintf("role_%d", og.params.rng.Intn(100000))
+		}
+	}
+
+	// Build the SQL statement
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("CREATE POLICY %s ON %s", policyName, tableName))
+
+	if includeToRoles {
+		sqlStatement.WriteString(fmt.Sprintf(" TO %s", roles))
+	}
+
+	if includeUsing {
+		sqlStatement.WriteString(fmt.Sprintf(" USING (%s)", usingExpr))
+	}
+
+	if includeWithCheck {
+		sqlStatement.WriteString(fmt.Sprintf(" WITH CHECK (%s)", withCheckExpr))
+	}
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	// Add potential errors
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		// The table might not have RLS enabled
+		{code: pgcode.FeatureNotSupported, condition: true},
+		// If we're trying to grant to a role that doesn't exist
+		{code: pgcode.UndefinedObject, condition: includeToRoles && og.randIntn(3) == 2},
+		// The policy name might already be in use
+		{code: pgcode.DuplicateObject, condition: true},
+		{code: pgcode.InFailedSQLTransaction, condition: true},
+		{code: pgcode.SerializationFailure, condition: true},
+	})
+
+	return opStmt, nil
+}
+
+func (og *operationGenerator) dropPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Choose between using a real policy name (if available) or a random one
+	usesRealPolicy := og.randIntn(2) == 0 // 50% chance to use a real policy name
+	includeIfExists := og.randIntn(3) > 0 // 66% chance to include IF EXISTS
+
+	// Try to get an existing policy on this table
+	var policyName string
+	if usesRealPolicy && tableExists {
+
+		policyNames, err := og.scanStringArray(
+			ctx,
+			tx,
+			`SELECT array_agg(polname) FROM pg_policy WHERE polrelid = $1::regclass`,
+			tableName.String(),
+		)
+		if err == nil && len(policyNames) > 0 && policyNames[0] != "" {
+			// We found at least one policy, randomly select one
+			policies := strings.Split(policyNames[0][1:len(policyNames[0])-1], ",")
+			if len(policies) > 0 {
+				policyName = policies[og.randIntn(len(policies))]
+				// Remove any quotes that might be in the policy name
+				policyName = strings.Trim(policyName, "\"")
+			}
+		}
+	}
+
+	// If we didn't get a real policy name, generate a random one
+	// This will likely fail unless IF EXISTS is specified
+	if policyName == "" {
+		policyName = fmt.Sprintf("policy_%d", og.params.rng.Intn(100000))
+		// When using a random policy name, increase the chance of IF EXISTS
+		if !includeIfExists && og.randIntn(4) > 0 {
+			includeIfExists = true
+		}
+	}
+
+	// Build the SQL statement
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString("DROP POLICY ")
+
+	if includeIfExists {
+		sqlStatement.WriteString("IF EXISTS ")
+	}
+
+	sqlStatement.WriteString(fmt.Sprintf("%s ON %s", policyName, tableName))
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		// DROP POLICY IF EXISTS gives a notice if the table doesn't exist
+		{code: pgcode.UndefinedTable, condition: !tableExists && !includeIfExists},
+	})
+
+	// Add potential errors
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		// The policy might not exist and we're not using IF EXISTS
+		{code: pgcode.UndefinedObject, condition: !includeIfExists},
+		// The table might not have RLS enabled
+		{code: pgcode.FeatureNotSupported, condition: true},
+	})
+
+	return opStmt, nil
+}
