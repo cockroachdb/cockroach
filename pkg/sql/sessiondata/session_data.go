@@ -61,7 +61,7 @@ func (s *SessionData) Clone() *SessionData {
 	// as all the slices/maps does a copy if it mutates OR are operations that
 	// affect the whole SessionDataStack (e.g. setting SequenceState should be the
 	// setting the same value across all copied SessionData).
-	ret := *s
+	ret := *s // TODO: 2% of allocations
 	ret.CustomOptions = newCustomOptions
 	return &ret
 }
@@ -228,8 +228,8 @@ func NewStack(firstElem *SessionData) *Stack {
 
 // Clone clones the current stack.
 func (s *Stack) Clone() *Stack {
-	ret := &Stack{
-		stack: make([]*SessionData, len(s.stack)),
+	ret := &Stack{ // TODO: 2.5% of allocations
+		stack: make([]*SessionData, len(s.stack)), // TODO: 2.5% of allocations.
 	}
 	for i, st := range s.stack {
 		ret.stack[i] = st.Clone()

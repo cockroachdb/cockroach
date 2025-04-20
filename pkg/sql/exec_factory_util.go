@@ -21,7 +21,6 @@ import (
 )
 
 func constructPlan(
-	planner *planner,
 	root exec.Node,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
