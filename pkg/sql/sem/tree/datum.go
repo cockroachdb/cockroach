@@ -96,7 +96,7 @@ var (
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
 
 	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
-	ValidateJSONPath func(string) (*jsonpath.Jsonpath, error)
+	ValidateJSONPath func(string) (*jsonpath.Jsonpath, []string, error)
 
 	// EmptyDJSON is an empty JSON object.
 	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
@@ -3880,10 +3880,11 @@ func (d *DBox2D) Size() uintptr {
 // DJsonpath is the Datum representation of the Jsonpath type.
 type DJsonpath struct {
 	jsonpath.Jsonpath
+	Variables []string
 }
 
-func NewDJsonpath(d jsonpath.Jsonpath) *DJsonpath {
-	return &DJsonpath{Jsonpath: d}
+func NewDJsonpath(d jsonpath.Jsonpath, variables []string) *DJsonpath {
+	return &DJsonpath{Jsonpath: d, Variables: variables}
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -3955,11 +3956,11 @@ func (d *DJsonpath) Format(ctx *FmtCtx) {
 }
 
 func ParseDJsonpath(s string) (Datum, error) {
-	jp, err := ValidateJSONPath(s)
+	jp, vars, err := ValidateJSONPath(s)
 	if err != nil {
 		return nil, MakeParseError(s, types.Jsonpath, err)
 	}
-	return NewDJsonpath(*jp), nil
+	return NewDJsonpath(*jp, vars), nil
 }
 
 // AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and

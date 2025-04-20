@@ -183,7 +183,7 @@ func evalRegexFunc(op jsonpath.Operation, l, _ json.JSON) (jsonpathBool, error) 
 		return jsonpathBoolUnknown, err
 	}
 
-	r, err := parser.ReCache.GetRegexp(regexOp)
+	r, err := parser.ReCache.GetRegexpWithFlags(regexOp, regexOp.Flags)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}

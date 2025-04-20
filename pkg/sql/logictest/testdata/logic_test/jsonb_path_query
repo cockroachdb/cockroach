@@ -1552,3 +1552,117 @@ query T
 SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
 ----
 3
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
+
+query T
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
+----
+{"a": 10}
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $value && @.b > $value)');
+
+# Postgres would outputs min, but we sort the variable names and then check for invalid variables.
+statement error pgcode 42704 pq: could not find jsonpath variable "max"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $min && @.b > $max)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', false);
+
+query T
+SELECT jsonb_path_query('"Hello"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "s"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag "m"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag "q"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag ""');
+----
+true
+
+# Case insensitive and dot matches newline
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "hello.world" flag "is"');
+----
+true
+
+# Case insensitive and multiline
+query T
+SELECT jsonb_path_query('"Line1\nline2"', '$ like_regex "^LINE2$" flag "im"');
+----
+true
+
+# Case insensitive and literal matching
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "HELLO.*WORLD" flag "iq"');
+----
+false
+
+# Dot matches newline and multiline
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "ms"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "m"');
+----
+false
+
+# Dot matches newline and literal matching
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "sq"');
+----
+false
+
+# Multiline and literal matching
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
+----
+false

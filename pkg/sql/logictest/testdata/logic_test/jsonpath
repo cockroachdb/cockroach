@@ -101,54 +101,54 @@ SELECT bpchar('$.   abc    [*]':::JSONPATH::JSONPATH)::BPCHAR FROM t ORDER BY 1 
 $."abc"[*]
 
 query T
-SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH;
 ----
-$."a"[*]?(((@."b" == 1) && (@."c" != 1)))
+$."a"[*]?(@."b" == 1 && @."c" != 1)
 
 query T
-SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b != 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" != 1))
+$."a"[*]?(@."b" != 1)
 
 query T
-SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b < 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" < 1))
+$."a"[*]?(@."b" < 1)
 
 query T
-SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" <= 1))
+$."a"[*]?(@."b" <= 1)
 
 query T
-SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b > 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" > 1))
+$."a"[*]?(@."b" > 1)
 
 query T
-SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH;
 ----
-$."a"[*]?((@."b" >= 1))
+$."a"[*]?(@."b" >= 1)
 
 query T
-SELECT '$.a ? ($.b == 1)'::JSONPATH
+SELECT '$.a ? ($.b == 1)'::JSONPATH;
 ----
-$."a"?(($."b" == 1))
+$."a"?($."b" == 1)
 
 query T
-SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 query T
-SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 query T
-SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH;
 ----
-$."a"?((@."b" == 1))."c"?((@."d" == 2))
+$."a"?(@."b" == 1)."c"?(@."d" == 2)
 
 statement error pgcode 2201B pq: could not parse .* invalid regular expression: error parsing regexp: missing closing \)
 SELECT '$ ? (@ like_regex "(invalid pattern")'::JSONPATH
@@ -158,9 +158,6 @@ SELECT 'last'::JSONPATH
 
 statement error pgcode 42601 pq: could not parse "@" as type jsonpath: @ is not allowed in root expressions
 SELECT '@'::JSONPATH
-
-statement error unimplemented
-SELECT '$ ? (@ like_regex ".*" flag "i")'::JSONPATH;
 
 statement error unimplemented
 SELECT '$.keyvalue()'::JSONPATH;
@@ -194,6 +191,27 @@ SELECT '$.number()'::JSONPATH;
 
 statement error unimplemented
 SELECT '$.string()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.**'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.decimal()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.datetime()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.time_tz()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp()'::JSONPATH;
+
+statement error unimplemented
+SELECT '$.timestamp_tz()'::JSONPATH;
 
 ## When we allow table creation
 
