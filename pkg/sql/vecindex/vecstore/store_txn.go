@@ -270,13 +270,21 @@ func (tx *Txn) SearchPartitions(
 		partition, err := tx.store.decodePartition(
 			treeKey, toSearch[i].Key, &tx.codec, &b.Results[i*2], &b.Results[i*2+1])
 		if err != nil {
-			return err
+			if errors.Is(err, cspann.ErrPartitionNotFound) {
+				// Partition not found, so return InvalidLevel, MissingState, and
+				// Count=0.
+				toSearch[i].Level = cspann.InvalidLevel
+				toSearch[i].StateDetails = cspann.PartitionStateDetails{}
+				toSearch[i].Count = 0
+			} else {
+				return err
+			}
+		} else {
+			toSearch[i].Level = partition.Level()
+			toSearch[i].StateDetails = partition.Metadata().StateDetails
+			toSearch[i].Count = partition.Search(
+				&tx.codec.workspace, toSearch[i].Key, queryVector, searchSet)
 		}
-
-		toSearch[i].Level = partition.Level()
-		toSearch[i].StateDetails = partition.Metadata().StateDetails
-		toSearch[i].Count = partition.Search(
-			&tx.codec.workspace, toSearch[i].Key, queryVector, searchSet)
 	}
 
 	return nil
