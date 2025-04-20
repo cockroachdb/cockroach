@@ -6,6 +6,7 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math/rand"
@@ -13,12 +14,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,17 +47,17 @@ func TestLargeEnums(t *testing.T) {
 	// have to wait for lots of versions and it would take a very long time.
 	var createEnumsQuery string
 	{
-		alreadyInserted := btree.New(8)
+		alreadyInserted := btree.NewG[int](8, cmp.Less[int])
 		next := func(n int) (next int, ok bool) {
-			alreadyInserted.AscendGreaterOrEqual(intItem(n), func(i btree.Item) (wantMore bool) {
-				next, ok = int(i.(intItem)), true
+			alreadyInserted.AscendGreaterOrEqual(n, func(i int) (wantMore bool) {
+				next, ok = i, true
 				return false
 			})
 			return next, ok
 		}
 		prev := func(n int) (prev int, ok bool) {
-			alreadyInserted.DescendLessOrEqual(intItem(n), func(i btree.Item) (wantMore bool) {
-				prev, ok = int(i.(intItem)), true
+			alreadyInserted.DescendLessOrEqual(n, func(i int) (wantMore bool) {
+				prev, ok = i, true
 				return false
 			})
 			return prev, ok
@@ -74,7 +75,7 @@ func TestLargeEnums(t *testing.T) {
 				require.Truef(t, ok, "prev %v %v", n, order[:i])
 				fmt.Fprintf(&buf, " AFTER '%d';\n", prev)
 			}
-			alreadyInserted.ReplaceOrInsert(intItem(n))
+			alreadyInserted.ReplaceOrInsert(n)
 		}
 		buf.WriteString("COMMIT;")
 		createEnumsQuery = buf.String()
@@ -99,12 +100,6 @@ func TestLargeEnums(t *testing.T) {
 	require.NoError(t, rows.Err())
 	require.Len(t, read, N)
 	require.Truef(t, sort.IntsAreSorted(read), "%v", read)
-}
-
-type intItem int
-
-func (i intItem) Less(o btree.Item) bool {
-	return i < o.(intItem)
 }
 
 // TestEnumPlaceholderWithAsOfSystemTime is a regression test for an edge case
