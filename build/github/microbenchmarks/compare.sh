@@ -28,8 +28,7 @@ done
   --github-summary="$output_dir/summary.md" \
   --build-id="$BUILD_ID" \
   --old="$BASE_SHA" \
-  --new="$HEAD_SHA" \
-  --post
+  --new="$HEAD_SHA"
 
 cat "$output_dir/summary.md" > "$GITHUB_STEP_SUMMARY"
 
