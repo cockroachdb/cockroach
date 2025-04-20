@@ -1,0 +1,323 @@
+# Yaml for creating and configuring the drt-pua-15 and workload-pua-15 clusters. This also configures the datadog.
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-pua-15
+  WORKLOAD_CLUSTER: workload-pua-15
+  CLUSTER_NODES: 15
+  WORKLOAD_NODES: 3
+  STORE_COUNT: 2
+  COCKROACH_VERSION: v25.1.1
+
+  # variables used by tpcc_run_multiregion.sh
+  NUM_REGIONS: 3
+  NODES_PER_REGION: 5
+  REGIONS: northamerica-northeast2,us-east5,us-east1
+  TPCC_WAREHOUSES: 15000
+  DB_NAME: cct_tpcc
+  SURVIVAL_GOAL: region
+  RUN_DURATION: 10h
+  NUM_CONNECTIONS: 500
+  NUM_WORKERS: 500
+  MAX_RATE: 500
+
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/create_decommission_node.sh
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh
+
+targets:
+  - target_name: "Cluster Setup"
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-enable-multiple-stores: true
+          gce-zones: "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1"
+          nodes: $CLUSTER_NODES
+          gce-machine-type: n2-standard-16
+          local-ssd: true
+          gce-local-ssd-count: $STORE_COUNT
+          os-volume-size: 100
+          username: drt
+          lifetime: 8760h
+        on_rollback:
+          - command: destroy
+            args:
+              - $CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $CLUSTER
+          - release
+          - $COCKROACH_VERSION
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          enable-fluent-sink: true
+          store-count: $STORE_COUNT
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+        on_rollback:
+          - command: stop
+            args:
+              - $CLUSTER
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+  - target_name: "Workload Setup"
+    dependent_targets:
+      - "Cluster Setup"
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "northamerica-northeast2-a,us-east5-a,us-east1-b"
+          nodes: $NUM_REGIONS
+          gce-machine-type: n2d-standard-4
+          os-volume-size: 100
+          username: workload
+          lifetime: 8760h
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - release
+          - $COCKROACH_VERSION
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - workload
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER:1
+          - artifacts/roachtest
+          - roachtest
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: "Setup Certs & SSH Keys"
+    dependent_targets:
+      - "Workload Setup"
+    steps:
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: get
+        args:
+          - $CLUSTER:1
+          - certs
+          - certs-$CLUSTER
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - sudo
+          - rm
+          - -rf
+          - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - command: ssh
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - chmod
+          - 600
+          - './certs/*'
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_init_cct_tpcc.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: $TPCC_WAREHOUSES
+          partitions: $NUM_REGIONS
+          db: $DB_NAME
+          survival-goal: $SURVIVAL_GOAL
+          regions: $REGIONS
+      - script: "pkg/cmd/drtprod/scripts/tpcc_run_multiregion.sh"
+      - command: run # add ssh key to workload cluster
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - "ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt ./roachprod sync && ./roachprod ssh-keys add ~/.ssh/id_rsa.pub"
+      - command: setup-ssh
+        args:
+          - $CLUSTER
+  - target_name: "Data Import"
+    dependent_targets:
+      - "Setup Certs & SSH Keys"
+    steps:
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER:1
+          - --
+          - "./tpcc_init_cct_tpcc.sh"
+        wait: 600
+  - target_name: "Phase-1: Baseline TPC-C Performance"
+    dependent_targets:
+      - "Data Import"
+    steps:
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - "sudo systemd-run --unit tpcc_run --same-dir --uid $(id -u) --gid $(id -g) bash ./tpcc_run.sh"
+        wait: 3600
+  - target_name: "Phase-2: Endogenous Stress"
+    dependent_targets:
+      - "Phase-1: Baseline TPC-C Performance"
+    steps:
+      - command: sql # create backup schedule
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - |
+            CREATE SCHEDULE drt_pua_16_backup
+                FOR BACKUP INTO ('gs://cockroach-drt-backup-northamerica-northeast2/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=default',
+                'gs://cockroach-drt-backup-us-east5/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
+                'gs://cockroach-drt-backup-us-east1/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
+                WITH revision_history
+                RECURRING '@hourly' FULL BACKUP '@daily'
+                WITH SCHEDULE OPTIONS first_run = 'now', ignore_existing_backups;
+        wait: 120
+      - command: deploy # rolling upgrade
+        args:
+          - $CLUSTER
+          - release
+          - v25.1.2
+        wait: 120
+      - command: sql # create changefeed without initial scan
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "CREATE CHANGEFEED FOR TABLE cct_tpcc.public.order_line INTO 'null://' WITH initial_scan = 'no'"
+        wait: 120
+      - command: sql # create index on order table
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "CREATE INDEX add_index_o_w_id ON cct_tpcc.public.order (o_w_id)"
+        wait: 120
+  - target_name: "Phase-3: Flaky Disks"
+    dependent_targets:
+      - "Phase-2: Endogenous Stress"
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/flaky_disk_operation.sh"
+        wait: 1500
+#  - target_name: "Phase-4: Network Partition"
+#    dependent_targets:
+#      - "Phase-3: Flaky Disks"
+#    steps:
+#      - script: "pkg/cmd/drtprod/scripts/flaky_network_operation.sh"
+#        wait: 1500
+
+# node restarts
+# zonal outages
+# Regional outages
+  - target_name: "Phase-5: Node Restarts"
+    dependent_targets:
+      - "Phase-4: Network Partition"
+    steps:
+      - command: stop # ungraceful shutdown of node 4
+        args:
+          - $CLUSTER:4
+        wait: 30
+      - command: start # restart node 4
+        args:
+          - $CLUSTER:4
+        flags:
+          restart: true
+        wait: 1200
+      - command: stop # ungraceful shutdown of node 6
+        args:
+          - $CLUSTER:6
+        wait: 30
+      - command: start # restart node 6
+        args:
+          - $CLUSTER:6
+        flags:
+          restart: true
+        wait: 1500
+      - command: stop # ungraceful shutdown of node 15
+        args:
+          - $CLUSTER:15
+        wait: 30
+      - command: start # restart node 15
+        args:
+          - $CLUSTER:15
+        flags:
+          restart: true
+        wait: 1500
+  - target_name: "Phase-6: Zone Outages"
+    dependent_targets:
+      - "Phase-5: Node Restarts"
+    steps:
+      - command: stop # ungraceful shutdown of nodes 1, 2 to simulate zone outage
+        args:
+          - $CLUSTER:1-2
+        wait: 300
+      - command: start # restart nodes 1, 2
+        args:
+          - $CLUSTER:1-2
+        flags:
+          restart: true
+        wait: 1500
+  - target_name: "Phase-7: Region Outages"
+    dependent_targets:
+      - "Phase-6: Zone Outages"
+    steps:
+      - command: stop # ungraceful shutdown of nodes 11-15 to simulate region outage
+        args:
+          - $CLUSTER:11-15
+        wait: 300
+      - command: start # restart nodes 10, 11, 12
+        args:
+          - $CLUSTER:11-15
+        flags:
+          restart: true
