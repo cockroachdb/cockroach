@@ -70,6 +70,7 @@ type RecordedStmtStats struct {
 	TransactionID            uuid.UUID
 	AutoRetryCount           int
 	Failed                   bool
+	Generic                  bool
 	AutoRetryReason          error
 	RowsAffected             int
 	IdleLatencySec           float64
