@@ -99,7 +99,7 @@ func indexForDisplay(
 	if displayMode == IndexDisplayShowCreate {
 		f.WriteString("CREATE ")
 	}
-	if index.Unique {
+	if index.Unique && !isPrimary {
 		f.WriteString("UNIQUE ")
 	}
 	if !f.HasFlags(tree.FmtPGCatalog) {
@@ -110,8 +110,12 @@ func indexForDisplay(
 			f.WriteString("VECTOR ")
 		}
 	}
-	f.WriteString("INDEX ")
-	f.FormatNameP(&index.Name)
+	if isPrimary {
+		f.WriteString("PRIMARY KEY")
+	} else {
+		f.WriteString("INDEX ")
+		f.FormatNameP(&index.Name)
+	}
 	if *tableName != descpb.AnonymousTable {
 		f.WriteString(" ON ")
 		f.FormatNode(tableName)
