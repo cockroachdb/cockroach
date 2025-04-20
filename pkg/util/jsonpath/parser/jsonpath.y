@@ -2,6 +2,7 @@
 package parser
 
 import (
+  "math"
   "strconv"
 
   "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -21,7 +22,6 @@ func setErr(jsonpathlex jsonpathLexer, err error) int {
   return 1
 }
 
-// TODO(normanchenn): link meta-issue to unimplemented errors.
 func unimplemented(jsonpathlex jsonpathLexer, feature string) int {
   jsonpathlex.(*lexer).Unimplemented(feature)
   return 1
@@ -107,6 +107,10 @@ func (u *jsonpathSymUnion) operationType() jsonpath.OperationType {
   return u.val.(jsonpath.OperationType)
 }
 
+func (u *jsonpathSymUnion) int() int {
+  return u.val.(int)
+}
+
 %}
 
 %{
@@ -137,6 +141,19 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
   return binaryOp(jsonpath.OpLikeRegex, left, r), nil
 }
 
+func makeAny(start, end int) jsonpath.Any {
+  if start < 0 {
+    start = math.MaxInt
+  }
+  if end < 0 {
+    end = math.MaxInt
+  }
+  return jsonpath.Any{
+    Start: start,
+    End: end,
+  }
+}
+
 %}
 
 %union{
@@ -160,60 +177,20 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str> ERROR
 
-%token <str> STRICT
-%token <str> LAX
-
-%token <str> VARIABLE
-%token <str> TO
-
-%token <str> TRUE
-%token <str> FALSE
-
-%token <str> EQUAL
-%token <str> NOT_EQUAL
-%token <str> LESS
-%token <str> LESS_EQUAL
-%token <str> GREATER
-%token <str> GREATER_EQUAL
-
-%token <str> ROOT
-
-%token <str> AND
-%token <str> OR
-%token <str> NOT
-
-%token <str> CURRENT
-
-%token <str> STR
-%token <str> NULL
-
-%token <str> LIKE_REGEX
-%token <str> FLAG
-
-%token <str> LAST
-%token <str> EXISTS
-%token <str> IS
-%token <str> UNKNOWN
-%token <str> STARTS
-%token <str> WITH
-
-%token <str> SIZE
-
-%token <str> TYPE
-
-%token <str> KEYVALUE
-
-%token <str> ABS
-%token <str> CEILING
-%token <str> FLOOR
-
-%token <str> BIGINT
-%token <str> BOOLEAN
-%token <str> DATE
-%token <str> DOUBLE
-%token <str> INTEGER
-%token <str> NUMBER
-%token <str> STRING
+%token <str> STRICT LAX
+%token <str> ROOT CURRENT
+%token <str> VARIABLE STR NULL
+%token <str> TRUE FALSE
+%token <str> EQUAL NOT_EQUAL LESS LESS_EQUAL GREATER GREATER_EQUAL
+%token <str> AND OR NOT
+%token <str> LIKE_REGEX FLAG
+%token <str> TO LAST
+%token <str> EXISTS IS UNKNOWN STARTS WITH
+%token <str> ANY
+%token <str> SIZE TYPE KEYVALUE
+%token <str> ABS CEILING FLOOR
+%token <str> BIGINT BOOLEAN DATE DOUBLE INTEGER NUMBER STRING
+%token <str> DECIMAL DATETIME TIME TIME_TZ TIMESTAMP TIMESTAMP_TZ
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -228,12 +205,14 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %type <jsonpath.Path> delimited_predicate
 %type <jsonpath.Path> starts_with_initial
 %type <jsonpath.Path> method
+%type <jsonpath.Path> any_path
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <jsonpath.OperationType> comp_op
 %type <str> key_name
 %type <str> any_identifier
 %type <str> unreserved_keyword
+%type <int> any_level
 %type <bool> mode
 
 %left OR
@@ -377,6 +356,34 @@ accessor_op:
 | '.' method '(' ')'
   {
     $$.val = $2.path()
+  }
+| '.' any_path
+  {
+    $$.val = $2.path()
+  }
+| '.' DECIMAL '(' opt_csv_list ')'
+  {
+    return unimplemented(jsonpathlex, ".decimal()")
+  }
+| '.' DATETIME '(' opt_datetime_template ')'
+  {
+    return unimplemented(jsonpathlex, ".datetime()")
+  }
+| '.' TIME '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".time()")
+  }
+| '.' TIME_TZ '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".time_tz()")
+  }
+| '.' TIMESTAMP '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".timestamp()")
+  }
+| '.' TIMESTAMP_TZ '(' opt_datetime_precision ')'
+  {
+    return unimplemented(jsonpathlex, ".timestamp_tz()")
   }
 ;
 
@@ -577,6 +584,110 @@ method:
   }
 ;
 
+any_path:
+  ANY
+  {
+    $$.val = makeAny(0, -1)
+  }
+| ANY '{' any_level '}'
+  {
+    level := $3.int()
+    $$.val = makeAny(level, level)
+  }
+| ANY '{' any_level TO any_level '}'
+  {
+    $$.val = makeAny($3.int(), $5.int())
+  }
+;
+
+any_level:
+  ICONST
+  {
+    i, err := $1.numVal().AsInt64()
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = int(i)
+  }
+| LAST
+  {
+    $$.val = -1
+  }
+;
+
+opt_csv_list:
+  csv_list
+  {
+    // Unimplemented from .decimal().
+  }
+| /* empty */
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+csv_list:
+  csv_elem
+  {
+    // Unimplemented from .decimal().
+  }
+| csv_list ',' csv_elem
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+csv_elem:
+  ICONST
+  {
+    // Unimplemented from .decimal().
+  }
+| '+' ICONST %prec UMINUS
+  {
+    // Unimplemented from .decimal().
+  }
+| '-' ICONST %prec UMINUS
+  {
+    // Unimplemented from .decimal().
+  }
+;
+
+opt_datetime_template:
+  datetime_template
+  {
+    // Unimplemented from .datetime().
+  }
+| /* empty */
+  {
+    // Unimplemented from .datetime().
+  }
+;
+
+datetime_template:
+  STR
+  {
+    // Unimplemented from .datetime().
+  }
+;
+
+opt_datetime_precision:
+  datetime_precision
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
+  }
+| /* empty */
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
+  }
+;
+
+datetime_precision:
+  ICONST
+  {
+    // Unimplemented from .time(), time_tz(), .timestamp(), .timestamp_tz().
+  }
+;
+
 scalar_value:
   VARIABLE
   {
@@ -632,6 +743,8 @@ unreserved_keyword:
 | BOOLEAN
 | CEILING
 | DATE
+| DATETIME
+| DECIMAL
 | DOUBLE
 | EXISTS
 | FALSE
@@ -649,6 +762,10 @@ unreserved_keyword:
 | STARTS
 | STRICT
 | STRING
+| TIME
+| TIMESTAMP
+| TIMESTAMP_TZ
+| TIME_TZ
 | TO
 | TRUE
 | TYPE
