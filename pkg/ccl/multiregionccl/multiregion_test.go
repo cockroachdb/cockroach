@@ -14,14 +14,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -259,4 +264,118 @@ func TestReplicaClosedTSPolicyWithPolicyRefresher(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestEnsureLocalReadsOnGlobalTablesWithDelay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	runTest := func(withAutoTuning bool) int {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+
+		if withAutoTuning {
+			// Enable auto-tuning and set small intervals for faster testing.
+			closedts.LeadForGlobalReadsAutoTuneEnabled.Override(ctx, &st.SV, true)
+			closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
+			closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
+		}
+
+		// numOfFollowerReads looks at a trace to ensure that reads were served
+		// locally. It returns the number of follower read count in the trace.
+		numOfFollowerReads := func(t *testing.T, rec tracingpb.Recording) (followerReadsCount int) {
+			for _, sp := range rec {
+				if sp.Operation == "dist sender send" {
+					require.True(t, tracing.LogsContainMsg(sp, kvbase.RoutingRequestLocallyMsg),
+						"query was not served locally: %s", rec)
+
+					// Check the child span to find out if the query was served using a
+					// follower read.
+					for _, span := range rec {
+						if span.ParentSpanID == sp.SpanID {
+							followerReadsCount += tracing.CountLogMessages(span, kvbase.FollowerReadServingMsg)
+						}
+					}
+				}
+			}
+			return followerReadsCount
+		}
+
+		presentTimeRead := `SELECT * FROM t.test_table WHERE k=2`
+		recCh := make(chan tracingpb.Recording, 1)
+
+		knobs := base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
+					if stmt == presentTimeRead {
+						recCh <- trace
+					}
+				},
+			},
+		}
+
+		numServers := 3
+		tc, sqlDB, cleanup, delay := multiregionccltestutils.TestingCreateMultiRegionClusterWithDelay(
+			t, numServers, knobs, multiregionccltestutils.WithReplicationMode(base.ReplicationManual), multiregionccltestutils.WithSettings(st),
+		)
+		defer cleanup()
+
+		_, err := sqlDB.Exec(`CREATE DATABASE t PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`CREATE TABLE t.test_table (k INT PRIMARY KEY) LOCALITY GLOBAL`)
+		require.NoError(t, err)
+
+		var tableID uint32
+		err = sqlDB.QueryRow(`SELECT id from system.namespace WHERE name='test_table'`).Scan(&tableID)
+		require.NoError(t, err)
+		tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
+		// Split the range at the start of the table and add a voter to all nodes in
+		// the cluster.
+		tc.SplitRangeOrFatal(t, tablePrefix.AsRawKey())
+		tc.AddVotersOrFatal(t, tablePrefix.AsRawKey(), tc.Target(1), tc.Target(2))
+
+		_, _ = sqlDB.Exec("SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
+		_, _ = sqlDB.Exec("SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+		_, _ = sqlDB.Exec(`INSERT INTO t.test_table VALUES($1)`, 1)
+
+		delay()
+
+		totalCount := 0
+		for i := 0; i < numServers; i++ {
+			conn := tc.ServerConn(i)
+			testutils.SucceedsSoon(t, func() error {
+				// Run a query to populate its cache.
+				_, err = conn.Exec("SELECT * from t.test_table WHERE k=1")
+				require.NoError(t, err)
+
+				// Check that the cache was indeed populated.
+				cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+				entry, err := cache.TestingGetCached(
+					context.Background(), tablePrefix, false /* inverted */, roachpb.LAG_BY_CLUSTER_SETTING,
+				)
+				require.NoError(t, err)
+				require.False(t, entry.Lease.Empty())
+
+				if expected, got := roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy; got != expected {
+					return errors.Newf("expected closedts policy %s, got %s", expected, got)
+				}
+
+				t.Logf("suceeded at populating closed ts policy")
+				return nil
+			})
+
+			// Run the query to ensure local read.
+			_, err = conn.Exec(presentTimeRead)
+			require.NoError(t, err)
+
+			rec := <-recCh
+			totalCount += numOfFollowerReads(t, rec)
+		}
+		return totalCount
+	}
+
+	withoutAutoTune := runTest(false)
+	withAutoTune := runTest(true)
+	t.Logf("withoutAutoTune: %d, withAutoTune: %d", withoutAutoTune, withAutoTune)
+	require.LessOrEqual(t, withoutAutoTune, withAutoTune)
 }

@@ -9,14 +9,20 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 type multiRegionTestClusterParams struct {
@@ -89,6 +95,112 @@ func TestingCreateMultiRegionCluster(
 		1, /* serversPerRegion */
 		knobs,
 		opts...)
+}
+
+func TestingCreateMultiRegionClusterWithDelay(
+	t testing.TB, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
+) (*testcluster.TestCluster, *gosql.DB, func(), func()) {
+	regionNames := make([]string, numServers)
+	for i := 0; i < numServers; i++ {
+		// "us-east1", "us-east2"...
+		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	}
+
+	result := regionlatency.RoundTripPairs{}
+	for i := 0; i < numServers; i++ {
+		for j := i + 1; j < numServers; j++ {
+			pair := regionlatency.Pair{
+				A: regionNames[i],
+				B: regionNames[j],
+			}
+			result[pair] = 300 * time.Millisecond
+		}
+	}
+
+	regionLatencies := result.ToLatencyMap()
+	serverArgs := make(map[int]base.TestServerArgs)
+	params := &multiRegionTestClusterParams{}
+	for _, opt := range opts {
+		opt(params)
+	}
+
+	pauseAfter := make(chan struct{})
+	signalAfter := make([]chan struct{}, numServers)
+	var latencyEnabled atomic.Bool
+
+	totalServerCount := 0
+	for i, region := range regionNames {
+		signalAfter[i] = make(chan struct{})
+		serverKnobs := &server.TestingKnobs{
+			PauseAfterGettingRPCAddress:  pauseAfter,
+			SignalAfterGettingRPCAddress: signalAfter[i],
+			ContextTestingKnobs: rpc.ContextTestingKnobs{
+				InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
+				InjectedLatencyEnabled: latencyEnabled.Load,
+				UnaryClientInterceptor: func(
+					target string, class rpc.ConnectionClass,
+				) grpc.UnaryClientInterceptor {
+					return func(
+						ctx context.Context, method string, req, reply interface{},
+						cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
+						opts ...grpc.CallOption,
+					) error {
+						return invoker(ctx, method, req, reply, cc, opts...)
+					}
+				},
+			},
+		}
+
+		args := base.TestServerArgs{
+			Settings:      params.settings,
+			Knobs:         knobs,
+			ExternalIODir: params.baseDir,
+			UseDatabase:   params.useDatabase,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: region}},
+			},
+			ScanInterval: params.scanInterval,
+		}
+		args.Knobs.Server = serverKnobs
+		serverArgs[totalServerCount] = args
+		totalServerCount++
+	}
+
+	cs := cluster.MakeTestingClusterSettings()
+	tc := testcluster.NewTestCluster(t, totalServerCount, base.TestClusterArgs{
+		ParallelStart:     true,
+		ReplicationMode:   params.replicationMode,
+		ServerArgsPerNode: serverArgs,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+			Settings:          cs,
+		},
+	})
+
+	go func() {
+		for _, c := range signalAfter {
+			<-c
+		}
+		assert.NoError(t, regionLatencies.Apply(tc))
+		close(pauseAfter)
+	}()
+	tc.Start(t)
+
+	ctx := context.Background()
+	cleanup := func() {
+		tc.Stopper().Stop(ctx)
+	}
+
+	sqlDB := tc.ServerConn(0)
+
+	enableLatency := func() {
+		latencyEnabled.Store(true)
+		for i := 0; i < numServers; i++ {
+			tc.Server(i).RPCContext().RemoteClocks.TestingResetLatencyInfos()
+		}
+	}
+
+	return tc, sqlDB, cleanup, enableLatency
 }
 
 // TestingCreateMultiRegionClusterWithRegionList creates a test cluster with
