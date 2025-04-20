@@ -110,6 +110,7 @@ func newPebbleTempEngine(
 			cfg.opts.KeySchema = ""
 			cfg.opts.DisableWAL = true
 			cfg.opts.Experimental.UserKeyCategories = pebble.UserKeyCategories{}
+			cfg.opts.Experimental.SpanPolicyFunc = nil
 			cfg.opts.BlockPropertyCollectors = nil
 			cfg.opts.EnableSQLRowSpillMetrics = true
 			cfg.DiskWriteStatsCollector = statsCollector
