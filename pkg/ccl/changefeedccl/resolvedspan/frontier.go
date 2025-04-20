@@ -6,7 +6,6 @@
 package resolvedspan
 
 import (
-	"context"
 	"iter"
 	"slices"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -44,15 +42,15 @@ func NewAggregatorFrontier(
 // ForwardResolvedSpan forwards the progress of a resolved span and also does
 // some boundary validation.
 func (f *AggregatorFrontier) ForwardResolvedSpan(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) (bool, error) {
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
 	switch boundaryType := r.BoundaryType; boundaryType {
 	case jobspb.ResolvedSpan_NONE:
 	case jobspb.ResolvedSpan_BACKFILL, jobspb.ResolvedSpan_EXIT, jobspb.ResolvedSpan_RESTART:
 		// Boundary resolved events should be ingested from the schema feed
 		// serially, where the changefeed won't ever observe a new schema change
 		// boundary until it has progressed past the current boundary.
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 	default:
@@ -89,8 +87,8 @@ func NewCoordinatorFrontier(
 // ForwardResolvedSpan forwards the progress of a resolved span and also does
 // some boundary validation.
 func (f *CoordinatorFrontier) ForwardResolvedSpan(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) (bool, error) {
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
 	switch boundaryType := r.BoundaryType; boundaryType {
 	case jobspb.ResolvedSpan_NONE:
 	case jobspb.ResolvedSpan_BACKFILL:
@@ -103,13 +101,14 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 		// it is a BACKFILL we have already seen, then it is fine for it to be
 		// an earlier timestamp than the latest boundary.
 		boundaryTS := r.Timestamp
-		_, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
-			return elem.Compare(ts)
-		})
-		if ok {
+		if _, ok := slices.BinarySearchFunc(f.backfills, boundaryTS,
+			func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+				return elem.Compare(ts)
+			},
+		); ok {
 			break
 		}
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 		f.backfills = append(f.backfills, boundaryTS)
@@ -117,7 +116,7 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 		// EXIT and RESTART are final boundaries that cause the changefeed
 		// processors to all move to draining and so should not be followed
 		// by any other boundaries.
-		if err := f.assertBoundaryNotEarlier(ctx, r); err != nil {
+		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
 			return false, err
 		}
 	default:
@@ -130,9 +129,10 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 	// If the frontier changed, we check if the frontier has advanced past any known backfills.
 	if frontierChanged {
 		frontier := f.Frontier()
-		i, _ := slices.BinarySearchFunc(f.backfills, frontier, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
-			return elem.Compare(ts)
-		})
+		i, _ := slices.BinarySearchFunc(f.backfills, frontier,
+			func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+				return elem.Compare(ts)
+			})
 		f.backfills = f.backfills[i:]
 	}
 	return frontierChanged, nil
@@ -145,10 +145,11 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 // happening at different timestamps.
 func (f *CoordinatorFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 	boundaryTS := r.Timestamp
-	_, ok := slices.BinarySearchFunc(f.backfills, boundaryTS, func(elem hlc.Timestamp, ts hlc.Timestamp) int {
-		return elem.Next().Compare(ts)
-	})
-	if ok {
+	if _, ok := slices.BinarySearchFunc(f.backfills, boundaryTS,
+		func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+			return elem.Next().Compare(ts)
+		},
+	); ok {
 		return true
 	}
 
@@ -161,11 +162,12 @@ func (f *CoordinatorFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 		for resolvedSpan := range f.resolvedSpanFrontier.All() {
 			// Check if it's at an earlier backfill boundary.
 			if resolvedSpan.BoundaryType == jobspb.ResolvedSpan_NONE {
-				for _, b := range f.backfills {
-					if b.Equal(resolvedSpan.Timestamp) {
-						resolvedSpan.BoundaryType = jobspb.ResolvedSpan_BACKFILL
-						break
-					}
+				if _, ok := slices.BinarySearchFunc(f.backfills, resolvedSpan.Timestamp,
+					func(elem hlc.Timestamp, ts hlc.Timestamp) int {
+						return elem.Compare(ts)
+					},
+				); ok {
+					resolvedSpan.BoundaryType = jobspb.ResolvedSpan_BACKFILL
 				}
 			}
 			if !yield(resolvedSpan) {
@@ -224,8 +226,14 @@ func newResolvedSpanFrontier(
 }
 
 // ForwardResolvedSpan forwards the progress of a resolved span.
-func (f *resolvedSpanFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool, error) {
-	forwarded, err := f.Forward(r.Span, r.Timestamp)
+// The frontier is considered forwarded if either the frontier
+// timestamp advances or the current frontier timestamp becomes
+// a boundary timestamp (for some non-NONE boundary type)
+// and all the spans are at the boundary timestamp already.
+func (f *resolvedSpanFrontier) ForwardResolvedSpan(
+	r jobspb.ResolvedSpan,
+) (forwarded bool, err error) {
+	forwarded, err = f.Forward(r.Span, r.Timestamp)
 	if err != nil {
 		return false, err
 	}
@@ -235,7 +243,13 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(r jobspb.ResolvedSpan) (bool,
 			ts:  r.Timestamp,
 			typ: r.BoundaryType,
 		}
-		f.boundary.Forward(newBoundary)
+		boundaryForwarded := f.boundary.Forward(newBoundary)
+		if boundaryForwarded && !forwarded {
+			// The frontier is considered forwarded if the boundary type
+			// changes to non-NONE and all the spans are at the boundary
+			// timestamp already.
+			forwarded, _, _ = f.AtBoundary()
+		}
 	}
 	return forwarded, nil
 }
@@ -284,23 +298,26 @@ func (f *resolvedSpanFrontier) InBackfill(r jobspb.ResolvedSpan) bool {
 	return false
 }
 
-// assertBoundaryNotEarlier is a helper method provided to assert that a
-// resolved span does not have an earlier boundary than the existing one.
-func (f *resolvedSpanFrontier) assertBoundaryNotEarlier(
-	ctx context.Context, r jobspb.ResolvedSpan,
-) error {
+// assertBoundaryNotEarlierOrDifferent is a helper method that asserts that a
+// resolved span does not have an earlier boundary than the existing one
+// nor is it at the same time as the existing one with a different type.
+func (f *resolvedSpanFrontier) assertBoundaryNotEarlierOrDifferent(r jobspb.ResolvedSpan) error {
 	boundaryType := r.BoundaryType
 	if boundaryType == jobspb.ResolvedSpan_NONE {
-		return errors.AssertionFailedf("assertBoundaryNotEarlier should not be called for NONE boundary")
+		return errors.AssertionFailedf(
+			"assertBoundaryNotEarlierOrDifferent should not be called for NONE boundary")
 	}
 	boundaryTS := r.Timestamp
+	newBoundary := newResolvedSpanBoundary(boundaryTS, boundaryType)
 	if f.boundary.After(boundaryTS) {
-		newBoundary := newResolvedSpanBoundary(boundaryTS, boundaryType)
-		err := errors.AssertionFailedf("received resolved span for %s "+
+		return errors.AssertionFailedf("received resolved span for %s "+
 			"with %v, which is earlier than previously received %v",
 			r.Span, newBoundary, f.boundary)
-		log.Errorf(ctx, "error while forwarding boundary resolved span: %v", err)
-		return err
+	}
+	if atBoundary, typ := f.boundary.At(boundaryTS); atBoundary && boundaryType != typ {
+		return errors.AssertionFailedf("received resolved span for %s "+
+			"with %v, which has a different type from previously received %v with same timestamp",
+			r.Span, newBoundary, f.boundary)
 	}
 	return nil
 }
@@ -375,9 +392,9 @@ func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_B
 	return false, 0
 }
 
-// After returns whether a timestamp is later than the boundary timestamp.
+// After returns whether the boundary is after a given timestamp.
 func (b *resolvedSpanBoundary) After(ts hlc.Timestamp) bool {
-	return ts.Less(b.ts)
+	return b.ts.After(ts)
 }
 
 // Forward forwards the boundary to the new boundary if it is later.
