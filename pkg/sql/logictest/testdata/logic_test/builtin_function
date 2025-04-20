@@ -211,6 +211,21 @@ EXECUTE concat_stmt(':')
 ----
 1:
 
+statement ok
+SET use_pre_25_2_variadic_builtins = true
+
+statement ok
+PREPARE concat_stmt2 AS SELECT concat("foo"."a", $1) FROM foo
+
+statement error pgcode 22P02 pq: could not parse \":\" as type int: strconv.ParseInt: parsing \":\": invalid syntax
+EXECUTE concat_stmt2(':')
+
+statement ok
+RESET use_pre_25_2_variadic_builtins
+
+statement ok
+PREPARE concat_stmt3 AS SELECT concat("foo"."a", $1) FROM foo
+
 query T
 SELECT substr('RoacH', 2, 3)
 ----
@@ -3112,6 +3127,35 @@ EXECUTE nn_stmt('foo')
 1  1  1  1  3  3  3  3
 1  1  1  1  3  3  3  3
 2  2  2  2  2  2  2  2
+
+statement ok
+SET use_pre_25_2_variadic_builtins = true
+
+statement error pgcode 42883 pq: unknown signature: num_nulls\(int, anyelement, int, string\)
+PREPARE nn_stmt2 AS SELECT num_nulls(42, $1, a, b) FROM nulls_test
+
+# This should work without the cast to ::INT, but there's a bug in the pre-25.2
+# typechecking where we fail to make the type inference and panic. This has
+# existed since at least 24.2.
+statement ok
+PREPARE nn_stmt3 AS SELECT num_nulls(42, $1::INT, a) FROM nulls_test
+
+query I rowsort
+EXECUTE nn_stmt3(42)
+----
+0
+0
+1
+1
+
+statement error pgcode 22P02 pq: could not parse \"foo\" as type int: strconv.ParseInt: parsing \"foo\": invalid syntax
+EXECUTE nn_stmt3('foo')
+
+statement ok
+RESET use_pre_25_2_variadic_builtins
+
+statement error pgcode 42P18 pq: num_nulls\(\): error type checking resolved expression:: could not determine data type of placeholder \$1
+PREPARE nn_stmt4 AS SELECT num_nulls(42, $1, a) FROM nulls_test
 
 subtest pb_to_json
 

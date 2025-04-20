@@ -3941,6 +3941,22 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+	// CockroachDB extension.
+	`use_pre_25_2_variadic_builtins`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_pre_25_2_variadic_builtins`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_pre_25_2_variadic_builtins", s)
+			if err != nil {
+				return err
+			}
+			m.SetUsePre_25_2VariadicBuiltins(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UsePre_25_2VariadicBuiltins), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
