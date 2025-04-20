@@ -141,7 +141,7 @@ export const Loading = (props: React.PropsWithChildren<LoadingProps>) => {
   }
   if (props.loading) {
     return (
-      <div>
+      <div data-testid={"loading-spinner"}>
         <Spinner className={cx("loading-indicator", props.loadingClassName)} />
       </div>
     );
