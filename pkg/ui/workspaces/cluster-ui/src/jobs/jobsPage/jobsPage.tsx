@@ -174,9 +174,9 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     clearTimeout(this.refreshDataInterval);
   }
 
-  onChangePage = (current: number): void => {
+  setPagination = (current: number, pageSize: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
+    this.setState({ pagination: { ...pagination, current, pageSize } });
   };
 
   resetPagination = (): void => {
@@ -368,9 +368,10 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
               </section>
               <Pagination
                 pageSize={pagination.pageSize}
+                onShowSizeChange={this.setPagination}
                 current={pagination.current}
                 total={filteredJobs.length}
-                onChange={this.onChangePage}
+                onChange={this.setPagination}
               />
             </div>
           </Loading>
