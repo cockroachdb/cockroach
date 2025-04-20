@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -32,14 +31,12 @@ type SSTSinkKeyWriter struct {
 	targetFileSize int64
 }
 
-func MakeSSTSinkKeyWriter(
-	conf SSTSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
-) (*SSTSinkKeyWriter, error) {
+func MakeSSTSinkKeyWriter(conf SSTSinkConf, dest cloud.ExternalStorage) (*SSTSinkKeyWriter, error) {
 	if conf.ElideMode == execinfrapb.ElidePrefix_None {
 		return nil, errors.New("KeyWriter does not support ElidePrefix_None")
 	}
 	return &SSTSinkKeyWriter{
-		FileSSTSink:    *MakeFileSSTSink(conf, dest, pacer),
+		FileSSTSink:    *MakeFileSSTSink(conf, dest, nil),
 		targetFileSize: targetFileSize.Get(conf.Settings),
 	}, nil
 }
