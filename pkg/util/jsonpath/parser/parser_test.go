@@ -36,7 +36,7 @@ func TestParseDataDriven(t *testing.T) {
 			case "parse":
 				return VerifyParse(t, d.Input, d.Pos)
 			case "error":
-				_, err := parser.Parse(d.Input)
+				_, _, err := parser.Parse(d.Input)
 				if err == nil {
 					d.Fatalf(t, "%s\nexpected error, found none", d.Pos)
 				}
@@ -52,7 +52,7 @@ func TestParseDataDriven(t *testing.T) {
 func VerifyParse(t *testing.T, input, pos string) string {
 	t.Helper()
 
-	jsonpath, err := parser.Parse(input)
+	jsonpath, _, err := parser.Parse(input)
 	if err != nil {
 		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
 	}
