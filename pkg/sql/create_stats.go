@@ -76,6 +76,13 @@ var nonIndexJSONHistograms = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var automaticJobCheckBeforeCreatingJob = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_job_check_before_creating_job.enabled",
+	"set to true to perform the autostats job check before creating the job, instead of in the same "+
+		"transaction as creating the job",
+	true)
+
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -148,18 +155,27 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	}
 	details := record.Details.(jobspb.CreateStatsDetails)
 
-	if n.Name != jobspb.AutoStatsName && n.Name != jobspb.AutoPartialStatsName {
+	jobCheckBefore := automaticJobCheckBeforeCreatingJob.Get(n.p.ExecCfg().SV())
+	if (n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName) && jobCheckBefore {
+		// Don't start the job if there is already a CREATE STATISTICS job running.
+		// (To handle race conditions we check this again after the job starts,
+		// but this check is used to prevent creating a large number of jobs that
+		// immediately fail).
+		if err := checkRunningJobs(
+			ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
+			details.Table.ID,
+		); err != nil {
+			return err
+		}
+	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
+		if (n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName) && !jobCheckBefore {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
-			// (To handle race conditions we check this again after the job starts,
-			// but this check is used to prevent creating a large number of jobs that
-			// immediately fail).
 			if err := checkRunningJobsInTxn(
 				ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
 			); err != nil {
