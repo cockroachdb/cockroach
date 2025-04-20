@@ -328,7 +328,6 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			p.onQuiesce(report)
 			return
 		case <-t.C:
-			t.Read = true
 			// Retry every second. Note that if runHeartbeatUntilFailure takes >1, we'll
 			// retry immediately once it returns. This means that a connection breaking
 			// for the first time is usually followed by an immediate redial attempt.
@@ -540,7 +539,6 @@ func (p *peer) runHeartbeatUntilFailure(
 		case <-ctx.Done():
 			return ctx.Err() // likely server shutdown
 		case <-heartbeatTimer.C:
-			heartbeatTimer.Read = true
 		case <-connFailedCh:
 			// gRPC has signaled that the connection is now failed, which implies that
 			// we will need to start a new connection (since we set things up that way

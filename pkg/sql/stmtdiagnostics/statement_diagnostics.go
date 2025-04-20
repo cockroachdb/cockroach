@@ -202,7 +202,6 @@ func (r *Registry) poll(ctx context.Context) {
 		case <-pollIntervalChanged:
 			continue // go back around and maybe reset the timer
 		case <-timer.C:
-			timer.Read = true
 		case <-ctx.Done():
 			return
 		}

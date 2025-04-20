@@ -162,7 +162,6 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			// update to the frequency setting.
 			select {
 			case <-timerCh:
-				timer.Read = true
 			case <-changeCh:
 			case <-ctx.Done():
 				return

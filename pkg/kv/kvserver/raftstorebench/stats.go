@@ -33,10 +33,8 @@ func statsLoop(t T, ctx context.Context, cfg Config, s *aggStats, raftEng, smEng
 		var raft bool
 		select {
 		case <-tmr.C:
-			tmr.Read = true
 			tmr.Reset(d)
 		case <-raftTmr.C:
-			raftTmr.Read = true
 			raftTmr.Reset(cfg.RaftMetricsInterval)
 			raft = true
 		case <-ctx.Done():

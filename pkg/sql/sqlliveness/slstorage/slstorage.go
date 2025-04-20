@@ -403,7 +403,6 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.Ch():
-			t.MarkRead()
 			s.deleteExpiredSessions(ctx)
 			t.Reset(s.gcInterval())
 		}

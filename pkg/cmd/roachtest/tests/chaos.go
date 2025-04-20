@@ -123,7 +123,6 @@ func (ch *Chaos) Runner(
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-t.C:
-				t.Read = true
 			}
 
 			period, downTime := ch.Timer.Timing()

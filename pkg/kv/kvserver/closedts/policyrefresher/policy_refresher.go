@@ -213,7 +213,6 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 
 		// Refresh the policy for ranges with leaseholders on the node.
 		case <-policyRefresherTimer.C:
-			policyRefresherTimer.Read = true
 			policyRefresherTimer.Reset(getPolicyRefresh())
 			pr.refreshPolicies(pr.getLeaseholderReplicas())
 		case <-configUpdateCh:
@@ -221,7 +220,6 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 
 		// Refresh the latency cache.
 		case <-latencyRefresherTimer.C:
-			latencyRefresherTimer.Read = true
 			latencyRefresherTimer.Reset(getLatencyRefresh())
 			pr.updateLatencyCache()
 		case <-latencyRefresherConfigUpdateCh:

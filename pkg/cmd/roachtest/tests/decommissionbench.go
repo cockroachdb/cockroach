@@ -325,7 +325,6 @@ func fireAfter(ctx context.Context, t task.Tasker, duration time.Duration, fn fu
 		case <-ctx.Done():
 		case <-taskCtx.Done():
 		case <-fireTimer.C:
-			fireTimer.Read = true
 			fn()
 		}
 		return nil
@@ -471,7 +470,6 @@ func trackBytesUsed(
 		case <-ctx.Done():
 			return nil
 		case <-statsTimer.C:
-			statsTimer.Read = true
 			var bytesUsed int64
 
 			// If we have a target node, read the bytes used and record them.

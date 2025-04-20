@@ -161,7 +161,6 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 
 			select {
 			case <-timer.C:
-				timer.Read = true
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.
