@@ -26,9 +26,6 @@ func (m *DiskSlownessCleared) LoggingChannel() logpb.Channel { return logpb.Chan
 func (m *DiskSlownessDetected) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *LowDiskSpace) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
@@ -63,6 +60,9 @@ func (m *DebugRecoverReplica) LoggingChannel() logpb.Channel { return logpb.Chan
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DebugSendKvBatch) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *RuntimeStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
