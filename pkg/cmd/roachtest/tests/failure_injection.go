@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -52,6 +55,8 @@ type failureSmokeTest struct {
 	validateRecover func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error
 	// The workload to be run during the failureSmokeTest, if nil, defaultSmokeTestWorkload is used.
 	workload func(ctx context.Context, c cluster.Cluster, args ...string) error
+	// The duration to run the workload for before injecting the failure.
+	workloadRamp time.Duration
 }
 
 func (t *failureSmokeTest) run(
@@ -83,6 +88,15 @@ func (t *failureSmokeTest) run(
 	l.Printf("%s: Running Setup(); details in %s.log", t.failureName, file)
 	if err = failureMode.Setup(ctx, quietLogger, t.args); err != nil {
 		return err
+	}
+
+	if t.workloadRamp > 0 {
+		l.Printf("sleeping for %s before injecting failure", t.workloadRamp)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(t.workloadRamp):
+		}
 	}
 
 	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "inject")
@@ -599,6 +613,83 @@ var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 	}
 }
 
+var nodeKillTests = func(c cluster.Cluster) []failureSmokeTest {
+	rng, _ := randutil.NewPseudoRand()
+	var tests []failureSmokeTest
+	for _, gracefulShutdown := range []bool{true, false} {
+		groups, _ := c.CRDBNodes().SeededRandGroups(rng, 2 /* numGroups */)
+		killedNodeGroup := groups[0]
+		unaffectedNodeGroup := groups[1]
+		// These are the nodes that we will run validation on.
+		killedNode := killedNodeGroup.SeededRandNode(rng)
+		unaffectedNode := unaffectedNodeGroup.SeededRandNode(rng)
+
+		tests = append(tests, failureSmokeTest{
+			testName:    fmt.Sprintf("%s/GracefulShutdown=%t", failures.NodeKillFailureName, gracefulShutdown),
+			failureName: failures.NodeKillFailureName,
+			args: failures.NodeKillArgs{
+				Nodes:            killedNodeGroup.InstallNodes(),
+				GracefulShutdown: gracefulShutdown,
+			},
+			validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+				// If we initiate a graceful shutdown, the cockroach process should
+				// intercept it and start draining the node.
+				if gracefulShutdown {
+					err := testutils.SucceedsSoonError(func() error {
+						if ctx.Err() != nil {
+							return nil
+						}
+						res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(unaffectedNode), fmt.Sprintf("./cockroach node status %d --decommission --certs-dir=%s | sed -n '2p' | awk '{print $NF}'", killedNode[0], install.CockroachNodeCertsDir))
+						if err != nil {
+							return err
+						}
+						isDraining := strings.TrimSpace(res.Stdout)
+						if isDraining != "true" {
+							return errors.Errorf("expected node %d to be draining", killedNode[0])
+						}
+						return nil
+					})
+					if err != nil {
+						return err
+					} else if ctx.Err() != nil {
+						return ctx.Err()
+					}
+				}
+
+				// Check that we aren't able to establish a SQL connection to the killed node.
+				// waitForFailureToPropagate already checks system death for us, which is a
+				// stronger assertion than checking SQL connections are unavailable. We
+				// are mostly doing this to satisfy the smoke test framework since this is
+				// a fairly simple failure mode with less to validate.
+				killedDB, err := c.ConnE(ctx, l, killedNode[0])
+				if err == nil {
+					defer killedDB.Close()
+					if err := killedDB.Ping(); err == nil {
+						return errors.Errorf("expected node %d to be dead, but it is alive", killedNode)
+					} else {
+						l.Printf("failed to connect to node %d: %v", killedNode, err)
+					}
+				} else {
+					l.Printf("unable to establish SQL connection to node %d", killedNode)
+				}
+
+				return nil
+			},
+			// Similar to validateFailure, there is not much to validate here that isn't
+			// covered by WaitForFailureToRecover, so just skip it.
+			validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+				return nil
+			},
+			workload: func(ctx context.Context, c cluster.Cluster, args ...string) error {
+				return defaultFailureSmokeTestWorkload(ctx, c, "--tolerate-errors")
+			},
+			// Shutting down the server right after it's started can cause draining to be skipped.
+			workloadRamp: 30 * time.Second,
+		})
+	}
+	return tests
+}
+
 func defaultFailureSmokeTestWorkload(ctx context.Context, c cluster.Cluster, args ...string) error {
 	workloadArgs := strings.Join(args, " ")
 	cmd := roachtestutil.NewCommand("./cockroach workload run kv %s", workloadArgs).
@@ -647,6 +738,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 		dmsetupDiskStallTest(c),
 	}
 	failureSmokeTests = append(failureSmokeTests, cgroupsDiskStallTests(c)...)
+	failureSmokeTests = append(failureSmokeTests, nodeKillTests(c)...)
 
 	// Randomize the order of the tests in case any of the failures have unexpected side
 	// effects that may mask failures, e.g. a cgroups disk stall isn't properly recovered
@@ -654,6 +746,22 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	rand.Shuffle(len(failureSmokeTests), func(i, j int) {
 		failureSmokeTests[i], failureSmokeTests[j] = failureSmokeTests[j], failureSmokeTests[i]
 	})
+
+	// For testing new failure modes, it may be useful to run only a subset of
+	// tests to increase iteration speed.
+	if regex := os.Getenv("FAILURE_INJECTION_SMOKE_TEST_FILTER"); regex != "" {
+		filter, err := regexp.Compile(regex)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var filteredTests []failureSmokeTest
+		for _, test := range failureSmokeTests {
+			if filter.MatchString(test.testName) {
+				filteredTests = append(filteredTests, test)
+			}
+		}
+		failureSmokeTests = filteredTests
+	}
 
 	for _, test := range failureSmokeTests {
 		t.L().Printf("\n=====running %s test=====", test.testName)
