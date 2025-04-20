@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/google/btree"
 )
 
 type state struct {
@@ -88,7 +88,7 @@ func newState(settings *config.SimulationSettings) *state {
 type rmap struct {
 	// NB: Both rangeTree and rangeMap hold references to ranges. They must
 	// both be updated on insertion and deletion to maintain consistent state.
-	rangeTree *btree.BTree
+	rangeTree *btree.BTreeG[*rng]
 	rangeMap  map[RangeID]*rng
 
 	// Unique ID generator for Ranges.
@@ -96,18 +96,16 @@ type rmap struct {
 }
 
 func newRMap() *rmap {
+	lessFn := func(a, b *rng) bool {
+		return a.startKey < b.startKey
+	}
 	rmap := &rmap{
-		rangeTree: btree.New(8),
+		rangeTree: btree.NewG[*rng](8, lessFn),
 		rangeMap:  make(map[RangeID]*rng),
 	}
 
 	rmap.initFirstRange()
 	return rmap
-}
-
-// Less is part of the btree.Item interface.
-func (r *rng) Less(than btree.Item) bool {
-	return r.startKey < than.(*rng).startKey
 }
 
 // initFirstRange initializes the first range within the rangemap, with
@@ -164,8 +162,7 @@ func (s *state) String() string {
 	builder := &strings.Builder{}
 
 	orderedRanges := []*rng{}
-	s.ranges.rangeTree.Ascend(func(i btree.Item) bool {
-		r := i.(*rng)
+	s.ranges.rangeTree.Ascend(func(r *rng) bool {
 		orderedRanges = append(orderedRanges, r)
 		return !r.desc.EndKey.Equal(MaxKey.ToRKey())
 	})
@@ -330,8 +327,8 @@ func (s *state) rangeFor(key Key) *rng {
 	var r *rng
 	// If keyToFind equals to MinKey of the range, we found the right range, if
 	// the range is less than keyToFind then this is the right range also.
-	s.ranges.rangeTree.DescendLessOrEqual(keyToFind, func(i btree.Item) bool {
-		r = i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(keyToFind, func(i *rng) bool {
+		r = i
 		return false
 	})
 	return r
@@ -688,8 +685,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	//   [f, z)         - keeps old span config from [c,z)
 
 	splitsRequired := []Key{}
-	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(cur *rng) bool {
 		rStart := cur.startKey
 		// There are two cases we handle:
 		// (1) rStart == startKey: We don't need to split.
@@ -702,8 +698,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 		return false
 	})
 
-	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(cur *rng) bool {
 		rEnd := cur.endKey
 		rStart := cur.startKey
 		if rStart == endKey {
@@ -732,8 +727,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	}
 
 	// Apply the span config to all the ranges affected.
-	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(cur *rng) bool {
 		if cur.startKey == endKey {
 			return false
 		}
@@ -800,16 +794,15 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	endKey := Key(math.MaxInt32)
 	failed := false
 	// Find the sucessor range in the range map, to determine the endkey.
-	ranges.rangeTree.AscendGreaterOrEqual(r, func(i btree.Item) bool {
+	ranges.rangeTree.AscendGreaterOrEqual(r, func(i *rng) bool {
 		// The min key already exists in the range map, we cannot return a new
 		// range.
-		if !r.Less(i) {
+		if r.startKey == i.startKey {
 			failed = true
 			return false
 		}
 
-		successorRange, _ := i.(*rng)
-		endKey = successorRange.startKey
+		endKey = i.startKey
 		return false
 	})
 
@@ -822,10 +815,10 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	var predecessorRange *rng
 	// Find the predecessor range, to update it's endkey to the new range's min
 	// key.
-	ranges.rangeTree.DescendLessOrEqual(r, func(i btree.Item) bool {
+	ranges.rangeTree.DescendLessOrEqual(r, func(i *rng) bool {
 		// The case where the min key already exists cannot occur here, as the
 		// failed flag will have been set above.
-		predecessorRange, _ = i.(*rng)
+		predecessorRange = i
 		return false
 	})
 
@@ -998,8 +991,7 @@ func (s *state) ApplyLoad(lb workload.LoadBatch) {
 	// that range is not larger than the any key of the remaining load events.
 	iter := n - 1
 	max := &rng{startKey: Key(lb[iter].Key)}
-	s.ranges.rangeTree.DescendLessOrEqual(max, func(i btree.Item) bool {
-		next, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(max, func(next *rng) bool {
 		for iter > -1 && lb[iter].Key >= int64(next.startKey) {
 			s.applyLoad(next, lb[iter])
 			iter--
