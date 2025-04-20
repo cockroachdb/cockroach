@@ -1185,6 +1185,12 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	if txn != nil && txn.Type() == kv.RootTxn {
+		// For 25.2, we're being conservative and explicitly disabling buffered
+		// writes for the internal executor.
+		// TODO(yuzefovich): remove this for 25.3.
+		txn.SetBufferedWritesEnabled(false)
+	}
 	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
 	growStackSize := sessionDataOverride.GrowStackSize
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
