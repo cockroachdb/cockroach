@@ -234,8 +234,8 @@ func MakeSSTBatcher(
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
-	b.Reset(ctx)
-	return b, nil
+	err := b.Reset(ctx)
+	return b, err
 }
 
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
@@ -274,8 +274,8 @@ func MakeStreamSSTBatcher(
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
 	b.SetOnFlush(onFlush)
-	b.Reset(ctx)
-	return b, nil
+	err := b.Reset(ctx)
+	return b, err
 }
 
 // MakeTestingSSTBatcher creates a batcher for testing, allowing setting options
@@ -298,8 +298,8 @@ func MakeTestingSSTBatcher(
 		limiter:        sendLimiter,
 		priority:       admissionpb.BulkNormalPri,
 	}
-	b.Reset(ctx)
-	return b, nil
+	err := b.Reset(ctx)
+	return b, err
 }
 
 func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
@@ -425,9 +425,9 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
-func (b *SSTBatcher) Reset(ctx context.Context) {
+func (b *SSTBatcher) Reset(ctx context.Context) error {
 	if err := b.asyncAddSSTs.Wait(); err != nil {
-		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
+		return errors.Wrapf(err, "closing with flushes in-progress encountered an error")
 	}
 	b.asyncAddSSTs = ctxgroup.Group{}
 
@@ -461,6 +461,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) {
 	if b.mu.totalStats.SendWaitByStore == nil {
 		b.mu.totalStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	}
+	return nil
 }
 
 const (
@@ -495,8 +496,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if err := b.doFlush(ctx, rangeFlush); err != nil {
 			return err
 		}
-		b.Reset(ctx)
-		return nil
+		err := b.Reset(ctx)
+		return err
 	}
 
 	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
@@ -520,8 +521,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if err := b.doFlush(ctx, sizeFlush); err != nil {
 			return err
 		}
-		b.Reset(ctx)
-		return nil
+		err := b.Reset(ctx)
+		return err
 	}
 	return nil
 }
@@ -777,12 +778,13 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 }
 
 // Close closes the underlying SST builder.
-func (b *SSTBatcher) Close(ctx context.Context) {
+func (b *SSTBatcher) Close(ctx context.Context) error {
 	b.sstWriter.Close()
 	if err := b.asyncAddSSTs.Wait(); err != nil {
-		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
+		return errors.Wrap(err, "closing with flushes in-progress encountered an error")
 	}
 	b.mem.Close(ctx)
+	return nil
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
