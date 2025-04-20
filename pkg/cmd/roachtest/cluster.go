@@ -1609,7 +1609,7 @@ func (c *clusterImpl) assertConsistentReplicas(
 	return timeutil.RunWithTimeout(
 		ctx, "consistency check", 20*time.Minute,
 		func(ctx context.Context) error {
-			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
+			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, c, t.L(), db)
 		},
 	)
 }
