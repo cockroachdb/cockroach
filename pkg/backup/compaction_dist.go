@@ -130,7 +130,7 @@ func runCompactionPlan(
 
 	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
 	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
-	return nil
+	return rowResultWriter.Err()
 }
 
 // createCompactionPlan creates an un-finalized physical plan that will
