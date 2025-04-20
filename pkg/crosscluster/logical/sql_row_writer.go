@@ -126,10 +126,10 @@ func (s *sqlRowWriter) UpdateRow(
 func newSQLRowWriter(
 	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
 ) (*sqlRowWriter, error) {
-	physicalColumns := getPhysicalColumns(table)
-	columns := make([]string, len(physicalColumns))
-	for i, col := range physicalColumns {
-		columns[i] = col.GetName()
+	columnsToDecode := getColumnSchema(table)
+	columns := make([]string, len(columnsToDecode))
+	for i, col := range columnsToDecode {
+		columns[i] = col.column.GetName()
 	}
 
 	// TODO(jeffswenson): figure out how to manage prepared statements and
