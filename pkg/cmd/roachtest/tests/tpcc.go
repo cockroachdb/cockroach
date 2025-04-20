@@ -730,7 +730,7 @@ func registerTPCC(r registry.Registry) {
 		Owner:   registry.OwnerTestEng,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
-		CompatibleClouds:  registry.AllExceptAWS,
+		CompatibleClouds:  registry.AllClouds.NoAWS().NoIBM(),
 		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,

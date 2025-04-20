@@ -71,12 +71,13 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name:          "version-upgrade",
-				fn:            runVersionUpgrade,
-				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
-				defaultLeases: true,
-				randomized:    true,
-				suites:        []string{registry.MixedVersion},
+				name:               "version-upgrade",
+				fn:                 runVersionUpgrade,
+				timeout:            2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
+				defaultLeases:      true,
+				randomized:         true,
+				suites:             []string{registry.MixedVersion},
+				incompatibleClouds: registry.OnlyIBM,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -96,13 +97,14 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerSQLFoundations: {
 			{
-				name:          "validate-system-schema-after-version-upgrade",
-				fn:            runValidateSystemSchemaAfterVersionUpgrade,
-				timeout:       60 * time.Minute,
-				defaultLeases: true,
-				randomized:    true,
-				numNodes:      1,
-				suites:        []string{registry.MixedVersion},
+				name:               "validate-system-schema-after-version-upgrade",
+				fn:                 runValidateSystemSchemaAfterVersionUpgrade,
+				timeout:            60 * time.Minute,
+				defaultLeases:      true,
+				randomized:         true,
+				numNodes:           1,
+				suites:             []string{registry.MixedVersion},
+				incompatibleClouds: registry.OnlyIBM,
 			},
 			{
 				name:     "mismatched-locality",

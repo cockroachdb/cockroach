@@ -39,7 +39,7 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 		Name:             "sql-stats/mixed-version",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runSQLStatsMixedVersion,

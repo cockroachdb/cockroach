@@ -117,7 +117,7 @@ func registerDecommission(r registry.Registry) {
 			Name:             "decommission/mixed-versions",
 			Owner:            registry.OwnerKV,
 			Cluster:          r.MakeClusterSpec(numNodes),
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c)

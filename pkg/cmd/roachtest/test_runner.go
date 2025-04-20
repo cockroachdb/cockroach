@@ -2032,6 +2032,11 @@ func (r *testRunner) maybeInitSideEyeClient(ctx context.Context, l *logger.Logge
 			"you can run the agent manually.")
 		return ""
 	}
+	if roachtestflags.Cloud == spec.IBM {
+		l.Printf("--side-eye-token is ignored in --cloud=ibm. The Side-Eye agent is incompatible " +
+			"with the s390x architecture.")
+		return ""
+	}
 
 	client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(token))
 	if err != nil {
