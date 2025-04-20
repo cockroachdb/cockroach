@@ -409,25 +409,29 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 }
 
 // AddReferencingDescriptorID adds a new referencing descriptor ID to the
-// TypeDescriptor. It ensures that duplicates are not added.
-func (desc *Mutable) AddReferencingDescriptorID(new descpb.ID) {
+// TypeDescriptor, ensuring no duplicates are added. Returns false if the ID
+// was already present and no changes were made.
+func (desc *Mutable) AddReferencingDescriptorID(new descpb.ID) bool {
 	for _, id := range desc.ReferencingDescriptorIDs {
 		if new == id {
-			return
+			return false
 		}
 	}
 	desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs, new)
+	return true
 }
 
 // RemoveReferencingDescriptorID removes the desired referencing descriptor ID
-// from the catalog.TypeDescriptor. It has no effect if the requested ID is not present.
-func (desc *Mutable) RemoveReferencingDescriptorID(remove descpb.ID) {
+// from the catalog.TypeDescriptor. If the ID is not present, the method has no
+// effect and returns false to indicate that no removal occurred.
+func (desc *Mutable) RemoveReferencingDescriptorID(remove descpb.ID) bool {
 	for i, id := range desc.ReferencingDescriptorIDs {
 		if id == remove {
 			desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs[:i], desc.ReferencingDescriptorIDs[i+1:]...)
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // SetParentSchemaID sets the SchemaID of the type.
