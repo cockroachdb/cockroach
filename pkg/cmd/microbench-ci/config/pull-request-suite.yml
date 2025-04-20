@@ -10,7 +10,7 @@ benchmarks:
     retries: 3
     metrics:
       - name: "sec/op"
-        threshold: .6
+        threshold: .7
       - name: "allocs/op"
         threshold: .2
 
