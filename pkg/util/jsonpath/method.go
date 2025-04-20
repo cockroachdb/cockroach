@@ -10,12 +10,11 @@ import "fmt"
 type MethodType int
 
 const (
-	InvalidMethod MethodType = iota
-	SizeMethod
+	SizeMethod MethodType = iota
 	TypeMethod
 )
 
-var MethodTypeStrings = map[MethodType]string{
+var MethodTypeStrings = [...]string{
 	SizeMethod: "size",
 	TypeMethod: "type",
 }
@@ -27,5 +26,8 @@ type Method struct {
 var _ Path = Method{}
 
 func (m Method) String() string {
+	if int(m.Type) < 0 || int(m.Type) >= len(MethodTypeStrings) {
+		panic(fmt.Sprintf("invalid method type: %d", m.Type))
+	}
 	return fmt.Sprintf(".%s()", MethodTypeStrings[m.Type])
 }
