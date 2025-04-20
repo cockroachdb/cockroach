@@ -360,7 +360,7 @@ type SQLGauge struct {
 }
 
 var _ metric.Iterable = (*SQLGauge)(nil)
-var _ metric.PrometheusIterable = (*SQLGauge)(nil)
+var _ metric.PrometheusConfigurable = (*SQLGauge)(nil)
 var _ metric.PrometheusExportable = (*SQLGauge)(nil)
 
 func NewSQLGauge(metadata metric.Metadata) *SQLGauge {
@@ -414,6 +414,11 @@ func (sg *SQLGauge) GetMetadata() metric.Metadata {
 // Inspect is part of the metric.Iterable interface.
 func (sg *SQLGauge) Inspect(f func(interface{})) {
 	f(sg)
+}
+
+// Value returns the aggregate sum of all of its current children.
+func (sg *SQLGauge) Value() int64 {
+	return sg.g.Value()
 }
 
 // Update updates the Gauge value by i for the given label values. If a

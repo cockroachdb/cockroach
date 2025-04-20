@@ -256,7 +256,7 @@ type SQLCounter struct {
 }
 
 var _ metric.Iterable = (*SQLCounter)(nil)
-var _ metric.PrometheusIterable = (*SQLCounter)(nil)
+var _ metric.PrometheusConfigurable = (*SQLCounter)(nil)
 var _ metric.PrometheusExportable = (*SQLCounter)(nil)
 
 // NewSQLCounter constructs a new SQLCounter.
@@ -311,6 +311,16 @@ func (c *SQLCounter) GetMetadata() metric.Metadata {
 // Inspect is part of the metric.Iterable interface.
 func (c *SQLCounter) Inspect(f func(interface{})) {
 	f(c)
+}
+
+// Clear resets the counter to zero.
+func (c *SQLCounter) Clear() {
+	c.g.Clear()
+}
+
+// Count returns the aggregate count of all of its current and past children.
+func (c *SQLCounter) Count() int64 {
+	return c.g.Count()
 }
 
 // Inc increments the counter value by i for the given label values. If a

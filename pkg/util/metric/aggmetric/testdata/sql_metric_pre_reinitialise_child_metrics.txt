@@ -1,0 +1,17 @@
+echo
+----
+test_counter 1
+test_gauge 10
+test_histogram_bucket{le="+Inf"} 1
+test_histogram_bucket{le="0"} 0
+test_histogram_bucket{le="10"} 1
+test_histogram_bucket{le="20"} 1
+test_histogram_bucket{le="30"} 1
+test_histogram_bucket{le="40"} 1
+test_histogram_bucket{le="50"} 1
+test_histogram_bucket{le="60"} 1
+test_histogram_bucket{le="70"} 1
+test_histogram_bucket{le="80"} 1
+test_histogram_bucket{le="90"} 1
+test_histogram_count 1
+test_histogram_sum 10
