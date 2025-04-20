@@ -13,12 +13,10 @@ import (
 	"math"
 	"math/rand"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -418,7 +417,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 			// the primary index, but it cannot be found in the secondary index.
 			if !notFound {
 				idxCtx.Init(txn)
-				err := s.Index.Delete(s.Ctx, &idxCtx, s.TreeKey, vec, key)
+				_, err := s.Index.Delete(s.Ctx, &idxCtx, s.TreeKey, vec, key)
 				require.NoError(s.T, err)
 			}
 			s.MemStore.DeleteVector(key)
@@ -946,7 +945,8 @@ func TestIndexConcurrency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// Load features.
-	features := testutils.LoadFeatures(t, 2000)
+	const featureCount = 128
+	features := testutils.LoadFeatures(t, featureCount)
 
 	// Trim feature dimensions from 512 to 4, in order to make the test run
 	// faster and hit more interesting concurrency combinations.
@@ -962,29 +962,65 @@ func TestIndexConcurrency(t *testing.T) {
 	for i := range 10 {
 		log.Infof(ctx, "iteration %d", i)
 
-		// Set small partition size and beam size to trigger frequent splits and
-		// merges.
-		options := cspann.IndexOptions{
-			MinPartitionSize: 2,
-			MaxPartitionSize: 8,
-			BaseBeamSize:     2,
-			QualitySamples:   4,
-		}
-		seed := int64(i)
+		// Construct store. Multiple index instances running on different goroutines
+		// will use this store.
+		const seed = 42
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
 		store := memstore.New(quantizer, seed)
-		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
-		require.NoError(t, err)
 
-		expected := buildIndex(ctx, t, store, index, vectors, primaryKeys)
+		// Create 8 instances of the index, all using the same shared Store.
+		const instances = 8
+		var expectedKeys syncutil.Set[string]
 
-		vectorCount := validateIndex(ctx, t, store)
-		require.Equal(t, expected, vectorCount)
+		options := cspann.IndexOptions{
+			MinPartitionSize: 2,
+			MaxPartitionSize: 4,
+			BaseBeamSize:     2,
+			QualitySamples:   4,
+			// Eliminate the delay for one instance assisting another, in order
+			// to maximize the possibility of race conditions.
+			StalledOpTimeout: func() time.Duration { return 0 },
+		}
 
-		index.Close()
+		var wait sync.WaitGroup
+		vecsPerInstance := vectors.Count / instances
+		for i := 0; i < vectors.Count; i += vecsPerInstance {
+			wait.Add(1)
+			go func(start, end int) {
+				defer wait.Done()
+
+				// Set small partition size and beam size to trigger frequent splits and
+				// merges.
+				index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
+				require.NoError(t, err)
+
+				vectorSubset := vectors.Slice(start, end-start)
+				keySubset := primaryKeys[start:end]
+				deletedKeySubset := buildIndex(ctx, t, store, index, vectorSubset, keySubset)
+
+				// Add any keys that were deleted into the shared map.
+				for i := range keySubset {
+					key := string(keySubset[i])
+					if !deletedKeySubset.Contains(key) {
+						expectedKeys.Add(key)
+					}
+				}
+
+				// Process any remaining fixups and close the index.
+				index.ProcessFixups()
+				index.Close()
+			}(i, min(i+vecsPerInstance, vectors.Count))
+		}
+
+		wait.Wait()
+
+		validateIndex(ctx, t, store, &expectedKeys)
 	}
 }
 
+// buildIndex inserts the vectors in batches, and tries to delete one vector in
+// each batch. It returns the subset of keys it successfully deleted (as
+// strings).
 func buildIndex(
 	ctx context.Context,
 	t *testing.T,
@@ -992,8 +1028,8 @@ func buildIndex(
 	index *cspann.Index,
 	vectors vector.Set,
 	primaryKeys []cspann.KeyBytes,
-) int {
-	var insertCount, deleteCount atomic.Uint64
+) (deletedKeys *syncutil.Set[string]) {
+	deletedKeys = new(syncutil.Set[string])
 
 	// Insert block of vectors within the scope of a transaction.
 	insertVectors := func(idxCtx *cspann.Context, start, end int) {
@@ -1004,23 +1040,25 @@ func buildIndex(
 				require.NoError(t,
 					index.Insert(ctx, idxCtx, nil /* treeKey */, vectors.At(i), primaryKeys[i]))
 			})
-			insertCount.Add(1)
 		}
 	}
 
 	deleteVector := func(idxCtx *cspann.Context, vec vector.T, key cspann.KeyBytes) {
 		commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 			idxCtx.Init(txn)
-			require.NoError(t, index.Delete(ctx, idxCtx, nil /* treeKey */, vec, key))
-			store.DeleteVector(key)
+			deleted, err := index.Delete(ctx, idxCtx, nil /* treeKey */, vec, key)
+			require.NoError(t, err)
+			if deleted {
+				store.DeleteVector(key)
+				deletedKeys.Add(string(key))
+			}
 		})
-		deleteCount.Add(1)
 	}
 
 	// Insert vectors into the store on multiple goroutines. Delete the first
 	// vector in each block.
 	var wait sync.WaitGroup
-	procs := runtime.GOMAXPROCS(-1)
+	const procs = 4
 	countPerProc := (vectors.Count + procs) / procs
 	blockSize := index.Options().MinPartitionSize
 	for i := 0; i < vectors.Count; i += countPerProc {
@@ -1039,44 +1077,17 @@ func buildIndex(
 			}
 		}(i, end)
 	}
-
-	logProgress := func() {
-		log.Infof(ctx, "%d vectors inserted, %d vectors deleted",
-			insertCount.Load(), deleteCount.Load())
-	}
-
-	info := log.Every(time.Second)
-	for int(insertCount.Load()) < vectors.Count {
-		time.Sleep(10 * time.Millisecond)
-
-		if info.ShouldLog() {
-			logProgress()
-		}
-
-		// Fail on foreground goroutine if any background goroutines failed.
-		if t.Failed() {
-			t.FailNow()
-		}
-	}
-
 	wait.Wait()
 
-	// Process any remaining fixups.
-	index.ProcessFixups()
-
-	logProgress()
-
-	return int(insertCount.Load() - deleteCount.Load())
+	return deletedKeys
 }
 
-func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
+// validateIndex tests that the store contains each of the specified primary
+// keys except those that are in the deletedKeys map.
+func validateIndex(
+	ctx context.Context, t *testing.T, store *memstore.Store, expectedKeys *syncutil.Set[string],
+) {
 	treeKey := memstore.ToTreeKey(memstore.TreeID(0))
-
-	// Duplicate vectors are possible in the index, so the total count of vectors
-	// is not deterministc. Instead, return the number of unique vectors, which
-	// should be stable.
-	var deDup cspann.ChildKeyDeDup
-	deDup.Init(1000)
 
 	partitionKeys := []cspann.PartitionKey{cspann.RootKey}
 	for {
@@ -1084,11 +1095,26 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		var childKeys []cspann.ChildKey
 		for _, key := range partitionKeys {
 			partition, err := store.TryGetPartition(ctx, treeKey, key)
-			if !errors.Is(err, cspann.ErrPartitionNotFound) {
+			if errors.Is(err, cspann.ErrPartitionNotFound) {
 				// Ignore ErrPartitionNotFound, as splits can cause dangling
 				// partition keys.
-				require.NoError(t, err)
-				childKeys = append(childKeys, partition.ChildKeys()...)
+				continue
+			}
+
+			require.NoError(t, err)
+			childKeys = append(childKeys, partition.ChildKeys()...)
+
+			// Append target partitions of the root, if they exist. These may not
+			// yet have been added to the root partition, and so may not be
+			// accessible in any other way.
+			if key == cspann.RootKey {
+				state := partition.Metadata().StateDetails
+				if state.Target1 != cspann.InvalidKey {
+					childKeys = append(childKeys, cspann.ChildKey{PartitionKey: state.Target1})
+				}
+				if state.Target2 != cspann.InvalidKey {
+					childKeys = append(childKeys, cspann.ChildKey{PartitionKey: state.Target2})
+				}
 			}
 		}
 
@@ -1097,8 +1123,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		}
 
 		if childKeys[0].KeyBytes != nil {
-			// This is the leaf level, so verify that full vectors exist. Count
-			// the number of unique vectors.
+			// This partition contains leaf-level vectors.
 			commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 				refs := make([]cspann.VectorWithKey, len(childKeys))
 				for i := range childKeys {
@@ -1108,7 +1133,8 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 				require.NoError(t, err)
 				for i := range refs {
 					if refs[i].Vector != nil {
-						deDup.TryAdd(refs[i].Key)
+						// Vector is in the tree, so remove it from the expected map.
+						expectedKeys.Remove(string(refs[i].Key.KeyBytes))
 					}
 				}
 			})
@@ -1124,5 +1150,12 @@ func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int
 		}
 	}
 
-	return deDup.Count()
+	// Validate that there are no remaining keys that were expected to be present
+	// in the index.
+	var missingKeys []string
+	expectedKeys.Range(func(value string) bool {
+		missingKeys = append(missingKeys, value)
+		return true
+	})
+	require.Empty(t, missingKeys)
 }
