@@ -45,10 +45,12 @@ func MakeSSTSinkKeyWriter(conf SSTSinkConf, dest cloud.ExternalStorage) (*SSTSin
 // including the prefix. Reset needs to be called prior to WriteKey whenever
 // writing keys from a new span. Keys must also be written in order.
 //
-// After writing the last key for a span, AssumeNotMidRow must be called to
-// enforce the invariant that BackupManifest_File spans do not end mid-row.
+// Once a key has been written, the caller may safely reuse the underlying
+// memory for the passed in key.
 //
-// Flush should be called before the sink is closed to ensure the SST
+// NOTE: After writing the last key for a span, AssumeNotMidRow must be called
+// to enforce the invariant that BackupManifest_File spans do not end mid-row.
+// Flush should also be called before the sink is closed to ensure the SST
 // is written to the destination.
 func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	if len(s.flushedFiles) == 0 {
@@ -117,6 +119,9 @@ func (s *SSTSinkKeyWriter) AssumeNotMidRow() {
 // and calling AssumeNotMidRow before resetting to enforce this invariant.
 // Any time a new span is being written, Reset MUST be called prior to any
 // WriteKey calls.
+//
+// Once Reset has been called, the caller may safely reuse the underlying memory
+// of the passed in span.
 func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) error {
 	log.VEventf(ctx, 2, "resetting sink to span %s", newSpan)
 	if s.midRow {
@@ -143,7 +148,8 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 			lastFile.EntryCounts.DataSize < fileSpanByteLimit {
 			log.VEventf(ctx, 2, "extending span %s to %s", lastFile.Span, newSpan)
 			s.stats.spanGrows++
-			lastFile.Span.EndKey = newSpan.EndKey
+			// See reason for Clone() below.
+			lastFile.Span.EndKey = newSpan.EndKey.Clone()
 			return nil
 		}
 	}
@@ -156,7 +162,11 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 	s.flushedFiles = append(
 		s.flushedFiles,
 		backuppb.BackupManifest_File{
-			Span: newSpan,
+			// Because there are situations where the underlying memory for keys of
+			// the span is reused to optimize memory usage, we need to clone the keys
+			// to ensure that the BackupManifest_File's span is not unintentionally
+			// mutated outside of the SSTSinkKeyWriter.
+			Span: newSpan.Clone(),
 			Path: s.outName,
 		},
 	)
