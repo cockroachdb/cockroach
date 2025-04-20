@@ -43,11 +43,11 @@ func TestAggCounter(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	c := NewCounter(metric.Metadata{
+	c := NewSQLCounter(metric.Metadata{
 		Name: "foo_counter",
-	}, "tenant_id", "counter_label")
+	})
+	c.labelConfig.Store(LabelConfigAppAndDB)
 	r.AddMetric(c)
-	c.initWithCacheStorageType([]string{"tenant_id", "counter_label"})
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(size int, key, value interface{}) bool {
@@ -62,13 +62,13 @@ func TestAggCounter(t *testing.T) {
 		c.Inc(1, "1", strconv.Itoa(i))
 	}
 
-	testFile := "aggCounter_pre_eviction.txt"
+	testFile := "SQLCounter_pre_eviction.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 
 	for i := 0 + cacheSize; i < cacheSize+5; i++ {
 		c.Inc(1, "2", strconv.Itoa(i))
 	}
 
-	testFile = "aggCounter_post_eviction.txt"
+	testFile = "SQLCounter_post_eviction.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-func TestAggHistogram(t *testing.T) {
+func TestSQLHistogram(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const cacheSize = 10
 	r := metric.NewRegistry()
@@ -44,7 +44,7 @@ func TestAggHistogram(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	h := NewHistogram(metric.HistogramOptions{
+	h := NewSQLHistogram(metric.HistogramOptions{
 		Metadata: metric.Metadata{
 			Name: "histo_gram",
 		},
@@ -52,7 +52,7 @@ func TestAggHistogram(t *testing.T) {
 		MaxVal:       100,
 		SigFigs:      1,
 		BucketConfig: metric.Percent100Buckets,
-	}, "tenant_id", "hist_label")
+	})
 	r.AddMetric(h)
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
@@ -63,14 +63,15 @@ func TestAggHistogram(t *testing.T) {
 	h.mu.children = &UnorderedCacheWrapper{
 		cache: cacheStorage,
 	}
+	h.labelConfig.Store(LabelConfigAppAndDB)
 
 	for i := 0; i < cacheSize; i++ {
 		h.RecordValue(1, "1", strconv.Itoa(i))
 	}
 
-	testFile := "aggHistogram_pre_eviction.txt"
+	testFile := "SQLHistogram_pre_eviction.txt"
 	if metric.HdrEnabled() {
-		testFile = "aggHistogram_pre_eviction_hdr.txt"
+		testFile = "SQLHistogram_pre_eviction_hdr.txt"
 	}
 
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
@@ -79,9 +80,9 @@ func TestAggHistogram(t *testing.T) {
 		h.RecordValue(10, "2", strconv.Itoa(i))
 	}
 
-	testFile = "aggHistogram_post_eviction.txt"
+	testFile = "SQLHistogram_post_eviction.txt"
 	if metric.HdrEnabled() {
-		testFile = "aggHistogram_post_eviction_hdr.txt"
+		testFile = "SQLHistogram_post_eviction_hdr.txt"
 	}
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 }

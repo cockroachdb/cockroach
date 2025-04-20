@@ -1,6 +1,6 @@
 echo
 ----
 bar_counter 2
-bar_counter{tenant_id="3"} 2
+bar_counter{database="test-db",application_name="test-app"} 2
 foo_counter 2
 foo_counter{tenant_id="2"} 2

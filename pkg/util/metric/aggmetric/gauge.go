@@ -308,32 +308,6 @@ func (g *AggGaugeFloat64) AddChild(labelVals ...string) *GaugeFloat64 {
 	return child
 }
 
-// Update updates the Gauge value by val for the given label values. If a
-// Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and updates it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
-func (g *AggGaugeFloat64) Update(val float64, labelVals ...string) {
-	child := g.GetOrCreateChild(labelVals...)
-	child.Update(val)
-}
-
-func (g *AggGaugeFloat64) GetOrCreateChild(labelVals ...string) *GaugeFloat64 {
-	if len(g.labels) != len(labelVals) {
-		panic(errors.AssertionFailedf(
-			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(g.labels), g.labels))
-	}
-
-	// If the child already exists then return it.
-	if child, ok := g.get(labelVals...); ok {
-		return child.(*GaugeFloat64)
-	}
-
-	// Otherwise, create a new child then return it.
-	child := g.AddChild(labelVals...)
-	return child
-}
-
 // GaugeFloat64 is a child of a AggGaugeFloat64. When it is incremented or
 // decremented, so too is the parent. When metrics are collected by prometheus,
 // each of the children will appear with a distinct label, however, when
@@ -372,4 +346,162 @@ func (g *GaugeFloat64) Value() float64 {
 func (g *GaugeFloat64) Update(v float64) {
 	oldBits := atomic.SwapUint64(&g.bits, math.Float64bits(v))
 	g.parent.g.Inc(v - math.Float64frombits(oldBits))
+}
+
+// SQLGauge maintains a gauge as the sum of its children. The gauge will
+// report to crdb-internal time series only the aggregate sum of all of its
+// children, while its children are additionally exported to prometheus via the
+// PrometheusIterable interface. SQLGauge differs from AggGauge in that
+// a SQLGauge creates child metrics dynamically while AggGauge needs the
+// child creation up front.
+type SQLGauge struct {
+	g metric.Gauge
+	*SQLMetric
+}
+
+var _ metric.Iterable = (*SQLGauge)(nil)
+var _ metric.PrometheusIterable = (*SQLGauge)(nil)
+var _ metric.PrometheusExportable = (*SQLGauge)(nil)
+
+func NewSQLGauge(metadata metric.Metadata) *SQLGauge {
+	g := &SQLGauge{
+		g: *metric.NewGauge(metadata),
+	}
+	g.SQLMetric = NewSQLMetric(LabelConfigDisabled)
+	return g
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (sg *SQLGauge) GetType() *io_prometheus_client.MetricType {
+	return sg.g.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (sg *SQLGauge) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return sg.g.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (sg *SQLGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return sg.g.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (sg *SQLGauge) GetName(useStaticLabels bool) string {
+	return sg.g.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (sg *SQLGauge) GetHelp() string {
+	return sg.g.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (sg *SQLGauge) GetMeasurement() string {
+	return sg.g.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (sg *SQLGauge) GetUnit() metric.Unit {
+	return sg.g.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (sg *SQLGauge) GetMetadata() metric.Metadata {
+	return sg.g.GetMetadata()
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (sg *SQLGauge) Inspect(f func(interface{})) {
+	f(sg)
+}
+
+// Update updates the Gauge value by i for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and updates it. Update increments parent metrics
+// irrespective of labelConfig.
+func (sg *SQLGauge) Update(val int64, db, app string) {
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+
+	// If the label configuration is either LabelConfigDisabled or unrecognised,
+	// then only update aggregated gauge value.
+	if !isChildMetricEnabled {
+		sg.g.Update(val)
+		return
+	}
+
+	delta := val - childMetric.(*SQLChildGauge).Value()
+	sg.g.Inc(delta)
+	childMetric.(*SQLChildGauge).Update(val)
+}
+
+// Inc increments the Gauge value by i for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and increments it. Inc increments parent metrics
+// irrespective of labelConfig.
+func (sg *SQLGauge) Inc(i int64, db, app string) {
+	sg.g.Inc(i)
+
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+	if !isChildMetricEnabled {
+		return
+	}
+	childMetric.(*SQLChildGauge).Inc(i)
+}
+
+// Dec decrements the Gauge value by i for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and decrements it. Dec decrements parent metrics
+// // irrespective of labelConfig.
+func (sg *SQLGauge) Dec(i int64, db, app string) {
+	sg.g.Dec(i)
+
+	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+	if !isChildMetricEnabled {
+		return
+	}
+	childMetric.(*SQLChildGauge).Dec(i)
+}
+
+func (sg *SQLGauge) createChildGauge(labelValues labelValuesSlice) ChildMetric {
+	return &SQLChildGauge{
+		labelValuesSlice: labelValues,
+	}
+}
+
+// SQLChildGauge is a child of a SQLGauge. When metrics are collected by prometheus,
+// each of the children will appear with a distinct label, however, when cockroach
+// internally collects metrics, only the parent is collected.
+type SQLChildGauge struct {
+	labelValuesSlice
+	gauge metric.Gauge
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this Gauge.
+func (scg *SQLChildGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Gauge: &io_prometheus_client.Gauge{
+			Value: proto.Float64(float64(scg.Value())),
+		},
+	}
+}
+
+// Value returns the SQLChildGauge's current gauge.
+func (scg *SQLChildGauge) Value() int64 {
+	return scg.gauge.Value()
+}
+
+// Update sets the gauge's value.
+func (scg *SQLChildGauge) Update(val int64) {
+	scg.gauge.Update(val)
+}
+
+// Inc increments the gauge's value.
+func (scg *SQLChildGauge) Inc(i int64) {
+	scg.gauge.Inc(i)
+}
+
+// Dec decrements the gauge's value.
+func (scg *SQLChildGauge) Dec(i int64) {
+	scg.gauge.Dec(i)
 }
