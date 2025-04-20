@@ -9,6 +9,7 @@ go_library(
         "add_index.go",
         "add_rls_policy.go",
         "backup_restore.go",
+        "cancel_job.go",
         "cluster_settings.go",
         "debug_zip.go",
         "disk_stall.go",
