@@ -7,6 +7,7 @@ package builtins
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strconv"
@@ -127,7 +128,11 @@ func init() {
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
 		for name, builtin := range makeTypeIOBuiltins(builtinPrefix, typ) {
-			registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
+			if overload, found := pgIOBuiltins[name]; found {
+				registerBuiltin(name, overload, tree.NormalClass, enforceClass)
+			} else {
+				registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
+			}
 		}
 	}
 	// Make array type i/o builtins.
@@ -610,6 +615,67 @@ SELECT COALESCE(
     ), '')
 FROM pg_catalog.pg_proc WHERE oid=$1 GROUP BY oid, proargtypes LIMIT 1
 `
+
+var pgIOBuiltins = map[string]builtinDefinition{
+	"int4in": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				i, err := strconv.ParseUint(s, 10, 32)
+				if err != nil {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid input syntax for int4: %q", s)
+				}
+				return tree.NewDInt(tree.DInt(i)), nil
+			},
+			Info: "Parses a string as an INT4.",
+		},
+	),
+
+	"int4out": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := int32(tree.MustBeDInt(args[0]))
+				return tree.NewDString(strconv.FormatInt(int64(val), 10)), nil
+			},
+			Info: "Converts an INT4 to its text representation.",
+		},
+	),
+
+	"int4recv": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyElement}},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				bytes := []byte(*args[0].(*tree.DBytes))
+				if len(bytes) != 4 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid length for int4recv: got %d, expected 4", len(bytes))
+				}
+				val := int32(binary.BigEndian.Uint32(bytes))
+				return tree.NewDInt(tree.DInt(val)), nil
+			},
+			Info: "Converts a 4-byte big-endian binary representation to INT4.",
+		},
+	),
+
+	"int4send": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := int32(tree.MustBeDInt(args[0]))
+				buf := make([]byte, 4)
+				binary.BigEndian.PutUint32(buf, uint32(val))
+				return tree.NewDBytes(tree.DBytes(buf)), nil
+			},
+			Info:       "Converts an INT4 value to its big-endian binary representation.",
+			Volatility: volatility.Immutable,
+		},
+	),
+}
 
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
