@@ -134,6 +134,15 @@ func jsonpathQuery(
 	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) ([]json.JSON, error) {
 	expr := path.Jsonpath
+	for _, v := range path.Variables {
+		val, err := vars.JSON.FetchValKey(v)
+		if err != nil {
+			return nil, err
+		}
+		if val == nil {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", v)
+		}
+	}
 	ctx := &jsonpathCtx{
 		root:                 target.JSON,
 		vars:                 vars.JSON,
@@ -183,7 +192,7 @@ func (ctx *jsonpathCtx) eval(
 	case jsonpath.Last:
 		return ctx.evalLast()
 	case jsonpath.Method:
-		return ctx.evalMethod(path, jsonValue)
+		return ctx.evalMethod(path, jsonValue, unwrap)
 	default:
 		return nil, errUnimplemented
 	}
