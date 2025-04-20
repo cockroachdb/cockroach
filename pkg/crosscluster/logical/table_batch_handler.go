@@ -170,7 +170,9 @@ func (t *tableHandler) attemptBatch(
 				stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
 			case event.prevRow == nil:
 				stats.inserts++
-				err := t.sqlWriter.InsertRow(ctx, txn, event.originTimestamp, event.row)
+				err := withSavepoint(ctx, txn.KV(), func() error {
+					return t.sqlWriter.InsertRow(ctx, txn, event.originTimestamp, event.row)
+				})
 				if isLwwLoser(err) {
 					// Insert may observe a LWW failure if it attempts to write over a tombstone.
 					stats.kvLwwLosers++
