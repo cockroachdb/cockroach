@@ -677,6 +677,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	nodeRegistry.AddMetricStruct(ctSender.Metrics())
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 	var policyRefresher *policyrefresher.PolicyRefresher
 	{
@@ -686,6 +687,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		}
 		policyRefresher = policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
 			rpcContext.RemoteClocks.AllLatencies, knobs)
+		nodeRegistry.AddMetricStruct(policyRefresher.Metrics())
 	}
 
 	// The Executor will be further initialized later, as we create more
