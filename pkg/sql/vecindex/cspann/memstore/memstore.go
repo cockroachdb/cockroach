@@ -815,11 +815,7 @@ func (s *Store) makeEmptyRootMetadataLocked() cspann.PartitionMetadata {
 	if s.mu.emptyVec == nil {
 		s.mu.emptyVec = make(vector.T, s.dims)
 	}
-	return cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     s.mu.emptyVec,
-		StateDetails: cspann.MakeReadyDetails(),
-	}
+	return cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, s.mu.emptyVec)
 }
 
 // tryCreateEmptyPartition creates a empty partition with the given metadata and
