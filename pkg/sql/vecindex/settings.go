@@ -44,19 +44,6 @@ var StalledOpTimeoutSetting = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
-// SearchBeamSizeSetting controls the number of candidates examined during
-// vector index searches. It represents the number of vector partitions that are
-// are considered at each level of the search tree. Higher values increase
-// search accuracy but require more processing resources.
-var SearchBeamSizeSetting = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.vecindex.search_beam_size",
-	"number of vector partitions searched at each level of the search tree "+
-		"(higher values increase accuracy but require more processing)",
-	32,
-	settings.IntInRange(1, 512),
-)
-
 // VectorIndexEnabled is used to enable and disable vector indexes.
 var VectorIndexEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
