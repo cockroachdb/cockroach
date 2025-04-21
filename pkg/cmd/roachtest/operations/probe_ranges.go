@@ -7,12 +7,10 @@ package operations
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -30,32 +28,30 @@ func runProbeRanges(
 	conn := c.Conn(ctx, o.L(), nid, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
-	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
-	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
-	sid := helpers.PickRandomStore(ctx, o, conn, nid)
+	probeReadRangeStmt := `select range_id, error from crdb_internal.probe_ranges(INTERVAL '1s', 'read') where error != ''`
 
-	compactionStmt := fmt.Sprintf(`SELECT crdb_internal.compact_engine_span(
-				%d, %d,
-				(SELECT raw_start_key FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS] LIMIT 1),
-				(SELECT raw_end_key FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS] LIMIT 1))`,
-		nid, sid, dbName, tableName, dbName, tableName)
-	o.Status(fmt.Sprintf("compacting a range for table %s.%s in n%d, s%d",
-		dbName, tableName, nid, sid))
-	_, err := conn.ExecContext(ctx, compactionStmt)
-	if err != nil {
-		o.Fatal(err)
+	probeWriteRangeStmt := `select range_id, error from crdb_internal.probe_ranges(INTERVAL '1s', 'write') where error != ''`
+
+	_, readErr := conn.ExecContext(ctx, probeReadRangeStmt)
+	if readErr != nil {
+		o.Fatal(readErr)
 	}
+	_, writeErr := conn.ExecContext(ctx, probeWriteRangeStmt)
+	if writeErr != nil {
+		o.Fatal(writeErr)
+	}
+
 	return nil
 }
 
 func registerProbeRanges(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:               "Probe ranges",
+		Name:               "probe-ranges",
 		Owner:              registry.OwnerSRE,
 		Timeout:            30 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCanRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnavailableRanges},
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase, registry.OperationRequiresZeroUnavailableRanges},
 		Run:                runProbeRanges,
 	})
 }

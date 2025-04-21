@@ -31,11 +31,11 @@ const (
 	OwnerProductSecurity    Owner = `product-security`
 	OwnerReleaseEng         Owner = `release-eng`
 	OwnerSQLQueries         Owner = `sql-queries`
-	OwnerSRE                Owner = `sre`
 	OwnerStorage            Owner = `storage`
 	OwnerTestEng            Owner = `test-eng`
 	OwnerDevInf             Owner = `dev-inf`
 	OwnerFieldEng           Owner = `field-engineering`
+	OwnerSRE                Owner = `sre`
 )
 
 // IsValid returns true if the owner is valid, i.e. it has a corresponding team
