@@ -1975,6 +1975,15 @@ message AdminScatterResponse {
   // scattered
   int64 replicas_scattered_bytes = 5;
 
+  // NumReplicasMoved specifies the number of replicas that were successfully
+  // scattered.
+  int64 num_replicas_moved = 6;
+
+  // NoReplicasMoved indicates whether any replicas were moved. This is left for
+  // mixed-version compatibility since NumReplicasMoved is zero if being unset
+  // or being explicitly set to 0.
+  bool no_replicas_moved = 7;
+
   // NB: if you add a field here, don't forget to update combine().
 }
 

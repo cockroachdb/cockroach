@@ -212,22 +212,36 @@ func (s dbSplitAndScatterer) scatter(
 			// throughput.
 			log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
 				newScatterKey, newScatterKey.Next(), pErr.GoError())
+		} else {
+			// Log at INFO level when scatter request is rejected because the range is
+			// non-empty (range size exceeds req.MaxSize). This is expected during
+			// RESTORE resume.
+			log.Infof(ctx, "failed to scatter span [%s,%s): %+v",
+				newScatterKey, newScatterKey.Next(), pErr.GoError())
 		}
 		return 0, nil
 	}
 
-	return s.findDestination(res.(*kvpb.AdminScatterResponse)), nil
+	return s.findDestination(ctx, res.(*kvpb.AdminScatterResponse)), nil
 }
 
 // findDestination returns the node ID of the node of the destination of the
 // AdminScatter request. If the destination cannot be found, 0 is returned.
-func (s dbSplitAndScatterer) findDestination(res *kvpb.AdminScatterResponse) roachpb.NodeID {
+func (s dbSplitAndScatterer) findDestination(
+	ctx context.Context, res *kvpb.AdminScatterResponse,
+) roachpb.NodeID {
 	if len(res.RangeInfos) > 0 {
 		// If the lease is not populated, we return the 0 value anyway. We receive 1
 		// RangeInfo per range that was scattered. Since we send a scatter request
 		// to each range that we make, we are only interested in the first range,
 		// which contains the key at which we're splitting and scattering.
 		return res.RangeInfos[0].Lease.Replica.NodeID
+	}
+
+	if res.NoReplicasMoved {
+		log.Errorf(ctx, "no replicas moved during scatter")
+	} else if res.NumReplicasMoved != 0 {
+		log.Infof(ctx, "number of replicas moved during scatter: %d", res.NumReplicasMoved)
 	}
 
 	return roachpb.NodeID(0)

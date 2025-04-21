@@ -4278,6 +4278,8 @@ func (r *Replica) adminScatter(
 		// that were moved so the value may not be entirely accurate, but it is
 		// adequate.
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
+		NumReplicasMoved:       int64(numReplicasMoved),
+		NoReplicasMoved:        numReplicasMoved == 0,
 	}, nil
 }
 
