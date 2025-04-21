@@ -221,7 +221,7 @@ vectorized: true
 
 # Tracing tests for fast delete.
 statement ok
-CREATE TABLE a (a INT PRIMARY KEY)
+CREATE TABLE a (a DECIMAL PRIMARY KEY)
 
 # Delete range operates in chunks of 600 (defined by row.TableTruncateChunkSize).
 statement ok
@@ -427,28 +427,28 @@ distribution: local
 vectorized: true
 ·
 • render
-│ columns: (a int, b int, "?column?" unknown)
+│ columns: (a decimal, b int, "?column?" unknown)
 │ render ?column?: (NULL)[unknown]
-│ render a: (a)[int]
+│ render a: (a)[decimal]
 │ render b: (b)[int]
 │
 └── • delete
-    │ columns: (a int, b int)
+    │ columns: (a decimal, b int)
     │ estimated row count: 1,000 (missing stats)
     │ from: a
     │ auto commit
     │
     └── • distinct
-        │ columns: (a int, b int)
+        │ columns: (a decimal, b int)
         │ estimated row count: 1,000 (missing stats)
         │ distinct on: a
         │
         └── • cross join (inner)
-            │ columns: (a int, b int)
+            │ columns: (a decimal, b int)
             │ estimated row count: 333,333 (missing stats)
             │
             ├── • scan
-            │     columns: (a int)
+            │     columns: (a decimal)
             │     estimated row count: 1,000 (missing stats)
             │     table: a@a_pkey
             │     spans: FULL SCAN

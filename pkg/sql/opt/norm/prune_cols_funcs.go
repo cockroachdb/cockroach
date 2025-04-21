@@ -102,6 +102,7 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
+	// TODO combine this with helper func
 	familyCols := func(fam cat.Family) opt.ColSet {
 		var colSet opt.ColSet
 		for i, n := 0, fam.ColumnCount(); i < n; i++ {
@@ -123,6 +124,19 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			if famCols.Intersects(updateCols) {
 				cols.UnionWith(famCols)
 			}
+		}
+	}
+
+	// For swap mutations, include all columns in the primary index.
+	if private.Swap {
+		primaryIndex := tabMeta.Table.Index(cat.PrimaryIndex)
+		for i := 0; i < primaryIndex.ColumnCount(); i++ {
+			col := primaryIndex.Column(i)
+			if col.Kind() == cat.System {
+				continue
+			}
+			ord := col.Ordinal()
+			cols.Add(tabMeta.MetaID.ColumnID(ord))
 		}
 	}
 

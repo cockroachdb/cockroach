@@ -1102,3 +1102,7 @@ func (m *SessionDataMutator) SetOptimizerClampLowHistogramSelectivity(val bool) 
 func (m *SessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 	m.Data.OptimizerClampInequalitySelectivity = val
 }
+
+func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
+	m.Data.UseSwapMutations = val
+}
