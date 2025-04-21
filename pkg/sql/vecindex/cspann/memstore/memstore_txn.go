@@ -198,7 +198,7 @@ func (tx *memTxn) SearchPartitions(
 			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
 				toSearch[i].Level = cspann.LeafLevel
-				toSearch[i].StateDetails = cspann.MakeReadyDetails()
+				toSearch[i].StateDetails.MakeReady()
 				toSearch[i].Count = 0
 			} else {
 				// Partition does not exist, so return InvalidLevel, MissingState

@@ -141,7 +141,7 @@ func (fw *fixupWorker) splitPartition(
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
 		expected := metadata
-		metadata.StateDetails = MakeSplittingDetails(
+		metadata.StateDetails.MakeSplitting(
 			fw.index.store.MakePartitionKey(), fw.index.store.MakePartitionKey())
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
@@ -195,7 +195,7 @@ func (fw *fixupWorker) splitPartition(
 
 		// Move to the DrainingForSplit state.
 		expected := metadata
-		metadata.StateDetails = MakeDrainingForSplitDetails(leftPartitionKey, rightPartitionKey)
+		metadata.StateDetails.MakeDrainingForSplit(leftPartitionKey, rightPartitionKey)
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
@@ -208,6 +208,10 @@ func (fw *fixupWorker) splitPartition(
 		partition, err = fw.getPartition(ctx, partitionKey)
 		if err != nil || partition == nil {
 			return err
+		}
+		if !metadata.HasSameTimestamp(partition.Metadata()) {
+			// Another worker must have updated the metadata, so abort.
+			return errors.Wrapf(errFixupAborted, "reloading partition, metadata timestamp changed")
 		}
 	} else if metadata.StateDetails.State != MissingState {
 		leftMetadata, err = fw.getPartitionMetadata(ctx, leftPartitionKey)
@@ -238,7 +242,7 @@ func (fw *fixupWorker) splitPartition(
 		// Update sub-partition states from Updating to Ready.
 		if leftMetadata.StateDetails.State == UpdatingState {
 			expected := leftMetadata
-			leftMetadata.StateDetails = MakeReadyDetails()
+			leftMetadata.StateDetails.MakeReady()
 			err = fw.updateMetadata(ctx, leftPartitionKey, leftMetadata, expected)
 			if err != nil {
 				return err
@@ -246,7 +250,7 @@ func (fw *fixupWorker) splitPartition(
 		}
 		if rightMetadata.StateDetails.State == UpdatingState {
 			expected := rightMetadata
-			rightMetadata.StateDetails = MakeReadyDetails()
+			rightMetadata.StateDetails.MakeReady()
 			err = fw.updateMetadata(ctx, rightPartitionKey, rightMetadata, expected)
 			if err != nil {
 				return err
@@ -278,7 +282,7 @@ func (fw *fixupWorker) splitPartition(
 			// Increase level by one and move to the AddingLevel state.
 			expected := metadata
 			metadata.Level++
-			metadata.StateDetails = MakeAddingLevelDetails(leftPartitionKey, rightPartitionKey)
+			metadata.StateDetails.MakeAddingLevel(leftPartitionKey, rightPartitionKey)
 			err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 			if err != nil {
 				return err
@@ -299,7 +303,7 @@ func (fw *fixupWorker) splitPartition(
 
 		// Move to the Ready state.
 		expected := metadata
-		metadata.StateDetails = MakeReadyDetails()
+		metadata.StateDetails.MakeReady()
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
@@ -528,8 +532,8 @@ func (fw *fixupWorker) createSplitSubPartition(
 	targetMetadata = PartitionMetadata{
 		Level:        sourceMetadata.Level,
 		Centroid:     centroid,
-		StateDetails: MakeUpdatingDetails(sourcePartitionKey),
 	}
+	targetMetadata.StateDetails.MakeUpdating(sourcePartitionKey)
 	err = fw.index.store.TryCreateEmptyPartition(ctx, fw.treeKey, partitionKey, targetMetadata)
 	if err != nil {
 		targetMetadata, err = suppressRaceErrors(err)

@@ -215,11 +215,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		require.NoError(t, err)
 
 		partitionKey := store.MakePartitionKey()
-		nonRootMetadata := cspann.PartitionMetadata{
-			Level:        3,
-			Centroid:     vector.T{1, 2},
-			StateDetails: cspann.MakeReadyDetails(),
-		}
+		nonRootMetadata := cspann.MakeReadyPartitionMetadata(3, vector.T{1, 2})
 		err = store.TryCreateEmptyPartition(ctx, treeKey, partitionKey, nonRootMetadata)
 		require.NoError(t, err)
 
@@ -250,7 +246,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart := &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 1, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
+		cspann.MakeReadyPartitionMetadata(1, centroid),
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,
@@ -268,7 +264,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart = &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 2, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
+		cspann.MakeReadyPartitionMetadata(2, centroid),
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,
