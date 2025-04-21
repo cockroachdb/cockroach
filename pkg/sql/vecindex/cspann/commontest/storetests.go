@@ -289,9 +289,12 @@ func (suite *StoreTestSuite) TestRemoveFromPartition() {
 			err = txn.AddToPartition(suite.ctx, treeKey, cspann.RootKey, cspann.LeafLevel,
 				vec1, primaryKey1, valueBytes1)
 			suite.NoError(err)
+		})
+		CheckPartitionCount(suite.ctx, suite.T(), store, treeKey, cspann.RootKey, 1)
 
-			// Remove that vector.
-			err = txn.RemoveFromPartition(suite.ctx, treeKey, cspann.RootKey,
+		// Remove the vector that added to the root.
+		RunTransaction(suite.ctx, suite.T(), store, func(txn cspann.Txn) {
+			err := txn.RemoveFromPartition(suite.ctx, treeKey, cspann.RootKey,
 				cspann.LeafLevel, primaryKey1)
 			suite.NoError(err)
 		})

@@ -110,6 +110,10 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
+	// Construct an empty root partition.
+	metadata := store.makeEmptyRootMetadata()
+	require.NoError(t, store.TryCreateEmptyPartition(ctx, treeKey, cspann.RootKey, metadata))
+
 	var wait sync.WaitGroup
 	wait.Add(1)
 	commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
@@ -161,6 +165,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	quantizer := quantize.NewUnQuantizer(2)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
+
+	// Construct an empty root partition.
+	metadata := store.makeEmptyRootMetadata()
+	require.NoError(t, store.TryCreateEmptyPartition(ctx, treeKey, cspann.RootKey, metadata))
 
 	commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 		childKey10 := cspann.ChildKey{PartitionKey: 10}
