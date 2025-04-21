@@ -27,3 +27,28 @@ func init() {
 		},
 	)
 }
+
+func init() {
+	// This rule ensures that when a policy dependent is being swapped are
+	// done in the correct order. The dropped element should disappear before
+	// the replacement element is added.
+	registerDepRule(
+		"policy dependents are swapped in order",
+		scgraph.Precedence,
+		"drop-policy-dependent", "add-policy-dependent",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isPolicyDependent),
+				to.TypeFilter(rulesVersionKey, isPolicyDependent),
+				// Confirm we are joining on the same types.
+				from.El.AttrEqVar(rel.Type, "sameType"),
+				to.El.AttrEqVar(rel.Type, "sameType"),
+				JoinOnPolicyID(from, to, "table-id", "policy-id"),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
+				to.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+}
