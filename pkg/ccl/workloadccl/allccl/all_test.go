@@ -247,6 +247,11 @@ func hashTableInitialData(
 					binary.LittleEndian.PutUint64(scratch[:8], uint64(colTime[i].UnixNano()))
 					_, _ = h.Write(scratch[:8])
 				}
+			case types.DecimalFamily:
+				colDecimal := col.Decimal()
+				for i := 0; i < b.Length(); i++ {
+					_, _ = h.Write([]byte(colDecimal[i].String()))
+				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())
 			}
@@ -282,7 +287,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
-		`tpcc`:       0xcccced25deea244e,
+		`tpcc`:       0xccfecd06eed59975,
 		`tpch`:       0xcd2abbd021ed895d,
 		`ycsb`:       0x0e6012ee6491a0fb,
 	}
