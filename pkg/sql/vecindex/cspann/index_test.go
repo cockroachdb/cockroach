@@ -764,7 +764,8 @@ func (s *testState) loadIndexFromFormat(
 	line = line[idx:]
 
 	// Parse centroid and state.
-	details := cspann.MakeReadyDetails()
+	var details cspann.PartitionStateDetails
+	details.MakeReady()
 	idx = strings.Index(line, "[")
 	if idx != -1 {
 		require.True(s.T, strings.HasSuffix(line, "]"))
