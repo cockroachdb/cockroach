@@ -9,7 +9,11 @@
 
 package kvserverbase
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
 
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {
@@ -60,6 +64,10 @@ type BatchEvalTestingKnobs struct {
 
 	// CommitTriggerError is called at commit triggers to simulate errors.
 	CommitTriggerError func() error
+
+	// BeforeAbortSpanCheck is called before a request checks the abort span with
+	// the request's txn ID.
+	BeforeAbortSpanCheck func(id uuid.UUID)
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
