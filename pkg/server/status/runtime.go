@@ -173,6 +173,12 @@ var (
 		Help:        "Current user+system cpu percentage consumed by the CRDB process, normalized 0-1 by number of cores",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
+		Essential:   true,
+		Category:    metric.Metadata_HARDWARE,
+		HowToUse: `This metric gives the CPU utilization percentage by the CockroachDB process. 
+		If it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should 
+		not be running with over 80% utilization for extended periods of time (hours). This metric 
+		is used in the DB Console CPU Percent graph.`,
 	}
 	metaCPUNowNS = metric.Metadata{
 		Name:        "sys.cpu.now.ns",
