@@ -162,3 +162,52 @@ func TestReduce(t *testing.T) {
 		}, 0))
 	})
 }
+
+func TestFindIndex(t *testing.T) {
+	testcases := []struct {
+		name      string
+		input     []int
+		predicate func(int) bool
+		expected  int
+	}{
+		{
+			"empty slice",
+			[]int{},
+			func(i int) bool {
+				return i == 1
+			},
+			-1,
+		},
+		{
+			"single match on non-empty slice",
+			[]int{1, 2, 3, 5, 7},
+			func(i int) bool {
+				return i%2 == 0
+			},
+			1,
+		},
+		{
+			"multiple matches on non-empty slice",
+			[]int{1, 2, 3, 5, 7},
+			func(i int) bool {
+				return i > 2
+			},
+			2,
+		},
+		{
+			"no match on non-empty slice",
+			[]int{1, 3, 5, 7},
+			func(i int) bool {
+				return i%2 == 0
+			},
+			-1,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := FindIndex(tc.input, tc.predicate)
+			require.Equal(t, tc.expected, actual)
+		})
+	}
+}

@@ -121,3 +121,14 @@ func Reduce[T any, U any](collection []T, fn func(acc U, el T, idx int) U, init 
 	}
 	return acc
 }
+
+// FindIndex returns the index of the first element in the collection that
+// satisfies the predicate. If no element satisfies the predicate, returns -1.
+func FindIndex[T any](collection []T, predicate func(T) bool) int {
+	for idx, el := range collection {
+		if predicate(el) {
+			return idx
+		}
+	}
+	return -1
+}
