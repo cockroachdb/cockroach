@@ -727,7 +727,8 @@ func (vi *Index) fallbackOnTargets(
 	vec vector.T,
 	state PartitionStateDetails,
 ) error {
-	if state.State == DrainingForSplitState {
+	switch state.State {
+	case DrainingForSplitState:
 		// Synthesize one search result for each split target partition to pass
 		// to getFullVectors.
 		idxCtx.tempResults[0] = SearchResult{
@@ -754,6 +755,11 @@ func (vi *Index) fallbackOnTargets(
 			searchSet.Add(&tempResults[i])
 		}
 
+		return nil
+
+	case DeletingForSplitState:
+		// The partition is ready for deletion; its target partitions have already
+		// been built and may themselves been split or deleted, so don't use them.
 		return nil
 	}
 

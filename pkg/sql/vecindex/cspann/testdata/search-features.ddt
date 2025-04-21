@@ -5,7 +5,7 @@
 new-index dims=512 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 load-features=1000 hide-tree
 ----
 Created index with 1000 vectors with 512 dimensions.
-3 levels, 107 partitions.
+3 levels, 209 partitions.
 CV stats:
   level 2 - mean: 0.1160, stdev: 0.0241
   level 3 - mean: 0.1595, stdev: 0.0192
