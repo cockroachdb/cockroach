@@ -88,6 +88,12 @@ message ChartMetric {
   // should be of the same type to ensure the information displays behaves in
   // expected ways.
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
+  // exportedName is the name of metrics as seen by external scrapers.
+  required string exportedName = 6 [(gogoproto.nullable) = false];
+  // essential is true when the metric is part of the essential list for customers to monitor.
+  required bool essential = 7 [(gogoproto.nullable) = false];
+  // howToUse is the usage instructions for the metric.
+  optional string howToUse = 8 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display
