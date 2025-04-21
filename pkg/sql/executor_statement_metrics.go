@@ -170,6 +170,7 @@ func (ex *connExecutor) recordStatementSummary(
 	recordedStmtStats := &sqlstats.RecordedStmtStats{
 		FingerprintID:        stmtFingerprintID,
 		QuerySummary:         stmt.StmtSummary,
+		Generic:              flags.IsSet(planFlagGeneric),
 		DistSQL:              flags.ShouldBeDistributed(),
 		Vec:                  flags.IsSet(planFlagVectorized),
 		ImplicitTxn:          implicitTxn,
