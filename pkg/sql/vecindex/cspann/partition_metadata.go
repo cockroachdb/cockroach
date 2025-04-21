@@ -246,6 +246,11 @@ func (psd *PartitionStateDetails) MaybeMergeStalled(stalledOpTimeout time.Durati
 //	Splitting:2,3
 //	Updating:4
 func (psd *PartitionStateDetails) String() string {
+	if psd.State == ReadyState {
+		// Short-circuit the common case.
+		return "Ready"
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString(psd.State.String())
 	if psd.Target1 != InvalidKey {
