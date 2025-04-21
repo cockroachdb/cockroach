@@ -175,6 +175,10 @@ type Table interface {
 	// owning database could not be determined.
 	GetDatabaseID() descpb.ID
 
+	// GetSchemaID returns the owning schema id of the table, or zero, if the
+	// owning schema could not be determined.
+	GetSchemaID() descpb.ID
+
 	// IsHypothetical returns true if this is a hypothetical table (used when
 	// searching for index recommendations).
 	IsHypothetical() bool
