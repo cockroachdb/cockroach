@@ -4186,15 +4186,28 @@ func (r *Replica) adminScatter(
 		preScatterReplicaIDs[rd.ReplicaID] = struct{}{}
 	}
 
+	// TODO(wenyihu6): try understanding the flow better here
+	// 1. why are we keep retrying even if requeue returns false (related to
+	// https://github.com/cockroachdb/cockroach/commit/80c8e056a096a61ff1670316b3234bae2175c3dc,
+	// https://github.com/cockroachdb/cockroach/commit/3baea1f6d396ee2933c9c08f1dc6f095235959af,
+	// https://github.com/cockroachdb/cockroach/commit/7d668a30eea11fbc6609549ea4809f2a065c4ecb)
+	// 2. should we retry if replicaCanBeProcessed returns an error
+	// 3. understand better on what should be considered as a terminating error
+	// v.s. retriable error surfacing up to DR
+	// 4. check verbosity on the logs we added
+
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
+	var terminatingErr error
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
+			log.Eventf(ctx, "stopped scattering for replica %v after %d attempts", r, maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
+			terminatingErr = errors.Wrapf(err, "replica %v can not be processed", r)
 			break
 		}
 		_, err = rq.processOneChange(
@@ -4206,14 +4219,19 @@ func (r *Replica) adminScatter(
 			// issued, in which case the scatter may fail due to the range split
 			// updating the descriptor while processing.
 			if IsRetriableReplicationChangeError(err) {
-				log.VEventf(ctx, 1, "retrying scatter process after retryable error: %v", err)
+				log.Eventf(ctx, "retrying scatter process for replica %v after retryable error: %v", r, err)
 				continue
 			}
+			terminatingErr = errors.Wrapf(err, "replica %v failed to scatter", r)
 			break
 		}
+		log.Eventf(ctx, "no error occured but continue scattering for replica %v until max attempts reached", r)
 		currentAttempt++
 		re.Reset()
 	}
+
+	log.Eventf(ctx, "stopped scattering for replica %v after %d attempts due to %v",
+		r, currentAttempt, terminatingErr)
 
 	// If we've been asked to randomize the leases beyond what the replicate
 	// queue would do on its own (#17341), do so after the replicate queue is
