@@ -8,7 +8,9 @@ package backupinfo_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -549,10 +552,24 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Create URIs and locality info in a way that we can track their
+			// resulting order after being truncated.
+			inputURIs := make([]string, len(tc.manifests))
+			inputLocs := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.manifests))
+			for i := range tc.manifests {
+				index := strconv.Itoa(i)
+				inputURIs[i] = index
+				inputLocs[i].URIsByOriginalLocalityKV = make(map[string]string)
+				inputLocs[i].URIsByOriginalLocalityKV[index] = index
+			}
+			ordering := util.Map(tc.expected, func(ts []int) string {
+				return strconv.Itoa(slices.IndexFunc(tc.manifests, func(m backuppb.BackupManifest) bool {
+					return m.StartTime.WallTime == int64(ts[0]) && m.EndTime.WallTime == int64(ts[1])
+				}))
+			})
+
 			uris, res, locs, err := backupinfo.ValidateEndTimeAndTruncate(
-				make([]string, len(tc.manifests)),
-				tc.manifests,
-				make([]jobspb.RestoreDetails_BackupLocalityInfo, len(tc.manifests)),
+				inputURIs, tc.manifests, inputLocs,
 				hlc.Timestamp{WallTime: int64(tc.endTime)},
 				false, /* includeSkipped */
 				tc.includeCompacted,
@@ -561,9 +578,14 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 				require.ErrorContains(t, err, tc.err)
 				return
 			}
-			require.Equal(t, len(tc.expected), len(uris))
-			require.Equal(t, len(tc.expected), len(locs))
 			require.Equal(t, len(tc.expected), len(res))
+			require.Equal(t, ordering, uris)
+			require.Len(t, locs, len(tc.expected))
+			for idx, rank := range ordering {
+				_, ok := locs[idx].URIsByOriginalLocalityKV[rank]
+				require.True(t, ok)
+			}
+
 			for i := range tc.expected {
 				actual := []int{int(res[i].StartTime.WallTime), int(res[i].EndTime.WallTime)}
 				require.Equal(t, tc.expected[i], actual)
