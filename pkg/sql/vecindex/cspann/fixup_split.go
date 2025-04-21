@@ -209,7 +209,7 @@ func (fw *fixupWorker) splitPartition(
 		if err != nil || partition == nil {
 			return err
 		}
-	} else if metadata.StateDetails.State == DrainingForSplitState {
+	} else if metadata.StateDetails.State != MissingState {
 		leftMetadata, err = fw.getPartitionMetadata(ctx, leftPartitionKey)
 		if err != nil {
 			return err
