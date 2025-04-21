@@ -105,10 +105,9 @@ func (tx *memTxn) AddToPartition(
 	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition did not exist, so ensure it's created now.
-			memPart, err = tx.ensureLockedRootPartition(treeKey)
-		}
-		if err != nil {
+			// Root partition did not exist, so lazily create it now.
+			memPart = tx.ensureLockedRootPartition(treeKey)
+		} else {
 			return errors.Wrapf(err, "adding to partition %d (level=%d)", partitionKey, level)
 		}
 	}
@@ -264,34 +263,13 @@ func (tx *memTxn) GetFullVectors(
 // K-means tree, and returns it with an exclusive lock already acquired on it.
 // NOTE: This is only intended for use with AddToPartition and/or other methods
 // that need an exclusive lock.
-func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartition, error) {
-	// Acquire the structure lock in order to create the root partition.
-	tx.store.structureLock.Acquire(tx.id)
-	tx.ownedLocks = append(tx.ownedLocks, &tx.store.structureLock)
+func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) *memPartition {
+	metadata := tx.store.makeEmptyRootMetadata()
+	memPart, _ := tx.store.tryCreateEmptyPartition(treeKey, cspann.RootKey, metadata)
 
-	// Check for race condition where another thread already created the root.
-	memPart, err := tx.lockPartition(treeKey, cspann.RootKey, true /* isExclusive */)
-	if err != nil {
-		if !errors.Is(err, cspann.ErrPartitionNotFound) {
-			return nil, err
-		}
-
-		// Partition not found, so create it.
-	} else {
-		// Root was already created, return it.
-		return memPart, err
-	}
-
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
-
-	metadata := tx.store.makeEmptyRootMetadataLocked()
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
-	memPart = tx.store.insertPartitionLocked(treeKey, cspann.RootKey, root)
+	// Acquire an exclusive lock on the partition.
 	memPart.lock.Acquire(tx.id)
-
-	tx.store.updatedStructureLocked(tx)
-	return memPart, nil
+	return memPart
 }
 
 // lockPartition acquires a shared or exclusive lock of the given partition. If
