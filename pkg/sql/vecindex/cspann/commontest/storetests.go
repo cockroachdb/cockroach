@@ -438,32 +438,43 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 		partitionKey, _ := suite.createTestPartition(store, treeKey)
 
 		RunTransaction(suite.ctx, suite.T(), store, func(txn cspann.Txn) {
+			// Empty request set.
+			err := txn.GetFullVectors(suite.ctx, treeKey, []cspann.VectorWithKey{})
+			suite.NoError(err)
+
 			// Insert some full vectors into the test store.
 			key1 := store.InsertVector(suite.T(), treeID, vec1)
 			key2 := store.InsertVector(suite.T(), treeID, vec2)
 			key3 := store.InsertVector(suite.T(), treeID, vec3)
 
-			// Include primary keys, partition keys, and keys that cannot be found.
+			// Start by fetching partition keys, both that exist and that do not.
 			results := []cspann.VectorWithKey{
+				{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
+				{Key: cspann.ChildKey{PartitionKey: cspann.PartitionKey(99)}}, // No such partition.
+				{Key: cspann.ChildKey{PartitionKey: partitionKey}},
+			}
+			err = txn.GetFullVectors(suite.ctx, treeKey, results)
+			suite.NoError(err)
+			suite.Equal(vector.T{0, 0}, results[0].Vector)
+			suite.Nil(results[1].Vector)
+			suite.Equal(vector.T{4, 3}, results[2].Vector)
+
+			// Next fetch primary keys that reference vectors that exist and that
+			// do not exist.
+			results = []cspann.VectorWithKey{
 				{Key: cspann.ChildKey{KeyBytes: key1}},
 				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-				{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
 				{Key: cspann.ChildKey{KeyBytes: key2}},
 				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
-				{Key: cspann.ChildKey{PartitionKey: partitionKey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
-				{Key: cspann.ChildKey{PartitionKey: cspann.PartitionKey(99)}}, // No such partition.
 			}
-			err := txn.GetFullVectors(suite.ctx, treeKey, results)
+			err = txn.GetFullVectors(suite.ctx, treeKey, results)
 			suite.NoError(err)
 			suite.Equal(vec1, results[0].Vector)
 			suite.Nil(results[1].Vector)
-			suite.Equal(vector.T{0, 0}, results[2].Vector)
-			suite.Equal(vec2, results[3].Vector)
-			suite.Nil(results[4].Vector)
-			suite.Equal(vector.T{4, 3}, results[5].Vector)
-			suite.Equal(vec3, results[6].Vector)
-			suite.Nil(results[7].Vector)
+			suite.Equal(vec2, results[2].Vector)
+			suite.Nil(results[3].Vector)
+			suite.Equal(vec3, results[4].Vector)
 
 			// Grab another set of vectors to ensure that saved state is properly reset.
 			results = []cspann.VectorWithKey{

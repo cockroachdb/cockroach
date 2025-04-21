@@ -231,27 +231,38 @@ func (tx *memTxn) SearchPartitions(
 func (tx *memTxn) GetFullVectors(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
 ) error {
-	tx.store.mu.Lock()
-	defer tx.store.mu.Unlock()
+	if len(refs) == 0 {
+		return nil
+	}
 
-	for i := range len(refs) {
-		ref := &refs[i]
-		if ref.Key.PartitionKey != cspann.InvalidKey {
-			// Get the partition's centroid.
-			memPart, ok := tx.store.getPartitionLocked(treeKey, ref.Key.PartitionKey)
+	// All vectors must be at the same level of the tree.
+	if refs[0].Key.PartitionKey != cspann.InvalidKey {
+		// Get partition centroids.
+		for i := range len(refs) {
+			func(vectorWithKey *cspann.VectorWithKey) {
+				// Lock the partition to read its data.
+				memPart := tx.store.lockPartition(
+					treeKey, vectorWithKey.Key.PartitionKey, uniqueOwner, false /* isExclusive */)
+				if memPart != nil {
+					defer memPart.lock.ReleaseShared()
+					vectorWithKey.Vector = memPart.lock.partition.Centroid()
+				} else {
+					vectorWithKey.Vector = nil
+				}
+			}(&refs[i])
+		}
+	} else {
+		// Get inserted vectors.
+		tx.store.mu.Lock()
+		defer tx.store.mu.Unlock()
+
+		for i := range len(refs) {
+			vectorWithKey := &refs[i]
+			vector, ok := tx.store.mu.vectors[string(vectorWithKey.Key.KeyBytes)]
 			if ok {
-				// Don't need to acquire lock to call the Centroid method, since it
-				// is immutable and thread-safe.
-				ref.Vector = memPart.lock.partition.Centroid()
+				vectorWithKey.Vector = vector
 			} else {
-				ref.Vector = nil
-			}
-		} else {
-			vector, ok := tx.store.mu.vectors[string(refs[i].Key.KeyBytes)]
-			if ok {
-				ref.Vector = vector
-			} else {
-				ref.Vector = nil
+				vectorWithKey.Vector = nil
 			}
 		}
 	}
