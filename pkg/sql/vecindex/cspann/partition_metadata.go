@@ -35,6 +35,8 @@ func ParsePartitionState(s string) PartitionState {
 		return DrainingForSplitState
 	case "DrainingForMerge":
 		return DrainingForMergeState
+	case "DeletingForSplit":
+		return DeletingForSplitState
 	case "AddingLevel":
 		return AddingLevelState
 	case "RemovingLevel":
@@ -71,6 +73,8 @@ func (s PartitionState) String() string {
 		return "DrainingForSplit"
 	case DrainingForMergeState:
 		return "DrainingForMerge"
+	case DeletingForSplitState:
+		return "DeletingForSplitState"
 	case AddingLevelState:
 		return "AddingLevel"
 	case RemovingLevelState:
@@ -117,6 +121,10 @@ const (
 	// decreased by one. What remains is to move vectors from the child into the
 	// root. Searches, inserts, and deletes are allowed, but not splits or merges.
 	RemovingLevelState
+	// DeletingForSplitState indicates that a non-root splitting partition is
+	// about to be removed from its tree and deleted. Searches are allowed, but
+	// not inserts, deletes, splits, or merges.
+	DeletingForSplitState
 )
 
 // PartitionStateDetails records information about the current state of a
@@ -126,9 +134,9 @@ type PartitionStateDetails struct {
 	// state machine diagram for details.
 	State PartitionState
 	// Target1 is set differently depending on the state:
-	// - SplittingState, DrainingForSplitState, AddingLevelState: key of a new
-	//   partition which will contain a subset of the vectors in the splitting
-	//   partition.
+	// - SplittingState, DrainingForSplitState, DeletingForSplitState,
+	//   AddingLevelState: key of a new partition which will contain a subset of
+	//   the vectors in the splitting partition.
 	// - DrainingForMergeState (non-root): key of an existing partition at the
 	//   same level where vectors can be inserted if no better partition has been
 	//   found; this guarantees that inserts always find a target partition that
@@ -137,7 +145,8 @@ type PartitionStateDetails struct {
 	//   that will be merged into the root partition.
 	Target1 PartitionKey
 	// Target2 is set the same way as Target1 for these states:
-	// SplittingState, DrainingForSplitState, AddingLevelState.
+	// SplittingState, DrainingForSplitState, DeletingForSplitState,
+	// AddingLevelState.
 	Target2 PartitionKey
 	// Source is set differently depending on the state:
 	// - UpdatingState: key of the partition that is currently moving vectors into
@@ -214,6 +223,16 @@ func (psd *PartitionStateDetails) MakeAddingLevel(target1, target2 PartitionKey)
 	}
 }
 
+// MakeDeletingForSplit sets DeletingForSplit partition state details.
+func (psd *PartitionStateDetails) MakeDeletingForSplit(target1, target2 PartitionKey) {
+	*psd = PartitionStateDetails{
+		State:     DeletingForSplitState,
+		Target1:   target1,
+		Target2:   target2,
+		Timestamp: getHigherTimestamp(psd.Timestamp),
+	}
+}
+
 // getHigherTimestamp takes an existing timestamp (can be zero) and returns a
 // time that's greater than the existing timestamp. It prefers to use the
 // current time, but if that is not greater, it simply adds one nanosecond to
@@ -236,7 +255,7 @@ var DefaultStalledOpTimeout = 100 * time.Millisecond
 // state for longer than the timeout, possibly indicating the fixup is stalled.
 func (psd *PartitionStateDetails) MaybeSplitStalled(stalledOpTimeout time.Duration) bool {
 	switch psd.State {
-	case SplittingState, DrainingForSplitState, AddingLevelState:
+	case SplittingState, DrainingForSplitState, DeletingForSplitState, AddingLevelState:
 		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
 	}
 	return false

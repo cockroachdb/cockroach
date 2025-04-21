@@ -537,7 +537,7 @@ force-split partition-key=5 parent-partition-key=1
 # Split partitions with less than 2 vectors.
 # ----------------------------------------------------------------------
 
-load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
+load-index min-partition-size=1 max-partition-size=2 beam-size=2
 • 1 (2.4583, 4.6667)
 │
 └───• 2 (3.75, 6.9167)
