@@ -45,6 +45,12 @@ stabilize
   1->1 MsgAppResp Term:1 Log:0/12 Commit:11
   1->1 MsgAppResp Term:1 Log:0/13 Commit:11
 
+status 1
+----
+1: StateReplicate match=13 next=14 sentCommit=11 matchCommit=11
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+
 # Attempt to send a misaligned MsgApp. No-op.
 send-msg-app 1 to=2 lo=10 hi=13
 ----
