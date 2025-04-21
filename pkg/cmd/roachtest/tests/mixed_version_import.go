@@ -20,6 +20,11 @@ import (
 
 func registerImportMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
+		// TODO(jeffswenson): re-enable mixed version import once #144818 is
+		// backported. This test is fragile because it expects the special
+		// 'workload://' fixtures to be deterministic across versions. A better
+		// version of this test would use actual CSV fixtures.
+		Skip:             "Issue #143870",
 		Name:             "import/mixed-versions",
 		Owner:            registry.OwnerSQLQueries,
 		Cluster:          r.MakeClusterSpec(4),

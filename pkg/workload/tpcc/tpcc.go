@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
-	randold "golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -662,9 +661,6 @@ func (w *tpcc) Tables() []workload.Table {
 	aCharsInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, aCharsAlphabet)
 	lettersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, lettersAlphabet)
 	numbersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, numbersAlphabet)
-	aCharsInitOld := workloadimpl.PrecomputedRandInit(randold.New(randold.NewSource(seed)), precomputedLength, aCharsAlphabet)
-	lettersInitOld := workloadimpl.PrecomputedRandInit(randold.New(randold.NewSource(seed)), precomputedLength, lettersAlphabet)
-	numbersInitOld := workloadimpl.PrecomputedRandInit(randold.New(randold.NewSource(seed)), precomputedLength, numbersAlphabet)
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
@@ -677,15 +673,6 @@ func (w *tpcc) Tables() []workload.Table {
 						aChars:  aCharsInit(),
 						letters: lettersInit(),
 						numbers: numbersInit(),
-					},
-					rngOld: tpccRandOld{
-						Rand: randold.New(randold.NewSource(uint64(timeutil.Now().UnixNano()))),
-						// Intentionally wait until here to initialize the precomputed rands
-						// so a caller of Tables that only wants schema doesn't compute
-						// them.
-						aChars:  aCharsInitOld(),
-						letters: lettersInitOld(),
-						numbers: numbersInitOld(),
 					},
 				}
 			},

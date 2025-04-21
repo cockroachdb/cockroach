@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/workload/histogram",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadogV1",
