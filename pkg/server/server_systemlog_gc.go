@@ -258,8 +258,6 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 		for ; ; timer.Reset(getPeriod()) {
 			select {
 			case <-timer.C:
-				timer.Read = true
-
 				// Do the work for all system tables.
 				runSystemLogGC(ctx, sqlServer, st, systemLogsToGC)
 

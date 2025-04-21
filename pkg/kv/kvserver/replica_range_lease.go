@@ -1443,7 +1443,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
 					return kvpb.NewError(err)
 				case <-slowTimer.C:
-					slowTimer.Read = true
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
 						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)

@@ -931,7 +931,6 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		}
 		timer.Reset(until.Sub(now))
 		<-timer.C
-		timer.Read = true
 	}
 
 	// Create a config that will be used by the taskPacer, which allows us to pace

@@ -246,8 +246,6 @@ func (m *manualTimer) Ch() <-chan time.Time {
 	return m.ch
 }
 
-func (m *manualTimer) MarkRead() {}
-
 type manualTicker struct {
 	m       *ManualTime
 	element *list.Element

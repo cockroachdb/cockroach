@@ -261,7 +261,6 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		}
 		return nil, bp.constructProgressProducerMeta(prog)
 	case <-bp.aggTimer.C:
-		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
 			bp.FlowCtx.NodeID.SQLInstanceID(), bp.FlowCtx.ID, bp.agg)
@@ -494,7 +493,6 @@ func runBackupProcessor(
 								case <-ctxDone:
 									return ctx.Err()
 								case <-timer.C:
-									timer.Read = true
 								}
 							}
 

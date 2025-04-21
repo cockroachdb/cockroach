@@ -97,7 +97,6 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 		timer.Reset(timeutil.Until(lastReconciled.Add(getInterval())))
 		select {
 		case <-timer.C:
-			timer.Read = true
 			r.reconcile(ctx)
 			lastReconciled = timeutil.Now()
 		case <-reconcileIntervalChanged:

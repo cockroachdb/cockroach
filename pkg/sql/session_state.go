@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -54,7 +55,7 @@ func serializeSessionState(
 	prepStmtsState eval.PreparedStatementState,
 	sd *sessiondata.SessionData,
 	execCfg *ExecutorConfig,
-) (*tree.DBytes, error) {
+) (_ *tree.DBytes, err error) {
 	if inExplicitTxn {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
@@ -87,7 +88,9 @@ func serializeSessionState(
 	m.SessionData = sd.SessionData
 	sessiondata.MarshalNonLocal(sd, &m.SessionData)
 	m.LocalOnlySessionData = sd.LocalOnlySessionData
-	m.PreparedStatements = prepStmtsState.MigratablePreparedStatements()
+	if m.PreparedStatements, err = prepStmtsState.MigratablePreparedStatements(); err != nil {
+		return nil, err
+	}
 
 	b, err := protoutil.Marshal(&m)
 	if err != nil {
@@ -205,7 +208,7 @@ func (p *planner) DeserializeSessionState(
 			stmt,
 			placeholderTypes,
 			prepStmt.PlaceholderTypeHints,
-			PreparedStatementOriginSessionMigration,
+			prep.StatementOriginSessionMigration,
 		)
 		if err != nil {
 			return nil, err

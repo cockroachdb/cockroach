@@ -72,7 +72,6 @@ func (h *HeartbeatSender) Start(ctx context.Context, ts timeutil.TimeSource) {
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-timer.Ch():
-					timer.MarkRead()
 					timer.Reset(h.frequencyGetter())
 				case frontier := <-h.FrontierUpdates:
 					h.frontier.Forward(frontier)

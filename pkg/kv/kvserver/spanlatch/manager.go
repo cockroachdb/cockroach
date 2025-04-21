@@ -607,8 +607,6 @@ func (m *Manager) waitForSignal(
 				return errors.Errorf("unsupported poison.Policy %d", pp)
 			}
 		case <-t.C:
-			t.Read = true
-
 			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
 				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {

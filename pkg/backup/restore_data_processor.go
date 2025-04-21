@@ -664,7 +664,6 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		rd.progressMade = true
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 	case <-rd.aggTimer.C:
-		rd.aggTimer.Read = true
 		rd.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(rd.Ctx(),
 			rd.FlowCtx.NodeID.SQLInstanceID(), rd.FlowCtx.ID, rd.agg)

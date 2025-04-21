@@ -221,7 +221,6 @@ func (rs *replicaScanner) waitAndProcess(ctx context.Context, start time.Time, r
 			if log.V(6) {
 				log.Infof(ctx, "wait timer fired")
 			}
-			rs.waitTimer.Read = true
 			if repl == nil {
 				return false
 			}

@@ -167,7 +167,6 @@ func startSampleEnvironment(
 				case <-cfg.stopper.ShouldQuiesce():
 					return
 				case <-timer.C:
-					timer.Read = true
 					timer.Reset(cfg.minSampleInterval)
 
 					cgoStats := status.GetCGoMemStats(ctx)

@@ -102,7 +102,6 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			timer.Stop()
 			continue
 		case <-timer.C:
-			timer.Read = true
 			log.Info(ctx, "running table metadata update job after data cache expiration")
 		case <-signalCh:
 			log.Info(ctx, "running table metadata update job via grpc signal")
