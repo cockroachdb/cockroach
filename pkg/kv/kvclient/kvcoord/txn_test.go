@@ -38,9 +38,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func checkGetResults(t *testing.T, expected map[string][]byte, results ...kv.Result) {
+	for _, result := range results {
+		require.Equal(t, 1, len(result.Rows))
+		require.Equal(t, expected[string(result.Rows[0].Key)], result.Rows[0].ValueBytes())
+	}
+	require.Len(t, expected, len(results))
+}
 
 // TestTxnDBBasics verifies that a simple transaction can be run and
 // either committed or aborted. On commit, mutations are visible; on
@@ -2370,4 +2380,83 @@ func TestLeafTransactionAdmissionHeader(t *testing.T) {
 		Source:     kvpb.AdmissionHeader_FROM_SQL,
 	}
 	require.Equal(t, expectedLeafHeader, leafHeader)
+}
+
+// TestTxnBufferedWritesOmitAbortSpanChecks verifies that transactions that use
+// buffered writes do not check the AbortSpan, while still upholding
+// read-your-own-writes semantics.
+func TestTxnBufferedWritesOmitAbortSpanChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var mu struct {
+		syncutil.Mutex
+		txnID uuid.UUID
+	}
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			BeforeAbortSpanCheck: func(id uuid.UUID) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				if mu.txnID == id {
+					t.Fatal("transactions using buffered writes should not check the AbortSpan")
+				}
+			},
+		},
+	})
+	defer s.Stop()
+
+	value1 := []byte("value1")
+	valueConflict := []byte("conflict")
+
+	keyA := []byte("keyA")
+
+	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+	txn.SetBufferedWritesEnabled(true)
+	mu.Lock()
+	mu.txnID = txn.ID()
+	mu.Unlock()
+
+	// Fix the transaction's commit timestamp.
+	_, err := txn.CommitTimestamp()
+	require.NoError(t, err)
+
+	// Put transactional value at keyA.
+	require.NoError(t, txn.Put(ctx, keyA, value1))
+
+	// Read what we just wrote.
+	b := txn.NewBatch()
+	b.Get(keyA)
+	require.NoError(t, txn.Run(ctx, b))
+	expected := map[string][]byte{
+		"keyA": value1,
+	}
+	checkGetResults(t, expected, b.Results...)
+
+	// Start another transaction that writes to keyA. This prevents us from
+	// committing at our original timestamp. Moreover, had we not been buffering
+	// our writes, this transaction would have resulted in aborting us and
+	// removing our intent.
+	err = s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		require.NoError(t, txn.SetUserPriority(roachpb.MaxUserPriority))
+		return txn.Put(ctx, keyA, valueConflict)
+	})
+	require.NoError(t, err)
+
+	// Perform another read again. We should still see our previous write, not what
+	// the conflicting transaction wrote.
+	b = txn.NewBatch()
+	b.Get(keyA)
+	require.NoError(t, txn.Run(ctx, b))
+	expected = map[string][]byte{
+		"keyA": value1,
+	}
+	checkGetResults(t, expected, b.Results...)
+
+	// Try to commit the transaction. We should encounter a WriteTooOldError.
+	err = txn.Commit(ctx)
+	require.Error(t, err)
+	require.Regexp(t, "TransactionRetryWithProtoRefreshError: .*WriteTooOldError", err)
 }
