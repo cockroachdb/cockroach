@@ -1119,15 +1119,29 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	// Create a scratch range.
 	scratchKey := tc.ScratchRange(t)
-	store := tc.GetFirstStoreFromServer(t, 0)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Targets(1, 2)...)
+
+	// Get a non-leaseholder replica to avoid background RefreshPolicy calls that
+	// would interfere with testing the policy refresh logic in isolation.
+	store := tc.GetFirstStoreFromServer(t, 1)
 	repl := store.LookupReplica(roachpb.RKey(scratchKey))
 	require.NotNil(t, repl)
 	repl.SetSpanConfig(roachpb.SpanConfig{GlobalReads: true}, roachpb.Span{Key: scratchKey})
+
+	// Verify that the range is properly configured to use global reads.
+	testutils.SucceedsSoon(t, func() error {
+		if repl.GetRangeInfo(ctx).ClosedTimestampPolicy != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.New("expected LEAD_FOR_GLOBAL_READS")
+		}
+		return nil
+	})
 
 	// Define test cases with different latency scenarios.
 	testCases := []struct {

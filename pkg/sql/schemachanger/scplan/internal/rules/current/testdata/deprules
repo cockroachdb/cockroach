@@ -4170,6 +4170,22 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($partial-predicate, $partial-predicate-Target, $partial-predicate-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: policy dependents are swapped in order
+  from: drop-policy-dependent-Node
+  kind: Precedence
+  to: add-policy-dependent-Node
+  query:
+    - $drop-policy-dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
+    - $add-policy-dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
+    - $drop-policy-dependent[Type] = $sameType
+    - $add-policy-dependent[Type] = $sameType
+    - joinOnPolicyID($drop-policy-dependent, $add-policy-dependent, $table-id, $policy-id)
+    - $drop-policy-dependent-Target[TargetStatus] = ABSENT
+    - $drop-policy-dependent-Node[CurrentStatus] = ABSENT
+    - $add-policy-dependent-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $add-policy-dependent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($drop-policy-dependent, $drop-policy-dependent-Target, $drop-policy-dependent-Node)
+    - joinTargetNode($add-policy-dependent, $add-policy-dependent-Target, $add-policy-dependent-Node)
 - name: primary index named right before index becomes public
   from: index-name-Node
   kind: SameStagePrecedence
@@ -9091,6 +9107,22 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($partial-predicate, $partial-predicate-Target, $partial-predicate-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: policy dependents are swapped in order
+  from: drop-policy-dependent-Node
+  kind: Precedence
+  to: add-policy-dependent-Node
+  query:
+    - $drop-policy-dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
+    - $add-policy-dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
+    - $drop-policy-dependent[Type] = $sameType
+    - $add-policy-dependent[Type] = $sameType
+    - joinOnPolicyID($drop-policy-dependent, $add-policy-dependent, $table-id, $policy-id)
+    - $drop-policy-dependent-Target[TargetStatus] = ABSENT
+    - $drop-policy-dependent-Node[CurrentStatus] = ABSENT
+    - $add-policy-dependent-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $add-policy-dependent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($drop-policy-dependent, $drop-policy-dependent-Target, $drop-policy-dependent-Node)
+    - joinTargetNode($add-policy-dependent, $add-policy-dependent-Target, $add-policy-dependent-Node)
 - name: primary index named right before index becomes public
   from: index-name-Node
   kind: SameStagePrecedence
