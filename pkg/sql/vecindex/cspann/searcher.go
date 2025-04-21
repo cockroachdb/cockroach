@@ -71,7 +71,6 @@ func (s *searcher) Init(idx *Index, idxCtx *Context, searchSet *SearchSet) {
 // search stats and also rerank vectors (if requested by idxCtx).
 func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 	if len(s.levels) == 0 {
-		s.levels = ensureSliceLen(s.levels, 1)
 		root := &s.levelStorage[0]
 		root.Init(s.idx, s.idxCtx, nil /* parent */, &s.searchSet.Stats)
 
@@ -91,7 +90,8 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 		}
 
 		if s.idxCtx.level > root.Level() {
-			// This should only happen when inserting into the root.
+			// Next must have been called by an insert operation. This code path
+			// should only be hit when the insert needs to go into the root partition.
 			if root.Level() != s.idxCtx.level-1 {
 				panic(errors.AssertionFailedf("caller passed invalid level %d", s.idxCtx.level))
 			}
@@ -99,6 +99,8 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 				ChildKey: ChildKey{PartitionKey: RootKey},
 			})
 			// Ensure that if Next() is called again, it will return false.
+			s.levels = ensureSliceLen(s.levels, 1)
+			s.levels[0] = *root
 			return root.NextBatch(ctx)
 		}
 
