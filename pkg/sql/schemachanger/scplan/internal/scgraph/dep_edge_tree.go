@@ -8,11 +8,11 @@ package scgraph
 import (
 	"sync"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 // edgeTreeOrder order in which the edge tree is sorted,
@@ -30,8 +30,8 @@ type getTargetIdxFunc = func(n *screl.Node) targetIdx
 // depEdges is a data structure to store the set of depEdges. It offers
 // in-order traversal of edges from or to any node in the graph.
 type depEdges struct {
-	fromTo *btree.BTree
-	toFrom *btree.BTree
+	fromTo *btree.BTreeG[*depEdgeTreeEntry]
+	toFrom *btree.BTreeG[*depEdgeTreeEntry]
 
 	getTargetIdx getTargetIdxFunc
 	edgeAlloc    depEdgeAlloc
@@ -42,8 +42,8 @@ type depEdges struct {
 func makeDepEdges(getTargetIdx getTargetIdxFunc) depEdges {
 	const degree = 32 // arbitrary
 	return depEdges{
-		fromTo:       btree.New(degree),
-		toFrom:       btree.New(degree),
+		fromTo:       btree.NewG[*depEdgeTreeEntry](degree, (*depEdgeTreeEntry).less),
+		toFrom:       btree.NewG[*depEdgeTreeEntry](degree, (*depEdgeTreeEntry).less),
 		getTargetIdx: getTargetIdx,
 	}
 }
@@ -109,7 +109,11 @@ func (et *depEdges) iterateToNode(n *screl.Node, it DepEdgeIterator) (err error)
 // (target, status) node will be visited, and if the order is toFrom, then all
 // edges to that (target, status) node will be visited.
 func iterateDepEdges(
-	order edgeTreeOrder, t *btree.BTree, target targetIdx, status scpb.Status, it DepEdgeIterator,
+	order edgeTreeOrder,
+	t *btree.BTreeG[*depEdgeTreeEntry],
+	target targetIdx,
+	status scpb.Status,
+	it DepEdgeIterator,
 ) (err error) {
 	var idx int
 	if order == toFrom {
@@ -123,8 +127,8 @@ func iterateDepEdges(
 	defer putDepEdgeTreeEntry(k2)
 	*k1 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryStart}
 	*k2 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryEnd}
-	t.AscendRange(k1, k2, func(i btree.Item) (wantMore bool) {
-		err = it(i.(*depEdgeTreeEntry).edge)
+	t.AscendRange(k1, k2, func(i *depEdgeTreeEntry) (wantMore bool) {
+		err = it(i.edge)
 		return err == nil
 	})
 	return iterutil.Map(err)
@@ -132,8 +136,8 @@ func iterateDepEdges(
 
 // iterates iterates all edges.
 func (et *depEdges) iterate(it DepEdgeIterator) (err error) {
-	et.fromTo.Ascend(func(i btree.Item) bool {
-		err = it(i.(*depEdgeTreeEntry).edge)
+	et.fromTo.Ascend(func(i *depEdgeTreeEntry) bool {
+		err = it(i.edge)
 		return err == nil
 	})
 	return iterutil.Map(err)
@@ -144,8 +148,8 @@ func (et *depEdges) get(k edgeKey) (*DepEdge, bool) {
 	qk := getDepEdgeTreeEntry()
 	defer putDepEdgeTreeEntry(qk)
 	*qk = depEdgeTreeEntry{edgeKey: k, order: fromTo}
-	if got := et.fromTo.Get(qk); got != nil {
-		return got.(*depEdgeTreeEntry).edge, true
+	if got, _ := et.fromTo.Get(qk); got != nil {
+		return got.edge, true
 	}
 	return nil, false
 }
@@ -205,8 +209,7 @@ const (
 	queryEnd
 )
 
-func (ek *depEdgeTreeEntry) Less(other btree.Item) bool {
-	o := other.(*depEdgeTreeEntry)
+func (ek *depEdgeTreeEntry) less(o *depEdgeTreeEntry) bool {
 	less, eq := cmpEdgeTreeEntry(ek, o, true /* first */)
 	if eq {
 		less, _ = cmpEdgeTreeEntry(ek, o, false /* first */)
