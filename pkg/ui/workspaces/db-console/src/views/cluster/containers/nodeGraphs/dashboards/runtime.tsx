@@ -77,8 +77,15 @@ export default function (props: GraphDashboardProps) {
           and fall based on load.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="goroutines">
-        <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
+      <Axis units={AxisUnits.Count} label="goroutines">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.sys.goroutines"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
@@ -129,7 +136,7 @@ export default function (props: GraphDashboardProps) {
       title="GC Runs"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`}
+      tooltip={`The number of times that Go's garbage collector was invoked per second ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
       <Axis label="runs">
@@ -141,7 +148,7 @@ export default function (props: GraphDashboardProps) {
       title="GC Pause Time"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The amount of processor time used by Go’s garbage collector per second
+      tooltip={`The amount of processor time used by Go's garbage collector per second
           ${tooltipSelection}. During garbage collection, application code
           execution is paused.`}
       showMetricsInTooltip={true}
