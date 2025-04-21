@@ -1757,7 +1757,45 @@ func (r *raft) Step(m pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+			var logHint entryID
+			if m.Type == pb.MsgVote {
+				// Return a hint to the candidate - a guess on the maximal (index, term)
+				// at which the logs match. Do this by searching through the voter's
+				// log for the maximum (index, term) pair with a term <= candLastID.term
+				// and an index <= the candLastID.index
+				//
+				// The candidate's log can shorter than the voter's. So we take the
+				// minimum of the two log's last index to pass into findConflictByTerm.
+				//
+				// If the resulting logHint.index and logHint.term are both non-zero,
+				// it indicates that the voter's log has an entry with
+				// a term <= candLastID.term and an index <= candLast.index.
+				//
+				// It is possible that one or both of the returning index and term values
+				// are 0. This is fine as the candidate would ignore the hint in such case.
+				//
+				// This can help skip all indexes in the voter's uncommitted log tail
+				// with terms greater than candLast.term.
+				//
+				// The use of findConflictByTerm here is very similar to the one in
+				// handleAppendEntries. See the other caller for findConflictByTerm
+				// (in stepLeader) for a much more detailed explanation of this mechanism.
+				minIdx := min(candLastID.index, lastID.index)
+				logHint.index, logHint.term = r.raftLog.findConflictByTerm(minIdx, candLastID.term)
+			}
+			r.send(pb.Message{
+				To:   m.From,
+				Term: m.Term,
+				// RejectHint and LogTerm are also populated although the message is non
+				// -reject. This helps the new leader (if the candidate wins election)
+				// to set the state of the follower to StateReplicate if the logs match.
+				// See raft.becomeLeader for more detail.
+				// TODO(hakuuww): Consider renaming RejectHint to something more
+				//  general like LogHint.
+				RejectHint: logHint.index,
+				LogTerm:    logHint.term,
+				Type:       voteRespMsgType(m.Type),
+			})
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
