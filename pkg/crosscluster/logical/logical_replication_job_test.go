@@ -181,6 +181,61 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 	}
 }
 
+func TestOptimsitcInsertCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #144645. Running the optimistic insert code
+	// path could corrupt indexes if the insert is not wrapped in a savepoint.
+
+	ctx := context.Background()
+
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbSource.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled = true")
+
+	createTableStmt := `CREATE TABLE computed_cols (
+		a INT,
+		b INT,
+		c INT,
+		PRIMARY KEY (a, b)
+	)`
+	dbSource.Exec(t, createTableStmt)
+	dbDest.Exec(t, createTableStmt)
+
+	createIdxStmt := `CREATE INDEX c ON computed_cols (c)`
+	dbSource.Exec(t, createIdxStmt)
+	dbDest.Exec(t, createIdxStmt)
+
+	// Insert initial data into destination that should be overwritten. This
+	// gives more opportunities for corruption.
+	dbDest.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 3), (3, 4, 5)")
+	dbSource.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 6), (3, 4, 7)")
+
+	// Create logical replication stream from source to destination
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE computed_cols ON $1 INTO TABLE computed_cols",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbDest, jobID)
+
+	dbSource.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+	dbDest.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+
+	compareReplicatedTables(t, s, "a", "b", "computed_cols", dbSource, dbDest)
+}
+
 type fatalDLQ struct{ *testing.T }
 
 func (fatalDLQ) Create(ctx context.Context) error { return nil }
