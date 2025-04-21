@@ -671,9 +671,21 @@ func (vi *Index) searchForUpdateHelper(
 			// partition if this is an insert operation. This is not necessary in
 			// the delete case; it's OK if we end up leaving a dangling vector.
 			if idxCtx.forInsert {
-				partitionKey := result.ChildKey.PartitionKey
+				// If splitting the root, the new parent will be the root.
+				var parentPartitionKey PartitionKey
+				sourcePartitionKey := result.ChildKey.PartitionKey
+				if sourcePartitionKey == RootKey {
+					// Splitting the root partition, so the parent of the target
+					// partitions will be the root.
+					parentPartitionKey = RootKey
+				} else {
+					// Splitting a non-root partition, so the parent of the target
+					// partitions will be the parent of the splitting partition.
+					parentPartitionKey = result.ParentPartitionKey
+				}
+
 				err = vi.fallbackOnTargets(ctx, idxCtx, &idxCtx.tempSearchSet,
-					partitionKey, idxCtx.randomized, state)
+					parentPartitionKey, sourcePartitionKey, idxCtx.randomized, state)
 				if err != nil {
 					return nil, err
 				}
@@ -726,15 +738,16 @@ func (vi *Index) searchForUpdateHelper(
 }
 
 // fallbackOnTargets is called when none of the partitions returned by a search
-// allow inserting a vector, because they are in a Draining state. Instead, the
-// search needs to continue with the target partitions of the split (or merge).
-// fallbackOnTargets returns an ordered list of search results for the targets.
+// allow inserting a vector, because they are in a Draining or Deleting state.
+// Instead, the search needs to continue with the target partitions of the split
+// (or merge). fallbackOnTargets returns an ordered list of search results for
+// the targets.
 // NOTE: "tempResults" is overwritten within this method by results.
 func (vi *Index) fallbackOnTargets(
 	ctx context.Context,
 	idxCtx *Context,
 	searchSet *SearchSet,
-	partitionKey PartitionKey,
+	parentPartitionKey, sourcePartitionKey PartitionKey,
 	vec vector.T,
 	state PartitionStateDetails,
 ) error {
@@ -743,11 +756,11 @@ func (vi *Index) fallbackOnTargets(
 		// Synthesize one search result for each split target partition to pass
 		// to getFullVectors.
 		idxCtx.tempResults[0] = SearchResult{
-			ParentPartitionKey: partitionKey,
+			ParentPartitionKey: parentPartitionKey,
 			ChildKey:           ChildKey{PartitionKey: state.Target1},
 		}
 		idxCtx.tempResults[1] = SearchResult{
-			ParentPartitionKey: partitionKey,
+			ParentPartitionKey: parentPartitionKey,
 			ChildKey:           ChildKey{PartitionKey: state.Target2},
 		}
 
@@ -757,7 +770,7 @@ func (vi *Index) fallbackOnTargets(
 		if err != nil {
 			return errors.Wrapf(err,
 				"fetching centroids for target partitions %d and %d, for splitting partition %d",
-				state.Target1, state.Target2, partitionKey)
+				state.Target1, state.Target2, sourcePartitionKey)
 		}
 
 		// Calculate the distance of the query vector to the centroids.
