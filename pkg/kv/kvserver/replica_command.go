@@ -4280,7 +4280,7 @@ func (r *Replica) adminScatter(
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
 		NumReplicasMoved:       int64(numReplicasMoved),
 		NoReplicasMoved:        numReplicasMoved == 0,
-	}, nil
+	}, terminatingErr
 }
 
 // TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
