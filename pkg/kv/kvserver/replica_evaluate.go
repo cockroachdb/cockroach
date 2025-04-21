@@ -240,6 +240,10 @@ func evaluateBatch(
 		// transactions on reads). Note that 1PC transactions have had their
 		// transaction field cleared by this point so we do not execute this
 		// check in that case.
+		//
+		// TODO(arul): this check assumes lock == Intent, which isn't true any
+		// longer. We could optimize this by making a distinction between locks
+		// acquired and previous writes performed.
 		if baHeader.Txn.IsLocking() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
@@ -247,9 +251,17 @@ func evaluateBatch(
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
+			// - if the request belongs to a transaction that has buffered all
+			// preceding writes on the client, we don't rely on the AbortSpan to
+			// correctly uphold read-your-own-write semantics.
+			//
 			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
-			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
+			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() &&
+				!ba.HasBufferedAllPrecedingWrites {
+				if fn := rec.EvalKnobs().BeforeAbortSpanCheck; fn != nil {
+					fn(ba.Txn.ID)
+				}
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
