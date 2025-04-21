@@ -981,6 +981,9 @@ func TestIndexConcurrency(t *testing.T) {
 			// Eliminate the delay for one instance assisting another, in order
 			// to maximize the possibility of race conditions.
 			StalledOpTimeout: func() time.Duration { return 0 },
+			// Set MaxInsertAttempts really high so that test is very unlikely
+			// to fail because it can't find a partition that allows inserts.
+			MaxInsertAttempts: 100,
 		}
 
 		var wait sync.WaitGroup
