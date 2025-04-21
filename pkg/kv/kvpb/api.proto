@@ -2928,8 +2928,6 @@ message Header {
   // * A destination node older than 24.1 will not see this field.
   RangeInfo proxy_range_info = 34;
 
-  reserved 7, 10, 12, 14, 20;
-
   WriteOptions write_options = 35;
 
   // DeadlockTimeout specifies the amount of time that a request will wait on a
@@ -2945,7 +2943,27 @@ message Header {
   google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
 
-  // Next ID: 37
+  // HasBufferedAllPrecedingWrites, if set, indicates that the batch belongs to
+  // a transaction that has buffered all of its writes (from preceding batches)
+  // on the client. 
+  //
+  // The server may use this field to omit checking the AbortSpan. Transactions
+  // use the AbortSpan to check whether they've been aborted or not. If they
+  // have, any intents they may have previously written could be removed by
+  // concurrent transactions, which means a transaction may not have a guarantee
+  // to read its own writes. So, transactions eagerly check the AbortSpan to
+  // identify this case and eagerly return a TransactionAbortedError to the
+  // client, instead of breaking read-your-own-writes. However, transactions
+  // that have buffered all writes on the client uphold read-your-own-writes
+  // semantics by joining results from the KVServer against the write buffer;
+  // simply put, they do not rely on the AbortSpan to uphold
+  // read-your-own-writes. As such, they can eschew checking the AbortSpan on
+  // the server.
+  bool has_buffered_all_preceding_writes = 37;
+  
+  reserved 7, 10, 12, 14, 20;
+
+  // Next ID: 38
 }
 
 message WriteOptions {
