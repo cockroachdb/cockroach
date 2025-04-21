@@ -15,8 +15,6 @@ import (
 // VerifyStatementPrettyRoundtrip verifies that the SQL statements in s
 // correctly round trip through the pretty printer.
 func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
-	t.Helper()
-
 	stmts, err := parser.Parse(sql)
 	if err != nil {
 		t.Fatalf("%s: %s", err, sql)
@@ -41,7 +39,6 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 func verifyStatementPrettyRoundTrip(
 	t *testing.T, sql string, origStmt tree.NodeFormatter, p Parser,
 ) {
-	t.Helper()
 	// Dataflow of the statement through these checks:
 	//
 	//             sql (from test file)
