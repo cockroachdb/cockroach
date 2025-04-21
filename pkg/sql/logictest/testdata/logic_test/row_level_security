@@ -3141,3 +3141,42 @@ statement ok
 DROP USER bypassrls_user;
 
 subtest end
+
+
+subtest policy_with_schema_locked
+
+statement ok
+CREATE TABLE alter_policy_table_locked (c1 INT8 NOT NULL, c2 STRING NULL, CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC), FAMILY fam_0_c1_c2 (c1, c2)) WITH (schema_locked = true);
+
+statement ok
+CREATE POLICY p ON alter_policy_table_locked WITH CHECK (TRUE);
+
+statement ok
+ALTER POLICY p ON alter_policy_table_locked RENAME TO p_sel;
+
+query TT
+SHOW CREATE TABLE alter_policy_table_locked;
+----
+alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
+                             c1 INT8 NOT NULL,
+                             c2 STRING NULL,
+                             CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
+                             FAMILY fam_0_c1_c2 (c1, c2)
+                           ) WITH (schema_locked = true);
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
+
+statement ok
+ALTER POLICY p_sel ON alter_policy_table_locked WITH CHECK (FALSE);
+
+query TT
+SHOW CREATE TABLE alter_policy_table_locked;
+----
+alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
+                             c1 INT8 NOT NULL,
+                             c2 STRING NULL,
+                             CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
+                             FAMILY fam_0_c1_c2 (c1, c2)
+                           ) WITH (schema_locked = true);
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false)
+
+subtest end
