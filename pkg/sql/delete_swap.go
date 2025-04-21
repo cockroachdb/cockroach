@@ -133,6 +133,7 @@ func (d *deleteSwapNode) BatchedValues(rowIdx int) tree.Datums {
 }
 
 func (d *deleteSwapNode) Close(ctx context.Context) {
+	d.input.Close(ctx)
 	d.run.td.close(ctx)
 	*d = deleteSwapNode{}
 	deleteSwapNodePool.Put(d)
