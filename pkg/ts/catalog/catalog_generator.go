@@ -39,6 +39,8 @@ func generateInternal(
 	metadata map[string]metric.Metadata, sl []ChartSection, metricLayer MetricLayer,
 ) []ChartSection {
 	avgAgg := tspb.TimeSeriesQueryAggregator_AVG
+	chartSections := make(map[metric.Metadata_Category]*ChartSection)
+
 	for name, meta := range metadata {
 		der := tspb.TimeSeriesQueryDerivative_NONE
 		if meta.MetricType == prometheusgo.MetricType_COUNTER {
@@ -50,33 +52,44 @@ func generateInternal(
 			dstUnit = AxisUnits(candidate)
 		}
 
-		sl = append(sl, ChartSection{
+		section, ok := chartSections[meta.Category]
+		if !ok {
+			chartSections[meta.Category] = &ChartSection{
+				Title:           meta.Category.String(),
+				LongTitle:       meta.Category.String(),
+				CollectionTitle: meta.Category.String(),
+				Description:     meta.Category.String(),
+				Level:           0,
+				MetricLayer:     metricLayer,
+			}
+			section = chartSections[meta.Category]
+		}
+
+		section.Charts = append(section.Charts, &IndividualChart{
 			Title:           name,
 			LongTitle:       name,
 			CollectionTitle: name,
-			Description:     name,
-			Level:           0,
-			MetricLayer:     metricLayer,
-			Charts: []*IndividualChart{{
-				Title:           name,
-				LongTitle:       name,
-				CollectionTitle: name,
-				Downsampler:     &avgAgg,
-				Aggregator:      &avgAgg,
-				Derivative:      &der,
-				Units:           dstUnit,
-				AxisLabel:       meta.Measurement,
-				Metrics: []ChartMetric{
-					{
-						Name:           name,
-						Help:           meta.Help,
-						AxisLabel:      meta.Measurement,
-						PreferredUnits: dstUnit,
-						MetricType:     meta.MetricType,
-					},
+			Downsampler:     &avgAgg,
+			Aggregator:      &avgAgg,
+			Derivative:      &der,
+			Units:           dstUnit,
+			AxisLabel:       meta.Measurement,
+			Metrics: []ChartMetric{
+				{
+					ExportedName:   metric.ExportedName(name),
+					Name:           name,
+					Help:           meta.Help,
+					AxisLabel:      meta.Measurement,
+					PreferredUnits: dstUnit,
+					MetricType:     meta.MetricType,
+					Essential:      meta.Essential,
+					HowToUse:       meta.HowToUse,
 				},
-			}},
+			},
 		})
+	}
+	for _, s := range chartSections {
+		sl = append(sl, *s)
 	}
 	return sl
 }
