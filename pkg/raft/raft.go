@@ -1744,7 +1744,23 @@ func (r *raft) Step(m pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+			var logHint entryID
+			if m.Type == pb.MsgVote {
+				logHint = lastID
+			}
+			r.send(pb.Message{
+				To:   m.From,
+				Term: m.Term,
+				// RejectHint and LogTerm are also populated although the message is non
+				// -reject. This helps the new leader (if the candidate wins election)
+				// to set the state of the follower to StateReplicate if the logs match.
+				// See raft.becomeLeader for more detail.
+				// TODO(hakuuww): Consider renaming RejectHint to something more
+				//  general like LogHint.
+				RejectHint: logHint.index,
+				LogTerm:    logHint.term,
+				Type:       voteRespMsgType(m.Type),
+			})
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
