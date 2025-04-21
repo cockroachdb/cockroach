@@ -8,6 +8,7 @@ package tpcc
 import (
 	"math/rand/v2"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	randold "golang.org/x/exp/rand"
@@ -163,8 +164,10 @@ func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAl
 
 // randTax produces a random tax between [0.0000..0.2000]
 // See 2.1.5.
-func randTax(rng *rand.Rand) float64 {
-	return float64(randInt(rng, 0, 2000)) / float64(10000.0)
+func randTax(rng *rand.Rand) apd.Decimal {
+	var result apd.Decimal
+	result.SetFinite(randInt(rng, 0, 2000), -4)
+	return result
 }
 
 // randInt returns a number within [min, max] inclusive.

@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"strconv"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -34,20 +35,26 @@ const (
 	maxOrderLinesPerOrder    = 15
 
 	originalString = "ORIGINAL"
-	wYtd           = 300000.00
-	ytd            = 30000.00
 	nextOrderID    = 3001
-	creditLimit    = 50000.00
-	balance        = -10.00
-	ytdPayment     = 10.00
 	paymentCount   = 1
 	deliveryCount  = 0
 )
+
+func makeDecimal(value, scale int32) apd.Decimal {
+	var result apd.Decimal
+	result.SetFinite(int64(value), scale)
+	return result
+}
 
 var (
 	middleName = []byte(`OE`)
 	goodCredit = []byte("GC")
 	badCredit  = []byte("BC")
+	wYtd = makeDecimal(300000_00, -2)
+	ytd = makeDecimal(30000_00, -2)
+	creditLimit = makeDecimal(50000_00, -2)
+	balance = makeDecimal(-10_00, -2)
+	ytdPayment = makeDecimal(10_00, -2)
 )
 
 // These constants configure how we split the tables when splitting is enabled.
@@ -66,7 +73,7 @@ var itemTypes = []*types.T{
 	types.Int,
 	types.Int,
 	types.Bytes,
-	types.Float,
+	types.MakeDecimal(5, 2),
 	types.Bytes,
 }
 
@@ -78,11 +85,14 @@ func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc
 
 	iID := rowIdx + 1
 
+	var price apd.Decimal
+	price.SetFinite(randInt(l.rng.Rand, 100, 10000), -2)
+
 	cb.Reset(itemTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(iID)
 	cb.ColVec(1).Int64()[0] = randInt(l.rng.Rand, 1, 10000)                             // im_id: "Image ID associated to Item"
 	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24))     // name
-	cb.ColVec(3).Float64()[0] = float64(randInt(l.rng.Rand, 100, 10000)) / float64(100) // price
+	cb.ColVec(3).Decimal()[0] = price
 	cb.ColVec(4).Bytes().Set(0, randOriginalStringInitialDataOnly(&l.rng, &ao, a))
 }
 
@@ -107,8 +117,8 @@ var warehouseTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
 	types.Bytes,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(4, 4),
+	types.MakeDecimal(12, 2),
 }
 
 func (w *tpcc) tpccWarehouseInitialRowBatch(
@@ -130,8 +140,8 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 	cb.ColVec(4).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // city
 	cb.ColVec(5).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
 	cb.ColVec(6).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
-	cb.ColVec(7).Float64()[0] = randTax(l.rng.Rand)
-	cb.ColVec(8).Float64()[0] = wYtd
+	cb.ColVec(7).Decimal()[0] = randTax(l.rng.Rand)
+	cb.ColVec(8).Decimal()[0] = wYtd
 }
 
 func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
@@ -236,8 +246,8 @@ var districtTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
 	types.Bytes,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(4, 4),
+	types.MakeDecimal(12, 2),
 	types.Int,
 }
 
@@ -263,8 +273,8 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 	cb.ColVec(5).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city
 	cb.ColVec(6).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
 	cb.ColVec(7).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
-	cb.ColVec(8).Float64()[0] = randTax(l.rng.Rand)
-	cb.ColVec(9).Float64()[0] = ytd
+	cb.ColVec(8).Decimal()[0] = randTax(l.rng.Rand)
+	cb.ColVec(9).Decimal()[0] = ytd
 	cb.ColVec(10).Int64()[0] = nextOrderID
 }
 
@@ -305,10 +315,10 @@ var customerTypes = []*types.T{
 	types.Bytes,
 	types.Timestamp,
 	types.Bytes,
-	types.Float,
-	types.Float,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(12,2),
+	types.MakeDecimal(4,4),
+	types.MakeDecimal(12,2),
+	types.MakeDecimal(12,2),
 	types.Int,
 	types.Int,
 	types.Bytes,
@@ -359,10 +369,10 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	cb.ColVec(11).Bytes().Set(0, randNStringInitialDataOnly(&l.rng, &no, a, 16, 16)) // phone number
 	cb.ColVec(12).Timestamp()[0] = w.nowTime
 	cb.ColVec(13).Bytes().Set(0, credit)
-	cb.ColVec(14).Float64()[0] = creditLimit
-	cb.ColVec(15).Float64()[0] = float64(randInt(l.rng.Rand, 0, 5000)) / float64(10000.0) // discount
-	cb.ColVec(16).Float64()[0] = balance
-	cb.ColVec(17).Float64()[0] = ytdPayment
+	cb.ColVec(14).Decimal()[0] = creditLimit
+	cb.ColVec(15).Decimal()[0] = makeDecimal(int32(randInt(l.rng.Rand, 0, 5000)), -4)
+	cb.ColVec(16).Decimal()[0] = balance
+	cb.ColVec(17).Decimal()[0] = ytdPayment
 	cb.ColVec(18).Int64()[0] = paymentCount
 	cb.ColVec(19).Int64()[0] = deliveryCount
 	cb.ColVec(20).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500)) // data
@@ -410,7 +420,7 @@ var historyTypes = []*types.T{
 	types.Int,
 	types.Int,
 	types.Timestamp,
-	types.Float,
+	types.MakeDecimal(6, 2),
 	types.Bytes,
 }
 
@@ -444,7 +454,7 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	cb.ColVec(4).Int64()[0] = int64(dID)
 	cb.ColVec(5).Int64()[0] = int64(wID)
 	cb.ColVec(6).Timestamp()[0] = w.nowTime
-	cb.ColVec(7).Float64()[0] = 10.00
+	cb.ColVec(7).Decimal()[0] = makeDecimal(10_00, -2)
 	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 12, 24))
 }
 
@@ -591,7 +601,7 @@ var orderLineTypes = []*types.T{
 	types.Int,
 	types.Timestamp,
 	types.Int,
-	types.Float,
+	types.MakeDecimal(6, 2),
 	types.Bytes,
 }
 
@@ -623,20 +633,20 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	olDeliveryD.Nulls().UnsetNulls()
 	olDeliveryDCol := olDeliveryD.Timestamp()
 	olQuantityCol := cb.ColVec(7).Int64()
-	olAmountCol := cb.ColVec(8).Float64()
+	olAmountCol := cb.ColVec(8).Decimal()
 	olDistInfoCol := cb.ColVec(9).Bytes()
 
 	olDistInfoCol.Reset()
 	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
 		olNumber := rowIdx + 1
 
-		var amount float64
+		var amount apd.Decimal
 		var deliveryDSet bool
 		if oID < 2101 {
-			amount = 0
+			amount = makeDecimal(0, -2)
 			deliveryDSet = true
 		} else {
-			amount = float64(randIntOld(l.rngOld.Rand, 1, 999999)) / 100.0
+			amount = makeDecimal(int32(randIntOld(l.rngOld.Rand, 1, 999999)), -2)
 		}
 
 		olOIDCol[rowIdx] = int64(oID)
