@@ -1089,3 +1089,7 @@ func (m *SessionDataMutator) SetAllowUnsafeInternals(val bool) {
 func (m *SessionDataMutator) SetOptimizerUseImprovedHoistJoinProject(val bool) {
 	m.Data.OptimizerUseImprovedHoistJoinProject = val
 }
+
+func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
+	m.Data.UseSwapMutations = val
+}
