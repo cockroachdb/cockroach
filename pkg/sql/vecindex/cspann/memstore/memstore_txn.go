@@ -169,9 +169,9 @@ func (tx *memTxn) RemoveFromPartition(
 
 	// Remove vector from the partition.
 	if level != partition.Level() {
-		panic(errors.AssertionFailedf(
-			"RemoveFromPartition level %d does not match actual partition level %d",
-			level, partition.Level()))
+		return errors.Wrapf(cspann.ErrRestartOperation,
+			"removing from partition %d (expected: %d, actual: %d)",
+			partitionKey, level, partition.Level())
 	}
 
 	if partition.ReplaceWithLastByKey(childKey) {
@@ -293,22 +293,11 @@ func (tx *memTxn) lockPartition(
 		memPart.lock.AcquireShared(tx.id)
 	}
 
-	if memPart.lock.deleted != 0 && tx.current > memPart.lock.deleted {
-		if isExclusive {
-			memPart.lock.Release()
-		} else {
-			memPart.lock.ReleaseShared()
-		}
-
-		return nil, errors.Wrapf(cspann.ErrPartitionNotFound,
-			"partition (created=%d, deleted=%d) is not visible to txn %d (current=%d)",
-			memPart.lock.created, memPart.lock.deleted, tx.id, tx.current)
-	}
-
 	// If the root partition's level was updated after the transaction was
-	// started, then treat it as if it was deleted and re-created. Instruct the
-	// caller to restart the operation with a later time.
-	if partitionKey == cspann.RootKey && tx.current < memPart.lock.created {
+	// started, or if the partition was deleted after the transaction was started,
+	// then treat this as a concurrency conflict and instruct the caller to
+	// restart the operation at a later time.
+	if tx.current < memPart.lock.created || tx.current < memPart.lock.deleted {
 		// Release the partition lock.
 		if isExclusive {
 			memPart.lock.Release()
@@ -323,6 +312,20 @@ func (tx *memTxn) lockPartition(
 		return nil, errors.Wrapf(cspann.ErrRestartOperation,
 			"root partition (created=%d) is not visible to txn %d (current=%d)",
 			memPart.lock.created, tx.id, prevCurrent)
+	}
+
+	// If the partition has been deleted, and the operation wasn't restarted
+	// above, then return ErrPartitionNotFound.
+	if memPart.lock.deleted != 0 {
+		if isExclusive {
+			memPart.lock.Release()
+		} else {
+			memPart.lock.ReleaseShared()
+		}
+
+		return nil, errors.Wrapf(cspann.ErrPartitionNotFound,
+			"partition %d (created=%d, deleted=%d) has been deleted, txn %d (current=%d)",
+			partitionKey, memPart.lock.created, memPart.lock.deleted, tx.id, tx.current)
 	}
 
 	return memPart, nil
