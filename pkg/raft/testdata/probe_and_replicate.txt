@@ -569,6 +569,16 @@ stabilize 1
   1->1 MsgAppResp Term:8 Log:0/21 Commit:18
   1->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
 
+status 1
+----
+1: StateReplicate match=21 next=22 sentCommit=18 matchCommit=18
+2: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+3: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+4: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+5: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+6: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+7: StateProbe match=0 next=21 sentCommit=18 matchCommit=0 paused inactive
+
 ## Recover each follower, one by one.
 stabilize 1 2
 ----
@@ -814,3 +824,70 @@ stabilize 1 6
   8/21 EntryNormal ""
 > 1 receiving messages
   6->1 MsgAppResp Term:8 Log:0/21 Commit:21
+
+stabilize 1 7
+----
+> 7 receiving messages
+  1->7 MsgFortifyLeader Term:8 Log:0/0
+  1->7 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
+> 7 handling Ready
+  Ready:
+  HardState Term:8 Vote:1 Commit:13 Lead:1 LeadEpoch:2
+  OnSync:
+  7->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
+  7->1 MsgAppResp Term:8 Log:3/20 Rejected Hint:3/20 Commit:13
+> 1 receiving messages
+  7->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
+  7->1 MsgAppResp Term:8 Log:3/20 Rejected Hint:3/20 Commit:13
+> 1 handling Ready
+  Ready:
+  Messages:
+  1->7 MsgApp Term:8 Log:1/13 Commit:21 Entries:[
+    4/14 EntryNormal ""
+    4/15 EntryNormal "prop_4_15"
+    5/16 EntryNormal ""
+    5/17 EntryNormal "prop_5_17"
+    6/18 EntryNormal ""
+    6/19 EntryNormal "prop_6_19"
+    6/20 EntryNormal "prop_6_20"
+    8/21 EntryNormal ""
+  ]
+> 7 receiving messages
+  1->7 MsgApp Term:8 Log:1/13 Commit:21 Entries:[
+    4/14 EntryNormal ""
+    4/15 EntryNormal "prop_4_15"
+    5/16 EntryNormal ""
+    5/17 EntryNormal "prop_5_17"
+    6/18 EntryNormal ""
+    6/19 EntryNormal "prop_6_19"
+    6/20 EntryNormal "prop_6_20"
+    8/21 EntryNormal ""
+  ]
+  INFO found conflict at index 14 [existing term: 2, conflicting term: 4]
+  INFO replace the unstable entries from index 14
+> 7 handling Ready
+  Ready:
+  HardState Term:8 Vote:1 Commit:21 Lead:1 LeadEpoch:2
+  Entries:
+  4/14 EntryNormal ""
+  4/15 EntryNormal "prop_4_15"
+  5/16 EntryNormal ""
+  5/17 EntryNormal "prop_5_17"
+  6/18 EntryNormal ""
+  6/19 EntryNormal "prop_6_19"
+  6/20 EntryNormal "prop_6_20"
+  8/21 EntryNormal ""
+  Committed: (13,21]
+  OnSync:
+  7->1 MsgAppResp Term:8 Log:0/21 Commit:21
+  Applying:
+  4/14 EntryNormal ""
+  4/15 EntryNormal "prop_4_15"
+  5/16 EntryNormal ""
+  5/17 EntryNormal "prop_5_17"
+  6/18 EntryNormal ""
+  6/19 EntryNormal "prop_6_19"
+  6/20 EntryNormal "prop_6_20"
+  8/21 EntryNormal ""
+> 1 receiving messages
+  7->1 MsgAppResp Term:8 Log:0/21 Commit:21
