@@ -1785,7 +1785,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	// [CONSTRAINT name]
-	//    [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
+	//    [PRIMARY KEY|UNIQUE [[WITHOUT] INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1794,7 +1794,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//
 	// or (no constraint name):
 	//
-	// [PRIMARY KEY|UNIQUE [WITHOUT INDEX]] ( ... )
+	// [PRIMARY KEY|UNIQUE [[WITHOUT] INDEX]] ( ... )
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1810,12 +1810,19 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 		if node.WithoutIndex {
 			title = pretty.ConcatSpace(title, pretty.Keyword("WITHOUT INDEX"))
 		}
+		if node.FormatAsIndex {
+			title = pretty.ConcatSpace(title, pretty.Keyword("INDEX"))
+		}
+	}
+	if node.Name != "" {
+		if node.FormatAsIndex {
+			title = pretty.ConcatSpace(title, p.Doc(&node.Name))
+		} else {
+			clauses = append(clauses, title)
+			title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
+		}
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
-	if node.Name != "" {
-		clauses = append(clauses, title)
-		title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
-	}
 	if node.Sharded != nil {
 		clauses = append(clauses, p.Doc(node.Sharded))
 	}

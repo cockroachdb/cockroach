@@ -11307,6 +11307,7 @@ index_def:
         Predicate:        $11.expr(),
         Invisibility:     $12.indexInvisibility(),
       },
+      FormatAsIndex:    true,
     }
   }
 | INVERTED INDEX_BEFORE_PAREN '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible

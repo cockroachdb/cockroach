@@ -2639,3 +2639,35 @@ CREATE TABLE a (a VECTOR)
 CREATE TABLE a (a VECTOR) -- fully parenthesized
 CREATE TABLE a (a VECTOR) -- literals removed
 CREATE TABLE _ (_ VECTOR) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX ( b NULLS FIRST ) USING HASH WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE (_ NULLS FIRST) USING HASH WITH ('foo' = 'bar')) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX ( b NULLS FIRST ) USING HASH WITH BUCKET_COUNT = 10 WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = 10 WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = (10) WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b NULLS FIRST) USING HASH WITH BUCKET_COUNT = _ WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE (_ NULLS FIRST) USING HASH WITH BUCKET_COUNT = 10 WITH ('foo' = 'bar')) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX (b) USING HASH)
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b) USING HASH) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b) USING HASH) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE (b) USING HASH) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE (_) USING HASH) -- identifiers removed
+
+parse
+CREATE TABLE t (a INT PRIMARY KEY, b INT, UNIQUE INDEX idx (b) WITH ( 'foo' = 'bar' ))
+----
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, CONSTRAINT idx UNIQUE (b) WITH ('foo' = 'bar')) -- normalized!
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, CONSTRAINT idx UNIQUE (b) WITH ('foo' = ('bar'))) -- fully parenthesized
+CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, CONSTRAINT idx UNIQUE (b) WITH ('foo' = '_')) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, CONSTRAINT _ UNIQUE (_) WITH ('foo' = 'bar')) -- identifiers removed
