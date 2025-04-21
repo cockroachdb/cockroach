@@ -70,8 +70,6 @@ func parseOne(t *testing.T, input string, p Parser) (tree.NodeFormatter, error) 
 func VerifyParseFormat(
 	t *testing.T, input, pos string, p Parser, reParseWithoutLiterals bool,
 ) string {
-	t.Helper()
-
 	// Check parse.
 	stmts, err := parse(t, input, p)
 	if err != nil {
