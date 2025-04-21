@@ -11389,15 +11389,17 @@ constraint_elem:
     }
   }
 | UNIQUE opt_without_index '(' index_params ')'
-    opt_storing opt_partition_by_index opt_deferrable opt_where_clause
+    opt_hash_sharded opt_storing opt_partition_by_index opt_deferrable opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       WithoutIndex: $2.bool(),
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
-        Storing: $6.nameList(),
-        PartitionByIndex: $7.partitionByIndex(),
-        Predicate: $9.expr(),
+        Sharded: $6.shardedIndexDef(),
+        Storing: $7.nameList(),
+        PartitionByIndex: $8.partitionByIndex(),
+        StorageParams:    $10.storageParams(),
+        Predicate:        $11.expr(),
       },
     }
   }
