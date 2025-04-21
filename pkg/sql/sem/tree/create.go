@@ -1112,6 +1112,10 @@ type UniqueConstraintTableDef struct {
 	PrimaryKey   bool
 	WithoutIndex bool
 	IfNotExists  bool
+	// FormatAsIndex indicates if the constraint should be formatted as an index
+	// definition. This is needed since indexes support syntax for things like
+	// storage parameters and sharding, while constraints do not.
+	FormatAsIndex bool
 }
 
 // SetName implements the TableDef interface.
@@ -1126,7 +1130,7 @@ func (node *UniqueConstraintTableDef) SetIfNotExists() {
 
 // Format implements the NodeFormatter interface.
 func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
-	if node.Name != "" {
+	if node.Name != "" && !node.FormatAsIndex {
 		ctx.WriteString("CONSTRAINT ")
 		if node.IfNotExists {
 			ctx.WriteString("IF NOT EXISTS ")
@@ -1138,6 +1142,13 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString("PRIMARY KEY ")
 	} else {
 		ctx.WriteString("UNIQUE ")
+		if node.FormatAsIndex {
+			ctx.WriteString("INDEX ")
+			if node.Name != "" {
+				ctx.FormatNode(&node.Name)
+				ctx.WriteByte(' ')
+			}
+		}
 	}
 	if node.WithoutIndex {
 		ctx.WriteString("WITHOUT INDEX ")
