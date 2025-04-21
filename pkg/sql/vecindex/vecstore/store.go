@@ -515,12 +515,7 @@ func (s *Store) getMetadataFromKVResult(
 		}
 
 		// Construct synthetic metadata.
-		metadata := cspann.PartitionMetadata{
-			Level:        cspann.LeafLevel,
-			Centroid:     s.emptyVec,
-			StateDetails: cspann.MakeReadyDetails(),
-		}
-		return metadata, nil
+		return cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, s.emptyVec), nil
 	}
 
 	return vecencoding.DecodeMetadataValue(value)

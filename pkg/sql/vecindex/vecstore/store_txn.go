@@ -437,11 +437,7 @@ func (tx *Txn) createRootPartition(
 	ctx context.Context, metadataKey roachpb.Key,
 ) (cspann.PartitionMetadata, error) {
 	b := tx.kv.NewBatch()
-	metadata := cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     tx.store.emptyVec,
-		StateDetails: cspann.MakeReadyDetails(),
-	}
+	metadata := cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, tx.store.emptyVec)
 	encoded := vecencoding.EncodeMetadataValue(metadata)
 
 	// Use CPut to detect the case where another transaction is racing to create
