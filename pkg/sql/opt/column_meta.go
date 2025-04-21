@@ -163,6 +163,25 @@ func (ocl OptionalColList) ToSet() ColSet {
 	return r
 }
 
+// CopyAndMaybeRemapColumns copies this OptionalColList, remapping any columns
+// present in the provided ColMap.
+func (ocl OptionalColList) CopyAndMaybeRemapColumns(m ColMap) (res OptionalColList) {
+	if len(ocl) == 0 {
+		return nil
+	}
+	res = make(OptionalColList, len(ocl))
+	for i, col := range ocl {
+		if col != 0 {
+			if val, ok := m.Get(int(col)); ok {
+				res[i] = ColumnID(val)
+			} else {
+				res[i] = col
+			}
+		}
+	}
+	return res
+}
+
 // ColumnMeta stores information about one of the columns stored in the
 // metadata.
 type ColumnMeta struct {
