@@ -4400,6 +4400,21 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 			), nil
 		},
+	},
+	// CockroachDB extension.
+	`use_swap_mutations`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_swap_mutations`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_swap_mutations", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseSwapMutations(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSwapMutations), nil
+		},
 		GlobalDefault: globalTrue,
 	},
 }

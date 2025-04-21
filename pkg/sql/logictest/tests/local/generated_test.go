@@ -2383,6 +2383,13 @@ func TestLogic_subquery_correlated(
 	runLogicTest(t, "subquery_correlated")
 }
 
+func TestLogic_swap_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "swap_mutation")
+}
+
 func TestLogic_synthetic_privileges(
 	t *testing.T,
 ) {
