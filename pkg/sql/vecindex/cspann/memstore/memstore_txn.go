@@ -84,7 +84,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	if forUpdate && !metadata.StateDetails.State.AllowAddOrRemove() {
 		err = cspann.NewConditionFailedError(*metadata)
 		return cspann.PartitionMetadata{}, errors.Wrapf(err,
-			"getting partition metadata %d (state=%s)",
+			"getting metadata for partition %d (state=%s)",
 			partitionKey, metadata.StateDetails.State.String())
 	}
 
@@ -125,8 +125,8 @@ func (tx *memTxn) AddToPartition(
 	// Add the vector to the partition.
 	if level != partition.Level() {
 		return errors.Wrapf(cspann.ErrRestartOperation,
-			"adding to partition %d (expected: %d, actual: %d)",
-			partitionKey, level, partition.Level())
+			"partition %d level %d does not match expected level %d",
+			partitionKey, partition.Level(), level)
 	}
 
 	if partition.Add(&tx.workspace, vec, childKey, valueBytes, true /* overwrite */) {
