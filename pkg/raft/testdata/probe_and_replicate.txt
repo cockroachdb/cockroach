@@ -453,12 +453,12 @@ stabilize 2 3 4 5 6 7
   Ready:
   HardState Term:8 Vote:1 Commit:18 Lead:0 LeadEpoch:0
   OnSync:
-  2->1 MsgVoteResp Term:8 Log:0/0
+  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19
 > 3 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:14 Lead:0 LeadEpoch:0
   OnSync:
-  3->1 MsgVoteResp Term:8 Log:0/0
+  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14
 > 4 handling Ready
   Ready:
   State:StateFollower
@@ -482,7 +482,7 @@ stabilize 2 3 4 5 6 7
   Ready:
   HardState Term:8 Vote:1 Commit:15 Lead:0 LeadEpoch:0
   OnSync:
-  6->1 MsgVoteResp Term:8 Log:0/0
+  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17
 > 7 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:13 Lead:0 LeadEpoch:0
@@ -494,7 +494,7 @@ stabilize 2 3 4 5 6 7
   7->5 MsgDeFortifyLeader Term:3 Log:0/0
   7->6 MsgDeFortifyLeader Term:3 Log:0/0
   OnSync:
-  7->1 MsgVoteResp Term:8 Log:0/0
+  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/20
 > 2 receiving messages
   5->2 MsgDeFortifyLeader Term:7 Log:0/0
   INFO 2 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
@@ -525,10 +525,10 @@ stabilize 2 3 4 5 6 7
 stabilize 1
 ----
 > 1 receiving messages
-  2->1 MsgVoteResp Term:8 Log:0/0
+  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19
   INFO 1 received MsgVoteResp from 2 at term 8
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
-  3->1 MsgVoteResp Term:8 Log:0/0
+  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14
   INFO 1 received MsgVoteResp from 3 at term 8
   INFO 1 has received 3 MsgVoteResp votes and 0 vote rejections
   4->1 MsgVoteResp Term:8 Log:0/0 Rejected
@@ -539,13 +539,13 @@ stabilize 1
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected
   INFO 1 received MsgVoteResp rejection from 5 at term 8
   INFO 1 has received 3 MsgVoteResp votes and 2 vote rejections
-  6->1 MsgVoteResp Term:8 Log:0/0
+  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17
   INFO 1 received MsgVoteResp from 6 at term 8
   INFO 1 has received 4 MsgVoteResp votes and 2 vote rejections
   INFO 1 became leader at term 8
   7->1 MsgDeFortifyLeader Term:3 Log:0/0
   INFO 1 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
-  7->1 MsgVoteResp Term:8 Log:0/0
+  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/20
 > 1 handling Ready
   Ready:
   State:StateLeader
