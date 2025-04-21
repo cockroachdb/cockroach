@@ -47,8 +47,6 @@ func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, err
 // check that a successfully parsed expression round trips and correctly handles
 // formatting flags.
 func VerifyParseFormat(t *testing.T, input string, plpgsql bool) string {
-	t.Helper()
-
 	// Check parse.
 	stmts, err := parse(t, input, plpgsql)
 	if err != nil {
