@@ -53,8 +53,6 @@ func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, err
 func VerifyParseFormat(
 	t *testing.T, input, pos string, plpgsql, reParseWithoutLiterals bool,
 ) string {
-	t.Helper()
-
 	// Check parse.
 	stmts, err := parse(t, input, plpgsql)
 	if err != nil {
