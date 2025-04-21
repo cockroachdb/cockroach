@@ -236,7 +236,6 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			}
 
 		case <-flushTimer.C:
-			flushTimer.Read = true
 			flushTimer.Reset(flushInterval)
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()

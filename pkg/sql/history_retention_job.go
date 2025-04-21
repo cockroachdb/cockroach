@@ -111,7 +111,6 @@ func (h *historyRetentionResumer) Resume(ctx context.Context, execCtx interface{
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			t.Read = true
 			t.Reset(historyRetentionExpirationPollInterval.Get(execCfg.SV()))
 			p, err := jobs.LoadJobProgress(ctx, execCfg.InternalDB, h.job.ID())
 			if err != nil {

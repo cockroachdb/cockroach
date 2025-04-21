@@ -1879,7 +1879,6 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				return
 
 			case <-rangeFeedProgressWatchDog.C:
-				rangeFeedProgressWatchDog.Read = true
 				// Detect if the range feed has stopped making
 				// progress.
 				if rangeFeedProgressWatchDogEnabled {
@@ -1898,7 +1897,6 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				m.handleRangeFeedError(ctx)
 				m.refreshSomeLeases(ctx, true /*refreshAll*/)
 			case <-refreshTimer.C:
-				refreshTimer.Read = true
 				refreshTimer.Reset(getRefreshTimerDuration() / 2)
 
 				// Check for any react to any range feed availability problems, and

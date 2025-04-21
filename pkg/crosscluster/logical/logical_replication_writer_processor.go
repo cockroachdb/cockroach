@@ -390,7 +390,6 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 			}
 		}
 	case <-lrw.aggTimer.C:
-		lrw.aggTimer.Read = true
 		lrw.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(lrw.Ctx(),
 			lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)

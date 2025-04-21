@@ -72,7 +72,6 @@ func (p *periodicProgressFlusher) StartPeriodicUpdates(
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-timer.Ch():
-				timer.MarkRead()
 				if err := write(ctx); err != nil {
 					log.Warningf(ctx, "could not flush progress: %v", err)
 				}

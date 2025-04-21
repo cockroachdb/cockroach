@@ -1469,7 +1469,6 @@ func (cf *changeFrontier) runUsageMetricReporting(ctx context.Context) {
 		t.Reset(reportingInterval - lastDuration)
 		select {
 		case start = <-t.Ch():
-			t.MarkRead()
 		case <-ctx.Done():
 			return
 		}

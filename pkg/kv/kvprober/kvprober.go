@@ -326,7 +326,6 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 			for {
 				select {
 				case <-t.C:
-					t.Read = true
 					// Jitter added to de-synchronize different nodes' probe loops.
 					t.Reset(d())
 				case <-stopper.ShouldQuiesce():

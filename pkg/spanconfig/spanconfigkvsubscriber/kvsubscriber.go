@@ -270,7 +270,6 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				select {
 				case <-timer.C:
-					timer.Read = true
 					s.updateMetrics(ctx)
 					continue
 
