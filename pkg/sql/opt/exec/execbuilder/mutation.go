@@ -463,19 +463,36 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		}
 	}
 
-	node, err := b.factory.ConstructUpdate(
-		input.root,
-		tab,
-		fetchColOrds,
-		updateColOrds,
-		returnColOrds,
-		checkOrds,
-		passthroughCols,
-		upd.UniqueWithTombstoneIndexes,
-		lockedIndexes,
-		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
-			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil,
-	)
+	allowAutoCommit := b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
+		len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil
+	var node exec.Node
+	if upd.Swap {
+		node, err = b.factory.ConstructUpdateSwap(
+			input.root,
+			tab,
+			fetchColOrds,
+			updateColOrds,
+			returnColOrds,
+			checkOrds,
+			passthroughCols,
+			upd.UniqueWithTombstoneIndexes,
+			lockedIndexes,
+			allowAutoCommit,
+		)
+	} else {
+		node, err = b.factory.ConstructUpdate(
+			input.root,
+			tab,
+			fetchColOrds,
+			updateColOrds,
+			returnColOrds,
+			checkOrds,
+			passthroughCols,
+			upd.UniqueWithTombstoneIndexes,
+			lockedIndexes,
+			allowAutoCommit,
+		)
+	}
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -624,16 +641,30 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		}
 	}
 
-	node, err := b.factory.ConstructDelete(
-		input.root,
-		tab,
-		fetchColOrds,
-		returnColOrds,
-		passthroughCols,
-		lockedIndexes,
-		b.allowAutoCommit && len(del.FKChecks) == 0 &&
-			len(del.FKCascades) == 0 && del.AfterTriggers == nil,
-	)
+	allowAutoCommit := b.allowAutoCommit && len(del.FKChecks) == 0 &&
+		len(del.FKCascades) == 0 && del.AfterTriggers == nil
+	var node exec.Node
+	if del.Swap {
+		node, err = b.factory.ConstructDeleteSwap(
+			input.root,
+			tab,
+			fetchColOrds,
+			returnColOrds,
+			passthroughCols,
+			lockedIndexes,
+			allowAutoCommit,
+		)
+	} else {
+		node, err = b.factory.ConstructDelete(
+			input.root,
+			tab,
+			fetchColOrds,
+			returnColOrds,
+			passthroughCols,
+			lockedIndexes,
+			allowAutoCommit,
+		)
+	}
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
