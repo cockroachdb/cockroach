@@ -35,6 +35,7 @@ const (
 	OwnerTestEng            Owner = `test-eng`
 	OwnerDevInf             Owner = `dev-inf`
 	OwnerFieldEng           Owner = `field-engineering`
+	OwnerSRE                Owner = `sre`
 )
 
 // IsValid returns true if the owner is valid, i.e. it has a corresponding team
