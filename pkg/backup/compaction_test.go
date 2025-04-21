@@ -699,6 +699,48 @@ func TestCompactionCheckpointing(t *testing.T) {
 	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end, 2)
 }
 
+func TestToggleCompactionForRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, db, _, cleanup := backupRestoreTestSetup(
+		t, singleNode, 1 /* numAccounts */, InitManualReplication,
+	)
+	defer cleanup()
+	start := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%d'", start))
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	end := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%d'", end))
+	var backupPath string
+	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+	var compactionID jobspb.JobID
+	db.QueryRow(
+		t,
+		fmt.Sprintf(
+			`SELECT crdb_internal.backup_compaction(
+				'BACKUP INTO LATEST IN ''nodelocal://1/backup''',
+				'%s', %d::DECIMAL, %d::DECIMAL
+			)`,
+			backupPath, start, end,
+		),
+	).Scan(&compactionID)
+	waitForSuccessfulJob(t, tc, compactionID)
+
+	var compRestoreID, classicRestoreID jobspb.JobID
+	var unused any
+	db.QueryRow(
+		t, "RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup' WITH new_db_name = 'data1'",
+	).Scan(&compRestoreID, &unused, &unused, &unused)
+	db.Exec(t, "SET CLUSTER SETTING restore.compacted_backups.enabled = false")
+	db.QueryRow(
+		t, "RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup' WITH new_db_name = 'data2'",
+	).Scan(&classicRestoreID, &unused, &unused, &unused)
+
+	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
+	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
+}
+
 // validateCompactedBackupForTables is a wrapper around
 // validateCompactedBackupForTablesWithOpts that passes in no options.
 func validateCompactedBackupForTables(
@@ -747,7 +789,13 @@ func validateCompactedBackupForTablesWithOpts(
 		restoredRows := db.QueryStr(t, "SELECT * FROM "+table)
 		require.Equal(t, originalRows, restoredRows, "table %s", table)
 	}
-	// Check that the number of backups used in the restore is correct.
+
+	require.Equal(t, numBackups, getNumBackupsInRestore(t, db, restoreJobID))
+}
+
+// getNumBackupsInRestore returns the number of backups used in the restore
+func getNumBackupsInRestore(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) int {
+	t.Helper()
 	var detailsStr string
 	db.QueryRow(t, `SELECT crdb_internal.pb_to_json(
 		'cockroach.sql.jobs.jobspb.Payload',
@@ -756,10 +804,10 @@ func validateCompactedBackupForTablesWithOpts(
 	FROM system.job_info 
 	WHERE job_id = $1
 	AND info_key = 'legacy_payload';
-	`, restoreJobID).Scan(&detailsStr)
+	`, jobID).Scan(&detailsStr)
 	var details jobspb.RestoreDetails
 	require.NoError(t, json.Unmarshal([]byte(detailsStr), &details))
-	require.Equal(t, numBackups, len(details.URIs))
+	return len(details.URIs)
 }
 
 // ensureBackupExists ensures that a backup exists that spans the given start and end times.
