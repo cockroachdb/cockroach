@@ -8,8 +8,10 @@ package eval
 import (
 	"math"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
@@ -125,11 +127,33 @@ func asInt(j json.JSON) (int, error) {
 	if !ok {
 		return 0, errIndexNotSingleNumValue
 	}
-	i64, err := d.Int64()
+
+	// First, try direct conversion to int64.
+	if i64, err := d.Int64(); err == nil {
+		return validateInt32Range(i64)
+	}
+
+	// If direct conversion fails, truncate the non-integer towards zero.
+	var err error
+	dec := &apd.Decimal{}
+	if d.Sign() == 1 {
+		_, err = tree.ExactCtx.Floor(dec, d)
+	} else {
+		_, err = tree.ExactCtx.Ceil(dec, d)
+	}
 	if err != nil {
 		return 0, errIndexNotSingleNumValue
 	}
-	// Postgres returns an error if the index is outside int32 range.
+
+	i64, err := dec.Int64()
+	if err != nil {
+		return 0, errIndexNotSingleNumValue
+	}
+	return validateInt32Range(i64)
+}
+
+// validateInt32Range checks if the int64 value is within int32 range.
+func validateInt32Range(i64 int64) (int, error) {
 	if i64 < math.MinInt32 || i64 > math.MaxInt32 {
 		return 0, errInvalidSubscript
 	}

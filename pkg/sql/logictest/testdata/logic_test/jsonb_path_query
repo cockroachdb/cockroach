@@ -264,22 +264,25 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1]');
 ----
 2
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pq: jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[0.99]')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[0.99]');
+----
+10
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pq: jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[1.01]')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[1.01]');
+----
+9
 
 query T
 SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varInt]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
 ----
 9
 
-# TODO(normanchenn): this will be changed after floats are supported.
-statement error pgcode 22033 jsonpath array subscript is not a single numeric value
-SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varFloat]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varFloat]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}');
+----
+8
 
 statement error pgcode 22033 jsonpath array subscript is not a single numeric value
 SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varString]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
@@ -1552,3 +1555,48 @@ query T
 SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
 ----
 3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.1]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.5]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[1.99999999]');
+----
+2
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.1]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.5]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[2.99999999]');
+----
+3
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.1]');
+----
+1
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.5]');
+----
+1
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '$[-0.99999999]');
+----
+1
