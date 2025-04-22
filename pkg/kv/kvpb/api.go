@@ -615,23 +615,6 @@ func (er *ExportResponse) combine(_ context.Context, c combinable, _ *BatchReque
 
 var _ combinable = &ExportResponse{}
 
-// combine implements the combinable interface.
-func (r *AdminScatterResponse) combine(_ context.Context, c combinable, _ *BatchRequest) error {
-	if r != nil {
-		otherR := c.(*AdminScatterResponse)
-		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
-			return err
-		}
-
-		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
-		r.MVCCStats.Add(otherR.MVCCStats)
-		r.ReplicasScatteredBytes += otherR.ReplicasScatteredBytes
-	}
-	return nil
-}
-
-var _ combinable = &AdminScatterResponse{}
-
 func (avptr *AdminVerifyProtectedTimestampResponse) combine(
 	_ context.Context, c combinable, _ *BatchRequest,
 ) error {

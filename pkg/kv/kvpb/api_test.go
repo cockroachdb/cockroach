@@ -234,51 +234,6 @@ func TestCombinable(t *testing.T) {
 		}, v1)
 
 	})
-
-	t.Run("AdminScatter", func(t *testing.T) {
-
-		// Test that AdminScatterResponse properly implement it.
-		ar1 := &AdminScatterResponse{
-			RangeInfos: []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{
-				RangeID: 1,
-			}}},
-			MVCCStats: enginepb.MVCCStats{
-				LiveBytes: 1,
-				LiveCount: 1,
-				KeyCount:  1,
-			},
-			ReplicasScatteredBytes: 42,
-		}
-
-		if _, ok := interface{}(ar1).(combinable); !ok {
-			t.Fatalf("AdminScatterResponse does not implement combinable")
-		}
-
-		ar2 := &AdminScatterResponse{
-			RangeInfos: []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{
-				RangeID: 2,
-			}}},
-			MVCCStats: enginepb.MVCCStats{
-				LiveBytes: 2,
-				LiveCount: 2,
-				KeyCount:  2,
-			},
-			ReplicasScatteredBytes: 42,
-		}
-
-		wantedAR := &AdminScatterResponse{
-			RangeInfos:             []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{RangeID: 1}}, {Desc: roachpb.RangeDescriptor{RangeID: 2}}},
-			MVCCStats:              enginepb.MVCCStats{LiveBytes: 3, LiveCount: 3, KeyCount: 3},
-			ReplicasScatteredBytes: 84,
-		}
-
-		require.NoError(t, ar1.combine(context.Background(), ar2, nil))
-		require.NoError(t, ar1.combine(context.Background(), &AdminScatterResponse{}, nil))
-
-		if !reflect.DeepEqual(ar1, wantedAR) {
-			t.Errorf("wanted %v, got %v", wantedAR, ar1)
-		}
-	})
 }
 
 // TestMustSetInner makes sure that calls to MustSetInner correctly reset the
