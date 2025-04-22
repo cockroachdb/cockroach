@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4157,6 +4158,9 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 	}
 
 	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
