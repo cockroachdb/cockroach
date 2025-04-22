@@ -171,13 +171,17 @@ func (m *Manager) GetWithDesc(
 			// TODO(drewk): use the config to populate the index options as well.
 			config := index.GetVecConfig()
 			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
-			store, err := vecstore.NewWithColumnID(m.db, quantizer, m.codec, desc, index.GetID(), index.VectorColumnID())
+			store, err := vecstore.NewWithColumnID(
+				ctx, m.db, quantizer, m.codec, desc, index.GetID(), index.VectorColumnID(),
+			)
 			if err != nil {
 				return nil, err
 			}
 
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
+				m.ctx, store, quantizer, config.Seed,
+				m.getIndexOptions(config, store.ReadOnly()), m.stopper,
+			)
 		},
 	)
 }
@@ -207,12 +211,14 @@ func (m *Manager) Get(
 			// passed to cspann.NewIndex, and we don't want that to be the context of
 			// the Get call.
 			return cspann.NewIndex(
-				m.ctx, store, quantizer, config.Seed, m.getIndexOptions(config), m.stopper)
+				m.ctx, store, quantizer, config.Seed,
+				m.getIndexOptions(config, store.ReadOnly()), m.stopper,
+			)
 		},
 	)
 }
 
-func (m *Manager) getIndexOptions(config vecpb.Config) *cspann.IndexOptions {
+func (m *Manager) getIndexOptions(config vecpb.Config, readOnly bool) *cspann.IndexOptions {
 	return &cspann.IndexOptions{
 		MinPartitionSize: int(config.MinPartitionSize),
 		MaxPartitionSize: int(config.MaxPartitionSize),
@@ -222,6 +228,7 @@ func (m *Manager) getIndexOptions(config vecpb.Config) *cspann.IndexOptions {
 			return StalledOpTimeoutSetting.Get(m.sv)
 		},
 		IsDeterministic: config.IsDeterministic,
+		ReadOnly:        readOnly,
 	}
 }
 

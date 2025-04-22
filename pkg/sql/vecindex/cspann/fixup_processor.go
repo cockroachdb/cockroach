@@ -378,6 +378,12 @@ func (fp *FixupProcessor) Process(discard bool) {
 // already a duplicate fixup that's pending. It also starts a background worker
 // to process the fixup, if needed and allowed.
 func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
+	if fp.index.options.ReadOnly {
+		// Don't enqueue fixups if the index is read-only.
+		log.VEvent(ctx, 2, "discarding fixup because index is read-only")
+		return
+	}
+
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
