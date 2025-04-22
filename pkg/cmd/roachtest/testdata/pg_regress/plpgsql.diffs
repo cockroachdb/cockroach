@@ -5,7 +5,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      comment	text
  );
  create unique index Room_rno on Room using btree (roomno bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table WSlot (
      slotname	char(20),
      roomno	char(8),
@@ -13,13 +13,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      backlink	char(20)
  );
  create unique index WSlot_name on WSlot using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table PField (
      name	text,
      comment	text
  );
  create unique index PField_name on PField using btree (name text_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table PSlot (
      slotname	char(20),
      pfname	text,
@@ -27,7 +27,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      backlink	char(20)
  );
  create unique index PSlot_name on PSlot using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table PLine (
      slotname	char(20),
      phonenumber	char(20),
@@ -35,14 +35,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      backlink	char(20)
  );
  create unique index PLine_name on PLine using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table Hub (
      name	char(14),
      comment	text,
      nslots	integer
  );
  create unique index Hub_name on Hub using btree (name bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table HSlot (
      slotname	char(20),
      hubname	char(14),
@@ -50,15 +50,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      slotlink	char(20)
  );
  create unique index HSlot_name on HSlot using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create index HSlot_hubname on HSlot using btree (hubname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table System (
      name	text,
      comment	text
  );
  create unique index System_name on System using btree (name text_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table IFace (
      slotname	char(20),
      sysname	text,
@@ -66,14 +66,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
      slotlink	char(20)
  );
  create unique index IFace_name on IFace using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  create table PHone (
      slotname	char(20),
      comment	text,
      slotlink	char(20)
  );
  create unique index PHone_name on PHone using btree (slotname bpchar_ops);
-+ERROR:  operator classes are only allowed for the last column of an inverted index
++ERROR:  operator classes are only allowed for the last column of an inverted or vector index
  -- ************************************************************
  -- *
  -- * Trigger procedures and functions for the patchfield

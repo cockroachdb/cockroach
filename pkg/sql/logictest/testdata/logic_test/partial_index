@@ -1383,7 +1383,7 @@ vec  CREATE TABLE public.vec (
        id INT8 NOT NULL,
        v VECTOR(3) NULL,
        CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
-       VECTOR INDEX vec_id_v_idx (id ASC, v) WHERE (v <-> '[3,1,2]':::VECTOR) < 1.0:::FLOAT8,
+       VECTOR INDEX vec_id_v_idx (id ASC, v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) < 1.0:::FLOAT8,
        FAMILY fam_0_id_v (id, v)
      )
 

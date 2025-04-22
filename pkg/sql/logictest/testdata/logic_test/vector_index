@@ -2,6 +2,8 @@
 # CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
 
+subtest create_table_index
+
 # Test guardrail for vector index creation.
 # TODO(mw5h): remove these two statements once online modifications are supported.
 statement ok
@@ -36,6 +38,10 @@ ALTER TABLE simple ALTER PRIMARY KEY USING COLUMNS (b)
 statement notice CREATE VECTOR INDEX will disable writes to the table while the index is being built
 CREATE INDEX ON simple USING cspann (vec1 ASC);
 
+# We allow hnsw as an alias for cspann.
+statement ok
+CREATE INDEX ON simple USING hnsw (vec1);
+
 query TT
 SHOW CREATE TABLE simple
 ----
@@ -44,10 +50,11 @@ simple  CREATE TABLE public.simple (
           b INT8 NOT NULL,
           vec1 VECTOR(3) NULL,
           CONSTRAINT simple_pkey PRIMARY KEY (b ASC),
-          VECTOR INDEX simple_vec1_idx (vec1),
-          VECTOR INDEX simple_vec1_idx1 (vec1),
+          VECTOR INDEX simple_vec1_idx (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx1 (vec1 vector_l2_ops),
           UNIQUE INDEX simple_a_key (a ASC),
-          VECTOR INDEX simple_vec1_idx2 (vec1),
+          VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
+          VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
           FAMILY fam_0_a_vec1_b (a, vec1, b)
         )
 
@@ -82,8 +89,8 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               a INT8 NOT NULL,
               vec1 VECTOR(3) NULL,
               CONSTRAINT alt_syntax_pkey PRIMARY KEY (a ASC),
-              VECTOR INDEX vec_idx (vec1),
-              VECTOR INDEX another_index (vec1),
+              VECTOR INDEX vec_idx (vec1 vector_l2_ops),
+              VECTOR INDEX another_index (vec1 vector_l2_ops),
               FAMILY fam_0_a_vec1 (a, vec1)
             )
 
@@ -109,8 +116,8 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     vec1 VECTOR(3) NULL,
                     vec2 VECTOR(1000) NULL,
                     CONSTRAINT multiple_indexes_pkey PRIMARY KEY (a ASC),
-                    VECTOR INDEX multiple_indexes_vec1_idx (vec1),
-                    VECTOR INDEX multiple_indexes_vec2_idx (vec2),
+                    VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
+                    VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
                   )
 
@@ -146,8 +153,8 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                c INT8 NULL,
                vec1 VECTOR(3) NULL,
                CONSTRAINT prefix_cols_pkey PRIMARY KEY (a ASC),
-               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1),
-               VECTOR INDEX another_index (b ASC, c DESC, vec1),
+               VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
+               VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
              )
 
@@ -187,15 +194,37 @@ storage_params  CREATE TABLE public.storage_params (
                   a INT8 NOT NULL,
                   v VECTOR(3) NULL,
                   CONSTRAINT storage_params_pkey PRIMARY KEY (a ASC),
-                  VECTOR INDEX storage_params_v_idx (v) WITH (build_beam_size=16),
-                  VECTOR INDEX storage_params_v_idx1 (v) WITH (min_partition_size=8, max_partition_size=64),
+                  VECTOR INDEX storage_params_v_idx (v vector_l2_ops) WITH (build_beam_size=16),
+                  VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
                   FAMILY fam_0_a_v (a, v)
                 )
 
 statement ok
 DROP TABLE storage_params
 
+# It is possible to specify the default vector_l2_ops operator class.
+statement ok
+CREATE TABLE operator_class (
+  a INT PRIMARY KEY,
+  b INT,
+  vec1 VECTOR(3),
+  VECTOR INDEX (vec1 vector_l2_ops),
+  VECTOR INDEX (b, vec1 vector_l2_ops)
+)
+
+statement ok
+CREATE INDEX ON operator_class USING cspann (vec1 vector_l2_ops)
+
+statement ok
+CREATE INDEX ON operator_class USING cspann (b, vec1 vector_l2_ops)
+
+statement ok
+DROP TABLE operator_class
+
+subtest end
+
 # ----- CREATE TABLE errors -----
+subtest create_table_errors
 
 # Try to use vector in primary key.
 statement error column a has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
@@ -243,7 +272,11 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) 
 statement error pgcode 22023 max_partition_size \(7\) must be at least four times the value of min_partition_size \(2\)
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 2, max_partition_size = 7))
 
+subtest end
+
 # ----- CREATE INDEX errors -----
+subtest create_index_errors
+
 statement ok
 CREATE TABLE vec_errors (
   a INT PRIMARY KEY,
@@ -284,12 +317,18 @@ statement error vector indexes don.t support stored columns
 CREATE VECTOR INDEX on vec_errors (vec1) STORING (b);
 
 # Try to use unsupported vector index type.
-statement error at or near "hnsw": syntax error: unrecognized access method: hnsw
-CREATE INDEX ON vec_errors USING hnsw (vec1)
+statement error at or near "ivfflat": syntax error: unrecognized access method: ivfflat
+CREATE INDEX ON vec_errors USING ivfflat (vec1)
 
-# Operator classes are not (yet) supported.
-statement error operator classes are only allowed for the last column of an inverted index
-CREATE INDEX ON vec_errors USING cspann (vec1 vector_l2_ops)
+# Operator classes other than vector_l2_ops are not (yet) supported.
+statement error pgcode 0A000 pq: unimplemented: operator class vector_l1_ops is not supported
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_l1_ops)
+
+statement error pgcode 0A000 pq: unimplemented: operator class vector_cosine_ops is not supported
+CREATE INDEX ON vec_errors USING cspann (vec1 vector_cosine_ops)
+
+statement error pgcode 42704 pq: operator class "nonexistent_op_type" does not exist
+CREATE INDEX ON vec_errors USING cspann (vec1 nonexistent_op_type)
 
 # Storage param error.
 statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
@@ -298,10 +337,14 @@ CREATE VECTOR INDEX ON vec_errors (vec1) WITH (build_beam_size = 0)
 statement ok
 DROP TABLE vec_errors
 
+subtest end
+
 # ------------------------------------------------------------------------------
 # ALTER TABLE tests.
 # TODO(andyk): Move these tests to alter_primary_key when insertion is possible.
 # ------------------------------------------------------------------------------
+
+subtest alter_table
 
 statement ok
 CREATE TABLE alter_test (
@@ -323,7 +366,7 @@ alter_test  CREATE TABLE public.alter_test (
               b INT8 NOT NULL,
               vec1 VECTOR(3) NULL,
               CONSTRAINT alter_test_pkey PRIMARY KEY (b ASC),
-              VECTOR INDEX alter_test_vec1_idx (vec1),
+              VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
             )
@@ -331,9 +374,13 @@ alter_test  CREATE TABLE public.alter_test (
 statement ok
 DROP TABLE alter_test
 
+subtest end
+
 # ------------------------------------------------------------------------------
 # Execution tests.
 # ------------------------------------------------------------------------------
+
+subtest execution
 
 # Use small partition size so that index has more than one level.
 statement ok
@@ -381,6 +428,8 @@ SELECT a, vec1 FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMI
 
 statement ok
 DROP TABLE exec_test
+
+subtest end
 
 #
 # Test backfill.

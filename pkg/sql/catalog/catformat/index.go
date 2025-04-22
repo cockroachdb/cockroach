@@ -248,13 +248,19 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		// TODO(drewk): we might need to print something like "vector_l2_ops" for
-		// vector indexes.
-		if index.Type == idxtype.INVERTED &&
-			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
-			switch index.InvertedColumnKinds[0] {
-			case catpb.InvertedIndexColumnKind_TRIGRAM:
-				f.WriteString(" gin_trgm_ops")
+		switch index.Type {
+		case idxtype.INVERTED:
+			if col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
+				switch index.InvertedColumnKinds[0] {
+				case catpb.InvertedIndexColumnKind_TRIGRAM:
+					f.WriteString(" gin_trgm_ops")
+				}
+			}
+		case idxtype.VECTOR:
+			// TODO(#144016): once more distance functions are supported, store the
+			// operator on the index and use it here.
+			if col.GetID() == index.VectorColumnID() {
+				f.WriteString(" vector_l2_ops")
 			}
 		}
 		// The last column of an inverted or vector index cannot have a DESC

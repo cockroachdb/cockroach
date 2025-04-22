@@ -336,7 +336,7 @@ func processColNodeType(
 	// OpClass are only allowed for the last column of an inverted index.
 	if columnNode.OpClass != "" && (!lastColIdx || !n.Type.SupportsOpClass()) {
 		panic(pgerror.New(pgcode.DatatypeMismatch,
-			"operator classes are only allowed for the last column of an inverted index"))
+			"operator classes are only allowed for the last column of an inverted or vector index"))
 	}
 	// Disallow descending last column in inverted and vector indexes because they
 	// have no linear ordering.
@@ -393,7 +393,18 @@ func processColNodeType(
 			}
 			invertedKind = catpb.InvertedIndexColumnKind_TRIGRAM
 			b.IncrementSchemaChangeIndexCounter("trigram_inverted")
-
+		case types.PGVectorFamily:
+			switch columnNode.OpClass {
+			case "vector_l2_ops", "":
+			// vector_l2_ops is the default operator class. This allows users to omit
+			// the operator class in index definitions.
+			case "vector_l1_ops", "vector_ip_ops", "vector_cosine_ops",
+				"bit_hamming_ops", "bit_jaccard_ops":
+				panic(unimplemented.NewWithIssuef(144016,
+					"operator class %v is not supported", columnNode.OpClass))
+			default:
+				panic(newUndefinedOpclassError(columnNode.OpClass))
+			}
 		}
 		relationElts := b.QueryByID(indexSpec.secondary.TableID)
 		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
