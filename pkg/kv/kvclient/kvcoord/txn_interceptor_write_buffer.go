@@ -217,31 +217,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
-	if _, ok := ba.GetArg(kvpb.DeleteRange); ok {
-		log.VEventf(ctx, 2, "DeleteRangeRequest forcing flush of write buffer")
-		// DeleteRange requests can delete an arbitrary number of keys over a
-		// given keyspan. We won't know the exact scope of the delete until
-		// we've scanned the keyspan, which must happen on the server. We've got
-		// a couple of options here:
-		// 1. We decompose the DeleteRange request into a (potentially locking)
-		// Scan followed by buffered point Deletes for each key in the scan's
-		// result.
-		// 2. We flush the buffer[1] and send the DeleteRange request to the KV
-		// layer.
-		//
-		// We choose option 2, as typically the number of keys deleted is large,
-		// and we may realize we're over budget after performing the initial
-		// scan of the keyspan. At that point, we'll have to flush the buffer
-		// anyway. Moreover, buffered writes are most impactful when a
-		// transaction is writing to a small number of keys. As such, it's fine
-		// to not optimize the DeleteRange case, as typically it results in a
-		// large writing transaction.
-		//
-		// [1] Technically, we only need to flush the overlapping portion of the
-		// buffer. However, for simplicity, the txnWriteBuffer doesn't support
-		// transactions with partially buffered writes and partially flushed
-		// writes. We could change this in the future if there's benefit to
-		// doing so.
+	if twb.batchRequiresFlush(ctx, ba) {
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
@@ -293,6 +269,55 @@ func (twb *txnWriteBuffer) SendLocked(
 	}
 
 	return twb.mergeResponseWithTransformations(ctx, ts, br)
+}
+
+func (twb *txnWriteBuffer) batchRequiresFlush(ctx context.Context, ba *kvpb.BatchRequest) bool {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch req.(type) {
+		case *kvpb.IncrementRequest:
+			// We don't typically see IncrementRequest in transactional batches that
+			// haven't already had write buffering disabled becuase of DDL statements.
+			//
+			// However, we do have at least a few users of the NewTransactionalGenerator
+			// in test code and builtins.
+			//
+			// We could handle this similar to how we handle ConditionalPut, but its
+			// not clear there is much value in that.
+			log.VEventf(ctx, 2, "%s forcing flush of write buffer", req.Method())
+			return true
+		case *kvpb.DeleteRangeRequest:
+			// DeleteRange requests can delete an arbitrary number of keys over a
+			// given keyspan. We won't know the exact scope of the delete until
+			// we've scanned the keyspan, which must happen on the server. We've got
+			// a couple of options here:
+			//
+			// 1. We decompose the DeleteRange request into a (potentially
+			//    locking) Scan followed by buffered point Deletes for each
+			//    key in the scan's result.
+			//
+			// 2. We flush the buffer[1] and send the DeleteRange request to
+			//    the KV layer.
+			//
+			// We choose option 2, as typically the number of keys deleted is large,
+			// and we may realize we're over budget after performing the initial
+			// scan of the keyspan. At that point, we'll have to flush the buffer
+			// anyway. Moreover, buffered writes are most impactful when a
+			// transaction is writing to a small number of keys. As such, it's fine
+			// to not optimize the DeleteRange case, as typically it results in a
+			// large writing transaction.
+			//
+			// [1] Technically, we only need to flush the overlapping portion of the
+			// buffer. However, for simplicity, the txnWriteBuffer doesn't support
+			// transactions with partially buffered writes and partially flushed
+			// writes. We could change this in the future if there's benefit to
+			// doing so.
+
+			log.VEventf(ctx, 2, "%s forcing flush of write buffer", req.Method())
+			return true
+		}
+	}
+	return false
 }
 
 // validateBatch returns an error if the batch is unsupported
@@ -353,9 +378,9 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			}
 		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
 		default:
-			// All other requests are unsupported. Note that we assume EndTxn and
-			// DeleteRange requests were handled explicitly before this method was
-			// called.
+			// All other requests are unsupported. Note that we assume that requests
+			// that should result in a buffer flush are handled explicitly before this
+			// method was called.
 			return unsupportedMethodError(t.Method())
 		}
 	}
