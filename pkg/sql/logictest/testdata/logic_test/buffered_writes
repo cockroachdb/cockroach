@@ -439,3 +439,43 @@ query I
 SELECT count(*) FROM uvw
 ----
 64
+
+# Create some large blobs that will require the scans to be paginated (in 10MiB
+# chunks).
+statement ok
+CREATE TABLE large (k PRIMARY KEY, blob) AS SELECT i * 100, repeat('a', 11 * 1024 * 1024) FROM generate_series(1, 4) AS g(i);
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO large SELECT 11 + i * 100, 'b' FROM generate_series(1, 4) AS g(i);
+
+# Forward scan.
+query I
+SELECT k FROM large ORDER BY k;
+----
+100
+111
+200
+211
+300
+311
+400
+411
+
+# Reverse scan.
+query I
+SELECT k FROM large ORDER BY k DESC;
+----
+411
+400
+311
+300
+211
+200
+111
+100
+
+statement ok
+COMMIT;
