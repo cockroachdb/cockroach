@@ -540,6 +540,20 @@ func (mr *MockClusterMockRecorder) ListSnapshots(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSnapshots", reflect.TypeOf((*MockCluster)(nil).ListSnapshots), arg0, arg1)
 }
 
+// LocalCertsDir mocks base method.
+func (m *MockCluster) LocalCertsDir() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LocalCertsDir")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// LocalCertsDir indicates an expected call of LocalCertsDir.
+func (mr *MockClusterMockRecorder) LocalCertsDir() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalCertsDir", reflect.TypeOf((*MockCluster)(nil).LocalCertsDir))
+}
+
 // MakeNodes mocks base method.
 func (m *MockCluster) MakeNodes(arg0 ...option.Option) string {
 	m.ctrl.T.Helper()
