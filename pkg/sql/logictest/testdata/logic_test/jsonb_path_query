@@ -1556,50 +1556,42 @@ SELECT jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
 ----
 3
 
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[1.1]');
-----
-2
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"other": 10}');
 
 query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[1.5]');
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value": 11}');
 ----
-2
+{"a": 10}
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $value && @.b > $value)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "min"
+SELECT jsonb_path_query('{"a": 10, "b": 20}', '$ ? (@.a < $min && @.b > $max)');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', 'strict $ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', true);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "value"
+SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{}', false);
+
+statement error pgcode 42704 pq: could not find jsonpath variable "d"
+SELECT jsonb_path_query('{}', '$ ? ($d < $a && @.c > $b)');
 
 query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[1.99999999]');
+SELECT jsonb_path_query('{"a": 10}', '$ ? ((@.a < 12) || (@.a < $value))');
 ----
-2
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[2.1]');
-----
-3
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[2.5]');
-----
-3
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[2.99999999]');
-----
-3
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[-0.1]');
-----
-1
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[-0.5]');
-----
-1
-
-query T
-SELECT jsonb_path_query('[1, 2, 3]', '$[-0.99999999]');
-----
-1
-
-query empty
-SELECT jsonb_path_query('[1, 2, 3]', '$[-1.01]');
+{"a": 10}
