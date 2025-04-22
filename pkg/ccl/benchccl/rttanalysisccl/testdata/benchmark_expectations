@@ -17,3 +17,6 @@ exp,benchmark
 10,AlterTableLocality/alter_from_rbr_to_regional_by_table
 13,AlterTableLocality/alter_from_regional_by_table_to_global
 18,AlterTableLocality/alter_from_regional_by_table_to_rbr
+10,VirtualTableQueries/select_from_crdb_internal.zones_(100_tables)
+10,VirtualTableQueries/select_from_crdb_internal.zones_(10_tables)
+10,VirtualTableQueries/select_from_crdb_internal.zones_(50_tables)
