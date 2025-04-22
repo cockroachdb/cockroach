@@ -390,3 +390,1661 @@ lock t
       │    └── fd: (1)-->(2)
       └── filters
            └── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+
+# --------------------------------------------------
+# UseSwapMutation
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE abc (
+  a INT NOT NULL,
+  b INT,
+  c BOOLEAN,
+  PRIMARY KEY (a)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM 2 AND c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, 2, true)
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND (b = 2 AND c = FALSE)
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, 2, false)
+
+# Test that we do not use swap mutations with unconstrained columns.
+
+norm expect-not=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b > 2
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:6!null b:7!null c:8
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           └── b:7 > 2 [outer=(7), constraints=(/7: [/3 - ]; tight)]
+
+# TODO: we cannot yet constrain this to a single row.
+
+norm
+UPDATE abc SET a = b WHERE a >= 1 AND a < 2 AND b = 2 AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── (a:6 >= 1) AND (a:6 < 2) [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── b:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+           └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS NULL AND c IS NULL
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7 c:8
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, NULL, NULL)
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM NULL AND c IS NOT DISTINCT FROM NULL
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7 c:8
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, NULL, NULL)
+
+norm expect-not=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS DISTINCT FROM NULL AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+           └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b = 2 AND NOT c AND (a > b) = c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, 2, false)
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b IS NOT DISTINCT FROM $2 AND c IS NOT DISTINCT FROM $3
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── select
+      ├── columns: a:6!null b:7 c:8
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── values
+      │    ├── columns: a:6 b:7 c:8
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── ($1, $2, $3)
+      └── filters
+           └── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+
+norm expect-not=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b = $2
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── select
+      ├── columns: a:6!null b:7!null c:8
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── a:6 = $1 [outer=(6), constraints=(/6: (/NULL - ]), fd=()-->(6)]
+           └── b:7 = $2 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c = $3
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── values
+      │    ├── columns: a:6 b:7 c:8
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── ($1, $2, $3)
+      └── filters
+           ├── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+           ├── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+           └── c:8 IS NOT NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
+
+# Additional predicates should become extra filters before the swap.
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c AND c = $3 AND a < b
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── values
+      │    ├── columns: a:6 b:7 c:8!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── ($1, $2, true)
+      └── filters
+           ├── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+           ├── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+           ├── $3
+           └── a:6 < b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+
+# Test that we do use swap mutations with RETURNING.
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c AND a < b RETURNING a
+----
+update (swap) abc
+ ├── columns: a:1!null
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── return-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── values
+      │    ├── columns: a:6 b:7 c:8!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    └── ($1, $2, true)
+      └── filters
+           ├── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+           ├── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+           └── a:6 < b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = b WHERE a = $1 AND b = $2 + 1 AND c RETURNING a + b
+----
+project
+ ├── columns: "?column?":11!null
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── update (swap) abc
+ │    ├── columns: a:1!null b:2!null
+ │    ├── fetch columns: a:6 b:7 c:8
+ │    ├── update-mapping:
+ │    │    └── b:7 => a:1
+ │    ├── return-mapping:
+ │    │    ├── b:7 => a:1
+ │    │    └── b:7 => b:2
+ │    ├── cardinality: [0 - 1]
+ │    ├── volatile, mutations, has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+ │    └── select
+ │         ├── columns: a:6!null b:7!null c:8!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable, has-placeholder
+ │         ├── key: ()
+ │         ├── fd: ()-->(6-8)
+ │         ├── values
+ │         │    ├── columns: a:6 b:7 c:8!null
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── immutable, has-placeholder
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(6-8)
+ │         │    └── ($1, $2 + 1, true)
+ │         └── filters
+ │              ├── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │              └── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ └── projections
+      └── a:1 + b:2 [as="?column?":11, outer=(1,2), immutable]
+
+# Test delete swap for a few of the cases above.
+
+norm expect=UseSwapMutation
+DELETE FROM abc WHERE a = 1 AND b IS NOT DISTINCT FROM 1 AND c IS NOT DISTINCT FROM NULL
+----
+delete (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      └── (1, 1, NULL)
+
+norm expect=UseSwapMutation
+DELETE FROM abc WHERE a = $1 AND b IS NOT DISTINCT FROM $2 AND c IS NOT DISTINCT FROM $3 RETURNING $4:::int
+----
+project
+ ├── columns: int8:11
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── delete (swap) abc
+ │    ├── columns: a:1!null
+ │    ├── fetch columns: a:6 b:7 c:8
+ │    ├── return-mapping:
+ │    │    └── a:6 => a:1
+ │    ├── cardinality: [0 - 1]
+ │    ├── volatile, mutations, has-placeholder
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── select
+ │         ├── columns: a:6!null b:7 c:8
+ │         ├── cardinality: [0 - 1]
+ │         ├── has-placeholder
+ │         ├── key: ()
+ │         ├── fd: ()-->(6-8)
+ │         ├── values
+ │         │    ├── columns: a:6 b:7 c:8
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── has-placeholder
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(6-8)
+ │         │    └── ($1, $2, $3)
+ │         └── filters
+ │              └── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ └── projections
+      └── $4 [as=int8:11]
+
+# Test that we do not use swap mutations when there is a column with a composite
+# key encoding (such as DECIMAL).
+
+exec-ddl
+CREATE TABLE xy (
+  x INT NOT NULL,
+  y DECIMAL,
+  PRIMARY KEY (x)
+)
+----
+
+norm expect-not=UseSwapMutation
+UPDATE xy SET x = x WHERE x = 1 AND y = 2
+----
+update xy
+ ├── columns: <none>
+ ├── fetch columns: x:5 y:6
+ ├── update-mapping:
+ │    └── x:5 => x:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: x:5!null y:6!null
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── scan xy
+      │    ├── columns: x:5!null y:6
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           ├── x:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+           └── y:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+
+norm expect-not=UseSwapMutation
+DELETE FROM xy WHERE x = 1 AND y = 2
+----
+delete xy
+ ├── columns: <none>
+ ├── fetch columns: x:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: x:5!null y:6!null
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── scan xy
+      │    ├── columns: x:5!null y:6
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
+      └── filters
+           ├── x:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+           └── y:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = 2 WHERE a = 1 AND b IS NOT DISTINCT FROM 1 AND c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── a_new:11 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null a_new:11!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,11)
+      └── (1, 1, true, 2)
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = 1, b = 2, c = TRUE WHERE a = 4 AND b IS NOT DISTINCT FROM 5 AND c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    ├── a_new:11 => a:1
+ │    ├── b_new:12 => b:2
+ │    └── c_new:13 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null a_new:11!null b_new:12!null c_new:13!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,11-13)
+      └── (4, 5, true, 1, 2, true)
+
+norm expect=UseSwapMutation
+UPDATE abc SET a = $1, b = $2, c = $3 WHERE a = $4 AND b IS NOT DISTINCT FROM $5 AND c IS NOT DISTINCT FROM $6
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    ├── a_new:11 => a:1
+ │    ├── b_new:12 => b:2
+ │    └── c_new:13 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: a_new:11 b_new:12 c_new:13 a:6!null b:7 c:8
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8,11-13)
+      ├── select
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── cardinality: [0 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── values
+      │    │    ├── columns: a:6 b:7 c:8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-8)
+      │    │    └── ($4, $5, $6)
+      │    └── filters
+      │         └── a:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      └── projections
+           ├── $1 [as=a_new:11]
+           ├── $2 [as=b_new:12]
+           └── $3 [as=c_new:13]
+
+exec-ddl
+CREATE TABLE mnop (
+  m INT NOT NULL,
+  n INT,
+  o INT AS (m + n) VIRTUAL,
+  p BOOLEAN AS (m < n) VIRTUAL,
+  PRIMARY KEY (m),
+  UNIQUE INDEX (n),
+  INDEX (o)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE mnop SET m = 1, n = 2 WHERE m = 3 AND n IS NOT DISTINCT FROM 4
+----
+update (swap) mnop
+ ├── columns: <none>
+ ├── fetch columns: m:7 n:8 o:9 p:10
+ ├── update-mapping:
+ │    ├── m_new:13 => m:1
+ │    ├── n_new:14 => n:2
+ │    ├── o_comp:15 => o:3
+ │    └── p_comp:16 => p:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: m:7!null n:8!null o_comp:15!null p_comp:16!null m_new:13!null n_new:14!null o:9!null p:10!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7-10,13-16)
+      └── (3, 4, 3, true, 1, 2, 7, true)
+
+norm expect=UseSwapMutation
+DELETE FROM mnop WHERE m = $1 AND n IS NOT DISTINCT FROM $2
+----
+delete (swap) mnop
+ ├── columns: <none>
+ ├── fetch columns: m:7 n:8 o:9
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: o:9 m:7!null n:8
+      ├── cardinality: [0 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(7-9)
+      ├── select
+      │    ├── columns: m:7!null n:8
+      │    ├── cardinality: [0 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,8)
+      │    ├── values
+      │    │    ├── columns: m:7 n:8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8)
+      │    │    └── ($1, $2)
+      │    └── filters
+      │         └── m:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+      └── projections
+           └── m:7 + n:8 [as=o:9, outer=(7,8), immutable]
+
+norm expect=UseSwapMutation
+UPDATE mnop SET m = $1, n = $2 WHERE m = $3 AND n = $4 RETURNING o, p
+----
+project
+ ├── columns: o:3 p:4
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3,4)
+ └── update (swap) mnop
+      ├── columns: m:1!null o:3 p:4
+      ├── fetch columns: m:7 n:8 o:9 p:10
+      ├── update-mapping:
+      │    ├── m_new:13 => m:1
+      │    ├── n_new:14 => n:2
+      │    ├── o_comp:15 => o:3
+      │    └── p_comp:16 => p:4
+      ├── return-mapping:
+      │    ├── m_new:13 => m:1
+      │    ├── o_comp:15 => o:3
+      │    └── p_comp:16 => p:4
+      ├── cardinality: [0 - 1]
+      ├── volatile, mutations, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1,3,4)
+      └── project
+           ├── columns: o_comp:15 p_comp:16 m:7!null n:8!null o:9!null p:10!null m_new:13 n_new:14
+           ├── cardinality: [0 - 1]
+           ├── immutable, has-placeholder
+           ├── key: ()
+           ├── fd: ()-->(7-10,13-16)
+           ├── project
+           │    ├── columns: m_new:13 n_new:14 o:9!null p:10!null m:7!null n:8!null
+           │    ├── cardinality: [0 - 1]
+           │    ├── immutable, has-placeholder
+           │    ├── key: ()
+           │    ├── fd: ()-->(7-10,13,14)
+           │    ├── select
+           │    │    ├── columns: m:7!null n:8!null
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── has-placeholder
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(7,8)
+           │    │    ├── values
+           │    │    │    ├── columns: m:7 n:8
+           │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    ├── has-placeholder
+           │    │    │    ├── key: ()
+           │    │    │    ├── fd: ()-->(7,8)
+           │    │    │    └── ($3, $4)
+           │    │    └── filters
+           │    │         ├── m:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+           │    │         └── n:8 IS NOT NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
+           │    └── projections
+           │         ├── $1 [as=m_new:13]
+           │         ├── $2 [as=n_new:14]
+           │         ├── m:7 + n:8 [as=o:9, outer=(7,8), immutable]
+           │         └── m:7 < n:8 [as=p:10, outer=(7,8)]
+           └── projections
+                ├── m_new:13 + n_new:14 [as=o_comp:15, outer=(13,14), immutable]
+                └── m_new:13 < n_new:14 [as=p_comp:16, outer=(13,14)]
+
+norm expect=UseSwapMutation
+UPDATE mnop SET m = $1, n = n + $2 WHERE m = $3 AND n IS NOT DISTINCT FROM $4 AND o = $5 AND NOT p
+----
+update (swap) mnop
+ ├── columns: <none>
+ ├── fetch columns: m:7 n:8 o:9 p:10
+ ├── update-mapping:
+ │    ├── m_new:13 => m:1
+ │    ├── n_new:14 => n:2
+ │    ├── o_comp:15 => o:3
+ │    └── p_comp:16 => p:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: o_comp:15 p_comp:16 m:7!null n:8!null o:9!null p:10!null m_new:13 n_new:14
+      ├── cardinality: [0 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(7-10,13-16)
+      ├── project
+      │    ├── columns: m_new:13 n_new:14 o:9!null p:10!null m:7!null n:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable, has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-10,13,14)
+      │    ├── select
+      │    │    ├── columns: m:7!null n:8!null
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── immutable, has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8)
+      │    │    ├── values
+      │    │    │    ├── columns: m:7 n:8
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── has-placeholder
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(7,8)
+      │    │    │    └── ($3, $4)
+      │    │    └── filters
+      │    │         ├── (m:7 + n:8) = $5 [outer=(7,8), immutable]
+      │    │         ├── m:7 >= n:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    │         └── m:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+      │    └── projections
+      │         ├── $1 [as=m_new:13]
+      │         ├── n:8 + $2 [as=n_new:14, outer=(8), immutable]
+      │         ├── m:7 + n:8 [as=o:9, outer=(7,8), immutable]
+      │         └── m:7 < n:8 [as=p:10, outer=(7,8)]
+      └── projections
+           ├── m_new:13 + n_new:14 [as=o_comp:15, outer=(13,14), immutable]
+           └── m_new:13 < n_new:14 [as=p_comp:16, outer=(13,14)]
+
+# Test that we do use swap mutations with a subquery in the projection.
+
+norm expect=UseSwapMutation
+UPDATE abc SET b = (SELECT sum(m) FROM mnop) WHERE a = 1 AND b = 2 AND c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b_cast:19 => b:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:6!null b:7!null c:8!null b_cast:19
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(6-8,19)
+      └── tuple
+           ├── 1
+           ├── 2
+           ├── true
+           └── assignment-cast: INT8
+                └── subquery
+                     └── scalar-group-by
+                          ├── columns: sum:17
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(17)
+                          ├── scan mnop
+                          │    ├── columns: m:11!null
+                          │    ├── computed column expressions
+                          │    │    ├── o:13
+                          │    │    │    └── m:11 + n:12
+                          │    │    └── p:14
+                          │    │         └── m:11 < n:12
+                          │    └── key: (11)
+                          └── aggregations
+                               └── sum [as=sum:17, outer=(11)]
+                                    └── m:11
+
+# TODO: we do not yet use swap mutations with a subquery in a predicate, due to
+# the rule not matching the join.
+
+norm
+UPDATE abc SET b = 2 WHERE a = 1 AND b = (SELECT 1 FROM mnop LIMIT 1) AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b_new:18 => b:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: b_new:18!null a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,18)
+      ├── inner-join (cross)
+      │    ├── columns: a:6!null b:7!null c:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-8)
+      │    │    ├── scan abc
+      │    │    │    ├── columns: a:6!null b:7 c:8
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │    │         ├── b:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │    │         └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+      │    ├── limit
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── scan mnop
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── o:13
+      │    │    │    │    │    └── m:11 + n:12
+      │    │    │    │    └── p:14
+      │    │    │    │         └── m:11 < n:12
+      │    │    │    └── limit hint: 1.00
+      │    │    └── 1
+      │    └── filters (true)
+      └── projections
+           └── 2 [as=b_new:18]
+
+# TODO: we do not yet use swap mutations with CTEs due to the join.
+
+norm
+WITH w AS (SELECT sum(m) AS s FROM mnop) UPDATE abc SET b = 1 FROM w WHERE a = s AND b = 2 AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:13 b:14 c:15
+ ├── passthrough columns: s:18
+ ├── update-mapping:
+ │    └── b_new:19 => b:9
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: b_new:19!null s:18!null a:13!null b:14!null c:15!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(13-15,18,19), (13)==(18), (18)==(13)
+      ├── inner-join (cross)
+      │    ├── columns: sum:7!null a:13!null b:14!null c:15!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,13-15), (7)==(13), (13)==(7)
+      │    ├── select
+      │    │    ├── columns: a:13!null b:14!null c:15!null
+      │    │    ├── key: (13)
+      │    │    ├── fd: ()-->(14,15)
+      │    │    ├── scan abc
+      │    │    │    ├── columns: a:13!null b:14 c:15
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── key: (13)
+      │    │    │    └── fd: (13)-->(14,15)
+      │    │    └── filters
+      │    │         ├── b:14 = 2 [outer=(14), constraints=(/14: [/2 - /2]; tight), fd=()-->(14)]
+      │    │         └── c:15 [outer=(15), constraints=(/15: [/true - /true]; tight), fd=()-->(15)]
+      │    ├── scalar-group-by
+      │    │    ├── columns: sum:7
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7)
+      │    │    ├── scan mnop
+      │    │    │    ├── columns: m:1!null
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── o:3
+      │    │    │    │    │    └── m:1 + n:2
+      │    │    │    │    └── p:4
+      │    │    │    │         └── m:1 < n:2
+      │    │    │    └── key: (1)
+      │    │    └── aggregations
+      │    │         └── sum [as=sum:7, outer=(1)]
+      │    │              └── m:1
+      │    └── filters
+      │         └── a:13 = sum:7 [outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
+      └── projections
+           ├── 1 [as=b_new:19]
+           └── sum:7 [as=s:18, outer=(7)]
+
+norm expect=UseSwapMutation
+WITH w AS (SELECT sum(m) AS s FROM mnop) UPDATE abc SET b = (SELECT s FROM w) WHERE a = 1 AND b = 2 AND c
+----
+update (swap) abc
+ ├── columns: <none>
+ ├── fetch columns: a:13 b:14 c:15
+ ├── update-mapping:
+ │    └── b_cast:20 => b:9
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: a:13!null b:14!null c:15!null b_cast:20
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(13-15,20)
+      └── tuple
+           ├── 1
+           ├── 2
+           ├── true
+           └── assignment-cast: INT8
+                └── subquery
+                     └── project
+                          ├── columns: s:18
+                          ├── cardinality: [1 - 1]
+                          ├── key: ()
+                          ├── fd: ()-->(18)
+                          ├── scalar-group-by
+                          │    ├── columns: sum:7
+                          │    ├── cardinality: [1 - 1]
+                          │    ├── key: ()
+                          │    ├── fd: ()-->(7)
+                          │    ├── scan mnop
+                          │    │    ├── columns: m:1!null
+                          │    │    ├── computed column expressions
+                          │    │    │    ├── o:3
+                          │    │    │    │    └── m:1 + n:2
+                          │    │    │    └── p:4
+                          │    │    │         └── m:1 < n:2
+                          │    │    └── key: (1)
+                          │    └── aggregations
+                          │         └── sum [as=sum:7, outer=(1)]
+                          │              └── m:1
+                          └── projections
+                               └── sum:7 [as=s:18, outer=(7)]
+
+# TODO: we do not yet use swap mutations with joins.
+
+norm
+UPDATE abc SET c = false FROM mnop WHERE a = 1 AND m = 1 AND b = n AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── passthrough columns: m:11 n:12 o:13 p:14 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+ ├── update-mapping:
+ │    └── c_new:17 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: c_new:17!null a:6!null b:7!null c:8!null m:11!null n:12!null o:13 p:14 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(6-8,11-17), (7)==(12), (12)==(7)
+      ├── inner-join (hash)
+      │    ├── columns: a:6!null b:7!null c:8!null m:11!null n:12!null o:13 p:14 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+      │    ├── cardinality: [0 - 1]
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8,11-16), (7)==(12), (12)==(7)
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7 c:8!null
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-8)
+      │    │    ├── scan abc
+      │    │    │    ├── columns: a:6!null b:7 c:8
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │    │         └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+      │    ├── project
+      │    │    ├── columns: o:13 p:14 m:11!null n:12 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11-16)
+      │    │    ├── select
+      │    │    │    ├── columns: m:11!null n:12 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(11,12,15,16)
+      │    │    │    ├── scan mnop
+      │    │    │    │    ├── columns: m:11!null n:12 mnop.crdb_internal_mvcc_timestamp:15 mnop.tableoid:16
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    ├── o:13
+      │    │    │    │    │    │    └── m:11 + n:12
+      │    │    │    │    │    └── p:14
+      │    │    │    │    │         └── m:11 < n:12
+      │    │    │    │    ├── key: (11)
+      │    │    │    │    └── fd: (11)-->(12,15,16), (12)~~>(11,15,16)
+      │    │    │    └── filters
+      │    │    │         └── m:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      │    │    └── projections
+      │    │         ├── m:11 + n:12 [as=o:13, outer=(11,12), immutable]
+      │    │         └── m:11 < n:12 [as=p:14, outer=(11,12)]
+      │    └── filters
+      │         └── b:7 = n:12 [outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
+      └── projections
+           └── false [as=c_new:17]
+
+# Test that we do use swap mutations with computed columns.
+
+exec-ddl
+CREATE TABLE qrs (
+  q STRING NOT NULL,
+  r STRING AS (q || 'r') VIRTUAL,
+  s STRING AS (q || 's') STORED,
+  PRIMARY KEY (q, s),
+  INDEX (r)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE qrs SET q = q || 'q' WHERE q = 'q' AND s = 'qs'
+----
+update (swap) qrs
+ ├── columns: <none>
+ ├── fetch columns: q:6 r:7 s:8
+ ├── update-mapping:
+ │    ├── q_new:11 => q:1
+ │    ├── r_comp:12 => r:2
+ │    └── s_comp:13 => s:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: q:6!null s:8!null q_new:11!null r:7!null r_comp:12!null s_comp:13!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,11-13)
+      └── ('q', 'qs', 'qq', 'qr', 'qqr', 'qqs')
+
+# TODO: we do not yet use swap mutations without all primary index columns
+# specified, even if the missing columns are computed.
+
+norm
+UPDATE qrs SET q = q || 'q' WHERE q = 'q'
+----
+update qrs
+ ├── columns: <none>
+ ├── fetch columns: q:6 r:7 s:8
+ ├── update-mapping:
+ │    ├── q_new:11 => q:1
+ │    ├── r_comp:12 => r:2
+ │    └── s_comp:13 => s:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: r_comp:12!null s_comp:13!null q:6!null r:7!null s:8!null q_new:11!null
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(6-8,11-13)
+      ├── project
+      │    ├── columns: q_new:11!null r:7!null q:6!null s:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8,11)
+      │    ├── select
+      │    │    ├── columns: q:6!null s:8!null
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6,8)
+      │    │    ├── scan qrs
+      │    │    │    ├── columns: q:6!null s:8!null
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── r:7
+      │    │    │    │    │    └── q:6 || 'r'
+      │    │    │    │    └── s:8
+      │    │    │    │         └── q:6 || 's'
+      │    │    │    ├── flags: avoid-full-scan
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(8)
+      │    │    └── filters
+      │    │         └── q:6 = 'q' [outer=(6), constraints=(/6: [/'q' - /'q']; tight), fd=()-->(6)]
+      │    └── projections
+      │         ├── q:6 || 'q' [as=q_new:11, outer=(6), immutable]
+      │         └── q:6 || 'r' [as=r:7, outer=(6), immutable]
+      └── projections
+           ├── q_new:11 || 'r' [as=r_comp:12, outer=(11), immutable]
+           └── q_new:11 || 's' [as=s_comp:13, outer=(11), immutable]
+
+# Test that we do use swap mutations with expression indexes and partial indexes.
+
+exec-ddl
+CREATE TABLE ijk (
+  i INT NOT NULL,
+  j STRING NOT NULL,
+  k TIMESTAMPTZ,
+  PRIMARY KEY (i, j),
+  INDEX ((j || 'j')),
+  INDEX (k) WHERE k IS NOT NULL AND i > 0
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE ijk SET i = 2, j = 'h', k = now() WHERE i = 1 AND j = 'i' AND k = '1999-12-31 23:59:59 UTC'
+----
+update (swap) ijk
+ ├── columns: <none>
+ ├── fetch columns: i:7 j:8 k:9 crdb_internal_idx_expr:12
+ ├── update-mapping:
+ │    ├── i_new:13 => i:1
+ │    ├── j_new:14 => j:2
+ │    ├── k_new:15 => k:3
+ │    └── crdb_internal_idx_expr_comp:16 => crdb_internal_idx_expr:6
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: i:7!null j:8!null k:9!null partial_index_put1:17!null partial_index_del1:18!null crdb_internal_idx_expr_comp:16!null i_new:13!null j_new:14!null k_new:15!null crdb_internal_idx_expr:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7-9,12-18)
+      └── (1, 'i', '1999-12-31 23:59:59+00', true, true, 'hj', 2, 'h', '2017-05-10 13:00:00+00', 'ij')
+
+norm expect=UseSwapMutation
+UPDATE ijk SET i = -1, j = 'h', k = NULL WHERE i = 1 AND j = 'i' AND k = '1999-12-31 23:59:59 UTC'
+----
+update (swap) ijk
+ ├── columns: <none>
+ ├── fetch columns: i:7 j:8 k:9 crdb_internal_idx_expr:12
+ ├── update-mapping:
+ │    ├── i_new:13 => i:1
+ │    ├── j_new:14 => j:2
+ │    ├── k_new:15 => k:3
+ │    └── crdb_internal_idx_expr_comp:16 => crdb_internal_idx_expr:6
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: i:7!null j:8!null k:9!null partial_index_put1:17!null partial_index_del1:18!null crdb_internal_idx_expr_comp:16!null i_new:13!null j_new:14!null k_new:15 crdb_internal_idx_expr:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7-9,12-18)
+      └── (1, 'i', '1999-12-31 23:59:59+00', false, true, 'hj', -1, 'h', NULL, 'ij')
+
+norm expect=UseSwapMutation
+UPDATE ijk SET i = -1, j = 'h', k = NULL WHERE i = -1 AND j = 'i' AND k IS NULL
+----
+update (swap) ijk
+ ├── columns: <none>
+ ├── fetch columns: i:7 j:8 k:9 crdb_internal_idx_expr:12
+ ├── update-mapping:
+ │    ├── i_new:13 => i:1
+ │    ├── j_new:14 => j:2
+ │    ├── k_new:15 => k:3
+ │    └── crdb_internal_idx_expr_comp:16 => crdb_internal_idx_expr:6
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_del1:18
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: i:7!null j:8!null k:9 partial_index_put1:17!null partial_index_del1:18!null crdb_internal_idx_expr_comp:16!null i_new:13!null j_new:14!null k_new:15 crdb_internal_idx_expr:12!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7-9,12-18)
+      └── (-1, 'i', NULL, false, false, 'hj', -1, 'h', NULL, 'ij')
+
+# Test that we do use swap mutations with inverted indexes.
+
+exec-ddl
+CREATE TABLE uvw (
+  u UUID NOT NULL DEFAULT gen_random_uuid(),
+  v TEXT,
+  w INT[],
+  PRIMARY KEY (u),
+  INVERTED INDEX (v),
+  INVERTED INDEX (w)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE uvw SET u = gen_random_uuid(), w = w || 5 WHERE u = '3fb5c548-1497-4084-8973-7dcd2b28a1af' AND v = 'x' AND w = '{3}'
+----
+update (swap) uvw
+ ├── columns: <none>
+ ├── fetch columns: u:8 v:9 w:10
+ ├── update-mapping:
+ │    ├── u_new:15 => u:1
+ │    └── w_new:16 => w:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: u:8!null v:9!null w:10!null u_new:15 w_new:16!null
+      ├── cardinality: [1 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(8-10,15,16)
+      └── ('3fb5c548-1497-4084-8973-7dcd2b28a1af', 'x', ARRAY[3], gen_random_uuid(), ARRAY[3,5])
+
+# TODO: we do not yet use swap mutations with vector indexes.
+
+exec-ddl
+CREATE TABLE efg (
+  e INT NOT NULL,
+  f INT,
+  g VECTOR(3),
+  PRIMARY KEY (e),
+  VECTOR INDEX (f, g)
+)
+----
+
+norm
+UPDATE efg SET f = f + 1 WHERE e = 1 AND f = 2 AND g = '[8, 9, 10]'
+----
+update efg
+ ├── columns: <none>
+ ├── fetch columns: e:6 f:7 g:8
+ ├── update-mapping:
+ │    └── f_new:11 => f:2
+ ├── vector index del partition columns: vector_index_del_partition1:12
+ ├── vector index put partition columns: vector_index_put_partition1:13
+ ├── vector index put quantized vector columns: vector_index_put_quantized_vec1:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── vector-mutation-search efg@efg_f_g_idx,vector
+      ├── columns: e:6!null f:7!null g:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 f_new:11!null vector_index_del_partition1:12 vector_index_put_partition1:13 vector_index_put_quantized_vec1:14
+      ├── index put
+      ├── prefix key columns: [11]
+      ├── query vector column: g:8
+      ├── partition col: vector_index_put_partition1:13
+      ├── quantized vector col: vector_index_put_quantized_vec1:14
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(6-14)
+      └── vector-mutation-search efg@efg_f_g_idx,vector
+           ├── columns: e:6!null f:7!null g:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 f_new:11!null vector_index_del_partition1:12
+           ├── index del
+           ├── prefix key columns: [7]
+           ├── query vector column: g:8
+           ├── suffix key columns: [6]
+           ├── partition col: vector_index_del_partition1:12
+           ├── cardinality: [0 - 1]
+           ├── immutable
+           ├── key: ()
+           ├── fd: ()-->(6-12)
+           └── project
+                ├── columns: f_new:11!null e:6!null f:7!null g:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+                ├── cardinality: [0 - 1]
+                ├── immutable
+                ├── key: ()
+                ├── fd: ()-->(6-11)
+                ├── select
+                │    ├── columns: e:6!null f:7!null g:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(6-10)
+                │    ├── scan efg
+                │    │    ├── columns: e:6!null f:7 g:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+                │    │    ├── flags: avoid-full-scan
+                │    │    ├── key: (6)
+                │    │    └── fd: (6)-->(7-10)
+                │    └── filters
+                │         ├── e:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+                │         ├── f:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+                │         └── g:8 = '[8,9,10]' [outer=(8), constraints=(/8: [/[8,9,10] - /[8,9,10]]; tight), fd=()-->(8)]
+                └── projections
+                     └── f:7 + 1 [as=f_new:11, outer=(7), immutable]
+
+# Test that we do use swap mutations with partitioned tables.
+
+# Test that we do not use swap mutations with FK checks or cascades.
+
+exec-ddl
+CREATE TABLE parent (
+  p INT NOT NULL PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE child (
+  c INT NOT NULL PRIMARY KEY,
+  p INT,
+  INDEX (p)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE parent SET p = 2 WHERE p = 1
+----
+update (swap) parent
+ ├── columns: <none>
+ ├── fetch columns: p:4
+ ├── update-mapping:
+ │    └── p_new:7 => p:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: p:4!null p_new:7!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(4,7)
+      └── (1, 2)
+
+norm expect=UseSwapMutation
+UPDATE child SET c = 2, p = 2 WHERE c = 1 AND p = 1
+----
+update (swap) child
+ ├── columns: <none>
+ ├── fetch columns: c:5 p:6
+ ├── update-mapping:
+ │    ├── c_new:9 => c:1
+ │    └── c_new:9 => p:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: c:5!null p:6!null c_new:9!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5,6,9)
+      └── (1, 1, 2)
+
+exec-ddl
+ALTER TABLE child
+ADD CONSTRAINT child_p_fkey
+FOREIGN KEY (p) REFERENCES parent (p)
+ON DELETE CASCADE ON UPDATE CASCADE
+----
+
+norm expect-not=UseSwapMutation
+UPDATE parent SET p = 2 WHERE p = 1
+----
+update parent
+ ├── columns: <none>
+ ├── fetch columns: p:4
+ ├── update-mapping:
+ │    └── p_new:7 => p:1
+ ├── input binding: &1
+ ├── cascades
+ │    └── child_p_fkey
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: p_new:7!null p:4!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(4,7)
+      ├── select
+      │    ├── columns: p:4!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(4)
+      │    ├── scan parent
+      │    │    ├── columns: p:4!null
+      │    │    ├── flags: avoid-full-scan
+      │    │    └── key: (4)
+      │    └── filters
+      │         └── p:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      └── projections
+           └── 2 [as=p_new:7]
+
+norm expect-not=UseSwapMutation
+UPDATE child SET c = 2, p = 2 WHERE c = 1 AND p = 1
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: c:5 child.p:6
+ ├── update-mapping:
+ │    ├── c_new:9 => c:1
+ │    └── c_new:9 => child.p:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: c_new:9!null c:5!null child.p:6!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6,9)
+ │    ├── select
+ │    │    ├── columns: c:5!null child.p:6!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5,6)
+ │    │    ├── scan child
+ │    │    │    ├── columns: c:5!null child.p:6
+ │    │    │    ├── flags: avoid-full-scan
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6)
+ │    │    └── filters
+ │    │         ├── c:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+ │    │         └── child.p:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+ │    └── projections
+ │         └── 2 [as=c_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(10)
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    ├── mapping:
+                │    │    └──  c_new:9 => p:10
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(10)
+                ├── scan parent
+                │    ├── columns: parent.p:11!null
+                │    ├── flags: avoid-full-scan
+                │    └── key: (11)
+                └── filters
+                     └── p:10 = parent.p:11 [outer=(10,11), constraints=(/10: (/NULL - ]; /11: (/NULL - ]), fd=(10)==(11), (11)==(10)]
+
+# Test that we do not use swap mutations with uniqueness checks.
+
+exec-ddl
+CREATE TABLE cd (
+  c INT PRIMARY KEY,
+  d INT,
+  UNIQUE WITHOUT INDEX (d)
+)
+----
+
+norm expect-not=UseSwapMutation
+UPDATE cd SET c = 2, d = 2 WHERE c = 1 AND d = 1
+----
+update cd
+ ├── columns: <none>
+ ├── fetch columns: cd.c:5 cd.d:6
+ ├── update-mapping:
+ │    ├── c_new:9 => cd.c:1
+ │    └── c_new:9 => cd.d:2
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: c_new:9!null cd.c:5!null cd.d:6!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6,9)
+ │    ├── select
+ │    │    ├── columns: cd.c:5!null cd.d:6!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5,6)
+ │    │    ├── scan cd
+ │    │    │    ├── columns: cd.c:5!null cd.d:6
+ │    │    │    ├── flags: avoid-full-scan
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6), (6)~~>(5)
+ │    │    └── filters
+ │    │         ├── cd.c:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+ │    │         └── cd.d:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+ │    └── projections
+ │         └── 2 [as=c_new:9]
+ └── unique-checks
+      └── unique-checks-item: cd(d)
+           └── project
+                ├── columns: d:15!null
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(15)
+                └── semi-join (hash)
+                     ├── columns: c:14!null d:15!null
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(14,15)
+                     ├── with-scan &1
+                     │    ├── columns: c:14!null d:15!null
+                     │    ├── mapping:
+                     │    │    ├──  c_new:9 => c:14
+                     │    │    └──  c_new:9 => d:15
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(14,15)
+                     ├── scan cd
+                     │    ├── columns: cd.c:10!null cd.d:11
+                     │    ├── flags: avoid-full-scan
+                     │    ├── key: (10)
+                     │    └── fd: (10)-->(11)
+                     └── filters
+                          ├── d:15 = cd.d:11 [outer=(11,15), constraints=(/11: (/NULL - ]; /15: (/NULL - ]), fd=(11)==(15), (15)==(11)]
+                          └── c:14 != cd.c:10 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ])]
+
+# Test that we do use swap mutations with before triggers.
+
+exec-ddl
+CREATE TABLE trig (
+  id INT PRIMARY KEY,
+  name TEXT NOT NULL,
+  val INT NOT NULL
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
+----
+update (swap) trig
+ ├── columns: <none>
+ ├── fetch columns: id:6 name:7 val:8
+ ├── update-mapping:
+ │    └── val_new:11 => val:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: id:6!null name:7!null val:8!null val_new:11!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,11)
+      └── (1, 'n', 1, 2)
+
+exec-ddl
+CREATE OR REPLACE FUNCTION clamp_val_before_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW).val < 5 THEN
+    NEW.val := 5;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+----
+
+exec-ddl
+CREATE TRIGGER before_trig_update
+BEFORE UPDATE ON trig
+FOR EACH ROW
+EXECUTE FUNCTION clamp_val_before_update()
+----
+
+norm
+UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
+----
+update trig
+ ├── columns: <none>
+ ├── fetch columns: id:6 name:7 val:8
+ ├── update-mapping:
+ │    ├── id_new:44 => id:1
+ │    ├── name_new:45 => name:2
+ │    └── val_new:46 => val:3
+ ├── before-triggers
+ │    └── before_trig_update
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: id_new:44 name_new:45 val_new:46 id:6!null name:7!null val:8!null
+      ├── cardinality: [0 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(6-8,44-46)
+      ├── barrier
+      │    ├── columns: id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 val_new:11!null old:12!null new:13!null clamp_val_before_update:43!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-13,43)
+      │    └── select
+      │         ├── columns: id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 val_new:11!null old:12!null new:13!null clamp_val_before_update:43!null
+      │         ├── cardinality: [0 - 1]
+      │         ├── volatile
+      │         ├── key: ()
+      │         ├── fd: ()-->(6-13,43)
+      │         ├── project
+      │         │    ├── columns: clamp_val_before_update:43 id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 val_new:11!null old:12!null new:13!null
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── volatile
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(6-13,43)
+      │         │    ├── barrier
+      │         │    │    ├── columns: id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 val_new:11!null old:12!null new:13!null
+      │         │    │    ├── cardinality: [0 - 1]
+      │         │    │    ├── key: ()
+      │         │    │    ├── fd: ()-->(6-13)
+      │         │    │    └── project
+      │         │    │         ├── columns: new:13!null old:12!null val_new:11!null id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         ├── cardinality: [0 - 1]
+      │         │    │         ├── key: ()
+      │         │    │         ├── fd: ()-->(6-13)
+      │         │    │         ├── select
+      │         │    │         │    ├── columns: id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    ├── cardinality: [0 - 1]
+      │         │    │         │    ├── key: ()
+      │         │    │         │    ├── fd: ()-->(6-10)
+      │         │    │         │    ├── scan trig
+      │         │    │         │    │    ├── columns: id:6!null name:7!null val:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │         │    │    ├── flags: avoid-full-scan
+      │         │    │         │    │    ├── key: (6)
+      │         │    │         │    │    └── fd: (6)-->(7-10)
+      │         │    │         │    └── filters
+      │         │    │         │         ├── id:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │         │    │         │         ├── name:7 = 'n' [outer=(7), constraints=(/7: [/'n' - /'n']; tight), fd=()-->(7)]
+      │         │    │         │         └── val:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      │         │    │         └── projections
+      │         │    │              ├── ((id:6, name:7, 2) AS id, name, val) [as=new:13, outer=(6,7)]
+      │         │    │              ├── ((id:6, name:7, val:8) AS id, name, val) [as=old:12, outer=(6-8)]
+      │         │    │              └── 2 [as=val_new:11]
+      │         │    └── projections
+      │         │         └── clamp_val_before_update(new:13, old:12, 'before_trig_update', 'BEFORE', 'ROW', 'UPDATE', 66, 'trig', 'trig', 'public', 0, ARRAY[]) [as=clamp_val_before_update:43, outer=(12,13), volatile, udf]
+      │         └── filters
+      │              └── clamp_val_before_update:43 IS DISTINCT FROM NULL [outer=(43), immutable, constraints=(/43: (/NULL - ]; tight)]
+      └── projections
+           ├── (clamp_val_before_update:43).id [as=id_new:44, outer=(43)]
+           ├── (clamp_val_before_update:43).name [as=name_new:45, outer=(43)]
+           └── (clamp_val_before_update:43).val [as=val_new:46, outer=(43)]
+
+exec-ddl
+DROP TRIGGER before_trig_update ON trig
+----
+
+# Test that we do not use swap mutations with after triggers.
+
+exec-ddl
+CREATE TABLE trig_log (
+  id INT NOT NULL,
+  name TEXT NOT NULL,
+  val INT NOT NULL,
+  modified_at TIMESTAMPTZ,
+  INDEX (id)
+)
+----
+
+exec-ddl
+CREATE OR REPLACE FUNCTION log_trig_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO trig_log VALUES (NEW.id, NEW.name, NEW.val, now());
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql
+----
+
+exec-ddl
+CREATE TRIGGER after_trig_update
+AFTER UPDATE ON trig
+FOR EACH ROW
+EXECUTE FUNCTION log_trig_update()
+----
+
+norm
+UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
+----
+update trig
+ ├── columns: <none>
+ ├── fetch columns: id:6 name:7 val:8
+ ├── update-mapping:
+ │    └── val_new:11 => val:3
+ ├── input binding: &1
+ ├── after-triggers
+ │    └── after_trig_update
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: val_new:11!null id:6!null name:7!null val:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8,11)
+      ├── select
+      │    ├── columns: id:6!null name:7!null val:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── scan trig
+      │    │    ├── columns: id:6!null name:7!null val:8!null
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         ├── id:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │         ├── name:7 = 'n' [outer=(7), constraints=(/7: [/'n' - /'n']; tight), fd=()-->(7)]
+      │         └── val:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      └── projections
+           └── 2 [as=val_new:11]
