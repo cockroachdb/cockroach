@@ -5026,6 +5026,33 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		values := make(tree.Datums, len(showZoneConfigColumns))
+		descIDs := catalog.DescriptorIDSet{}
+		for _, r := range rows {
+			id := uint32(tree.MustBeDInt(r[0]))
+			zs, err := zonepb.ZoneSpecifierFromID(id, resolveID)
+			if err != nil {
+				// We can have valid zoneSpecifiers whose table/database has been
+				// deleted because zoneSpecifiers are collected asynchronously.
+				// In this case, just don't show the zoneSpecifier in the
+				// output of the table.
+				continue
+			}
+			if zs.TableOrIndex.Table.Object() == "" && zs.Database == "" {
+				continue
+			}
+			descIDs.Add(descpb.ID(id))
+		}
+		// Fetch all of the descriptors needed for format the zone configuration
+		// information.
+		zcDescMap := make(map[catid.DescID]catalog.Descriptor)
+		zcDescs, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Descs(ctx, descIDs.Ordered())
+		if err != nil {
+			return err
+		}
+		for _, desc := range zcDescs {
+			zcDescMap[desc.GetID()] = desc
+		}
+
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
 
@@ -5058,26 +5085,23 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Database(ctx, descpb.ID(id))
-				if err != nil {
-					return err
-				}
+				database := zcDescMap[catid.DescID(id)]
 				if ok, err := p.HasAnyPrivilege(ctx, database); err != nil {
 					return err
 				} else if !ok {
 					continue
 				}
 			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
-				tableEntry, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Table(ctx, descpb.ID(id))
-				if err != nil {
-					return err
-				}
+				tableEntry := zcDescMap[catid.DescID(id)]
 				if ok, err := p.HasAnyPrivilege(ctx, tableEntry); err != nil {
 					return err
 				} else if !ok {
 					continue
 				}
-				table = tableEntry
+				table, err = catalog.AsTableDescriptor(tableEntry)
+				if err != nil {
+					return err
+				}
 			}
 
 			// Write down information about the zone in the table.
