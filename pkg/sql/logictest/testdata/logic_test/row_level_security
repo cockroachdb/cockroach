@@ -2790,6 +2790,133 @@ DROP TABLE multip;
 statement ok
 DROP USER multi_user;
 
+subtest ctas_and_mqt
+
+# Test that RLS is enforced, even when users create CTAS and materialized views
+
+statement ok
+CREATE ROLE alice LOGIN;
+
+statement ok
+CREATE ROLE bob LOGIN;
+
+statement ok
+CREATE TABLE documents (
+    id INT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    content TEXT NOT NULL
+);
+
+statement ok
+INSERT INTO documents (id, owner, content) VALUES
+  (1, 'alice', 'Alice’s first document'),
+  (2, 'alice', 'Alice’s second document'),
+  (3, 'bob',   'Bob’s only document so far'),
+  (4, 'admin', 'Admin’s secret doc');
+
+statement ok
+GRANT ALL ON documents TO alice;
+
+statement ok
+GRANT ALL ON documents TO bob;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO alice;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO bob;
+
+statement ok
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY alice ON documents TO alice USING (owner = 'alice');
+
+statement ok
+CREATE POLICY bob ON documents TO bob USING (owner = 'bob');
+
+statement ok
+SET ROLE alice;
+
+query ITT
+SELECT * FROM documents ORDER BY ID;
+----
+1  alice  Alice’s first document
+2  alice  Alice’s second document
+
+statement ok
+CREATE TABLE ctas1 AS SELECT * FROM documents;
+
+query ITT
+SELECT * FROM ctas1 ORDER BY ID;
+----
+1  alice  Alice’s first document
+2  alice  Alice’s second document
+
+statement ok
+CREATE MATERIALIZED VIEW mqt_doc AS SELECT * FROM documents;
+
+query ITT
+SELECT * FROM mqt_doc ORDER BY ID;
+----
+1  alice  Alice’s first document
+2  alice  Alice’s second document
+
+statement ok
+GRANT ALL ON ctas1 TO bob;
+
+statement ok
+RESET ROLE;
+
+statement ok
+ALTER TABLE mqt_doc OWNER TO bob;
+
+statement ok
+SET ROLE bob;
+
+query ITT
+SELECT * FROM documents ORDER BY ID;
+----
+3  bob  Bob’s only document so far
+
+query ITT
+SELECT * FROM ctas1 ORDER BY ID;
+----
+1  alice  Alice’s first document
+2  alice  Alice’s second document
+
+query ITT
+SELECT * FROM mqt_doc ORDER BY ID;
+----
+1  alice  Alice’s first document
+2  alice  Alice’s second document
+
+statement ok
+REFRESH MATERIALIZED VIEW mqt_doc;
+
+query ITT
+SELECT * FROM mqt_doc ORDER BY ID;
+----
+3  bob  Bob’s only document so far
+
+statement ok
+RESET ROLE;
+
+statement ok
+DROP TABLE ctas1;
+
+statement ok
+DROP MATERIALIZED VIEW mqt_doc;
+
+statement ok
+DROP TABLE documents;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM bob, alice;
+
+statement ok
+DROP ROLE alice, bob;
+
 subtest show_policies_edge_cases
 
 statement error pq: relation "nonexistent_table" does not exist
