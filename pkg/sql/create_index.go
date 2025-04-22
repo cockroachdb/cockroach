@@ -256,6 +256,17 @@ func makeIndexDescriptor(
 		}
 
 		vecCol := columns[len(columns)-1]
+		switch vecCol.OpClass {
+		case "vector_l2_ops", "":
+			// vector_l2_ops is the default operator class. This allows users to omit
+			// the operator class in index definitions.
+		case "vector_l1_ops", "vector_ip_ops", "vector_cosine_ops",
+			"bit_hamming_ops", "bit_jaccard_ops":
+			return nil, unimplemented.NewWithIssuef(144016,
+				"operator class %v is not supported", vecCol.OpClass)
+		default:
+			return nil, newUndefinedOpclassError(vecCol.OpClass)
+		}
 		column, err := catalog.MustFindColumnByTreeName(tableDesc, vecCol.Column)
 		if err != nil {
 			return nil, err
@@ -372,7 +383,7 @@ func checkIndexColumns(
 		}
 		if colDef.OpClass != "" && (i < len(columns)-1 || !indexType.SupportsOpClass()) {
 			return pgerror.New(pgcode.DatatypeMismatch,
-				"operator classes are only allowed for the last column of an inverted index")
+				"operator classes are only allowed for the last column of an inverted or vector index")
 		}
 	}
 	for i, colName := range storing {
