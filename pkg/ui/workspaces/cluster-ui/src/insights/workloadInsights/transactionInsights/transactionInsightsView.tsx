@@ -29,10 +29,7 @@ import {
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import { TableStatistics } from "src/tableStatistics";
@@ -47,6 +44,7 @@ import {
   TimeScaleDropdown,
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
+import { usePagination } from "../../../util";
 import { InsightsError } from "../../insightsErrorComponent";
 import { EmptyInsightsTablePlaceholder } from "../util";
 
@@ -103,10 +101,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     maxSizeApiReached,
   } = props;
 
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: 10,
-  });
+  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
@@ -167,20 +162,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     sortSetting.columnTitle,
     search,
   ]);
-
-  const onChangePage = (current: number): void => {
-    setPagination({
-      current: current,
-      pageSize: 10,
-    });
-  };
-
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: 10,
-    });
-  };
 
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
@@ -301,7 +282,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredTransactions?.length}
-              onChange={onChangePage}
+              onChange={updatePagination}
+              onShowSizeChange={updatePagination}
             />
             {maxSizeApiReached && (
               <InlineAlert
