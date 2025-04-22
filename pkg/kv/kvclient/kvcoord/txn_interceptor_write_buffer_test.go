@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -25,11 +26,13 @@ import (
 )
 
 func makeMockTxnWriteBuffer(st *cluster.Settings) (txnWriteBuffer, *mockLockedSender) {
+	metrics := MakeTxnMetrics(time.Hour)
 	mockSender := &mockLockedSender{}
 	return txnWriteBuffer{
-		enabled: true,
-		wrapped: mockSender,
-		st:      st,
+		enabled:    true,
+		wrapped:    mockSender,
+		txnMetrics: &metrics,
+		st:         st,
 	}, mockSender
 }
 
@@ -109,6 +112,7 @@ func TestTxnWriteBufferBuffersBlindWrites(t *testing.T) {
 	require.Equal(t, br.Responses[0].GetInner(), &kvpb.PutResponse{})
 	require.Equal(t, br.Responses[1].GetInner(), &kvpb.PutResponse{})
 	require.Equal(t, br.Responses[2].GetInner(), &kvpb.DeleteResponse{})
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferFullyHandledBatches.Count())
 
 	// Verify the writes were buffered correctly.
 	expBufferedWrites := []bufferedWrite{
@@ -1450,6 +1454,8 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	// Even though we flushed the Put, it shouldn't make it back to the response.
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[0].GetInner())
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Count())
 
 	// Ensure the buffer is empty at this point.
 	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
@@ -1497,6 +1503,9 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	require.NotNil(t, br)
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+	// Sanity check the metrics remain the same (and don't increase).
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Count())
 }
 
 // TestTxnWriteBufferDeleteRange ensures that the txnWriteBuffer correctly
@@ -1563,6 +1572,7 @@ func TestTxnWriteBufferDeleteRange(t *testing.T) {
 	// Even though we flushed some writes, it shouldn't make it back to the response.
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.DeleteRangeResponse{}, br.Responses[0].GetInner())
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 
 	// Ensure the buffer is empty at this point.
 	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
@@ -1765,6 +1775,7 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	// The buffer should be flushed and disabled.
 	require.False(t, twb.enabled)
 	require.False(t, twb.flushOnNextBatch)
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 
 	// Both Put and Del should make it to the server in a single bath.
 	require.Equal(t, numCalledBefore+1, mockSender.NumCalled())
@@ -1813,6 +1824,8 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	require.NotNil(t, br)
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+	// Sanity check the metric remains the same (and doesn't increase).
+	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 }
 
 // TestTxnWriteBufferClearsBufferOnEpochBump tests that the txnWriteBuffer
