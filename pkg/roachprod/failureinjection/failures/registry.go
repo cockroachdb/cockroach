@@ -8,9 +8,9 @@ package failures
 import (
 	"fmt"
 	"regexp"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type ConnectionInfo struct {
@@ -23,7 +23,7 @@ type failureSpec struct {
 	args            FailureArgs
 }
 type FailureRegistry struct {
-	sync.Mutex
+	syncutil.Mutex
 	failures map[string]failureSpec
 }
 

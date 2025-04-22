@@ -19,6 +19,8 @@ type NodeKillArgs struct {
 	Nodes install.Nodes
 	// GracefulShutdown will allow the cockroach process to drain before exiting.
 	GracefulShutdown bool
+	// The replication factor to wait for in WaitForFailureToRecover. Defaults to 3 if empty.
+	ReplicationFactor int
 }
 
 const NodeKillFailureName = "node-kill"
@@ -85,10 +87,8 @@ func (f *NodeKillFailure) WaitForFailureToPropagate(
 func (f *NodeKillFailure) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
-	nodes := args.(NodeKillArgs).Nodes
+	nodeKillArgs := args.(NodeKillArgs)
+	nodes := nodeKillArgs.Nodes
 	l.Printf("Waiting for cockroach process to recover on nodes: %v", nodes)
-
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return f.WaitForSQLReady(ctx, l, n)
-	})
+	return f.WaitForRestartedNodesToStabilize(ctx, l, nodes, nodeKillArgs.ReplicationFactor)
 }
