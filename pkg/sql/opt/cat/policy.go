@@ -6,6 +6,8 @@
 package cat
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -87,12 +89,30 @@ func (p *Policy) InitRoles(roleNames []string) {
 	p.roles = roles
 }
 
-// AppliesToRole checks whether the policy applies to the give role.
-func (p *Policy) AppliesToRole(user username.SQLUsername) bool {
+// AppliesToRole checks whether the policy applies to the given role.
+func (p *Policy) AppliesToRole(ctx context.Context, cat Catalog, user username.SQLUsername) bool {
 	// If no roles are specified, assume the policy applies to all users (public role).
 	if p.roles == nil {
 		return true
 	}
-	_, found := p.roles[user.Normalized()]
-	return found
+
+	// First check if the user directly has the role
+	if _, found := p.roles[user.Normalized()]; found {
+		return true
+	}
+
+	// Check each role in the policy to see if the user belongs to it
+	for role := range p.roles {
+		// Convert string to SQLUsername
+		roleUsername := username.MakeSQLUsernameFromPreNormalizedString(role)
+
+		// Check if user belongs to this role
+		if belongs, err := cat.UserBelongsToRole(ctx, user, roleUsername); err != nil {
+			panic(err)
+		} else if belongs {
+			return true
+		}
+	}
+
+	return false
 }
