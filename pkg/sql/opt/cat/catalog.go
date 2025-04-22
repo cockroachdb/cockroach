@@ -245,6 +245,10 @@ type Catalog interface {
 	// NOLOGIN instead of LOGIN.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 
+	// GetRolesForMember returns a map of role names to a boolean indicating whether
+	// the given member is a direct or indirect member of those roles.
+	GetRolesForMember(ctx context.Context, member username.SQLUsername) (_ map[username.SQLUsername]bool, retErr error)
+
 	// UserHasGlobalPrivilegeOrRoleOption returns a bool representing whether the given user
 	// has a global privilege or the corresponding legacy role option.
 	UserHasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind, user username.SQLUsername) (bool, error)

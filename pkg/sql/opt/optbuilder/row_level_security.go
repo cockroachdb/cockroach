@@ -111,7 +111,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(policy cat.Policy, restrictive bool) {
-		if !policy.AppliesToRole(b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
+		if !policy.AppliesToRole(b.ctx, b.catalog, b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
 			return
 		}
 		strExpr := policy.UsingExpr
@@ -241,7 +241,7 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 		return "true", nil
 	}
 
-	combinedExpr := r.combinePolicyWithCheckExpr(&colIDs)
+	combinedExpr := r.combinePolicyWithCheckExpr(ctx, &colIDs)
 	// If no policies apply, then we will add a false check as nothing is allowed
 	// to be written.
 	if combinedExpr == "" {
@@ -253,27 +253,29 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 
 // combinePolicyWithCheckExpr will build a combined expression depending if this
 // is INSERT or UPDATE.
-func (r *optRLSConstraintBuilder) combinePolicyWithCheckExpr(colIDs *intsets.Fast) string {
+func (r *optRLSConstraintBuilder) combinePolicyWithCheckExpr(
+	ctx context.Context, colIDs *intsets.Fast,
+) string {
 	// When handling UPDATE, we need to add the SELECT/ALL using expressions
 	// first, then apply any UPDATE policy.
 	if r.isUpdate {
-		selExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeSelect)
+		selExpr := r.genPolicyWithCheckExprForCommand(ctx, colIDs, cat.PolicyScopeSelect)
 		if selExpr == "" {
 			return ""
 		}
-		updExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeUpdate)
+		updExpr := r.genPolicyWithCheckExprForCommand(ctx, colIDs, cat.PolicyScopeUpdate)
 		if updExpr == "" {
 			return ""
 		}
 		return fmt.Sprintf("(%s) and (%s)", selExpr, updExpr)
 	}
-	return r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeInsert)
+	return r.genPolicyWithCheckExprForCommand(ctx, colIDs, cat.PolicyScopeInsert)
 }
 
 // genPolicyWithCheckExprForCommand will build a WITH CHECK expression for the
 // given policy command.
 func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
-	colIDs *intsets.Fast, cmdScope cat.PolicyCommandScope,
+	ctx context.Context, colIDs *intsets.Fast, cmdScope cat.PolicyCommandScope,
 ) string {
 	var sb strings.Builder
 	var policiesUsed opt.PolicyIDSet
@@ -281,7 +283,7 @@ func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(p cat.Policy, restrictive bool) {
-		if !p.AppliesToRole(r.user) || !policyAppliesToCommandScope(p, cmdScope) {
+		if !p.AppliesToRole(ctx, r.oc, r.user) || !policyAppliesToCommandScope(p, cmdScope) {
 			return
 		}
 		policiesUsed.Add(p.ID)

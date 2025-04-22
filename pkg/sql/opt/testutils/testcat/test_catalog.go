@@ -348,6 +348,13 @@ func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Opti
 	return true, nil
 }
 
+// GetRolesForMember is part of the cat.Catalog interface.
+func (tc *Catalog) GetRolesForMember(
+	ctx context.Context, member username.SQLUsername,
+) (_ map[username.SQLUsername]bool, retErr error) {
+	return map[username.SQLUsername]bool{}, nil
+}
+
 // UserHasGlobalPrivilegeOrRoleOption is part of the cat.Catalog interface.
 func (tc *Catalog) UserHasGlobalPrivilegeOrRoleOption(
 	ctx context.Context, privilege privilege.Kind, user username.SQLUsername,
