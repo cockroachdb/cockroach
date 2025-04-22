@@ -65,9 +65,9 @@ var flagHideProgress = flag.Bool("hide-progress", false, "Hide progress during i
 // Search command options.
 var flagMaxResults = flag.Int("k", 10, "Number of search results, used in recall calculation.")
 var flagBeamSize = flag.Int(
-	"default-beam-size",
+	"build-beam-size",
 	8,
-	"Default beam size used for building and searching the index.")
+	"Default beam size used for building the index.")
 var flagSearchBeamSizes = flag.String(
 	"search-beam-sizes",
 	"1,2,4,8,16,32,64,128,256,512",
@@ -248,30 +248,37 @@ func (vb *vectorBench) SearchIndex() {
 	}
 
 	doSearch := func(beamSize int) {
+		// Prepare to search.
+		maxResults := *flagMaxResults
+		state, err := vb.provider.SetupSearch(vb.ctx, maxResults, beamSize)
+		if err != nil {
+			panic(err)
+		}
+
 		start := timeutil.Now()
 
 		// Search for test vectors.
-		var sumMAP, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
+		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
 		count := data.Test.Count
-		for i := 0; i < count; i++ {
+		for i := range count {
 			// Calculate truth set for the vector.
 			queryVector := data.Test.At(i)
 
 			var stats cspann.SearchStats
-			prediction, err := vb.provider.Search(vb.ctx, queryVector, *flagMaxResults, beamSize, &stats)
+			prediction, err := vb.provider.Search(vb.ctx, state, queryVector, &stats)
 			if err != nil {
 				panic(err)
 			}
 
-			primaryKeys := make([]byte, len(prediction)*4)
-			truth := make([]cspann.KeyBytes, len(prediction))
-			for neighbor := 0; neighbor < len(prediction); neighbor++ {
+			primaryKeys := make([]byte, maxResults*4)
+			truth := make([]cspann.KeyBytes, maxResults)
+			for neighbor := range maxResults {
 				primaryKey := primaryKeys[neighbor*4 : neighbor*4+4]
 				binary.BigEndian.PutUint32(primaryKey, uint32(data.Neighbors[i][neighbor]))
 				truth[neighbor] = primaryKey
 			}
 
-			sumMAP += findMAP(prediction, truth)
+			sumRecall += calculateRecall(prediction, truth)
 			sumVectors += float64(stats.QuantizedVectorCount)
 			sumLeafVectors += float64(stats.QuantizedLeafVectorCount)
 			sumFullVectors += float64(stats.FullVectorCount)
@@ -280,7 +287,7 @@ func (vb *vectorBench) SearchIndex() {
 
 		elapsed := timeutil.Since(start)
 		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\n",
-			beamSize, sumMAP/float64(count)*100,
+			beamSize, sumRecall/float64(count)*100,
 			sumLeafVectors/float64(count), sumVectors/float64(count),
 			sumFullVectors/float64(count), sumPartitions/float64(count),
 			float64(count)/elapsed.Seconds())
@@ -289,14 +296,14 @@ func (vb *vectorBench) SearchIndex() {
 	fmt.Println()
 	fmt.Printf(White+"%s\n"+Reset, vb.datasetName)
 	fmt.Printf(
-		White+"%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, base beam size %d\n"+Reset,
+		White+"%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, build beam size %d\n"+Reset,
 		data.Count, data.Test.Count, data.Test.Dims,
 		minPartitionSize, maxPartitionSize, *flagBeamSize)
 	fmt.Println(vb.provider.FormatStats())
 
 	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
 
-	// Search multiple times with different beam sizes.
+	// Search multiple times with different search beam sizes.
 	beamSizeStrs := strings.Split(*flagSearchBeamSizes, ",")
 	for i := range beamSizeStrs {
 		beamSize, err := strconv.Atoi(beamSizeStrs[i])
@@ -626,15 +633,11 @@ func loadDataset(fileName string) dataset {
 	return data
 }
 
-// findMAP returns mean average precision, which compares a set of predicted
-// results with the true set of results. Both sets are expected to be of equal
-// length. It returns the percentage overlap of the predicted set with the truth
-// set.
-func findMAP(prediction, truth []cspann.KeyBytes) float64 {
-	if len(prediction) != len(truth) {
-		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
-	}
-
+// calculateRecall returns the percentage overlap of the predicted set with the
+// truth set. If the predicted set has fewer items than the truth set, it is
+// treated as if the predicted set has missing/incorrect items that reduce the
+// recall rate.
+func calculateRecall(prediction, truth []cspann.KeyBytes) float64 {
 	predictionMap := make(map[string]bool, len(prediction))
 	for _, p := range prediction {
 		predictionMap[string(p)] = true

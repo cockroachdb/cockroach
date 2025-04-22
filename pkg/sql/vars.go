@@ -3941,6 +3941,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
 	// CockroachDB extension.
 	`use_pre_25_2_variadic_builtins`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`use_pre_25_2_variadic_builtins`),
@@ -3956,6 +3957,29 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().UsePre_25_2VariadicBuiltins), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`vector_search_beam_size`: {
+		GetStringVal: makeIntGetStringValFn(`vector_search_beam_size`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return err
+			}
+			if b < 1 || b > 512 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"vector_search_beam_size cannot be less than 1 or greater than 512")
+			}
+			m.SetVectorSearchBeamSize(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().VectorSearchBeamSize), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "32"
+		},
 	},
 }
 

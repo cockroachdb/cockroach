@@ -168,6 +168,33 @@ CREATE VECTOR INDEX ON mixed_case (qUuX)
 statement ok
 DROP TABLE mixed_case
 
+# Use storage params for vector index.
+statement ok
+CREATE TABLE storage_params (
+  a INT PRIMARY KEY,
+  v VECTOR(3),
+  VECTOR INDEX (v) WITH (build_beam_size = 16),
+  FAMILY (a, v)
+)
+
+statement ok
+CREATE VECTOR INDEX ON storage_params (v) WITH (min_partition_size = 8, max_partition_size = 64)
+
+query TT
+SHOW CREATE TABLE storage_params
+----
+storage_params  CREATE TABLE public.storage_params (
+                  a INT8 NOT NULL,
+                  v VECTOR(3) NULL,
+                  CONSTRAINT storage_params_pkey PRIMARY KEY (a ASC),
+                  VECTOR INDEX storage_params_v_idx (v) WITH (build_beam_size=16),
+                  VECTOR INDEX storage_params_v_idx1 (v) WITH (min_partition_size=8, max_partition_size=64),
+                  FAMILY fam_0_a_v (a, v)
+                )
+
+statement ok
+DROP TABLE storage_params
+
 # ----- CREATE TABLE errors -----
 
 # Try to use vector in primary key.
@@ -193,6 +220,28 @@ CREATE TABLE t (a INT PRIMARY KEY, b VECTOR, VECTOR INDEX (b))
 # Try to use vector type in forward index.
 statement error column c has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), INDEX (b, c))
+
+# Storage param errors.
+statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 0))
+
+statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (build_beam_size = 513))
+
+statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 0))
+
+statement error pgcode 22023 "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 1025))
+
+statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 3))
+
+statement error pgcode 22023 "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (max_partition_size = 4097))
+
+statement error pgcode 22023 max_partition_size \(7\) must be at least four times the value of min_partition_size \(2\)
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (b, c DESC) WITH (min_partition_size = 2, max_partition_size = 7))
 
 # ----- CREATE INDEX errors -----
 statement ok
@@ -241,6 +290,10 @@ CREATE INDEX ON vec_errors USING hnsw (vec1)
 # Operator classes are not (yet) supported.
 statement error operator classes are only allowed for the last column of an inverted index
 CREATE INDEX ON vec_errors USING cspann (vec1 vector_l2_ops)
+
+# Storage param error.
+statement error pgcode 22023 "build_beam_size" value must be between 1 and 512 inclusive
+CREATE VECTOR INDEX ON vec_errors (vec1) WITH (build_beam_size = 0)
 
 statement ok
 DROP TABLE vec_errors
@@ -457,5 +510,52 @@ SELECT * FROM backfill_test@backfill_test_username_prefix_enc_idx WHERE username
 
 statement ok
 DROP TABLE backfill_test
+
+subtest end
+
+#
+# Settings tests.
+#
+
+subtest vector_settings
+
+# Disable / enable vector indexes.
+statement ok
+SET CLUSTER SETTING feature.vector_index.enabled = false
+
+statement error vector indexes are not enabled; enable with the feature.vector_index.enabled cluster setting
+CREATE TABLE not_enabled (a INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v))
+
+statement ok
+CREATE TABLE enabled (a INT PRIMARY KEY, v VECTOR(3))
+
+statement error vector indexes are not enabled; enable with the feature.vector_index.enabled cluster setting
+CREATE VECTOR INDEX not_enabled_idx ON enabled (v)
+
+statement ok
+DROP TABLE enabled
+
+statement ok
+SET CLUSTER SETTING feature.vector_index.enabled = true
+
+# Ensure that the vector_search_beam_size session setting is settable.
+query T
+SHOW vector_search_beam_size;
+----
+32
+
+statement ok
+SET vector_search_beam_size=8
+
+query T
+SHOW vector_search_beam_size;
+----
+8
+
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
+SET vector_search_beam_size=0
+
+statement error vector_search_beam_size cannot be less than 1 or greater than 512
+SET vector_search_beam_size=513
 
 subtest end
