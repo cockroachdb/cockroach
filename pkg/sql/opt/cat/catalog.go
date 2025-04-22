@@ -236,6 +236,10 @@ type Catalog interface {
 	// UserHasAdminRole checks if the specified user has admin privileges.
 	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
 
+	// UserIsMemberOfAnyRole checks if the specified user is a member of any of the given roles,
+	// either directly or indirectly through role inheritance.
+	UserIsMemberOfAnyRole(ctx context.Context, user username.SQLUsername, roles map[username.SQLUsername]struct{}) (bool, error)
+
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
 	// valid transaction to be open.

@@ -343,6 +343,16 @@ func (tc *Catalog) UserHasAdminRole(ctx context.Context, user username.SQLUserna
 	return roleMembership.isMemberOfAdminRole, nil
 }
 
+// UserIsMemberOfAnyRole is part of the cat.Catalog interface.
+func (tc *Catalog) UserIsMemberOfAnyRole(
+	ctx context.Context, user username.SQLUsername, roles map[username.SQLUsername]struct{},
+) (bool, error) {
+	if _, found := roles[user]; found {
+		return true, nil
+	}
+	return false, nil
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	return true, nil
