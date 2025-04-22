@@ -18,3 +18,9 @@ func LocalCertsPath(localCertsPath string) ClusterOptionFunc {
 		o.localCertsPath = localCertsPath
 	}
 }
+
+func ReplicationFactor(replicationFactor int) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.replicationFactor = replicationFactor
+	}
+}

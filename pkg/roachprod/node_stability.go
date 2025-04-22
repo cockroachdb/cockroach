@@ -196,3 +196,94 @@ func WaitForUpdatedReplicationReport(
 		return errors.Newf("waiting for updated replication report")
 	})
 }
+
+type unbalancedRanges struct {
+	// The store id of the unbalanced stores.
+	storeIDs []int
+	// Range counts for each store in storeIDs.
+	rangeCounts []int
+	// Average range count across all stores, not just the unbalanced ones.
+	avgRangeCount float64
+}
+
+func findUnbalancedStores(
+	ctx context.Context, db *gosql.DB, threshold float64,
+) (unbalancedRanges, error) {
+	lowerBound := 1 - threshold
+	upperBound := 1 + threshold
+
+	query := fmt.Sprintf(`WITH stats AS (
+    SELECT avg(range_count) AS mean_val
+    FROM crdb_internal.kv_store_status
+)
+SELECT store_id, range_count, stats.mean_val
+FROM crdb_internal.kv_store_status, stats
+WHERE range_count < mean_val * %f
+   OR range_count > mean_val * %f;
+`, lowerBound, upperBound)
+
+	var unablancedStores []int
+	var rangeCounts []int
+	var avgRanges float64
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return unbalancedRanges{}, err
+	}
+	for rows.Next() {
+		var storeID, ranges int
+		if err = rows.Scan(&storeID, &ranges, &avgRanges); err != nil {
+			return unbalancedRanges{}, err
+		}
+		unablancedStores = append(unablancedStores, storeID)
+		rangeCounts = append(rangeCounts, ranges)
+	}
+	return unbalancedRanges{
+		storeIDs:      unablancedStores,
+		rangeCounts:   rangeCounts,
+		avgRangeCount: avgRanges,
+	}, nil
+}
+
+// WaitForBalancedReplicas blocks until the replica count across each store is less than
+// `range_rebalance_threshold` percent from the mean. Note that this doesn't wait for
+// rebalancing to _fully_ finish; there can still be range events that happen after this.
+// We don't know what kind of background workloads may be running concurrently and creating
+// range events, so lets just get to a state "close enough", i.e. a state that the allocator
+// would consider balanced.
+func WaitForBalancedReplicas(
+	ctx context.Context, db *gosql.DB, l *logger.Logger, opts ...install.RetryOptionFunc,
+) error {
+	config := makeRetryOpts(opts...)
+
+	// This is the threshold the db uses to determine that a store is under or overfull
+	// and needs to be rebalanced.
+	var threshold float64
+	if err := db.QueryRowContext(
+		ctx, "SHOW CLUSTER SETTING kv.allocator.range_rebalance_threshold",
+	).Scan(&threshold); err != nil {
+		return err
+	}
+
+	// If we query too soon after a node is added to the cluster, our calculation may
+	// not include those stores. Make sure we observe a few consecutive intervals that confirm
+	// our ranges are stable.
+	consecutiveStableIntervals := 0
+	return config.Do(ctx, func(ctx context.Context) error {
+		unbalanced, err := findUnbalancedStores(ctx, db, threshold)
+		if err != nil {
+			return err
+		}
+
+		if len(unbalanced.storeIDs) == 0 {
+			consecutiveStableIntervals++
+			l.Printf("all stores have range count within %.2f%% of the mean", threshold*100)
+			if consecutiveStableIntervals > 2 {
+				return nil
+			}
+		} else {
+			l.Printf("unbalanced stores: %v, ranges: %v, avg: %f", unbalanced.storeIDs, unbalanced.rangeCounts, unbalanced.avgRangeCount)
+			consecutiveStableIntervals = 0
+		}
+		return errors.Newf("only %d consecutive intervals of balanced stores", consecutiveStableIntervals)
+	})
+}
