@@ -664,6 +664,9 @@ message LocalOnlySessionData {
   // are considered at each level of the search tree. Higher values increase
   // search accuracy but require more processing resources.
   int32 vector_search_beam_size = 168;
+  // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
+  // transactions to inherit the admission header from the root transaction.
+  bool propagate_admission_header_to_leaf_transactions = 169;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

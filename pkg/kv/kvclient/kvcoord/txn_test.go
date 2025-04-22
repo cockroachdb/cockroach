@@ -1624,7 +1624,7 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 			}
 			for _, txnForRead := range []*kv.Txn{
 				txn,
-				kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, tis),
+				kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, tis, nil /* header */),
 			} {
 				if err = readFn(txnForRead); err != nil {
 					return err
@@ -2286,4 +2286,43 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// TestLeafTransactionAdmissionHeader tests that the admission control header is
+// correctly set for a new leaf txn.
+func TestLeafTransactionAdmissionHeader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := createTestDB(t)
+	defer s.Stop()
+	priorityOptions := []admissionpb.WorkPriority{
+		admissionpb.LowPri,
+		admissionpb.BulkLowPri,
+		admissionpb.UserLowPri,
+		admissionpb.BulkNormalPri,
+		admissionpb.NormalPri,
+		admissionpb.LockingNormalPri,
+		admissionpb.UserHighPri,
+		admissionpb.LockingUserHighPri,
+		admissionpb.HighPri,
+	}
+	rnd, _ := randutil.NewTestRand()
+	priority := priorityOptions[rnd.Intn(len(priorityOptions))]
+
+	ctx := context.Background()
+	rootTxn := kv.NewTxnWithAdmissionControl(
+		ctx, s.DB, 0 /* gatewayNodeID */, kvpb.AdmissionHeader_FROM_SQL, priority)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	require.NoError(t, err)
+
+	rootAdmissionHeader := rootTxn.AdmissionHeader()
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, &rootAdmissionHeader)
+	leafHeader := leafTxn.AdmissionHeader()
+	expectedLeafHeader := kvpb.AdmissionHeader{
+		Priority:   int32(priority),
+		CreateTime: rootAdmissionHeader.CreateTime,
+		Source:     kvpb.AdmissionHeader_FROM_SQL,
+	}
+	require.Equal(t, expectedLeafHeader, leafHeader)
 }
