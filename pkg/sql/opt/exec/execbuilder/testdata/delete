@@ -256,8 +256,7 @@ query TT nosort
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
-delete range      Del (locking) /Table/110/1/5/0
-dist sender send  r74: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r74: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
 # Ensure that we send DelRanges when doing a point delete operation on a table
 # that has multiple column families.

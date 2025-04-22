@@ -50,3 +50,33 @@
 (Lock $rows:* & (HasZeroRows $rows))
 =>
 $rows
+
+# UseSwapMutation converts an Update or a Delete to an UpdateSwap or a
+# DeleteSwap, respectively. It also replaces the input Scan with Values,
+# possibly wrapped in a Select.
+#
+# UpdateSwap and DeleteSwap are optimistic compare-and-swap operations that are
+# possible when:
+#
+# - all columns in the primary index are constrained to a single exact value
+#   by the WHERE clause;
+# - only a single row is modified;
+# - there are no FK checks or cascades;
+# - there are no uniqueness checks;
+# - there are no check constraints;
+# - there are no after triggers;
+# - the table only uses a single column family.
+#
+# This rule needs to run after PruneMutationInputCols and before
+# GenerateParameterizedJoin.
+[UseSwapMutation, Normalize]
+(Update | Delete
+    $input:* & (HasZeroOrOneRow $input)
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let ($newInput $ok):(BuildSwapMutationInput $input) $ok)
+)
+=>
+((OpName) $newInput [] [] (UseSwapMutation $mutationPrivate))
