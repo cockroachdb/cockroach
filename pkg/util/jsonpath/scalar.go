@@ -36,3 +36,7 @@ func (s Scalar) String() string {
 	}
 	return s.Value.String()
 }
+
+func (s Scalar) Validate(nestingLevel int, insideArraySubscript bool) error {
+	return nil
+}
