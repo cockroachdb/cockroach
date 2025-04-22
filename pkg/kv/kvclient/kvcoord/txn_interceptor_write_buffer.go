@@ -35,7 +35,7 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-var bufferedWritesMaxBufferSize = settings.RegisterIntSetting(
+var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
 	"if non-zero, defines that maximum size of the "+
@@ -246,7 +246,9 @@ func (twb *txnWriteBuffer) SendLocked(
 	// and flush the buffer.
 	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
 	bufSize := twb.estimateSize(ba) + twb.bufferSize
-	if bufSize > maxSize {
+	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
+	// any buffer limiting.
+	if maxSize != 0 && bufSize > maxSize {
 		// TODO(arul): add some metrics for this case.
 		log.VEventf(ctx, 2, "flushing buffer because buffer size (%s) exceeds max size (%s)",
 			humanizeutil.IBytes(bufSize),
