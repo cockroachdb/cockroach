@@ -6,10 +6,7 @@
 import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
@@ -38,6 +35,7 @@ import { filterActiveTransactions } from "../activeExecutions/activeStatementUti
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { RefreshControl } from "src/activeExecutions/refreshControl";
 import moment, { Moment } from "moment-timezone";
+import { usePagination } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -87,10 +85,10 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   lastUpdated,
   onManualRefresh,
 }: ActiveTransactionsViewProps) => {
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: PAGE_SIZE,
-  });
+  const [pagination, updatePagination, resetPagination] = usePagination(
+    1,
+    PAGE_SIZE,
+  );
 
   const history = useHistory();
   const [search, setSearch] = useState<string>(
@@ -187,13 +185,6 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     search,
   ]);
 
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: PAGE_SIZE,
-    });
-  };
-
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
@@ -240,13 +231,6 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
-
-  const onChangePage = (page: number) => {
-    setPagination({
-      ...pagination,
-      current: page,
-    });
-  };
 
   return (
     <div className={cx("root")}>
@@ -320,7 +304,8 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             pageSize={pagination.pageSize}
             current={pagination.current}
             total={filteredTransactions?.length}
-            onChange={onChangePage}
+            onChange={updatePagination}
+            onShowSizeChange={updatePagination}
           />
           {maxSizeApiReached && (
             <InlineAlert

@@ -3,8 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import moment from "moment/moment";
+import { ISortedTablePagination } from "../sortedtable";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -93,4 +94,34 @@ export const useScheduleFunction = (
   }, [schedule, clearSchedule]);
 
   return [scheduleNow, clearSchedule];
+};
+
+/**
+ * usePagination creates a pagination state and provides functions to update and reset it. The update function
+ * is compatible with the Ant Design Table component.
+ * @param defaultPage the default page to be used for pagination
+ * @param defaultPageSize the default page size to be used for pagination
+ */
+export const usePagination = (
+  defaultPage: number,
+  defaultPageSize: number,
+): [
+  ISortedTablePagination,
+  (current: number, pageSize: number) => void,
+  () => void,
+] => {
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: defaultPage,
+    pageSize: defaultPageSize,
+  });
+  const updatePagination = (current: number, pageSize: number) => {
+    setPagination({
+      current,
+      pageSize,
+    });
+  };
+  const resetPagination = () => {
+    updatePagination(defaultPage, defaultPageSize);
+  };
+  return [pagination, updatePagination, resetPagination];
 };
