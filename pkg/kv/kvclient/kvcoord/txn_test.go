@@ -1659,7 +1659,11 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 		require.NoError(t, txn.Commit(ctx))
 
 		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			metrics := txn.Sender().(*kvcoord.TxnCoordSender).Metrics()
+			before := metrics.TxnWriteBufferEnabled.Count()
 			txn.SetBufferedWritesEnabled(true)
+			after := metrics.TxnWriteBufferEnabled.Count()
+			require.Equal(t, after-before, int64(1))
 
 			// Put transactional value.
 			if err := txn.Put(ctx, keyA, value1); err != nil {
