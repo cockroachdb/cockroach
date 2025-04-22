@@ -551,6 +551,14 @@ type RLSPoliciesApplied struct {
 	// PoliciesSkippedForRole is true if the user is a member of a role that is
 	// exempt from all policies (e.g., admin).
 	PoliciesSkippedForRole bool
+
+	// PoliciesFilteredAllRows is true if RLS was enforced, and although policies
+	// were applied, the result was that no rows were returned (typically represented
+	// by an empty VALUES node). This is used when it's not possible to attribute
+	// the result to specific table-level policy details (e.g., due to an empty
+	// VALUES node replacing a scan).
+	PoliciesFilteredAllRows bool
+
 	// Policies is the list of policy IDs applied to the scan of a single table.
 	// This applies to the table that this annotation was attached to. If this is
 	// empty, it either means policies were skipped due to the role, or none were
