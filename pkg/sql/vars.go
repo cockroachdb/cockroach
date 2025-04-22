@@ -4000,6 +4000,23 @@ var varGen = map[string]sessionVar{
 			return "32"
 		},
 	},
+
+	// CockroachDB extension.
+	`propagate_admission_header_to_leaf_transactions`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`propagate_admission_header_to_leaf_transactions`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("propagate_admission_header_to_leaf_transactions", s)
+			if err != nil {
+				return err
+			}
+			m.SetPropagateAdmissionHeaderToLeafTransactions(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
