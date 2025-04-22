@@ -2397,6 +2397,14 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	// LogTerm in this response in any case, so we don't verify it here.
 	hintIndex := min(m.Index, r.raftLog.lastIndex())
 	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
+	var tc []pb.EntryID
+	compacted := r.raftLog.compacted()
+	if hintIndex > r.raftLog.termCache.cache[0].index {
+		tc = r.raftLog.termCache.prepareProtoTcEntryIDs(compacted, hintIndex)
+	} else {
+		tc = nil
+	}
+
 	r.send(pb.Message{
 		To:    m.From,
 		Type:  pb.MsgAppResp,
@@ -2407,6 +2415,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		Reject:     true,
 		RejectHint: hintIndex,
 		LogTerm:    hintTerm,
+		TcEntryIDs: tc,
 	})
 }
 
