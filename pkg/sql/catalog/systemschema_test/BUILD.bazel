@@ -18,6 +18,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

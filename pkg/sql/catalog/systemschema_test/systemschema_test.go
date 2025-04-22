@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,6 +43,11 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "bootstrap_system"), func(t *testing.T, path string) {
 		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
+					SkipHotRangesLoggerJobBootstrap: true,
+				},
+			},
 		})
 		defer srv.Stopper().Stop(context.Background())
 		execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
@@ -51,6 +57,11 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "bootstrap_tenant"), func(t *testing.T, path string) {
 		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 			DefaultTestTenant: base.TestTenantAlwaysEnabled,
+			Knobs: base.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
+					SkipHotRangesLoggerJobBootstrap: true,
+				},
+			},
 		})
 		defer srv.Stopper().Stop(context.Background())
 		execCfg := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
