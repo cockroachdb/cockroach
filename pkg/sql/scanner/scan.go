@@ -141,14 +141,14 @@ func (s *Scanner) finishString(buf []byte) string {
 	return str
 }
 
-func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
+func (s *Scanner) scanSetup(lval ScanSymType, allowComments bool) (int, bool) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
 	s.quoted = false
 	s.lastAttemptedID = 0
 
-	if _, ok := s.skipWhitespace(lval, true); !ok {
+	if _, ok := s.skipWhitespace(lval, allowComments); !ok {
 		return 0, true
 	}
 
@@ -167,7 +167,7 @@ func (s *Scanner) scanSetup(lval ScanSymType) (int, bool) {
 
 // Scan scans the next token and populates its information into lval.
 func (s *SQLScanner) Scan(lval ScanSymType) {
-	ch, skipWhiteSpace := s.scanSetup(lval)
+	ch, skipWhiteSpace := s.scanSetup(lval, true /* allowComments */)
 
 	if skipWhiteSpace {
 		return

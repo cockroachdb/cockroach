@@ -118,12 +118,57 @@ func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path
   }
 }
 
-func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
+func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Path {
+  if scalar, ok := maybeNormalizeUnaryOp(op, left); ok {
+    return scalar
+  }
   return jsonpath.Operation{
     Type:  op,
     Left:  left,
     Right: nil,
   }
+}
+
+func maybeNormalizeUnaryOp(op jsonpath.OperationType, expr jsonpath.Path) (jsonpath.Scalar, bool) {
+  // Return if not unary plus or unary minus.
+  if op != jsonpath.OpPlus && op != jsonpath.OpMinus {
+    return jsonpath.Scalar{}, false
+  }
+
+  scalar, ok := extractNumericScalar(expr)
+  if !ok {
+    return jsonpath.Scalar{}, false
+  }
+  if op == jsonpath.OpMinus {
+    dec, _ := scalar.Value.AsDecimal()
+    dec.Neg(dec)
+    scalar.Value = json.FromDecimal(*dec)
+  }
+  return scalar, true
+}
+
+// extractNumericScalar attempts to extract a numeric scalar value from a
+// jsonpath.Path. It handles two cases:
+// - Direct scalar values.
+// - Scalar values wrapped in a jsonpath.Paths object of length 1.
+// The function returns the scalar and true if the path contains a valid numeric
+// value (integer or float), otherwise returns an empty scalar and false.
+func extractNumericScalar(expr jsonpath.Path) (jsonpath.Scalar, bool) {
+  potentialScalar := expr
+  if paths, ok := expr.(jsonpath.Paths); ok {
+    if len(paths) != 1 {
+      return jsonpath.Scalar{}, false
+    }
+    potentialScalar = paths[0]
+  }
+  scalar, ok := potentialScalar.(jsonpath.Scalar)
+  if !ok {
+    return jsonpath.Scalar{}, false
+  }
+  if scalar.Type != jsonpath.ScalarFloat && scalar.Type != jsonpath.ScalarInt {
+    return jsonpath.Scalar{}, false
+  }
+  return scalar, true
 }
 
 func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error) {
