@@ -83,6 +83,7 @@ type GenericFailure struct {
 	diskDevice        diskDevice
 	connCache         []*gosql.DB
 	localCertsPath    string
+	replicationFactor int
 }
 
 func makeGenericFailure(
@@ -94,8 +95,27 @@ func makeGenericFailure(
 		return nil, err
 	}
 
-	genericFailure := GenericFailure{c: c, runTitle: failureModeName, connCache: make([]*gosql.DB, len(c.Nodes))}
+	genericFailure := GenericFailure{
+		c:                 c,
+		runTitle:          failureModeName,
+		connCache:         make([]*gosql.DB, len(c.Nodes)),
+		localCertsPath:    connectionInfo.localCertsPath,
+		replicationFactor: clusterOpts.replicationFactor,
+	}
 	return &genericFailure, nil
+}
+
+// runOpts contains common options shared among GenericFailure helpers.
+type runOpts struct {
+	timeout time.Duration
+}
+
+func (f *GenericFailure) getRunOpts(opts []runOptFunc) *runOpts {
+	o := &runOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
 }
 
 func (f *GenericFailure) Run(
@@ -247,14 +267,16 @@ func (f *GenericFailure) PingNode(ctx context.Context, l *logger.Logger, node in
 // WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready
 // to serve SQL clients.
 func (f *GenericFailure) WaitForSQLReady(
-	ctx context.Context, l *logger.Logger, node install.Nodes,
+	ctx context.Context, l *logger.Logger, node install.Nodes, runOpts ...runOptFunc,
 ) error {
+	opts := f.getRunOpts(runOpts)
 	db, err := f.Conn(ctx, l, node)
 	if err != nil {
 		return err
 	}
 	err = roachprod.WaitForSQLReady(ctx, db,
-		roachprod.WithMaxRetries(5),
+		roachprod.WithMaxRetries(0),
+		roachprod.WithTimeout(opts.timeout),
 		roachprod.WithVerboseLogger(l),
 	)
 	return errors.Wrapf(err, "never connected to node %d", node)
@@ -262,32 +284,34 @@ func (f *GenericFailure) WaitForSQLReady(
 
 // WaitForSQLUnavailable pings a node until the SQL connection is unavailable.
 func (f *GenericFailure) WaitForSQLUnavailable(
-	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+	ctx context.Context, l *logger.Logger, node install.Nodes, runOpts ...runOptFunc,
 ) error {
+	opts := f.getRunOpts(runOpts)
 	db, err := f.Conn(ctx, l, node)
 	if err != nil {
 		return err
 	}
 	err = roachprod.WaitForSQLUnavailable(ctx, db,
 		roachprod.WithMaxRetries(0),
-		roachprod.WithTimeout(timeout),
+		roachprod.WithTimeout(opts.timeout),
 		roachprod.WithVerboseLogger(l),
 	)
-	return errors.Wrapf(err, "connections to node %d still available after %s", node, timeout)
+	return errors.Wrapf(err, "connections to node %d still available after %s", node, opts.timeout)
 }
 
 // WaitForProcessDeath checks systemd until the cockroach process is no longer running
 // or the timeout is reached.
 func (f *GenericFailure) WaitForProcessDeath(
-	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+	ctx context.Context, l *logger.Logger, node install.Nodes, runOpts ...runOptFunc,
 ) error {
+	opts := f.getRunOpts(runOpts)
 	err := roachprod.WaitForProcessDeath(ctx, *f.c, l, node,
 		roachprod.WithMaxRetries(0),
-		roachprod.WithTimeout(timeout),
+		roachprod.WithTimeout(opts.timeout),
 		roachprod.WithVerboseLogger(l),
 	)
 
-	return errors.Wrapf(err, "n%d process never exited after %s", node, timeout)
+	return errors.Wrapf(err, "n%d process never exited after %s", node, opts.timeout)
 }
 
 func (f *GenericFailure) StopCluster(
@@ -330,4 +354,75 @@ func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) err
 		close(errCh)
 	}()
 	return errCh
+}
+
+func (f *GenericFailure) WaitForReplication(
+	ctx context.Context, l *logger.Logger, node install.Nodes, replicationFactor int, runOpts ...runOptFunc,
+) error {
+	opts := f.getRunOpts(runOpts)
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	// Default to a replication factor of 3 if not specified. We could query and
+	// extract out the lowest replication factor among all zone configs, but it seems
+	// easier to just let the caller specify it if they want a stronger guarantee.
+	if replicationFactor == 0 {
+		replicationFactor = 3
+	}
+
+	return roachprod.WaitForReplication(ctx, db,
+		replicationFactor, roachprod.AtLeastReplicationFactor,
+		roachprod.RetryEveryDuration(time.Second),
+		roachprod.WithTimeout(opts.timeout),
+		roachprod.WithVerboseLogger(l),
+	)
+}
+
+// WaitForBalancedReplicas blocks until the replica count across each store is less than
+// `range_rebalance_threshold` percent from the mean. Note that this doesn't wait for
+// rebalancing to _fully_ finish; there can still be range events that happen after this.
+// We don't know what kind of background workloads may be running concurrently and creating
+// range events, so lets just get to a state "close enough", i.e. a state that the allocator
+// would consider balanced.
+func (f *GenericFailure) WaitForBalancedReplicas(
+	ctx context.Context, l *logger.Logger, node install.Nodes, runOpts ...runOptFunc,
+) error {
+	opts := f.getRunOpts(runOpts)
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+
+	return roachprod.WaitForBalancedReplicas(ctx, db,
+		roachprod.RetryEveryDuration(3*time.Second),
+		roachprod.WithTimeout(opts.timeout),
+		roachprod.WithVerboseLogger(l),
+	)
+}
+
+// WaitForRestartedNodesToStabilize is a helper that waits for nodes
+// to stabilize after a restart.
+func (f *GenericFailure) WaitForRestartedNodesToStabilize(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes, runOpts ...runOptFunc,
+) error {
+	// First, we block until we are able to connect to each of the nodes
+	// as we will use SQL connections to check the status of the cluster.
+	if err := forEachNode(nodes, func(n install.Nodes) error {
+		return f.WaitForSQLReady(ctx, l, n, runOpts...)
+	}); err != nil {
+		return err
+	}
+
+	// Then, we wait for ranges to be fully replicated. If the restarted nodes were only
+	// briefly offline, this will block until the restarted nodes catch up. If the restarted
+	// nodes were down long enough for the cluster to consider them dead, the ranges will
+	// have been rebalanced to other nodes and this will be a noop.
+	if err := f.WaitForReplication(ctx, l, nodes, f.replicationFactor, runOpts...); err != nil {
+		return err
+	}
+
+	// Finally, we also have to block until the cluster is done rebalancing replicas.
+	// If replicas were not moved around during the downtime, this will likely be a noop.
+	return f.WaitForBalancedReplicas(ctx, l, nodes, runOpts...)
 }

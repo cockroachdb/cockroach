@@ -39,9 +39,7 @@ func MakeResetVMFailure(
 		return nil, err
 	}
 
-	return &ProcessKillFailure{
-		GenericFailure: *genericFailure,
-	}, nil
+	return &resetVMFailure{GenericFailure: *genericFailure}, nil
 }
 
 // Description implements FailureMode.
@@ -102,7 +100,7 @@ func (r *resetVMFailure) WaitForFailureToPropagate(
 
 	// Some providers take a while to stop VMs (>10 minutes).
 	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLUnavailable(ctx, l, n, 15*time.Minute)
+		return r.WaitForSQLUnavailable(ctx, l, n, withTimeout(15*time.Minute))
 	})
 }
 
@@ -114,7 +112,5 @@ func (r *resetVMFailure) WaitForFailureToRecover(
 	l.Printf("Waiting for nodes to become available: %v", nodes)
 
 	// Some providers take a while to start VMs (>10 minutes).
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLReady(ctx, l, n)
-	})
+	return r.WaitForRestartedNodesToStabilize(ctx, l, nodes, withTimeout(30*time.Minute))
 }

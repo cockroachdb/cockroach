@@ -250,7 +250,7 @@ func (s *CGroupDiskStaller) WaitForFailureToPropagate(
 		// If writes are stalled, we expect the disk stall detection to kick in
 		// and kill the node.
 		return forEachNode(diskStallArgs.Nodes, func(n install.Nodes) error {
-			return s.WaitForSQLUnavailable(ctx, l, n, 3*time.Minute)
+			return s.WaitForSQLUnavailable(ctx, l, n, withTimeout(3*time.Minute))
 		})
 	}
 	return nil
@@ -259,10 +259,9 @@ func (s *CGroupDiskStaller) WaitForFailureToPropagate(
 func (s *CGroupDiskStaller) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
-	nodes := args.(DiskStallArgs).Nodes
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return s.WaitForSQLReady(ctx, l, n)
-	})
+	diskStallArgs := args.(DiskStallArgs)
+	nodes := diskStallArgs.Nodes
+	return s.WaitForRestartedNodesToStabilize(ctx, l, nodes, withTimeout(20*time.Minute))
 }
 
 type throughput struct {
@@ -527,7 +526,7 @@ func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
 		// If writes are stalled, we expect the disk stall detection to kick in
 		// and kill the node.
 		return forEachNode(nodes, func(n install.Nodes) error {
-			return s.WaitForSQLUnavailable(ctx, l, n, 3*time.Minute)
+			return s.WaitForSQLUnavailable(ctx, l, n, withTimeout(3*time.Minute))
 		})
 	})
 }
@@ -535,8 +534,7 @@ func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
 func (s *DmsetupDiskStaller) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
-	nodes := args.(DiskStallArgs).Nodes
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return s.WaitForSQLReady(ctx, l, n)
-	})
+	diskStallArgs := args.(DiskStallArgs)
+	nodes := diskStallArgs.Nodes
+	return s.WaitForRestartedNodesToStabilize(ctx, l, nodes, withTimeout(20*time.Minute))
 }
