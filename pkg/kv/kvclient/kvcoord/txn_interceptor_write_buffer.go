@@ -923,6 +923,10 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		it.FirstOverlap(seek)
 	}
 	bufferNext := func() {
+		// NB: we must reset seek before every use, as it's shared across multiple
+		// methods on the txnWriteBuffer. In particular, it's used by
+		// maybeServeRead, which we may call below.
+		seek = twb.seekItemForSpan(respIter.startKey(), respIter.endKey())
 		if reverse {
 			it.PrevOverlap(seek)
 		} else {
