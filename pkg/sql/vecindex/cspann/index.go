@@ -61,6 +61,10 @@ type IndexOptions struct {
 	// index is initialized with the same seed and fixups happen serially, the
 	// index will behave deterministically. This is useful for testing.
 	IsDeterministic bool
+	// ReadOnly is true if the index cannot be modified. If true, the index will
+	// not perform any fixups, even if a too-large or too-small partition is
+	// discovered during a search.
+	ReadOnly bool
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
 	MaxWorkers int
