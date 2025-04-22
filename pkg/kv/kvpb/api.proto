@@ -1945,8 +1945,7 @@ message ExportResponse {
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
 // replicas and leaseholders for a selection of ranges. Scatter is best-effort;
-// ranges that cannot be moved will include an error detail in the response and
-// won't fail the request.
+// ranges that cannot be moved won't fail the request.
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
@@ -1974,6 +1973,13 @@ message AdminScatterResponse {
   // ReplicasScatteredBytes specifies the byte size of the ranges that were
   // scattered
   int64 replicas_scattered_bytes = 5;
+
+  // NoReplicasMoved indicates whether no replicas were moved during the scatter
+  // operation. NB: this needs to be a separate field, since we can't reliably
+  // infer "no replica moved" from ReplicasScatteredBytes == 0. Empty ranges
+  // have stats.Total() == 0 and ReplicasScatteredBytes will be 0 regardless of
+  // whether any replicas were moved.
+  bool no_replicas_moved = 6;
 
   // NB: if you add a field here, don't forget to update combine().
 }
