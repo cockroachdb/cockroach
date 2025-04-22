@@ -93,11 +93,11 @@ SET ROLE rls_accessor
 # ----------------------------------------------------------------------
 
 exec-ddl
-CREATE POLICY "policy 1" ON t1 USING (true);
+CREATE POLICY "policy 1" ON t1 USING (c1 > 0);
 ----
 
 exec-ddl
-CREATE POLICY t2_pol_1 on t2 FOR SELECT USING (true);
+CREATE POLICY t2_pol_1 on t2 FOR SELECT USING (c1 > 0);
 ----
 
 plan
@@ -108,15 +108,32 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
 └── • hash join
     │ equality: (c1) = (c1)
     │
-    ├── • scan
-    │     table: t1@t1_pkey
-    │     spans: FULL SCAN
-    │     policies: policy 1
+    ├── • filter
+    │   │ filter: c1 > _
+    │   │
+    │   └── • scan
+    │         table: t1@t1_pkey
+    │         spans: FULL SCAN
+    │         policies: policy 1
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
+
+# Ensure that when the optimizer replaces a scan with a "norows" VALUES clause
+# due to RLS filtering, the plan still includes appropriate policy information.
+# ----------------------------------------------------------------------
+plan
+select count(*) from t1,t2 where t1.c1 = t2.c1 and t1.c1 < 0;
+----
+• group (scalar)
+│
+└── • norows
+      policies: applied (filtered all rows)
 
 # Add multiple policies on the same table
 # ----------------------------------------------------------------------
@@ -395,10 +412,13 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
     │     spans: FULL SCAN
     │     policies: exempt for role
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
 
 exec-ddl
 ALTER TABLE t1 FORCE ROW LEVEL SECURITY
@@ -417,10 +437,13 @@ select count(*) from t1,t2 where t1.c1 = t2.c1;
     │     spans: FULL SCAN
     │     policies: policy 1, p2, p3, r1, r2
     │
-    └── • scan
-          table: t2@t2_pkey
-          spans: FULL SCAN
-          policies: t2_pol_1
+    └── • filter
+        │ filter: c1 > _
+        │
+        └── • scan
+              table: t2@t2_pkey
+              spans: FULL SCAN
+              policies: t2_pol_1
 
 # Show that policies are shown for UPSERT (and its variations).
 # ----------------------------------------------------------------------

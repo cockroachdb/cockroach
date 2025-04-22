@@ -60,6 +60,30 @@ project
       └── filters
            └── c1:1 > 0
 
+# Introduce a contradiction with the policy expression to verify that
+# the optimizer eliminates the scan.
+build
+SELECT c1 FROM T1 where c1 < 0;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── select
+      │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    ├── scan t1
+      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── filters
+      │         └── c1:1 > 0
+      └── filters
+           └── c1:1 < 0
+
+opt
+SELECT c1 FROM T1 where c1 < 0;
+----
+values
+ └── columns: c1:1!null
+
 exec-ddl
 DROP POLICY p1 on t1;
 ----
