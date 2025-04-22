@@ -61,11 +61,16 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		if serverGCJobKnobs != nil {
 			tenantGCJobKnobs = *serverGCJobKnobs.(*sql.GCJobTestingKnobs)
 		}
+
+		// Copy the UpgradeManager knobs from the server to the tenant.
+		serverUpgradeKnobs := testServer.SystemLayer().TestingKnobs().UpgradeManager
+
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
 			TestingKnobs: base.TestingKnobs{
-				SpanConfig: h.scKnobs,
-				GCJob:      &tenantGCJobKnobs,
+				SpanConfig:     h.scKnobs,
+				GCJob:          &tenantGCJobKnobs,
+				UpgradeManager: serverUpgradeKnobs,
 			},
 		}
 		var err error
