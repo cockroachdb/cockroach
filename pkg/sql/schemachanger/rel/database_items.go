@@ -5,11 +5,7 @@
 
 package rel
 
-import (
-	"sync"
-
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
-)
+import "sync"
 
 // valuesItem is used to construct query bounds from the tree.
 type valuesItem struct {
@@ -19,8 +15,8 @@ type valuesItem struct {
 	idx *indexSpec
 }
 
-func (v *valuesItem) Less(than btree.Item) bool {
-	return v.idx.compareItems(v, than.(*valuesItem)) < 0
+func (v *valuesItem) less(than *valuesItem) bool {
+	return v.idx.compareItems(v, than) < 0
 }
 
 func (index *indexSpec) compareItems(a, b *valuesItem) (ret int) {
