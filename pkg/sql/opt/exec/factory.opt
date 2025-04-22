@@ -910,7 +910,13 @@ define VectorMutationSearch {
 # - there are no FK checks or cascades;
 # - there are no uniqueness checks;
 # - there are no check constraints;
-# - there are no after triggers.
+# - there are no vector indexes modified;
+# - there are no passthrough columns to RETURNING;
+# - there are no triggers;
+# - the table only uses a single column family;
+# - there are no mutation columns;
+# - there are no mutation indexes;
+# - there are no columns using composite encoding.
 #
 # Multiple indexes and complex projections are supported.
 #
@@ -958,10 +964,17 @@ define UpdateSwap {
 # This fast path is only possible when certain conditions hold true:
 # - all columns in the primary index are constrained to a single exact value
 #   by the WHERE clause;
-# - only a single row is deleted;
+# - only a single row is modified;
 # - there are no FK checks or cascades;
 # - there are no uniqueness checks;
-# - there are no after triggers.
+# - there are no check constraints;
+# - there are no vector indexes modified;
+# - there are no passthrough columns to RETURNING;
+# - there are no triggers;
+# - the table only uses a single column family;
+# - there are no mutation columns;
+# - there are no mutation indexes;
+# - there are no columns using composite encoding.
 #
 # Multiple indexes and complex projections are supported.
 #

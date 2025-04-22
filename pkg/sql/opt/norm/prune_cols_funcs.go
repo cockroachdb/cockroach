@@ -126,6 +126,19 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 	}
 
+	// For swap mutations, include all columns in the primary index.
+	if private.Swap {
+		primaryIndex := tabMeta.Table.Index(cat.PrimaryIndex)
+		for i := 0; i < primaryIndex.ColumnCount(); i++ {
+			col := primaryIndex.Column(i)
+			if col.Kind() == cat.System {
+				continue
+			}
+			ord := col.Ordinal()
+			cols.Add(tabMeta.MetaID.ColumnID(ord))
+		}
+	}
+
 	// Retain any FetchCols that are needed for ReturnCols. If a RETURN column
 	// is needed, then:
 	//   1. For Delete, the corresponding FETCH column is always needed, since
