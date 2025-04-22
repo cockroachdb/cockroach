@@ -1210,37 +1210,36 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRangeSnapShotCrossRegionSentBytes = metric.Metadata{
-		Name:        "range.snapshots.cross-region.sent-bytes",
-		Help:        "Number of snapshot bytes sent cross region",
+		Name: "range.snapshots.cross-region.sent-bytes",
+		Help: "Number of snapshot bytes sent cross region by this store when " +
+			"region tiers are configured",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapShotCrossRegionRcvdBytes = metric.Metadata{
-		Name:        "range.snapshots.cross-region.rcvd-bytes",
-		Help:        "Number of snapshot bytes received cross region",
+		Name: "range.snapshots.cross-region.rcvd-bytes",
+		Help: "Number of snapshot bytes received cross region by this store " +
+			"when region tiers are configured",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapShotCrossZoneSentBytes = metric.Metadata{
 		Name: "range.snapshots.cross-zone.sent-bytes",
-		Help: `Number of snapshot bytes sent cross zone within same region or if
-		region tiers are not configured. This count increases for each snapshot sent
-		between different zones within the same region. However, if the region tiers
-		are not configured, this count may also include snapshot data sent between
-		different regions. Ensuring consistent configuration of region and zone
-		tiers across nodes helps to accurately monitor the data transmitted.`,
+		Help: `Number of snapshot bytes sent cross zone within the same region by
+		this store when zone tiers are configured. If region tiers are not set, it
+		is assumed to be within the same region. To ensure accurate monitoring of
+		cross-zone data transfer, region and zone tiers should be consistently
+		configured across all nodes.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapShotCrossZoneRcvdBytes = metric.Metadata{
 		Name: "range.snapshots.cross-zone.rcvd-bytes",
-		Help: `Number of snapshot bytes received cross zone within same region or if
-		region tiers are not configured. This count increases for each snapshot
-		received between different zones within the same region. However, if the
-		region tiers are not configured, this count may also include snapshot data
-		received between different regions. Ensuring consistent configuration of
-		region and zone tiers across nodes helps to accurately monitor the data
-		transmitted.`,
+		Help: `Number of snapshot bytes received cross zone within the same region
+		by this store when zone tiers are configured. If region tiers are not set,
+		it is assumed to be within the same region. To ensure accurate monitoring of
+		cross-zone data transfer, region and zone tiers should be consistently
+		configured across all nodes.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -1742,7 +1741,7 @@ handling consumes writes.
 	metaRaftRcvdCrossRegionBytes = metric.Metadata{
 		Name: "raft.rcvd.cross_region.bytes",
 		Help: `Number of bytes received by this store for cross region Raft messages
-		(when region tiers are configured). Note that this does not include raft
+		when region tiers are configured. Note that this does not include raft
 		snapshot received.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
@@ -1750,11 +1749,11 @@ handling consumes writes.
 	metaRaftRcvdCrossZoneBytes = metric.Metadata{
 		Name: "raft.rcvd.cross_zone.bytes",
 		Help: `Number of bytes received by this store for cross zone, same region
-		Raft messages (when region and zone tiers are configured). If region tiers
-		are not configured, this count may include data sent between different
-		regions. To ensure accurate monitoring of transmitted data, it is important
-		to set up a consistent locality configuration across nodes. Note that this
-		does not include raft snapshot received.`,
+		Raft messages when zone tiers are configured. If region tiers are not set,
+		it is assumed to be within the same region. To ensure accurate monitoring of
+		cross-zone data transfer, region and zone tiers should be consistently
+		configured across all nodes. Note that this does not include raft snapshot
+		received.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -1768,7 +1767,7 @@ handling consumes writes.
 	metaRaftSentCrossRegionBytes = metric.Metadata{
 		Name: "raft.sent.cross_region.bytes",
 		Help: `Number of bytes sent by this store for cross region Raft messages
-		(when region tiers are configured). Note that this does not include raft
+		when region	tiers are configured. Note that this does not include raft
 		snapshot sent.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
@@ -1776,11 +1775,11 @@ handling consumes writes.
 	metaRaftSentCrossZoneBytes = metric.Metadata{
 		Name: "raft.sent.cross_zone.bytes",
 		Help: `Number of bytes sent by this store for cross zone, same region Raft
-		messages (when region and zone tiers are configured). If region tiers are
-		not configured, this count may include data sent between different regions.
-		To ensure accurate monitoring of transmitted data, it is important to set up
-		a consistent locality configuration across nodes. Note that this does not
-		include raft snapshot sent.`,
+		messages when zone tiers are configured. If region tiers are not set, it is
+		assumed to be within the same region. To ensure accurate monitoring of
+		cross-zone data transfer, region and zone tiers should be consistently
+		configured across all nodes. Note that this does not include raft snapshot
+		sent.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -3997,14 +3996,12 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 }
 
 // updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
-// metrics when outgoing snapshots are sent to the outgoingSnapshotStream. The
-// metrics being updated include 1. cross-region metrics, which monitor
-// activities across different regions, and 2. cross-zone metrics, which monitor
-// activities across different zones within the same region or in cases where
-// region tiers are not configured.
+// metrics when outgoing snapshots are sent to the outgoingSnapshotStream.
 func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotSent(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
+	// Read more about locality comparison in
+	// updateCrossLocalityMetricsOnIncomingRaftMsg.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
 		sm.RangeSnapShotCrossRegionSentBytes.Inc(inc)
@@ -4015,13 +4012,12 @@ func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotSent(
 
 // updateCrossLocalityMetricsOnSnapshotRcvd updates cross-locality related store
 // metrics when receiving SnapshotRequests through streaming and constructing
-// incoming snapshots. The metrics being updated include 1. cross-region
-// metrics, which monitor activities across different regions, and 2. cross-zone
-// metrics, which monitor activities across different zones within the same
-// region or in cases where region tiers are not configured.
+// incoming snapshots.
 func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotRcvd(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
+	// Read more about locality comparison in
+	// updateCrossLocalityMetricsOnIncomingRaftMsg.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
 		sm.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
@@ -4030,39 +4026,44 @@ func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotRcvd(
 	}
 }
 
-// updateCrossLocalityMetricsOnIncomingRaftMsg updates store metrics for raft
-// messages that have been received via HandleRaftRequest. In the cases of
-// messages containing heartbeats or heartbeat_resps, they capture the byte
-// count of requests with coalesced heartbeats before any uncoalescing happens.
-// The metrics being updated include 1. total byte count of messages received 2.
-// cross-region metrics, which monitor activities across different regions, and
-// 3. cross-zone metrics, which monitor activities across different zones within
-// the same region or in cases where region tiers are not configured.
+// updateCrossLocalityMetricsOnIncomingRaftMsg updates StoreMetrics for Raft
+// messages received by the store. This includes messages that may have been
+// dropped and not successfully enqueued to the raftReceiveQueues (due to queue
+// length or size).
 func (sm *StoreMetrics) updateCrossLocalityMetricsOnIncomingRaftMsg(
 	comparisonResult roachpb.LocalityComparisonType, msgSize int64,
 ) {
+	// Update metrics for total byte count of messages received. In the cases of
+	// messages containing heartbeats or heartbeat_resps, they capture the byte
+	// count of requests with coalesced heartbeats before any uncoalescing
+	// happens.
 	sm.RaftRcvdBytes.Inc(msgSize)
+	// In cases where both region and zone tiers are not configured,
+	// comparisonResult will be UNDEFINED.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
+		// Update cross-region metrics: monitor activities across different regions.
 		sm.RaftRcvdCrossRegionBytes.Inc(msgSize)
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		// Update cross-zone metrics: monitor activities across different zones
+		// within the same region. If region tiers are not set, it is assumed to be
+		// within the same region.
 		sm.RaftRcvdCrossZoneBytes.Inc(msgSize)
 	}
 }
 
 // updateCrossLocalityMetricsOnOutgoingRaftMsg updates store metrics for raft
-// messages that are about to be sent via raftSendQueue. In the cases of
-// messages containing heartbeats or heartbeat_resps, they capture the byte
-// count of requests with coalesced heartbeats. The metrics being updated
-// include 1. total byte count of messages sent 2. cross-region metrics, which
-// monitor activities across different regions, and 3. cross-zone metrics, which
-// monitor activities across different zones within the same region or in cases
-// where region tiers are not configured. Note that these metrics may include
-// messages that get dropped by `SendAsync` due to a full outgoing queue.
+// messages that are about to be sent via raftSendQueue. These metrics may
+// include messages that get dropped by `SendAsync` due to a full outgoing
+// queue.
 func (sm *StoreMetrics) updateCrossLocalityMetricsOnOutgoingRaftMsg(
 	comparisonResult roachpb.LocalityComparisonType, msgSize int64,
 ) {
+	// In the cases of messages containing heartbeats or heartbeat_resps, they
+	// capture the byte count of requests with coalesced heartbeats.
 	sm.RaftSentBytes.Inc(msgSize)
+	// Read more about locality comparison in
+	// updateCrossLocalityMetricsOnIncomingRaftMsg above.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
 		sm.RaftSentCrossRegionBytes.Inc(msgSize)
