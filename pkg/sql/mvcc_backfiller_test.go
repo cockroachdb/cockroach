@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -129,6 +130,9 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -595,6 +599,9 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
