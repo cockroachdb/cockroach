@@ -202,6 +202,9 @@ func DescribeMessage(m pb.Message, f EntryFormatter) string {
 	if m.RejectHint != 0 {
 		fmt.Fprintf(&buf, " Hint:%d/%d", m.LogTerm, m.RejectHint)
 	}
+	if len(m.TcEntryIDs) != 0 {
+		fmt.Fprintf(&buf, " TermCache: %v", prettyPrintLogTermCacheContents(convertEntryIDs(m.TcEntryIDs)))
+	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
 	}

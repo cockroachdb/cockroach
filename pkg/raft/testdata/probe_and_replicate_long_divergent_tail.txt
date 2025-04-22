@@ -465,17 +465,17 @@ stabilize 7 2 3 4 5 6
   7->5 MsgDeFortifyLeader Term:3 Log:0/0
   7->6 MsgDeFortifyLeader Term:3 Log:0/0
   OnSync:
-  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/22
+  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/22 TermCache: [t1/11, t2/14, t3/17]
 > 2 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:18 Lead:0 LeadEpoch:0
   OnSync:
-  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19
+  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19 TermCache: [t1/11, t4/14, t5/16, t6/18]
 > 3 handling Ready
   Ready:
   HardState Term:8 Vote:1 Commit:14 Lead:0 LeadEpoch:0
   OnSync:
-  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14
+  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14 TermCache: [t1/11, t4/14]
 > 4 handling Ready
   Ready:
   State:StateFollower
@@ -499,7 +499,7 @@ stabilize 7 2 3 4 5 6
   Ready:
   HardState Term:8 Vote:1 Commit:15 Lead:0 LeadEpoch:0
   OnSync:
-  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17
+  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17 TermCache: [t1/11, t4/14]
 > 7 receiving messages
   5->7 MsgDeFortifyLeader Term:7 Log:0/0
   INFO 7 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
@@ -532,13 +532,13 @@ stabilize 1
 > 1 receiving messages
   7->1 MsgDeFortifyLeader Term:3 Log:0/0
   INFO 1 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
-  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/22
+  7->1 MsgVoteResp Term:8 Log:3/0 Hint:3/22 TermCache: [t1/11, t2/14, t3/17]
   INFO 1 received MsgVoteResp from 7 at term 8
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
-  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19
+  2->1 MsgVoteResp Term:8 Log:6/0 Hint:6/19 TermCache: [t1/11, t4/14, t5/16, t6/18]
   INFO 1 received MsgVoteResp from 2 at term 8
   INFO 1 has received 3 MsgVoteResp votes and 0 vote rejections
-  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14
+  3->1 MsgVoteResp Term:8 Log:4/0 Hint:4/14 TermCache: [t1/11, t4/14]
   INFO 1 received MsgVoteResp from 3 at term 8
   INFO 1 has received 4 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 8
@@ -546,7 +546,7 @@ stabilize 1
   5->1 MsgDeFortifyLeader Term:7 Log:0/0
   INFO 1 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected
-  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17
+  6->1 MsgVoteResp Term:8 Log:4/0 Hint:4/17 TermCache: [t1/11, t4/14]
 > 1 handling Ready
   Ready:
   State:StateLeader

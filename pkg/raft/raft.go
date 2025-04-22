@@ -1791,6 +1791,15 @@ func (r *raft) Step(m pb.Message) error {
 			if m.Type == pb.MsgVote {
 				logHint = lastID
 			}
+
+			var tc []pb.EntryID
+			compacted := r.raftLog.compacted()
+			if logHint.index > r.raftLog.termCache.cache[0].index {
+				tc = r.raftLog.termCache.prepareProtoTcEntryIDs(compacted, logHint.index)
+			} else {
+				tc = nil
+			}
+
 			r.send(pb.Message{
 				To:   m.From,
 				Term: m.Term,
@@ -1802,6 +1811,7 @@ func (r *raft) Step(m pb.Message) error {
 				//  general like LogHint.
 				RejectHint: logHint.index,
 				LogTerm:    logHint.term,
+				TcEntryIDs: tc,
 				Type:       voteRespMsgType(m.Type),
 			})
 			if m.Type == pb.MsgVote {

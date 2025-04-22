@@ -286,9 +286,9 @@ stabilize
   Ready:
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/11
+  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/11 TermCache: [t1/11]
 > 2 receiving messages
-  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/11
+  3->2 MsgVoteResp Term:2 Log:1/0 Hint:1/11 TermCache: [t1/11]
   INFO 2 received MsgVoteResp from 3 at term 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
@@ -561,18 +561,18 @@ stabilize
   Ready:
   HardState Term:3 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   OnSync:
-  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
+  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12 TermCache: [t1/11, t2/12]
 > 3 handling Ready
   Ready:
   HardState Term:3 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   OnSync:
-  3->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
+  3->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12 TermCache: [t1/11, t2/12]
 > 2 receiving messages
-  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
+  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12 TermCache: [t1/11, t2/12]
   INFO 2 received MsgVoteResp from 1 at term 3
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 3
-  3->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
+  3->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12 TermCache: [t1/11, t2/12]
 > 2 handling Ready
   Ready:
   State:StateLeader
