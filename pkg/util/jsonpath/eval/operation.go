@@ -129,7 +129,7 @@ func (ctx *jsonpathCtx) evalIsUnknown(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	if leftBool == jsonpathBoolUnknown {
 		return jsonpathBoolTrue, nil
@@ -204,7 +204,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -233,7 +233,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	rightBool, err := ctx.evalBoolean(rightOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -251,6 +251,10 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 }
 
+func isIgnorableError(err error) bool {
+	return err == nil || (!errors.HasAssertionFailure(err) && !errors.Is(err, &errVariableNotFound{}))
+}
+
 // evalPredicate evaluates a predicate operation. Predicates have existence
 // semantics. True is returned if any pair of items from the left and right
 // paths satisfy the condition. In strict mode, even if a pair has been found,
@@ -263,6 +267,9 @@ func (ctx *jsonpathCtx) evalPredicate(
 ) (jsonpathBool, error) {
 	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
+	if !isIgnorableError(err) {
+		return jsonpathBoolUnknown, err
+	}
 	if err != nil || left == nil {
 		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 	}
@@ -270,6 +277,9 @@ func (ctx *jsonpathCtx) evalPredicate(
 	if evalRight {
 		// The right argument results are conditionally evaluated and unwrapped.
 		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
+		if !isIgnorableError(err) {
+			return jsonpathBoolUnknown, err
+		}
 		if err != nil || right == nil {
 			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
 		}

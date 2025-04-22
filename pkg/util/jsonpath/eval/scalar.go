@@ -10,7 +10,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/errors"
 )
+
+type errVariableNotFound struct{}
+
+func (e *errVariableNotFound) Error() string {
+	return ""
+}
 
 func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error) {
 	if scalar.Type == jsonpath.ScalarVariable {
@@ -19,7 +26,9 @@ func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error)
 			return nil, err
 		}
 		if val == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", scalar.Variable)
+			return nil, errors.Mark(pgerror.Newf(pgcode.UndefinedObject,
+				"could not find jsonpath variable %q", scalar.Variable),
+				&errVariableNotFound{})
 		}
 		return val, nil
 	}
