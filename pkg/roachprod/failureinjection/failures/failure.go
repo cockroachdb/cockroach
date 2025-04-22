@@ -325,3 +325,70 @@ func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) err
 	}()
 	return errCh
 }
+
+func (f *GenericFailure) WaitForReplication(
+	ctx context.Context, l *logger.Logger, node install.Nodes, replicationFactor int,
+) error {
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	// Default to a replication factor of 3 if not specified. We could query and
+	// extract out the lowest replication factor among all zone configs, but it seems
+	// easier to just let the caller specify it if they want a stronger guarantee.
+	if replicationFactor == 0 {
+		replicationFactor = 3
+	}
+
+	return roachprod.WaitForReplication(ctx, db,
+		replicationFactor, roachprod.AtLeastReplicationFactor,
+		roachprod.RetryEveryDuration(time.Second),
+		roachprod.WithVerboseLogger(l),
+	)
+}
+
+// WaitForBalancedReplicas blocks until the replica count across each store is less than
+// `range_rebalance_threshold` percent from the mean. Note that this doesn't wait for
+// rebalancing to _fully_ finish; there can still be range events that happen after this.
+// We don't know what kind of background workloads may be running concurrently and creating
+// range events, so lets just get to a state "close enough", i.e. a state that the allocator
+// would consider balanced.
+func (f *GenericFailure) WaitForBalancedReplicas(
+	ctx context.Context, l *logger.Logger, node install.Nodes,
+) error {
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+
+	return roachprod.WaitForBalancedReplicas(ctx, db,
+		roachprod.RetryEveryDuration(3*time.Second),
+		roachprod.WithVerboseLogger(l),
+	)
+}
+
+// WaitForRestartedNodesToStabilize is a helper that waits for nodes
+// to stabilize after a restart.
+func (f *GenericFailure) WaitForRestartedNodesToStabilize(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes, replicationFactor int,
+) error {
+	// First, we block until we are able to connect to each of the nodes
+	// as we will use SQL connections to check the status of the cluster.
+	if err := forEachNode(nodes, func(n install.Nodes) error {
+		return f.WaitForSQLReady(ctx, l, n)
+	}); err != nil {
+		return err
+	}
+
+	// Then, we wait for ranges to be fully replicated. If the restarted nodes were only
+	// briefly offline, this will block until the restarted nodes catch up. If the restarted
+	// nodes were down long enough for the cluster to consider them dead, the ranges will
+	// have been rebalanced to other nodes and this will be a noop.
+	if err := f.WaitForReplication(ctx, l, nodes, replicationFactor); err != nil {
+		return err
+	}
+
+	// Finally, we also have to block until the cluster is done rebalancing replicas.
+	// If replicas were not moved around during the downtime, this will likely be a noop.
+	return f.WaitForBalancedReplicas(ctx, l, nodes)
+}
