@@ -315,6 +315,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
 		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
 		{"failureCount", (*jsonInt)(&s.FailureCount)},
+		{"sqlType", (*jsonString)(&s.SQLType)},
 	}
 }
 

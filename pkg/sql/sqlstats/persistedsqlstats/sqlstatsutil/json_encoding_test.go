@@ -106,7 +106,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "p90": {{.Float}},
            "p99": {{.Float}}
          },
-         "lastErrorCode": "{{.String}}"
+         "lastErrorCode": "{{.String}}",
+				 "sqlType": "{{.String}}" 
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
