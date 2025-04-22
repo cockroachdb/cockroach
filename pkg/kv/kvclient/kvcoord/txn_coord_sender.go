@@ -321,7 +321,10 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen.ds = ds
 	}
-	tc.interceptorAlloc.txnWriteBuffer.st = tcf.st
+	tc.interceptorAlloc.txnWriteBuffer = txnWriteBuffer{
+		st:         tcf.st,
+		txnMetrics: &tc.metrics,
+	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:                       tcf.st,
 		riGen:                    riGen,
