@@ -4189,12 +4189,16 @@ func (r *Replica) adminScatter(
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
+			log.Eventf(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
+			log.Warningf(ctx,
+				"failed to scatter range (%v) at %dth attempt: cannot process replica due to %v",
+				desc, currentAttempt+1, err)
 			break
 		}
 		_, err = rq.processOneChange(
@@ -4206,9 +4210,11 @@ func (r *Replica) adminScatter(
 			// issued, in which case the scatter may fail due to the range split
 			// updating the descriptor while processing.
 			if IsRetriableReplicationChangeError(err) {
-				log.VEventf(ctx, 1, "retrying scatter process after retryable error: %v", err)
+				log.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
+			log.Warningf(ctx, "failed to scatter range (%v) at %dth attempt due to %v",
+				desc, currentAttempt+1, err)
 			break
 		}
 		currentAttempt++
