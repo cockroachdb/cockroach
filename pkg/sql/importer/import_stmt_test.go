@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -6264,6 +6265,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,
+				},
+				UpgradeManager: &upgradebase.TestingKnobs{
+					SkipHotRangesLoggerJobBootstrap: true,
 				},
 			},
 		}
