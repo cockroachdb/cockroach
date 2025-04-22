@@ -1,0 +1,127 @@
+# LogicTest: local
+
+# Test that unique indexes work correctly with swap mutations.
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  UNIQUE INDEX (y),
+  FAMILY (x, y, z)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 1, 1), (2, 2, 2)
+
+# This statement should fail with a dupe key error.
+
+statement error duplicate key value violates unique constraint "xyz_y_key"
+UPDATE xyz SET y = 1 WHERE x = 2 AND y = 2 AND z = 2
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  1
+2  2  2
+
+# This statement should succeed and modify 0 rows, because no rows have z = 3.
+
+statement ok
+UPDATE xyz SET y = 1 WHERE x = 2 AND y = 2 AND z = 3
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  1
+2  2  2
+
+# Test rollback of swap mutations.
+
+statement ok
+BEGIN
+
+statement ok
+UPDATE xyz SET z = 11 WHERE x = 1 AND y = 1 AND z = 1
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  11
+2  2  2
+
+statement ok
+SAVEPOINT a
+
+statement ok
+UPDATE xyz SET z = 12 WHERE x = 2 AND y = 2 AND z = 2
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  11
+2  2  12
+
+statement ok
+ROLLBACK TO a
+
+statement ok
+UPDATE xyz SET z = 21 WHERE x = 1 AND y = 1 AND z = 11
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  21
+2  2  2
+
+statement ok
+SAVEPOINT b
+
+# This should do nothing.
+
+statement ok
+UPDATE xyz SET z = 31 WHERE x = 1 AND y = 1 AND z = 11
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  21
+2  2  2
+
+statement ok
+ROLLBACK TO b
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  21
+2  2  2
+
+statement ok
+ROLLBACK TO a
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  11
+2  2  2
+
+# This should do nothing.
+
+statement ok
+UPDATE xyz SET z = 31 WHERE x = 1 AND y = 1 AND z = 21
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  11
+2  2  2
+
+statement ok
+COMMIT
+
+query III
+SELECT * FROM xyz ORDER BY x
+----
+1  1  11
+2  2  2
