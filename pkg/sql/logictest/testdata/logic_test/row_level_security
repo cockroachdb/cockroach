@@ -2176,6 +2176,202 @@ SET ROLE root
 statement ok
 DROP ROLE rls_cache_user;
 
+subtest computed_virtual_cols
+
+statement ok
+CREATE ROLE alice LOGIN;
+
+statement ok
+CREATE TABLE t (
+      k INT PRIMARY KEY,
+      a INT,
+      b INT,
+      c INT,
+      v INT AS (c + 1) VIRTUAL
+);
+
+statement ok
+INSERT INTO t VALUES (1,1,1,1),(-1,-1,-1,-1);
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON t TO alice;
+
+statement ok
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO alice
+USING (v > 0);
+
+statement ok
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO alice
+WITH CHECK (v > 1);
+
+statement ok
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO alice
+USING (v > 2);
+
+statement ok
+CREATE POLICY delete_policy
+ON t
+FOR DELETE
+TO alice
+USING (v > 3);
+
+statement ok
+SET ROLE alice;
+
+query IIIII
+SELECT * FROM t;
+----
+1  1  1  1  2
+
+query II
+SELECT k,a FROM t WHERE b IS NOT NULL;;
+----
+1  1
+
+statement ok
+INSERT INTO t VALUES (2,2,2,2);
+
+statement error pq: new row violates row-level security policy for table "t"
+INSERT INTO t VALUES (3,0,0,0);
+
+query IIIII
+UPDATE t SET c = 4 WHERE k = 2 RETURNING *;
+----
+2  2  2  4  5
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET c = 0 WHERE k = 2 RETURNING *;
+
+query I
+DELETE FROM t RETURNING v;
+----
+5
+
+statement ok
+SET ROLE root;
+
+query IIIII
+SELECT * FROM t ORDER BY k;
+----
+-1  -1  -1  -1  0
+1   1   1   1   2
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP USER ALICE;
+
+subtest computed_stored_cols
+
+statement ok
+CREATE ROLE pat LOGIN;
+
+statement ok
+CREATE TABLE t (
+      k INT PRIMARY KEY,
+      a INT,
+      b INT,
+      c INT,
+      v INT AS (c + 1) STORED
+);
+
+statement ok
+INSERT INTO t VALUES (1,1,1,1),(-1,-1,-1,-1);
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON t TO pat;
+
+statement ok
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO pat
+USING (v > 0);
+
+statement ok
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO pat
+WITH CHECK (v > 1);
+
+statement ok
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO pat
+USING (v > 2);
+
+statement ok
+CREATE POLICY delete_policy
+ON t
+FOR DELETE
+TO pat
+USING (v > 3);
+
+statement ok
+SET ROLE pat;
+
+query IIIII
+SELECT * FROM t;
+----
+1  1  1  1  2
+
+query II
+SELECT k,a FROM t WHERE b IS NOT NULL;;
+----
+1  1
+
+statement ok
+INSERT INTO t VALUES (2,2,2,2);
+
+statement error pq: new row violates row-level security policy for table "t"
+INSERT INTO t VALUES (3,0,0,0);
+
+query IIIII
+UPDATE t SET c = 4 WHERE k = 2 RETURNING *;
+----
+2  2  2  4  5
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET c = 0 WHERE k = 2 RETURNING *;
+
+query I
+DELETE FROM t RETURNING v;
+----
+5
+
+statement ok
+SET ROLE root;
+
+query IIIII
+SELECT * FROM t ORDER BY k;
+----
+-1  -1  -1  -1  0
+1   1   1   1   2
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP USER PAT;
+
 subtest block_invalid_expressions
 
 statement ok
