@@ -851,3 +851,291 @@ insert t1
       │         └── unique_rowid() [as=rowid_default:10]
       └── projections
            └── c3_default:9 >= '2025-01-01' [as=rls:11]
+
+# Tests for when stored virtual column is used in an RLS expression
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  v INT AS (c + 1) VIRTUAL
+);
+----
+
+exec-ddl
+ALTER TABLE t ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO fred
+USING (v > 0);
+----
+
+exec-ddl
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO fred
+USING (v > 1);
+----
+
+exec-ddl
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO fred
+USING (v > 5);
+----
+
+build
+SELECT * FROM t
+----
+project
+ ├── columns: k:1!null a:2 b:3 c:4 v:5!null
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── project
+      │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── scan t
+      │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    └── computed column expressions
+      │    │         └── v:5
+      │    │              └── c:4 + 1
+      │    └── projections
+      │         └── c:4 + 1 [as=v:5]
+      └── filters
+           └── v:5 > 0
+
+# Do a SELECT that doesn't reference the virtual column.
+build
+SELECT k, c FROM t WHERE a IS NULL;
+----
+project
+ ├── columns: k:1!null c:4
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── select
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── project
+      │    │    ├── columns: v:5 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    │    └── computed column expressions
+      │    │    │         └── v:5
+      │    │    │              └── c:4 + 1
+      │    │    └── projections
+      │    │         └── c:4 + 1 [as=v:5]
+      │    └── filters
+      │         └── v:5 > 0
+      └── filters
+           └── a:2 IS NULL
+
+build
+INSERT INTO t VALUES (1,2,3,4);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => k:1
+ │    ├── column2:9 => a:2
+ │    ├── column3:10 => b:3
+ │    ├── column4:11 => c:4
+ │    └── v_comp:12 => v:5
+ ├── check columns: rls:13
+ └── project
+      ├── columns: rls:13!null column1:8!null column2:9!null column3:10!null column4:11!null v_comp:12!null
+      ├── project
+      │    ├── columns: v_comp:12!null column1:8!null column2:9!null column3:10!null column4:11!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── (1, 2, 3, 4)
+      │    └── projections
+      │         └── column4:11 + 1 [as=v_comp:12]
+      └── projections
+           └── v_comp:12 > 1 [as=rls:13]
+
+build
+UPDATE t SET c = -10 WHERE k = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:8 a:9 b:10 c:11 v:12
+ ├── update-mapping:
+ │    ├── c_new:15 => c:4
+ │    └── v_comp:16 => v:5
+ ├── check columns: rls:17
+ └── project
+      ├── columns: rls:17!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null v_comp:16!null
+      ├── project
+      │    ├── columns: v_comp:16!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null
+      │    ├── project
+      │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: v:12 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    ├── scan t
+      │    │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    │    └── v:12
+      │    │    │    │    │    │    │         └── c:11 + 1
+      │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── c:11 + 1 [as=v:12]
+      │    │    │    │    └── filters
+      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    └── filters
+      │    │    │         └── k:8 = 1
+      │    │    └── projections
+      │    │         └── -10 [as=c_new:15]
+      │    └── projections
+      │         └── c_new:15 + 1 [as=v_comp:16]
+      └── projections
+           └── (v_comp:16 > 0) AND (v_comp:16 > 5) [as=rls:17]
+
+# Tests for when computed stored column is used in an RLS expression
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  v INT AS (c + 1) STORED
+);
+----
+
+exec-ddl
+ALTER TABLE t ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy
+ON t
+FOR SELECT
+TO fred
+USING (v > 0);
+----
+
+exec-ddl
+CREATE POLICY insert_policy
+ON t
+FOR INSERT
+TO fred
+USING (v > 1);
+----
+
+exec-ddl
+CREATE POLICY update_policy
+ON t
+FOR UPDATE
+TO fred
+USING (v > 5);
+----
+
+build
+SELECT * FROM t
+----
+project
+ ├── columns: k:1!null a:2 b:3 c:4 v:5!null
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── scan t
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    └── computed column expressions
+      │         └── v:5
+      │              └── c:4 + 1
+      └── filters
+           └── v:5 > 0
+
+# Do a SELECT that doesn't reference the stored column.
+build
+SELECT k, c FROM t WHERE a IS NULL;
+----
+project
+ ├── columns: k:1!null c:4
+ └── select
+      ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      ├── select
+      │    ├── columns: k:1!null a:2 b:3 c:4 v:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    ├── scan t
+      │    │    ├── columns: k:1!null a:2 b:3 c:4 v:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+      │    │    └── computed column expressions
+      │    │         └── v:5
+      │    │              └── c:4 + 1
+      │    └── filters
+      │         └── v:5 > 0
+      └── filters
+           └── a:2 IS NULL
+
+build
+INSERT INTO t VALUES (1,2,3,4);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => k:1
+ │    ├── column2:9 => a:2
+ │    ├── column3:10 => b:3
+ │    ├── column4:11 => c:4
+ │    └── v_comp:12 => v:5
+ ├── check columns: rls:13
+ └── project
+      ├── columns: rls:13!null column1:8!null column2:9!null column3:10!null column4:11!null v_comp:12!null
+      ├── project
+      │    ├── columns: v_comp:12!null column1:8!null column2:9!null column3:10!null column4:11!null
+      │    ├── values
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    │    └── (1, 2, 3, 4)
+      │    └── projections
+      │         └── column4:11 + 1 [as=v_comp:12]
+      └── projections
+           └── v_comp:12 > 1 [as=rls:13]
+
+build
+UPDATE t SET c = -10 WHERE k = 1;
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:8 a:9 b:10 c:11 v:12
+ ├── update-mapping:
+ │    ├── c_new:15 => c:4
+ │    └── v_comp:16 => v:5
+ ├── check columns: rls:17
+ └── project
+      ├── columns: rls:17!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null v_comp:16!null
+      ├── project
+      │    ├── columns: v_comp:16!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null
+      │    ├── project
+      │    │    ├── columns: c_new:15!null k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── select
+      │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    ├── scan t
+      │    │    │    │    │    ├── columns: k:8!null a:9 b:10 c:11 v:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    └── v:12
+      │    │    │    │    │    │         └── c:11 + 1
+      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    └── filters
+      │    │    │    │         └── (v:12 > 0) AND (v:12 > 5)
+      │    │    │    └── filters
+      │    │    │         └── k:8 = 1
+      │    │    └── projections
+      │    │         └── -10 [as=c_new:15]
+      │    └── projections
+      │         └── c_new:15 + 1 [as=v_comp:16]
+      └── projections
+           └── (v_comp:16 > 0) AND (v_comp:16 > 5) [as=rls:17]
