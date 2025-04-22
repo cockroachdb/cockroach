@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"golang.org/x/sys/unix"
@@ -28,18 +27,15 @@ func registerNodeKillFailure(r *FailureRegistry) {
 	r.add(NodeKillFailureName, NodeKillArgs{}, MakeNodeKillFailure)
 }
 
-func MakeNodeKillFailure(clusterName string, l *logger.Logger, secure bool) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(secure))
+func MakeNodeKillFailure(
+	clusterName string, l *logger.Logger, connectionInfo ConnectionInfo,
+) (FailureMode, error) {
+	genericFailure, err := makeGenericFailure(clusterName, l, connectionInfo, NodeKillFailureName)
 	if err != nil {
 		return nil, err
 	}
 
-	return &NodeKillFailure{
-		GenericFailure: GenericFailure{
-			c:        c,
-			runTitle: NodeKillFailureName,
-		},
-	}, nil
+	return &NodeKillFailure{GenericFailure: *genericFailure}, nil
 }
 
 type NodeKillFailure struct {
@@ -71,6 +67,7 @@ func (f *NodeKillFailure) Recover(ctx context.Context, l *logger.Logger, args Fa
 }
 
 func (f *NodeKillFailure) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+	defer f.CloseConnections()
 	return nil
 }
 
@@ -92,6 +89,6 @@ func (f *NodeKillFailure) WaitForFailureToRecover(
 	l.Printf("Waiting for cockroach process to recover on nodes: %v", nodes)
 
 	return forEachNode(nodes, func(n install.Nodes) error {
-		return f.WaitForSQLReady(ctx, l, n, time.Minute)
+		return f.WaitForSQLReady(ctx, l, n)
 	})
 }
