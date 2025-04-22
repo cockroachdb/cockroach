@@ -18,6 +18,9 @@ import (
 // Failer to describe how it should interact with the cluster.
 type ClusterOptions struct {
 	secure bool
+	// localCertsPath is the path to where the local copy of the cluster
+	// certs are stored, i.e. the ones accessible by the failer.
+	localCertsPath string
 }
 
 type failureSpec struct {
