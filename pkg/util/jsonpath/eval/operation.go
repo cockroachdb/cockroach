@@ -129,7 +129,7 @@ func (ctx *jsonpathCtx) evalIsUnknown(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	if leftBool == jsonpathBoolUnknown {
 		return jsonpathBoolTrue, nil
@@ -204,7 +204,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -233,7 +233,7 @@ func (ctx *jsonpathCtx) evalLogical(
 	}
 	rightBool, err := ctx.evalBoolean(rightOp, jsonValue)
 	if err != nil {
-		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
+		return jsonpathBoolUnknown, err
 	}
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
@@ -263,15 +263,27 @@ func (ctx *jsonpathCtx) evalPredicate(
 ) (jsonpathBool, error) {
 	// The left argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
-	if err != nil || left == nil {
+	if err != nil {
+		if errors.HasAssertionFailure(err) || errors.Is(err, errVariableNotFound) {
+			return jsonpathBoolUnknown, err
+		}
 		return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+	}
+	if left == nil {
+		return jsonpathBoolUnknown, nil
 	}
 	var right []json.JSON
 	if evalRight {
 		// The right argument results are conditionally evaluated and unwrapped.
 		right, err = ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
-		if err != nil || right == nil {
+		if err != nil {
+			if errors.HasAssertionFailure(err) || errors.Is(err, errVariableNotFound) {
+				return jsonpathBoolUnknown, err
+			}
 			return jsonpathBoolUnknown, nil //nolint:returnerrcheck
+		}
+		if right == nil {
+			return jsonpathBoolUnknown, nil
 		}
 	} else {
 		// If we don't want to evaluate the right argument, we need to call
