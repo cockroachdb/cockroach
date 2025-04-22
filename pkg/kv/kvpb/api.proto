@@ -1974,6 +1974,13 @@ message AdminScatterResponse {
   // scattered
   int64 replicas_scattered_bytes = 5;
 
+  // NoReplicasMoved indicates whether no replicas were moved during the scatter
+  // operation. NB: this needs to be a separate field, since we can't reliably
+  // infer "no replica moved" from ReplicasScatteredBytes == 0. Empty ranges
+  // have stats.Total() == 0 and ReplicasScatteredBytes will be 0 regardless of
+  // whether any replicas were moved.
+  bool no_replicas_moved = 6;
+
   // NB: if you add a field here, don't forget to update combine().
 }
 
