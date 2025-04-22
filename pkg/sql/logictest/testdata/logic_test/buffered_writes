@@ -319,3 +319,124 @@ Put /Table/114/3/3/2/0 -> /BYTES/
 
 statement ok
 RESET vectorize
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  FAMILY (u, v, w)
+)
+
+statement ok
+BEGIN;
+INSERT INTO uvw SELECT u, v, w FROM
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
+
+query I
+SELECT count(*) FROM uvw
+----
+64
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE uvw
+
+statement ok
+CREATE TABLE uvw (
+  u INT,
+  v INT,
+  w INT,
+  INDEX (u,v,w)
+)
+
+statement ok
+BEGIN;
+INSERT INTO uvw SELECT u, v, w FROM
+  generate_series(0, 3) AS u,
+  generate_series(0, 3) AS v,
+  generate_series(0, 3) AS w;
+UPDATE uvw SET u = NULL WHERE u = 0;
+UPDATE uvw SET v = NULL WHERE v = 0;
+UPDATE uvw SET w = NULL WHERE w = 0
+
+query III colnames
+SELECT * FROM uvw ORDER BY u, v, w
+----
+u     v     w
+NULL  NULL  NULL
+NULL  NULL  1
+NULL  NULL  2
+NULL  NULL  3
+NULL  1     NULL
+NULL  1     1
+NULL  1     2
+NULL  1     3
+NULL  2     NULL
+NULL  2     1
+NULL  2     2
+NULL  2     3
+NULL  3     NULL
+NULL  3     1
+NULL  3     2
+NULL  3     3
+1     NULL  NULL
+1     NULL  1
+1     NULL  2
+1     NULL  3
+1     1     NULL
+1     1     1
+1     1     2
+1     1     3
+1     2     NULL
+1     2     1
+1     2     2
+1     2     3
+1     3     NULL
+1     3     1
+1     3     2
+1     3     3
+2     NULL  NULL
+2     NULL  1
+2     NULL  2
+2     NULL  3
+2     1     NULL
+2     1     1
+2     1     2
+2     1     3
+2     2     NULL
+2     2     1
+2     2     2
+2     2     3
+2     3     NULL
+2     3     1
+2     3     2
+2     3     3
+3     NULL  NULL
+3     NULL  1
+3     NULL  2
+3     NULL  3
+3     1     NULL
+3     1     1
+3     1     2
+3     1     3
+3     2     NULL
+3     2     1
+3     2     2
+3     2     3
+3     3     NULL
+3     3     1
+3     3     2
+3     3     3
+
+statement ok
+COMMIT
+
+query I
+SELECT count(*) FROM uvw
+----
+64
