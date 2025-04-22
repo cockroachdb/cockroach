@@ -626,6 +626,7 @@ func (r *AdminScatterResponse) combine(_ context.Context, c combinable, _ *Batch
 		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
 		r.MVCCStats.Add(otherR.MVCCStats)
 		r.ReplicasScatteredBytes += otherR.ReplicasScatteredBytes
+		r.NoReplicasMoved = r.NoReplicasMoved && otherR.NoReplicasMoved
 	}
 	return nil
 }
