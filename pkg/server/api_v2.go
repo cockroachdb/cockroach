@@ -651,7 +651,11 @@ func planRollingRestart(
 	}
 
 	totalNodes := systemStatus.storePool.ClusterNodeCount()
-	nodesPerRound := int(math.Floor(float64(totalNodes) * (1.0 - capacityTarget)))
+	// due to floating-point rounding error, 1.0-0.8 < 0.2, so we end up a whole node short of our target.
+	// a fudge factor of about 1 in a million is sufficient to correct the error, and small enough to be
+	// insignificant
+	const fudgeFactor float64 = 1.0 / (1024.0 * 1024.0)
+	nodesPerRound := int(math.Floor(float64(totalNodes) * (1.0 - capacityTarget + fudgeFactor)))
 	if nodesPerRound < 1 {
 		nodesPerRound = 1
 	}
