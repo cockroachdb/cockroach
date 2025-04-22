@@ -346,10 +346,14 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		sd.SessionData = *sc.sessionData
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
+		//
+		// Note: the planner is created using the session’s user. This is important
+		// for row-level security (RLS), ensuring that the backfill query runs with
+		// the same visibility and access restrictions as the user who initiated it.
 		p, cleanup := NewInternalPlanner(
 			opName,
 			txn.KV(),
-			username.NodeUserName(),
+			sc.sessionData.User(),
 			&MemoryMetrics{},
 			sc.execCfg,
 			sd,
