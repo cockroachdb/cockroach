@@ -8,8 +8,12 @@ package norm
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -219,4 +223,323 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 	}
 
 	return simplified, &simplifiedPrivate
+}
+
+// CanUseSwapMutation checks whether an Update or Delete can become an
+// UpdateSwap or DeleteSwap, respectively.
+func (c *CustomFuncs) CanUseSwapMutation(op opt.Operator, private *memo.MutationPrivate) bool {
+	// Checks are not currently handled by UpdateSwap or DeleteSwap.
+	if !private.CheckCols.IsEmpty() {
+		return false
+	}
+
+	// Vector indexes are not currently handled by UpdateSwap or DeleteSwap.
+	if len(private.VectorIndexDelPartitionCols) != 0 ||
+		len(private.VectorIndexPutPartitionCols) != 0 ||
+		len(private.VectorIndexPutQuantizedVecCols) != 0 {
+		return false
+	}
+
+	// Passthrough columns are not currently remapped correctly by UseSwapMutation
+	// after BuildSwapMutationInput generates new column IDs.
+	if len(private.PassthroughCols) != 0 {
+		return false
+	}
+
+	// FK cascades are not currently handled by UpdateSwap or DeleteSwap.
+	if len(private.FKCascades) != 0 {
+		return false
+	}
+
+	md := c.mem.Metadata()
+	table := md.Table(private.Table)
+
+	// Triggers are not currently handled by UpdateSwap or DeleteSwap.
+	var eventsToMatch tree.TriggerEventTypeSet
+	if op == opt.UpdateOp {
+		eventsToMatch.Add(tree.TriggerEventUpdate)
+	} else if op == opt.DeleteOp {
+		eventsToMatch.Add(tree.TriggerEventDelete)
+	}
+	beforeTriggers := cat.GetRowLevelTriggers(table, tree.TriggerActionTimeBefore, eventsToMatch)
+	if len(beforeTriggers) != 0 {
+		return false
+	}
+	afterTriggers := cat.GetRowLevelTriggers(table, tree.TriggerActionTimeAfter, eventsToMatch)
+	if len(afterTriggers) != 0 {
+		return false
+	}
+	insteadOfTriggers := cat.GetRowLevelTriggers(table, tree.TriggerActionTimeInsteadOf, eventsToMatch)
+	if len(insteadOfTriggers) != 0 {
+		return false
+	}
+
+	// UpdateSwap currently has a bug with all-NULL column families where it will
+	// not issue a no-op CPut to validate an all-NULL column family's nonexistence
+	// in a case like:
+	//
+	//   CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, FAMILY (a, b), FAMILY (c));
+	//   INSERT INTO abc VALUES (1, 2, NULL);
+	//   UPDATE abc SET b = b + 1 WHERE a = 1 AND b = 2 AND c IS NULL;
+	//
+	// Until this is fixed, and multi-column-family tables are better tested, we
+	// disallow UpdateSwap and DeleteSwap on multi-column-family tables.
+	// TODO(michae2): lift this restriction.
+	if table.FamilyCount() > 1 {
+		return false
+	}
+
+	// UpdateSwap and DeleteSwap require fetch columns to contain every column in
+	// the primary index, in order to build the expected value for the row.
+	// TODO(michae2): When it comes time to support multi-column-family tables, we
+	// might want to lift this restriction for updates that touch a single column
+	// family.
+	//
+	// UpdateSwap and DeleteSwap also do not currently handle mutation columns.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		switch col.Kind() {
+		case cat.System:
+			continue
+		case cat.WriteOnly, cat.DeleteOnly:
+			return false
+		default:
+			if private.FetchCols[col.Ordinal()] == 0 {
+				return false
+			}
+		}
+	}
+
+	// UpdateSwap and DeleteSwap do not currently handle mutation indexes.
+	return table.DeletableIndexCount() == table.IndexCount()
+}
+
+// BuildSwapMutationInput tries to replace the initial scan of a mutation
+// statement with a ValuesExpr containing a single row. If it can successfully
+// rewrite the mutation input then the mutation can become a swap mutation.
+func (c *CustomFuncs) BuildSwapMutationInput(
+	input memo.RelExpr, private *memo.MutationPrivate,
+) (memo.RelExpr, opt.ColMap, bool) {
+	switch t := input.(type) {
+	case *memo.ProjectExpr:
+		if newInput, colMap, ok := c.BuildSwapMutationInput(t.Input, private); ok {
+			remappedProjections := c.f.RemapCols(&t.Projections, colMap).(*memo.ProjectionsExpr)
+			remappedPassthrough := t.Passthrough.CopyAndMaybeRemap(colMap)
+			return c.f.ConstructProject(newInput, *remappedProjections, remappedPassthrough), colMap, true
+		}
+	case *memo.SelectExpr:
+		// Swap mutations can only operate on a single row.
+		if c.HasZeroOrOneRow(t) {
+			if scan, ok := t.Input.(*memo.ScanExpr); ok {
+				// This must be a canonical scan to safely assume that the select
+				// filters contain all predicates from the query.
+				if scan.IsCanonical() && scan.Cols.SubsetOf(private.FetchCols.ToSet()) {
+					return c.buildSwapMutationValues(t.Filters, &scan.ScanPrivate)
+				}
+			}
+		}
+		// TODO(michae2): also match on joins here in order to support UPDATE FROM
+		// and DELETE FROM.
+		// TODO(michae2): also match on barriers.
+	}
+	return nil, opt.ColMap{}, false
+}
+
+// buildSwapMutationValues tries to construct a ValuesExpr containing the only
+// possible row that could satisfy the given filters on the given canonical
+// scan. UpdateSwap and DeleteSwap use this ValuesExpr in lieu of a ScanExpr.
+func (c *CustomFuncs) buildSwapMutationValues(
+	filters memo.FiltersExpr, scan *memo.ScanPrivate,
+) (memo.RelExpr, opt.ColMap, bool) {
+	colExprs, remainingFilters, ok := c.constrainColsToScalarExprs(scan.Cols, filters)
+	if !ok {
+		return nil, opt.ColMap{}, false
+	}
+
+	md := c.mem.Metadata()
+
+	newRow := make(memo.ScalarListExpr, 0, scan.Cols.Len())
+	newTypes := make([]*types.T, 0, scan.Cols.Len())
+	newCols := make(opt.ColList, 0, scan.Cols.Len())
+	var colMap opt.ColMap
+
+	scan.Cols.ForEach(func(col opt.ColumnID) {
+		if colExpr, ok := colExprs[col]; ok {
+			colMeta := md.ColumnMeta(col)
+			newCol := md.AddColumn(colMeta.Alias, colMeta.Type)
+			newRow = append(newRow, colExpr)
+			newTypes = append(newTypes, colMeta.Type)
+			newCols = append(newCols, newCol)
+			colMap.Set(int(col), int(newCol))
+		} else {
+			return
+		}
+	})
+	if len(newRow) < scan.Cols.Len() {
+		// We couldn't constrain every scan column to a single value.
+		// TODO(michae2): If any stored computed columns are still unconstrained, we
+		// could add a projection that computes them based on other column values.
+		return nil, opt.ColMap{}, false
+	}
+
+	tupleTyp := types.MakeTuple(newTypes)
+	tuple := c.f.ConstructTuple(newRow, tupleTyp)
+
+	expr := c.f.ConstructValues(
+		memo.ScalarListExpr{tuple},
+		&memo.ValuesPrivate{
+			Cols: newCols,
+			ID:   c.mem.Metadata().NextUniqueID(),
+		},
+	)
+
+	if len(remainingFilters) != 0 {
+		remappedRemainingFilters := c.f.RemapCols(&remainingFilters, colMap).(*memo.FiltersExpr)
+		expr = c.f.ConstructSelect(expr, *remappedRemainingFilters)
+	}
+
+	return expr, colMap, true
+}
+
+// constrainColsToScalarExprs is a simplified version of
+// idxconstraint.ConstrainIndexPrefixCols. It uses the given filters to
+// constrain the given columns to scalar expressions (instead of Constraints as
+// ConstrainIndexPrefixCols does). If a filter does not constrain the column to
+// a single value, the filter will be added to remainingFilters and the column
+// will not be constrained.
+//
+// constrainColsToScalarExprs returns the mapping from constrained columns to
+// scalar expressions, the remaining filters, and a boolean indicating whether
+// all columns were constrained.
+func (c *CustomFuncs) constrainColsToScalarExprs(
+	cols opt.ColSet, requiredFilters memo.FiltersExpr,
+) (colExprs map[opt.ColumnID]opt.ScalarExpr, remainingFilters memo.FiltersExpr, ok bool) {
+	md := c.mem.Metadata()
+
+	// colExprs collects the scalar expression for each constrained column.
+	colExprs = make(map[opt.ColumnID]opt.ScalarExpr)
+
+	// useExprAsScalarConstraint adds the scalar expression to colExprs.
+	useExprAsScalarConstraint := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		// If this expression references other columns we're trying to constrain, it
+		// will have to be a remainingFilter.
+		var sharedProps props.Shared
+		memo.BuildSharedProps(e, &sharedProps, c.f.evalCtx)
+		if sharedProps.OuterCols.Intersects(cols) {
+			return false
+		}
+		if !cols.Contains(col) {
+			return false
+		}
+		// Only use the first constraining filter found. If there is another
+		// constraining filter, it will become part of remainingFilters.
+		if _, ok := colExprs[col]; ok {
+			return false
+		}
+		// In the general case, the = operator (SQL equivalence) does not imply
+		// identical values. We can only use the scalar expression as the column
+		// value when we can prove that equivalence is also the identity relation.
+		//
+		// This will be true when:
+		// - the column does not have composite type
+		// - the scalar type is identical to the column type OR the scalar is NULL
+		colType := md.ColumnMeta(col).Type
+		if colinfo.CanHaveCompositeKeyEncoding(colType) {
+			return false
+		}
+		if !c.HasColType(e, colType) && e.DataType().Family() != types.UnknownFamily {
+			return false
+		}
+		colExprs[col] = e
+		return true
+	}
+
+	// constrainColsInExpr walks a filter predicate, adding scalar expressions for
+	// any columns constrained to a single value by the predicate.
+	var constrainColsInExpr func(opt.ScalarExpr)
+	constrainColsInExpr = func(e opt.ScalarExpr) {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			// `WHERE col` will be true if col is a boolean-typed column that has the
+			// value True.
+			if md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
+				if useExprAsScalarConstraint(t.Col, memo.TrueSingleton) {
+					return
+				}
+			}
+		case *memo.NotExpr:
+			// `WHERE NOT col` will be true if col is a boolean-typed column that has
+			// the value False.
+			if v, ok := t.Input.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					if useExprAsScalarConstraint(v.Col, memo.FalseSingleton) {
+						return
+					}
+				}
+			}
+		case *memo.AndExpr:
+			constrainColsInExpr(t.Left)
+			constrainColsInExpr(t.Right)
+			return
+		case *memo.EqExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col = <expr>` will be true if col has the value <expr> and
+				// <expr> IS NOT NULL.
+				if useExprAsScalarConstraint(v.Col, t.Right) {
+					// Because NULL = NULL evaluates to NULL, rather than true, we must
+					// also guard against the scalar expression evaluating to NULL.
+					remainingFilters = append(remainingFilters, c.constructIsNotNull(v.Col))
+					return
+				}
+			}
+			// TODO(michae2): Handle tuple of variables on LHS.
+		case *memo.IsExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col IS NOT DISTINCT FROM <expr>` will be true if col has the
+				// value <expr>.
+				if useExprAsScalarConstraint(v.Col, t.Right) {
+					return
+				}
+			}
+			// TODO(michae2): Handle tuple of variables on LHS.
+		}
+		// TODO(michae2): Add case for *memo.InExpr.
+
+		// If we could not turn the filter into a scalar expression constraining a
+		// column, add it to remainingFilters.
+		remainingFilters = append(remainingFilters, c.f.ConstructFiltersItem(e))
+	}
+
+	for i := range requiredFilters {
+		constrainColsInExpr(requiredFilters[i].Condition)
+	}
+
+	return colExprs, remainingFilters, len(colExprs) == cols.Len()
+}
+
+func (c *CustomFuncs) constructIsNotNull(colID opt.ColumnID) memo.FiltersItem {
+	return c.f.ConstructFiltersItem(
+		c.f.ConstructIsNot(
+			c.f.ConstructVariable(colID), memo.NullSingleton,
+		),
+	)
+}
+
+// UseSwapMutation builds a copy of the given MutationPrivate with Swap = true.
+func (c *CustomFuncs) UseSwapMutation(
+	private *memo.MutationPrivate, colMap opt.ColMap,
+) *memo.MutationPrivate {
+	swapPrivate := *private
+	swapPrivate.FetchCols = swapPrivate.FetchCols.CopyAndMaybeRemapColumns(colMap)
+	swapPrivate.UpdateCols = swapPrivate.UpdateCols.CopyAndMaybeRemapColumns(colMap)
+	swapPrivate.PartialIndexPutCols = swapPrivate.PartialIndexPutCols.CopyAndMaybeRemapColumns(colMap)
+	swapPrivate.PartialIndexDelCols = swapPrivate.PartialIndexDelCols.CopyAndMaybeRemapColumns(colMap)
+	swapPrivate.ReturnCols = swapPrivate.ReturnCols.CopyAndMaybeRemapColumns(colMap)
+	// If any of the PassthroughCols require remapping, then we will probably need
+	// a remapping Project on top of the mutation to map back to the original
+	// column ID. For now we disallow mutations with passthrough columns in
+	// CanUseSwapMutation to avoid this problem.
+	swapPrivate.Swap = true
+	return &swapPrivate
 }
