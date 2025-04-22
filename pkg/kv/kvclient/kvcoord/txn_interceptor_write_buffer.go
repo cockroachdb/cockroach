@@ -1477,6 +1477,11 @@ type respIter struct {
 	// BATCH_RESPONSE are supported right now.
 	scanFormat kvpb.ScanFormat
 
+	// resumeSpan, if set, is the ResumeSpan of the response. When non-nil, it
+	// means that the response is being paginated, so we need to overlap the
+	// buffer only with the part of the original span that was actually scanned.
+	resumeSpan *roachpb.Span
+
 	// rows is the Rows field of the corresponding response.
 	//
 	// Only set with KEY_VALUES scan format.
@@ -1514,6 +1519,7 @@ func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
 	return &respIter{
 		scanReq:        req,
 		scanFormat:     req.ScanFormat,
+		resumeSpan:     resp.ResumeSpan,
 		rows:           resp.Rows,
 		batchResponses: resp.BatchResponses,
 	}
@@ -1530,6 +1536,7 @@ func newReverseScanRespIter(
 	return &respIter{
 		reverseScanReq: req,
 		scanFormat:     req.ScanFormat,
+		resumeSpan:     resp.ResumeSpan,
 		rows:           resp.Rows,
 		batchResponses: resp.BatchResponses,
 	}
@@ -1583,6 +1590,14 @@ func (s *respIter) startKey() roachpb.Key {
 	if s.scanReq != nil {
 		return s.scanReq.Key
 	}
+	// For ReverseScans, the EndKey of the ResumeSpan is updated to indicate the
+	// start key for the "next" page, which is exactly the last key that was
+	// reverse-scanned for the current response.
+	// TODO(yuzefovich): we should have some unit tests that exercise the
+	// ResumeSpan case.
+	if s.resumeSpan != nil {
+		return s.resumeSpan.EndKey
+	}
 	return s.reverseScanReq.Key
 }
 
@@ -1590,6 +1605,12 @@ func (s *respIter) startKey() roachpb.Key {
 // was created.
 func (s *respIter) endKey() roachpb.Key {
 	if s.scanReq != nil {
+		// For Scans, the Key of the ResumeSpan is updated to indicate the start
+		// key for the "next" page, which is exactly the last key that was
+		// scanned for the current response.
+		if s.resumeSpan != nil {
+			return s.resumeSpan.Key
+		}
 		return s.scanReq.EndKey
 	}
 	return s.reverseScanReq.EndKey
