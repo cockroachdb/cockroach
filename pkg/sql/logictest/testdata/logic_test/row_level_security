@@ -4288,4 +4288,114 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                            ) WITH (schema_locked = true);
                            CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false)
 
+subtest bug_fix_policy_respects_inheritance_#144780
+
+statement ok
+CREATE ROLE parent_role
+
+statement ok
+CREATE ROLE child_role
+
+statement ok
+GRANT parent_role TO child_role
+
+statement ok
+CREATE TABLE employees (id SERIAL PRIMARY KEY, name TEXT, department TEXT)
+
+statement ok
+INSERT INTO employees VALUES (1, 'Alice', 'Engineering')
+
+statement ok
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY parent_policy_select ON employees FOR SELECT TO parent_role USING (true)
+
+statement ok
+CREATE POLICY parent_policy_insert ON employees FOR INSERT TO parent_role WITH CHECK (department IN ('Engineering', 'Sales'))
+
+statement ok
+CREATE POLICY parent_policy_update ON employees FOR UPDATE TO parent_role USING (false)
+
+statement ok
+GRANT SELECT, INSERT, UPDATE ON employees TO parent_role
+
+# Test with role inheritance - child_role should inherit parent_role's permissions.
+statement ok
+SET ROLE child_role
+
+query ITT
+SELECT * FROM employees
+----
+1  Alice  Engineering
+
+# Test INSERT with role inheritance - should succeed for allowed department.
+statement ok
+INSERT INTO employees (id, name, department) VALUES (2, 'Bob', 'Engineering')
+
+# Test INSERT with role inheritance - should succeed for another allowed department.
+statement ok
+INSERT INTO employees (id, name, department) VALUES (3, 'Carol', 'Sales')
+
+# Test INSERT with role inheritance - should fail for disallowed department.
+statement error pq: new row violates row-level security policy for table "employees"
+INSERT INTO employees (id, name, department) VALUES (4, 'Dave', 'Finance')
+
+statement ok
+UPDATE employees SET name = 'Robert' WHERE name = 'Bob'
+
+query ITT
+SELECT * FROM employees ORDER BY id
+----
+1  Alice  Engineering
+2  Bob    Engineering
+3  Carol  Sales
+
+statement ok
+RESET ROLE
+
+# Now revoke the parent role and ensure permissions don't apply anymore.
+statement ok
+REVOKE parent_role FROM child_role
+
+statement ok
+GRANT ALL ON employees TO child_role
+
+statement ok
+SET ROLE child_role
+
+# Should see no rows because the policy doesn't apply anymore.
+query ITT
+SELECT * FROM employees
+----
+
+# All write operations should fail now.
+statement error pq: new row violates row-level security policy for table "employees"
+INSERT INTO employees (id, name, department) VALUES (3, 'Eve', 'Engineering')
+
+# Test UPDATE with role inheritance - should succeed, 
+# but the update will not go as the default with ENABLED ROW LEVEL SECURITY.
+statement ok
+UPDATE employees SET name = 'Alice 2.0' WHERE name = 'Alice'
+
+statement ok
+RESET ROLE
+
+# Can see that no change was made by the update.
+query ITT
+SELECT * FROM employees ORDER BY id
+----
+1  Alice  Engineering
+2  Bob    Engineering
+3  Carol  Sales
+
+statement ok
+DROP TABLE employees CASCADE
+
+statement ok
+DROP ROLE child_role
+
+statement ok
+DROP ROLE parent_role
+
 subtest end
