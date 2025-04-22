@@ -321,6 +321,10 @@ const (
 	UpdateTableMetadataCacheJobID = jobspb.JobID(105)
 
 	SqlActivityFlushJobID = jobspb.JobID(106)
+
+	// HotRangesLoggerJobID A static job ID which is used for the
+	// hot ranges logger job.
+	HotRangesLoggerJobID = jobspb.JobID(107)
 )
 
 // MakeJobID generates a new job ID.

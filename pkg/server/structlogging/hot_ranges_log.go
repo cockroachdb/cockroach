@@ -63,7 +63,7 @@ var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
 // range in the keyspace, more information found where the cluster
 // setting SplitByLoadCPUThreshold is defined.
 var TelemetryHotRangesStatsCPUThreshold = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.SystemVisible,
 	"server.telemetry.hot_ranges_stats.cpu_threshold",
 	"the cpu time over which the system will automatically begin logging hot ranges",
 	time.Second/4,
@@ -127,7 +127,8 @@ func (s *hotRangesLoggingScheduler) startJob() error {
 	jobs.RegisterConstructor(
 		jobspb.TypeHotRangesLogger,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-			return &hotRangesLoggingScheduler{job: job}
+			s.job = job
+			return s
 		},
 		jobs.DisablesTenantCostControl,
 	)
@@ -171,6 +172,7 @@ func (s *hotRangesLoggingScheduler) maybeLogHotRanges(ctx context.Context, stopp
 //		   -- It's been greater than the log interval since we last logged.
 //		   -- One of the replicas see exceeds our cpu threshold.
 func (s *hotRangesLoggingScheduler) shouldLog(ctx context.Context) bool {
+
 	enabled := TelemetryHotRangesStatsEnabled.Get(&s.st.SV)
 	if !enabled {
 		return false
