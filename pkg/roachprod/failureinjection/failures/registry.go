@@ -18,6 +18,7 @@ import (
 // Failer to describe how it should interact with the cluster.
 type ClusterOptions struct {
 	ConnectionInfo
+	replicationFactor int
 }
 
 type ConnectionInfo struct {

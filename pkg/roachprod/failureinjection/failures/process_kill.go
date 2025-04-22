@@ -123,7 +123,5 @@ func (f *ProcessKillFailure) WaitForFailureToRecover(
 	nodes := args.(ProcessKillArgs).Nodes
 	l.Printf("Waiting for cockroach process to recover on nodes: %v", nodes)
 
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return f.WaitForSQLReady(ctx, l, n, time.Minute)
-	})
+	return f.WaitForRestartedNodesToStabilize(ctx, l, nodes, 20*time.Minute)
 }
