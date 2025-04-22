@@ -2399,7 +2399,28 @@ func (r *raft) handleVoteResp(m pb.Message, myVoteRespType pb.MessageType) {
 	// Avoid scanning the whole leader log in findConflictByTerm if the voter
 	// did not attach a hint for any reason.
 	if myVoteRespType == pb.MsgVoteResp && !m.Reject && voterLast.term > 0 && voterLast.index > 0 {
-		index, term := r.raftLog.findConflictByTerm(voterLast.index, voterLast.term)
+		index := uint64(0)
+		match := false
+		t := uint64(0)
+		matchID := entryID{term: 0, index: 0}
+		// If termCache is not transmitted, means we can only use
+		// the single hint entryID.
+		// Invariant:
+		// 		m.RejectHint > TcEntryIDs[0].Index if len(m.TcEntryIDs) != 0
+		if len(m.TcEntryIDs) == 0 {
+			index, t = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+			match = t == m.LogTerm
+		} else {
+			if matchID, match = r.raftLog.findMatch(convertEntryIDs(m.TcEntryIDs),
+				entryID{m.LogTerm, m.RejectHint}); match {
+				index = matchID.index
+			} else {
+				index, t = r.raftLog.findConflictByTerm(m.TcEntryIDs[0].Index, m.TcEntryIDs[0].Term)
+				match = t == m.TcEntryIDs[0].Term
+				index = min(index, m.TcEntryIDs[0].Index-1)
+			}
+		}
+
 		matchGuess = tracker.MatchGuess{
 			// NB: index <= voterLast.index.
 			// Also, raftLog.term(index) <= voterLast.term, or the entry at
@@ -2415,7 +2436,7 @@ func (r *raft) handleVoteResp(m pb.Message, myVoteRespType pb.MessageType) {
 			//
 			// The returned term can be 0 if the entry at the index is missing, in
 			// which case we don't consider it a match.
-			Match: term == voterLast.term,
+			Match: match,
 		}
 	}
 
