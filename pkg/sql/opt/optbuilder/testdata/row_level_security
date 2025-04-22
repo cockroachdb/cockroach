@@ -204,11 +204,11 @@ project
  └── select
       ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       ├── select
-      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       │    ├── scan t1
       │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       │    └── filters
-      │         └── false
+      │         └── c1:1 > 0
       └── filters
            └── (c1:1 >= 0) AND (c1:1 <= 9)
 
