@@ -146,7 +146,7 @@ func runTransitionStep(
 func Test_FailerLifecycle(t *testing.T) {
 	fr := NewFailureRegistry()
 	fr.Register()
-	f, err := fr.GetFailer("", NoopFailureName, nilLogger(), false /* secure */)
+	f, err := fr.GetFailer("", NoopFailureName, nilLogger(), ConnectionInfo{})
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()

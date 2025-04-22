@@ -291,5 +291,10 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 func GetFailer(
 	fr *failures.FailureRegistry, c cluster.Cluster, failureModeName string, l *logger.Logger,
 ) (*failures.Failer, error) {
-	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, c.IsSecure())
+	connectionInfo := failures.ConnectionInfo{
+		Secure:         c.IsSecure(),
+		LocalCertsPath: c.LocalCertsDir(),
+	}
+
+	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, connectionInfo)
 }
