@@ -51,9 +51,7 @@ func MakeResetVMFailure(
 		return nil, err
 	}
 
-	return &ProcessKillFailure{
-		GenericFailure: *genericFailure,
-	}, nil
+	return &resetVMFailure{GenericFailure: *genericFailure}, nil
 }
 
 func (m *processMap) add(virtualClusterName string, instance int, node install.Node) {
@@ -188,7 +186,5 @@ func (r *resetVMFailure) WaitForFailureToRecover(
 	l.Printf("Waiting for nodes to become available: %v", nodes)
 
 	// Some providers take a while to start VMs (>10 minutes).
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLReady(ctx, l, n, 15*time.Minute)
-	})
+	return r.WaitForRestartedNodesToStabilize(ctx, l, nodes, 30*time.Minute)
 }
