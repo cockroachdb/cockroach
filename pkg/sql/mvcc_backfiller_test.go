@@ -166,7 +166,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue, 2, func() {
-		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
+		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_id != $1)", jobs.HotRangesLoggerJobID); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -616,7 +616,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 	addIndexSchemaChange(t, sqlDB, kvDB, codec, maxValue+additionalRowsForMerge, 2, func() {
-		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
+		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_id != $1)", jobs.HotRangesLoggerJobID); err != nil {
 			t.Fatal(err)
 		}
 	})
