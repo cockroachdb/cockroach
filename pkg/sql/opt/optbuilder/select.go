@@ -753,7 +753,6 @@ func (b *Builder) buildScan(
 	// Add the partial indexes after constructing the scan so we can use the
 	// logical properties of the scan to fully normalize the index predicates.
 	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
-	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
 
 	if !virtualColIDs.Empty() {
 		// Project the expressions for the virtual columns (and pass through all
@@ -770,6 +769,10 @@ func (b *Builder) buildScan(
 		})
 		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
 	}
+
+	// Apply any filters required to enforce RLS policies. This must be done
+	// after projecting out virtual columns, in case any policies reference them.
+	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
 
 	if b.trackSchemaDeps {
 		dep := opt.SchemaDep{DataSource: tab}

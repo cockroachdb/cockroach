@@ -8,9 +8,9 @@ package rel
 import (
 	"reflect"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 // Database is a data structure for indexing entities.
@@ -148,7 +148,7 @@ func NewDatabase(sc *Schema, indexes ...Index) (*Database, error) {
 		}
 		t.indexes[i] = index{
 			indexSpec: spec,
-			tree:      btree.New(32),
+			tree:      btree.NewG[*valuesItem](32, (*valuesItem).less),
 		}
 	}
 	return t, nil
@@ -275,7 +275,7 @@ func (t *Database) Insert(v interface{}) error {
 
 type index struct {
 	indexSpec
-	tree *btree.BTree
+	tree *btree.BTreeG[*valuesItem]
 }
 
 type indexSpec struct {
@@ -302,8 +302,7 @@ func (t *Database) iterate(where values, hasAttrs ordinalSet, f entityIterator) 
 	}
 	from, to := getValuesItems(&idx.indexSpec, where)
 	defer putValuesItems(from, to)
-	idx.tree.AscendRange(from, to, func(i btree.Item) bool {
-		cv := i.(*valuesItem)
+	idx.tree.AscendRange(from, to, func(cv *valuesItem) bool {
 		// We want to skip items which do not have values set for
 		// all members of the where clause.
 		if where.attrs.without(cv.attrs) != 0 {
