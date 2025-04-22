@@ -174,8 +174,8 @@ stabilize 2
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:1/15 Rejected (Hint: 11) TermCache: [t1/11] Commit:11
   DEBUG 2 received MsgAppResp(rejected, hint: (index 11, term 1)) from 3 for index 15
-  DEBUG 2 decreased progress of 3 to [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
-  DEBUG 2 [firstindex: 16, commit: 16] sent snapshot[index: 16, term: 2] to 3 [StateProbe match=0 next=12 sentCommit=11 matchCommit=11]
+  DEBUG 2 decreased progress of 3 to [StateProbe match=0 next=11 sentCommit=10 matchCommit=11]
+  DEBUG 2 [firstindex: 16, commit: 16] sent snapshot[index: 16, term: 2] to 3 [StateProbe match=0 next=11 sentCommit=10 matchCommit=11]
   DEBUG 2 paused sending replication messages to 3 [StateSnapshot match=0 next=17 sentCommit=16 matchCommit=11 paused pendingSnap=16]
   3->2 MsgAppResp Term:2 Log:0/15 Commit:15
   DEBUG 2 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=15 next=17 sentCommit=16 matchCommit=15 paused pendingSnap=16]

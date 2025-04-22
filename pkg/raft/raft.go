@@ -2017,7 +2017,22 @@ func stepLeader(r *raft, m pb.Message) error {
 				//    7, the rejection points it at the end of the follower's log
 				//    which is at a higher log term than the actually committed
 				//    log.
-				nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				//
+				// If termCache is not transmitted, means we can only use
+				// the single hint entryID.
+				// Invariant:
+				// 		m.RejectHint > TcEntryIDs[0].Index if len(m.TcEntryIDs) != 0
+				if len(m.TcEntryIDs) == 0 {
+					nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				} else {
+					if matchID, found := r.raftLog.findMatch(convertEntryIDs(m.TcEntryIDs),
+						entryID{m.LogTerm, m.RejectHint}); found {
+						nextProbeIdx = matchID.index
+					} else {
+						nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.TcEntryIDs[0].Index, m.TcEntryIDs[0].Term)
+						nextProbeIdx = min(nextProbeIdx, m.TcEntryIDs[0].Index-1)
+					}
+				}
 			}
 			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
