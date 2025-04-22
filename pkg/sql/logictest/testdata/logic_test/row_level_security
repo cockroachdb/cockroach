@@ -3179,4 +3179,50 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                            ) WITH (schema_locked = true);
                            CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false)
 
+subtest bug_fix_policy_respects_inheritance_#144780
+
+statement ok
+CREATE ROLE parent_role
+
+statement ok
+CREATE ROLE child_role
+
+statement ok
+GRANT parent_role TO child_role
+
+statement ok
+CREATE TABLE employees (id SERIAL PRIMARY KEY, name TEXT)
+
+statement ok
+INSERT INTO employees VALUES (1, 'Alice')
+
+statement ok
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY admin_policy ON employees FOR ALL TO parent_role USING (true)
+
+statement ok
+GRANT SELECT ON employees TO parent_role
+
+statement ok
+SET ROLE child_role
+
+query IT
+SELECT * FROM employees
+----
+1  Alice
+
+statement ok
+RESET ROLE
+
+statement ok
+DROP TABLE employees CASCADE
+
+statement ok
+DROP ROLE child_role
+
+statement ok
+DROP ROLE parent_role
+
 subtest end

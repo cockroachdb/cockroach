@@ -111,7 +111,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(policy cat.Policy, restrictive bool) {
-		if !policy.AppliesToRole(b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
+		if !policy.AppliesToRole(b.ctx, b.catalog, b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
 			return
 		}
 		strExpr := policy.UsingExpr
@@ -278,10 +278,11 @@ func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
 	var sb strings.Builder
 	var policiesUsed opt.PolicyIDSet
 	policies := r.tabMeta.Table.Policies()
+	ctx := context.Background()
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(p cat.Policy, restrictive bool) {
-		if !p.AppliesToRole(r.user) || !policyAppliesToCommandScope(p, cmdScope) {
+		if !p.AppliesToRole(ctx, r.oc, r.user) || !policyAppliesToCommandScope(p, cmdScope) {
 			return
 		}
 		policiesUsed.Add(p.ID)
