@@ -293,20 +293,19 @@ func (tx *Txn) SearchPartitions(
 // getFullVectorsFromPK fills in refs that are specified by primary key. Refs
 // that specify a partition ID are ignored. The values are returned in-line in
 // the refs slice.
-func (tx *Txn) getFullVectorsFromPK(
-	ctx context.Context, refs []cspann.VectorWithKey, numPKLookups int,
-) (err error) {
-	if cap(tx.tmpSpans) >= numPKLookups {
+func (tx *Txn) getFullVectorsFromPK(ctx context.Context, refs []cspann.VectorWithKey) (err error) {
+	if cap(tx.tmpSpans) >= len(refs) {
 		tx.tmpSpans = tx.tmpSpans[:0]
 		tx.tmpSpanIDs = tx.tmpSpanIDs[:0]
 	} else {
-		tx.tmpSpans = make([]roachpb.Span, 0, numPKLookups)
-		tx.tmpSpanIDs = make([]int, 0, numPKLookups)
+		tx.tmpSpans = make([]roachpb.Span, 0, len(refs))
+		tx.tmpSpanIDs = make([]int, 0, len(refs))
 	}
 
 	for refIdx, ref := range refs {
 		if ref.Key.PartitionKey != cspann.InvalidKey {
-			continue
+			return errors.AssertionFailedf(
+				"cannot mix partition key and primary key requests to GetFullVectors")
 		}
 
 		key := make(roachpb.Key, len(tx.store.pkPrefix)+len(ref.Key.KeyBytes))
@@ -364,13 +363,13 @@ func (tx *Txn) getFullVectorsFromPK(
 // specified by partition ID. Primary key references are ignored.
 func (tx *Txn) getFullVectorsFromPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
-) (numPKLookups int, err error) {
+) error {
 	var b *kv.Batch
 
 	for _, ref := range refs {
 		if ref.Key.PartitionKey == cspann.InvalidKey {
-			numPKLookups++
-			continue
+			return errors.AssertionFailedf(
+				"cannot mix partition key and primary key requests to GetFullVectors")
 		}
 		metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, ref.Key.PartitionKey)
 		if b == nil {
@@ -379,20 +378,12 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 		b.Get(metadataKey)
 	}
 
-	if numPKLookups == len(refs) {
-		// All of the lookups are for leaf vectors, so don't fetch any centroids.
-		return numPKLookups, nil
-	}
 	if err := tx.kv.Run(ctx, b); err != nil {
-		return 0, err
+		return errors.Wrapf(err, "fetching partition metadata for GetFullVectors")
 	}
 
 	idx := 0
 	for _, result := range b.Results {
-		// Skip past primary key references.
-		for ; refs[idx].Key.PartitionKey == cspann.InvalidKey; idx++ {
-		}
-
 		if result.Rows[0].ValueBytes() == nil {
 			// If this is the root partition, then the metadata row is missing;
 			// it is only created when the first split of the root happens.
@@ -405,27 +396,31 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 			// Get the centroid from the partition metadata.
 			metadata, err := vecencoding.DecodeMetadataValue(result.Rows[0].ValueBytes())
 			if err != nil {
-				return 0, err
+				return err
 			}
 			refs[idx].Vector = metadata.Centroid
 		}
 		idx++
 	}
-	return numPKLookups, nil
+	return nil
 }
 
 // GetFullVectors implements the cspann.Txn interface.
 func (tx *Txn) GetFullVectors(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
 ) error {
-	numPKLookups, err := tx.getFullVectorsFromPartitionMetadata(ctx, treeKey, refs)
-	if err != nil {
-		return err
+	if len(refs) == 0 {
+		return nil
 	}
-	if numPKLookups > 0 {
-		err = tx.getFullVectorsFromPK(ctx, refs, numPKLookups)
+
+	// All vectors must be at the same level of the tree.
+	if refs[0].Key.PartitionKey != cspann.InvalidKey {
+		// Get partition centroids.
+		return tx.getFullVectorsFromPartitionMetadata(ctx, treeKey, refs)
 	}
-	return err
+
+	// Get vectors from primary index.
+	return tx.getFullVectorsFromPK(ctx, refs)
 }
 
 // createRootPartition uses the KV CPut operation to create metadata for the
@@ -437,11 +432,7 @@ func (tx *Txn) createRootPartition(
 	ctx context.Context, metadataKey roachpb.Key,
 ) (cspann.PartitionMetadata, error) {
 	b := tx.kv.NewBatch()
-	metadata := cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     tx.store.emptyVec,
-		StateDetails: cspann.MakeReadyDetails(),
-	}
+	metadata := cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, tx.store.emptyVec)
 	encoded := vecencoding.EncodeMetadataValue(metadata)
 
 	// Use CPut to detect the case where another transaction is racing to create

@@ -778,10 +778,16 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 
 	startOpts, settings := makeCDCBenchOptions(c)
 
-	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
+	// With a target_duration of 10s, we won't see slow span logs from changefeeds until we are > 100s
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+
+	// Randomly set a quantization interval since metamorphic settings
+	// don't extend to roachtests.
+	quantization := fmt.Sprintf("%ds", rand.Intn(30))
+	settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
+	t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
 
 	settings.Env = append(settings.Env, envVars...)
 

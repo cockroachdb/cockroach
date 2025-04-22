@@ -2,7 +2,7 @@
 # Step through typical split of a non-root partition.
 # ----------------------------------------------------------------------
 
-load-index min-partition-size=1 max-partition-size=3 beam-size=2 new-fixups
+load-index min-partition-size=1 max-partition-size=3 beam-size=2
 • 1 (6.8, 4.2)
 │
 └───• 2 (6.8, 4.2)
@@ -121,18 +121,44 @@ force-split partition-key=2 parent-partition-key=1 steps=1
     ├───• vec3 (4, 3)
     └───• vec1 (1, 2)
 
-# Update left sub-partition #3 to Ready state.
+# Clear all vectors from splitting partition #2.
 force-split partition-key=2 parent-partition-key=1 steps=1
 ----
 • 1 (6.8, 4.2)
 │
 ├───• 2 (6.8, 4.2) [DrainingForSplit:3,4]
+├───• 3 (10.5, 2.5) [Updating:2]
 │   │
-│   ├───• vec1 (1, 2)
-│   ├───• vec2 (7, 4)
-│   ├───• vec3 (4, 3)
-│   └───• vec5 (14, 1)
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
 │
+└───• 4 (2.5, 2.5) [Updating:2]
+    │
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
+
+# Update splitting partition #2 to DeletingForSplit state.
+force-split partition-key=2 parent-partition-key=1 steps=1
+----
+• 1 (6.8, 4.2)
+│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
+├───• 3 (10.5, 2.5) [Updating:2]
+│   │
+│   ├───• vec5 (14, 1)
+│   └───• vec2 (7, 4)
+│
+└───• 4 (2.5, 2.5) [Updating:2]
+    │
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
+
+# Update left sub-partition #3 to Ready state.
+force-split partition-key=2 parent-partition-key=1 steps=1
+----
+• 1 (6.8, 4.2)
+│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 3 (10.5, 2.5)
 │   │
 │   ├───• vec5 (14, 1)
@@ -148,13 +174,7 @@ force-split partition-key=2 parent-partition-key=1 steps=1
 ----
 • 1 (6.8, 4.2)
 │
-├───• 2 (6.8, 4.2) [DrainingForSplit:3,4]
-│   │
-│   ├───• vec1 (1, 2)
-│   ├───• vec2 (7, 4)
-│   ├───• vec3 (4, 3)
-│   └───• vec5 (14, 1)
-│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 3 (10.5, 2.5)
 │   │
 │   ├───• vec5 (14, 1)
@@ -165,7 +185,7 @@ force-split partition-key=2 parent-partition-key=1 steps=1
     ├───• vec3 (4, 3)
     └───• vec1 (1, 2)
 
-# Remove splitting partition #2 from parent and delete it.
+# Remove splitting partition #2 from its parent.
 force-split partition-key=2 parent-partition-key=1 steps=1
 ----
 • 1 (6.8, 4.2)
@@ -180,14 +200,15 @@ force-split partition-key=2 parent-partition-key=1 steps=1
     ├───• vec5 (14, 1)
     └───• vec2 (7, 4)
 
+# The metadata record for partition #2 should be left behind as a tombstone.
 format-tree root=2
 ----
-• 2 (MISSING)
+• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 
 # ----------------------------------------------------------------------
 # Interleaved parent and child splits.
 # ----------------------------------------------------------------------
-load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
+load-index min-partition-size=1 max-partition-size=2 beam-size=2
 • 1 (2.4583, 4.6667)
 │
 └───• 2 (3.75, 6.9167)
@@ -286,7 +307,7 @@ force-split partition-key=2 parent-partition-key=1 steps=5
 
 # Attempt to continue split of child. This should abort, since the parent is
 # still not in the Ready state.
-force-split partition-key=4 parent-partition-key=2 steps=1
+force-split partition-key=4 parent-partition-key=2
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -307,7 +328,7 @@ force-split partition-key=4 parent-partition-key=2 steps=1
 └───• 8 (5, 2) [Updating:2]
 
 # Finish split of parent.
-force-split partition-key=2 parent-partition-key=1 steps=7
+force-split partition-key=2 parent-partition-key=1
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -329,7 +350,7 @@ force-split partition-key=2 parent-partition-key=1 steps=7
 # Now split of child #4 should be able to continue with new parent #7. Notice
 # that partition #7's centroid is not exact, since it was computed while child
 # #4's split was in progress.
-force-split partition-key=4 parent-partition-key=7 steps=7
+force-split partition-key=4 parent-partition-key=7 steps=5
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -341,7 +362,7 @@ force-split partition-key=4 parent-partition-key=7 steps=7
 │
 └───• 7 (5.5, 6.25)
     │
-    ├───• 5 (6, 6.5)
+    ├───• 5 (6, 6.5) [Updating:4]
     │   │
     │   ├───• vec4 (6, 5)
     │   └───• vec3 (6, 8)
@@ -352,12 +373,12 @@ force-split partition-key=4 parent-partition-key=7 steps=7
     │   ├───• vec3 (6, 8)
     │   └───• vec4 (6, 5)
     │
-    └───• 6 (3, 5)
+    └───• 6 (3, 5) [Updating:4]
         │
         └───• vec2 (3, 5)
 
 # Start new split of parent #7, moving it to the DrainingForSplit state.
-force-split partition-key=7 parent-partition-key=1 steps=10
+force-split partition-key=7 parent-partition-key=1 steps=8
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -369,7 +390,7 @@ force-split partition-key=7 parent-partition-key=1 steps=10
 │
 ├───• 7 (5.5, 6.25) [DrainingForSplit:9,10]
 │   │
-│   ├───• 5 (6, 6.5)
+│   ├───• 5 (6, 6.5) [Updating:4]
 │   │   │
 │   │   ├───• vec4 (6, 5)
 │   │   └───• vec3 (6, 8)
@@ -380,13 +401,13 @@ force-split partition-key=7 parent-partition-key=1 steps=10
 │   │   ├───• vec3 (6, 8)
 │   │   └───• vec4 (6, 5)
 │   │
-│   └───• 6 (3, 5)
+│   └───• 6 (3, 5) [Updating:4]
 │       │
 │       └───• vec2 (3, 5)
 │
-├───• 9 (5.5, 6.25)
+├───• 9 (5.5, 6.25) [Updating:7]
 │   │
-│   ├───• 5 (6, 6.5)
+│   ├───• 5 (6, 6.5) [Updating:4]
 │   │   │
 │   │   ├───• vec4 (6, 5)
 │   │   └───• vec3 (6, 8)
@@ -397,15 +418,16 @@ force-split partition-key=7 parent-partition-key=1 steps=10
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
-└───• 10 (3, 5)
+└───• 10 (3, 5) [Updating:7]
     │
-    └───• 6 (3, 5)
+    └───• 6 (3, 5) [Updating:4]
         │
         └───• vec2 (3, 5)
 
-# Continue split of child #4. This should be a no-op, since its parent is in the
+# Continue split of child #4. This should only progress to DeletingForSplit,
+# since it cannot be removed from its parent #7, which is still in the
 # DrainingForSplit state.
-force-split partition-key=4 parent-partition-key=7 steps=2
+force-split partition-key=4 parent-partition-key=7
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -422,37 +444,27 @@ force-split partition-key=4 parent-partition-key=7 steps=2
 │   │   ├───• vec4 (6, 5)
 │   │   └───• vec3 (6, 8)
 │   │
-│   ├───• 4 (5, 6) [DrainingForSplit:5,6]
-│   │   │
-│   │   ├───• vec2 (3, 5)
-│   │   ├───• vec3 (6, 8)
-│   │   └───• vec4 (6, 5)
-│   │
+│   ├───• 4 (5, 6) [DeletingForSplitState:5,6]
 │   └───• 6 (3, 5)
 │       │
 │       └───• vec2 (3, 5)
 │
-├───• 9 (5.5, 6.25)
+├───• 9 (5.5, 6.25) [Updating:7]
 │   │
 │   ├───• 5 (6, 6.5)
 │   │   │
 │   │   ├───• vec4 (6, 5)
 │   │   └───• vec3 (6, 8)
 │   │
-│   └───• 4 (5, 6) [DrainingForSplit:5,6]
-│       │
-│       ├───• vec2 (3, 5)
-│       ├───• vec3 (6, 8)
-│       └───• vec4 (6, 5)
-│
-└───• 10 (3, 5)
+│   └───• 4 (5, 6) [DeletingForSplitState:5,6]
+└───• 10 (3, 5) [Updating:7]
     │
     └───• 6 (3, 5)
         │
         └───• vec2 (3, 5)
 
 # Finish the split of parent #7.
-force-split partition-key=7 parent-partition-key=1 steps=2
+force-split partition-key=7 parent-partition-key=1
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -475,14 +487,10 @@ force-split partition-key=7 parent-partition-key=1 steps=2
     │   ├───• vec4 (6, 5)
     │   └───• vec3 (6, 8)
     │
-    └───• 4 (5, 6) [DrainingForSplit:5,6]
-        │
-        ├───• vec2 (3, 5)
-        ├───• vec3 (6, 8)
-        └───• vec4 (6, 5)
+    └───• 4 (5, 6) [DeletingForSplitState:5,6]
 
 # Finally, the split of #4 should be able to complete with new parent #9.
-force-split partition-key=4 parent-partition-key=9 steps=2
+force-split partition-key=4 parent-partition-key=9
 ----
 • 1 (2.4583, 4.6667)
 │
@@ -505,11 +513,16 @@ force-split partition-key=4 parent-partition-key=9 steps=2
         ├───• vec4 (6, 5)
         └───• vec3 (6, 8)
 
+# Tombstone left behind for partition #4.
+format-tree root=4
+----
+• 4 (5, 6) [DeletingForSplitState:5,6]
+
 # ----------------------------------------------------------------------
 # Try to split a non-leaf partition with only 1 vector.
 # ----------------------------------------------------------------------
 
-load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
+load-index min-partition-size=1 max-partition-size=2 beam-size=2
 • 1 (3, 6)
 │
 └───• 2 (3, 6)
@@ -523,7 +536,7 @@ load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
 Loaded 3 vectors.
 
 # Step to point where target sub-partition #5 is empty.
-force-split partition-key=2 parent-partition-key=1 steps=8
+force-split partition-key=2 parent-partition-key=1 steps=7
 ----
 • 1 (3, 6)
 │
@@ -544,21 +557,15 @@ force-split partition-key=2 parent-partition-key=1 steps=8
 │       └───• vec4 (6, 5)
 │
 └───• 5 (5, 6) [Updating:2]
-    │
-    └───• 3 (5, 6)
-        │
-        ├───• vec2 (3, 5)
-        ├───• vec3 (6, 8)
-        └───• vec4 (6, 5)
 
 # Next steps should duplicate the last remaining vector in sub-partition #5
-# rather than leave it empty. An empty non-leaf partition is a violation of a
-# key balanced K-means tree constraint.
+# rather than leave it empty.
 force-split partition-key=2 parent-partition-key=1 steps=2
 ----
 • 1 (3, 6)
 │
 ├───• 2 (3, 6) [DrainingForSplit:4,5]
+├───• 4 (5, 6) [Updating:2]
 │   │
 │   └───• 3 (5, 6)
 │       │
@@ -566,15 +573,7 @@ force-split partition-key=2 parent-partition-key=1 steps=2
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
-├───• 4 (5, 6)
-│   │
-│   └───• 3 (5, 6)
-│       │
-│       ├───• vec2 (3, 5)
-│       ├───• vec3 (6, 8)
-│       └───• vec4 (6, 5)
-│
-└───• 5 (5, 6)
+└───• 5 (5, 6) [Updating:2]
     │
     └───• 3 (5, 6)
         │
@@ -584,11 +583,12 @@ force-split partition-key=2 parent-partition-key=1 steps=2
 
 # Finish split. Partition #3 should be referenced by both partition #4 and
 # partition #5.
-force-split partition-key=2 parent-partition-key=1 steps=2
+force-split partition-key=2 parent-partition-key=1
 ----
 • 1 (3, 6)
 │
-├───• 5 (5, 6)
+├───• 2 (3, 6) [DrainingForSplit:4,5]
+├───• 4 (5, 6) [Updating:2]
 │   │
 │   └───• 3 (5, 6)
 │       │
@@ -596,7 +596,7 @@ force-split partition-key=2 parent-partition-key=1 steps=2
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
-└───• 4 (5, 6)
+└───• 5 (5, 6) [Updating:2]
     │
     └───• 3 (5, 6)
         │
@@ -608,7 +608,7 @@ force-split partition-key=2 parent-partition-key=1 steps=2
 # Multiple attempts to find an insert partition.
 # ----------------------------------------------------------------------
 
-load-index min-partition-size=1 max-partition-size=3 beam-size=3 new-fixups
+load-index min-partition-size=1 max-partition-size=3 beam-size=3
 • 1 (2, -4)
 │
 ├───• 2 (2, -4)
@@ -623,16 +623,12 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=3 new-fixups
 ----
 Loaded 4 vectors.
 
-# Run split of partition #2 until it's in DrainingForSplit state.
-force-split partition-key=2 parent-partition-key=1 steps=10
+# Run split of partition #2 until it's in DeletingForSplitState state.
+force-split partition-key=2 parent-partition-key=1 steps=12
 ----
 • 1 (2, -4)
 │
-├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │
-│   ├───• vec1 (4, 0)
-│   └───• vec2 (0, -8)
-│
+├───• 2 (2, -4) [DeletingForSplitState:4,5]
 ├───• 3 (2, -4)
 │   │
 │   ├───• vec3 (2, -5)
@@ -646,16 +642,12 @@ force-split partition-key=2 parent-partition-key=1 steps=10
     │
     └───• vec1 (4, 0)
 
-# Run split of partition #3 until it's also in DrainingForSplit state.
+# Run split of partition #3 until it's in DrainingForSplit state.
 force-split partition-key=3 parent-partition-key=1 steps=8
 ----
 • 1 (2, -4)
 │
-├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │
-│   ├───• vec1 (4, 0)
-│   └───• vec2 (0, -8)
-│
+├───• 2 (2, -4) [DeletingForSplitState:4,5]
 ├───• 3 (2, -4) [DrainingForSplit:6,7]
 │   │
 │   ├───• vec3 (2, -5)
@@ -682,11 +674,7 @@ force-split partition-key=4 parent-partition-key=1 steps=6
 ----
 • 1 (2, -4)
 │
-├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │
-│   ├───• vec1 (4, 0)
-│   └───• vec2 (0, -8)
-│
+├───• 2 (2, -4) [DeletingForSplitState:4,5]
 ├───• 3 (2, -4) [DrainingForSplit:6,7]
 │   │
 │   ├───• vec3 (2, -5)
@@ -716,11 +704,7 @@ force-split partition-key=5 parent-partition-key=1 steps=6
 ----
 • 1 (2, -4)
 │
-├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │
-│   ├───• vec1 (4, 0)
-│   └───• vec2 (0, -8)
-│
+├───• 2 (2, -4) [DeletingForSplitState:4,5]
 ├───• 3 (2, -4) [DrainingForSplit:6,7]
 │   │
 │   ├───• vec3 (2, -5)
@@ -761,11 +745,7 @@ vec5: (2, -4)
 ----
 • 1 (2, -4)
 │
-├───• 2 (2, -4) [DrainingForSplit:4,5]
-│   │
-│   ├───• vec1 (4, 0)
-│   └───• vec2 (0, -8)
-│
+├───• 2 (2, -4) [DeletingForSplitState:4,5]
 ├───• 3 (2, -4) [DrainingForSplit:6,7]
 │   │
 │   ├───• vec3 (2, -5)
@@ -801,7 +781,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-9 leaf vectors, 19 vectors, 3 full vectors, 11 partitions
+7 leaf vectors, 17 vectors, 3 full vectors, 11 partitions
 
 format-tree
 ----
@@ -814,10 +794,7 @@ format-tree
 │   │   └───• vec2 (0, -8)
 │   │
 │   ├───• 9 (0, -8)
-│   ├───• 4 (0, -8) [DrainingForSplit:8,9]
-│   │   │
-│   │   └───• vec2 (0, -8)
-│   │
+│   ├───• 4 (0, -8) [DeletingForSplitState:8,9]
 │   └───• 6 (2, -5)
 │       │
 │       ├───• vec3 (2, -5)
@@ -825,24 +802,13 @@ format-tree
 │
 └───• 13 (3, -1.8333)
     │
-    ├───• 5 (4, 0) [DrainingForSplit:10,11]
-    │   │
-    │   └───• vec1 (4, 0)
-    │
+    ├───• 5 (4, 0) [DeletingForSplitState:10,11]
     ├───• 7 (2, -3)
     │   │
     │   └───• vec4 (2, -3)
     │
-    ├───• 2 (2, -4) [DrainingForSplit:4,5]
-    │   │
-    │   ├───• vec1 (4, 0)
-    │   └───• vec2 (0, -8)
-    │
-    ├───• 3 (2, -4) [DrainingForSplit:6,7]
-    │   │
-    │   ├───• vec3 (2, -5)
-    │   └───• vec4 (2, -3)
-    │
+    ├───• 2 (2, -4) [DeletingForSplitState:4,5]
+    ├───• 3 (2, -4) [DeletingForSplitState:6,7]
     ├───• 10 (4, 0)
     │   │
     │   └───• vec1 (4, 0)
@@ -854,7 +820,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-11 leaf vectors, 23 vectors, 3 full vectors, 13 partitions
+5 leaf vectors, 17 vectors, 3 full vectors, 13 partitions
 
 format-tree
 ----
@@ -862,10 +828,7 @@ format-tree
 │
 ├───• 17 (1, -6.5)
 │   │
-│   ├───• 4 (0, -8) [DrainingForSplit:8,9]
-│   │   │
-│   │   └───• vec2 (0, -8)
-│   │
+│   ├───• 4 (0, -8) [DeletingForSplitState:8,9]
 │   └───• 6 (2, -5)
 │       │
 │       ├───• vec3 (2, -5)
@@ -873,10 +836,7 @@ format-tree
 │
 ├───• 15 (4, 0)
 │   │
-│   ├───• 5 (4, 0) [DrainingForSplit:10,11]
-│   │   │
-│   │   └───• vec1 (4, 0)
-│   │
+│   ├───• 5 (4, 0) [DeletingForSplitState:10,11]
 │   ├───• 10 (4, 0)
 │   │   │
 │   │   └───• vec1 (4, 0)
@@ -884,20 +844,12 @@ format-tree
 │   └───• 11 (4, 0)
 ├───• 14 (2, -3.6667)
 │   │
-│   ├───• 3 (2, -4) [DrainingForSplit:6,7]
-│   │   │
-│   │   ├───• vec3 (2, -5)
-│   │   └───• vec4 (2, -3)
-│   │
+│   ├───• 3 (2, -4) [DeletingForSplitState:6,7]
 │   ├───• 7 (2, -3)
 │   │   │
 │   │   └───• vec4 (2, -3)
 │   │
-│   └───• 2 (2, -4) [DrainingForSplit:4,5]
-│       │
-│       ├───• vec1 (4, 0)
-│       └───• vec2 (0, -8)
-│
+│   └───• 2 (2, -4) [DeletingForSplitState:4,5]
 └───• 16 (0, -8)
     │
     ├───• 8 (0, -8)
@@ -911,7 +863,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-11 leaf vectors, 25 vectors, 3 full vectors, 15 partitions
+5 leaf vectors, 19 vectors, 3 full vectors, 15 partitions
 
 format-tree
 ----
@@ -952,7 +904,7 @@ format-tree
 # Attempt to split the target partition of another split.
 # ----------------------------------------------------------------------
 
-load-index min-partition-size=1 max-partition-size=4 beam-size=3 new-fixups
+load-index min-partition-size=1 max-partition-size=4 beam-size=3
 • 1 (6.8, 4.2)
 │
 └───• 2 (6.8, 4.2)
@@ -967,18 +919,11 @@ Loaded 5 vectors.
 
 # Split partition #2, to the point where it's about to be removed from its
 # parent.
-force-split partition-key=2 parent-partition-key=1 steps=10
+force-split partition-key=2 parent-partition-key=1 steps=12
 ----
 • 1 (6.8, 4.2)
 │
-├───• 2 (6.8, 4.2) [DrainingForSplit:3,4]
-│   │
-│   ├───• vec1 (1, 2)
-│   ├───• vec2 (7, 4)
-│   ├───• vec3 (4, 3)
-│   ├───• vec4 (-3, 2)
-│   └───• vec5 (14, 1)
-│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 3 (-1, 2)
 │   │
 │   ├───• vec1 (1, 2)
@@ -990,20 +935,13 @@ force-split partition-key=2 parent-partition-key=1 steps=10
     ├───• vec2 (7, 4)
     └───• vec5 (14, 1)
 
-# Split partition #3 in this state, so that the DrainingForSplit target now
+# Split partition #3 in this state, so that the DeletingForSplitState target now
 # points to a non-existent partition.
 force-split partition-key=3 parent-partition-key=1
 ----
 • 1 (6.8, 4.2)
 │
-├───• 2 (6.8, 4.2) [DrainingForSplit:3,4]
-│   │
-│   ├───• vec1 (1, 2)
-│   ├───• vec2 (7, 4)
-│   ├───• vec3 (4, 3)
-│   ├───• vec4 (-3, 2)
-│   └───• vec5 (14, 1)
-│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 6 (2.5, 2.5)
 │   │
 │   ├───• vec1 (1, 2)
@@ -1025,14 +963,7 @@ vec6: (7, 4)
 ----
 • 1 (6.8, 4.2)
 │
-├───• 2 (6.8, 4.2) [DrainingForSplit:3,4]
-│   │
-│   ├───• vec1 (1, 2)
-│   ├───• vec2 (7, 4)
-│   ├───• vec3 (4, 3)
-│   ├───• vec4 (-3, 2)
-│   └───• vec5 (14, 1)
-│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 6 (2.5, 2.5)
 │   │
 │   ├───• vec1 (1, 2)
@@ -1048,30 +979,94 @@ vec6: (7, 4)
     │
     └───• vec4 (-3, 2)
 
-# Trigger completion of partition #2 split.
-# NOTE: vec6 is an extra duplicate zero (within error bound of zero).
-search
-(7, 4)
-----
-vec2: 0 (centroid=0.28)
-vec6: 0 (centroid=3.81)
-10 leaf vectors, 14 vectors, 3 full vectors, 4 partitions
-
-format-tree
+# Split away partition #4 as well, so that #2 has two non-existent target
+# partitions.
+force-split partition-key=4 parent-partition-key=1
 ----
 • 1 (6.8, 4.2)
 │
-├───• 5 (-3, 2)
-│   │
-│   └───• vec4 (-3, 2)
-│
+├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
 ├───• 6 (2.5, 2.5)
 │   │
 │   ├───• vec1 (1, 2)
 │   └───• vec3 (4, 3)
 │
-└───• 4 (10.5, 2.5)
+├───• 8 (14, 1)
+│   │
+│   └───• vec5 (14, 1)
+│
+├───• 5 (-3, 2)
+│   │
+│   └───• vec4 (-3, 2)
+│
+└───• 7 (7, 4)
     │
     ├───• vec2 (7, 4)
-    ├───• vec5 (14, 1)
     └───• vec6 (7, 4)
+
+# Insert another vector that would go to partition #2.
+insert
+vec7: (7, 4)
+----
+• 1 (6.8, 4.2)
+│
+├───• 9 (-0.25, 2.25)
+│   │
+│   ├───• 5 (-3, 2)
+│   │   │
+│   │   └───• vec4 (-3, 2)
+│   │
+│   └───• 6 (2.5, 2.5)
+│       │
+│       ├───• vec1 (1, 2)
+│       └───• vec3 (4, 3)
+│
+└───• 10 (9.2667, 3.0667)
+    │
+    ├───• 8 (14, 1)
+    │   │
+    │   └───• vec5 (14, 1)
+    │
+    ├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
+    └───• 7 (7, 4)
+        │
+        ├───• vec2 (7, 4)
+        ├───• vec6 (7, 4)
+        └───• vec7 (7, 4)
+
+# Trigger completion of partition #2 split.
+# NOTE: vec7 is an extra duplicate zero (within error bound of zero).
+search
+(7, 4)
+----
+vec2: 0 (centroid=0)
+vec6: 0 (centroid=0)
+vec7: 0 (centroid=0)
+5 leaf vectors, 12 vectors, 4 full vectors, 6 partitions
+
+format-tree
+----
+• 1 (6.8, 4.2)
+│
+├───• 9 (-0.25, 2.25)
+│   │
+│   ├───• 5 (-3, 2)
+│   │   │
+│   │   └───• vec4 (-3, 2)
+│   │
+│   └───• 6 (2.5, 2.5)
+│       │
+│       ├───• vec1 (1, 2)
+│       └───• vec3 (4, 3)
+│
+└───• 10 (9.2667, 3.0667)
+    │
+    ├───• 8 (14, 1)
+    │   │
+    │   └───• vec5 (14, 1)
+    │
+    └───• 7 (7, 4)
+        │
+        ├───• vec2 (7, 4)
+        ├───• vec6 (7, 4)
+        └───• vec7 (7, 4)

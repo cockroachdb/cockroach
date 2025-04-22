@@ -68,6 +68,12 @@ type IndexOptions struct {
 	// operation can stay in the same state before another worker may attempt to
 	// assist. If this is nil, then a default value is used.
 	StalledOpTimeout func() time.Duration
+	// MaxInsertAttempts controls the number of times Insert or SearchForInsert
+	// will retry after finding partitions that do not allow inserts.
+	MaxInsertAttempts int
+	// MaxDeleteAttempts controls the number of times Delete or SearchForDelete
+	// will retry after failed attempts to find a requested deletion vector.
+	MaxDeleteAttempts int
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -218,6 +224,12 @@ func NewIndex(
 	if vi.options.StalledOpTimeout == nil {
 		vi.options.StalledOpTimeout = func() time.Duration { return DefaultStalledOpTimeout }
 	}
+	if vi.options.MaxInsertAttempts == 0 {
+		vi.options.MaxInsertAttempts = 32
+	}
+	if vi.options.MaxDeleteAttempts == 0 {
+		vi.options.MaxDeleteAttempts = 3
+	}
 
 	if vi.options.MaxPartitionSize < 2 {
 		return nil, errors.AssertionFailedf("MaxPartitionSize cannot be less than 2")
@@ -351,41 +363,56 @@ func (vi *Index) Insert(
 	// When a candidate insert partition is found, add the vector to it.
 	addFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
 		partitionKey := result.ChildKey.PartitionKey
-		return vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
+		err := vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
 			partitionKey, idxCtx.level-1, idxCtx.randomized, childKey, valueBytes)
+		if err != nil {
+			return errors.Wrapf(err, "inserting vector into partition %d", partitionKey)
+		}
+		return nil
 	}
 
-	_, err := vi.searchForUpdateHelper(ctx, idxCtx, addFunc, nil /* deleteKey */)
+	_, err := vi.searchForUpdateHelper(
+		ctx, idxCtx, addFunc, nil /* deleteKey */, vi.options.MaxInsertAttempts)
 	return err
 }
 
 // Delete attempts to remove a vector from the index, given its value and
 // primary key. This is called within the scope of a transaction so that the
-// index does not appear to change during the delete.
+// index does not appear to change during the delete. It returns true if the
+// vector was removed from the index.
 //
 // NOTE: Delete may not be able to locate the vector in the index, meaning a
 // "dangling vector" reference will be left in the tree. Vector index methods
 // handle this rare case by joining quantized vectors in the tree with their
 // corresponding full vector from the primary index (which cannot "dangle")
 // before returning search results. For details, see Index.getFullVectors.
+//
+// NOTE: Even if the vector is removed, there may still be duplicate dangling
+// instances of the vector still remaining in the index.
 func (vi *Index) Delete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
-) error {
+) (deleted bool, err error) {
 	// Potentially throttle operation if background work is falling behind.
 	if err := vi.fixups.DelayInsertOrDelete(ctx); err != nil {
-		return err
+		return false, err
 	}
 
 	vi.setupDeleteContext(idxCtx, treeKey, vec)
 
 	// When a candidate delete partition is found, remove the vector from it.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
-		return vi.removeFromPartition(ctx, idxCtx.txn, idxCtx.treeKey,
-			result.ParentPartitionKey, idxCtx.level, result.ChildKey)
+		partitionKey := result.ParentPartitionKey
+		err := vi.removeFromPartition(ctx, idxCtx.txn, idxCtx.treeKey,
+			partitionKey, idxCtx.level, result.ChildKey)
+		if err != nil {
+			return errors.Wrapf(err, "deleting vector from partition %d", partitionKey)
+		}
+		return nil
 	}
 
-	_, err := vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key)
-	return err
+	result, err := vi.searchForUpdateHelper(
+		ctx, idxCtx, removeFunc, key, vi.options.MaxDeleteAttempts)
+	return result != nil, err
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -426,13 +453,14 @@ func (vi *Index) SearchForInsert(
 		metadata, err := idxCtx.txn.GetPartitionMetadata(
 			ctx, treeKey, partitionKey, true /* forUpdate */)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "locking metadata for insert into partition %d", partitionKey)
 		}
 		result.Vector = metadata.Centroid
 		return nil
 	}
 
-	return vi.searchForUpdateHelper(ctx, idxCtx, getFunc, nil /* deleteKey */)
+	return vi.searchForUpdateHelper(
+		ctx, idxCtx, getFunc, nil /* deleteKey */, vi.options.MaxInsertAttempts)
 }
 
 // SearchForDelete finds the leaf partition containing the vector to be deleted.
@@ -453,10 +481,13 @@ func (vi *Index) SearchForDelete(
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
 		partitionKey := result.ParentPartitionKey
 		_, err := idxCtx.txn.GetPartitionMetadata(ctx, treeKey, partitionKey, true /* forUpdate */)
-		return err
+		if err != nil {
+			return errors.Wrapf(err, "locking metadata for delete from partition %d", partitionKey)
+		}
+		return nil
 	}
 
-	return vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key)
+	return vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key, vi.options.MaxDeleteAttempts)
 }
 
 // SuspendFixups suspends background fixup processing until ProcessFixups is
@@ -576,12 +607,8 @@ type updateFunc func(ctx context.Context, idxCtx *Context, result *SearchResult)
 // Note that it's possible for retry to switch back and forth between #1 and #2,
 // if we're racing with levels being added to or removed from the tree.
 func (vi *Index) searchForUpdateHelper(
-	ctx context.Context, idxCtx *Context, fn updateFunc, deleteKey KeyBytes,
+	ctx context.Context, idxCtx *Context, fn updateFunc, deleteKey KeyBytes, remainingAttempts int,
 ) (*SearchResult, error) {
-	const maxInsertAttempts = 16
-	const maxDeleteAttempts = 3
-	var maxAttempts int
-
 	idxCtx.tempSearchSet.Clear()
 	idxCtx.tempSearchSet.MaxExtraResults = 0
 	if idxCtx.forInsert {
@@ -589,13 +616,11 @@ func (vi *Index) searchForUpdateHelper(
 		// candidates don't allow inserts.
 		idxCtx.tempSearchSet.MaxResults = vi.options.QualitySamples
 		idxCtx.tempSearchSet.MatchKey = nil
-		maxAttempts = maxInsertAttempts
 	} else {
 		// Delete case, so just get 1 result per batch that matches the key.
 		// Fetch another batch if first batch doesn't find the vector.
 		idxCtx.tempSearchSet.MaxResults = 1
 		idxCtx.tempSearchSet.MatchKey = deleteKey
-		maxAttempts = maxDeleteAttempts
 	}
 	idxCtx.search.Init(vi, idxCtx, &idxCtx.tempSearchSet)
 	var result *SearchResult
@@ -604,48 +629,63 @@ func (vi *Index) searchForUpdateHelper(
 	// Loop until we find a partition to update or we've exhausted attempts.
 	// Each "next batch" operation and each updateFunc callback count as an
 	// "attempt", since each is separately expensive to do.
-	attempts := 0
-	for attempts < maxAttempts {
+	for remainingAttempts > 0 {
 		// Get next partition to check.
 		result = idxCtx.tempSearchSet.PopBestResult()
 		if result == nil {
 			// Get next batch of results from the searcher.
-			attempts++
+			remainingAttempts--
 			ok, err := idxCtx.search.Next(ctx)
 			if err != nil {
-				log.Infof(ctx, "error during update: %v\n", err)
+				log.Infof(ctx, "error during update: %v", err)
 				return nil, errors.Wrapf(err, "searching for partition to update")
 			}
 			if !ok {
-				log.Infof(ctx, "could not find result: %v\n", result)
+				if idxCtx.forInsert {
+					return vi.searchForUpdateHelper(ctx, idxCtx, fn, deleteKey, remainingAttempts)
+				}
 				break
 			}
 			continue
 		}
 
 		// Check first result.
-		attempts++
+		remainingAttempts--
 		err := fn(ctx, idxCtx, result)
 		if err == nil {
 			// This partition supports updates, so done.
 			break
 		}
-		lastError = errors.Wrapf(err, "checking result: %+v", result)
+		lastError = errors.Wrapf(err, "failed to update (remaining attempts=%d)", remainingAttempts)
 
 		var errConditionFailed *ConditionFailedError
 		if errors.Is(err, ErrRestartOperation) {
 			// Redo search operation.
-			log.VEventf(ctx, 2, "restarting search for update operation: %v", err)
-			return vi.searchForUpdateHelper(ctx, idxCtx, fn, deleteKey)
+			log.VEventf(ctx, 2, "restarting search for update operation: %v", lastError)
+			return vi.searchForUpdateHelper(ctx, idxCtx, fn, deleteKey, remainingAttempts)
 		} else if errors.As(err, &errConditionFailed) {
+			state := errConditionFailed.Actual.StateDetails
+			log.VEventf(ctx, 2, "updates not allowed in state %s: %v", state.String(), lastError)
+
 			// This partition does not allow updates, so fallback to a target
 			// partition if this is an insert operation. This is not necessary in
 			// the delete case; it's OK if we end up leaving a dangling vector.
 			if idxCtx.forInsert {
-				partitionKey := result.ChildKey.PartitionKey
-				metadata := errConditionFailed.Actual
+				// If splitting the root, the new parent will be the root.
+				var parentPartitionKey PartitionKey
+				sourcePartitionKey := result.ChildKey.PartitionKey
+				if sourcePartitionKey == RootKey {
+					// Splitting the root partition, so the parent of the target
+					// partitions will be the root.
+					parentPartitionKey = RootKey
+				} else {
+					// Splitting a non-root partition, so the parent of the target
+					// partitions will be the parent of the splitting partition.
+					parentPartitionKey = result.ParentPartitionKey
+				}
+
 				err = vi.fallbackOnTargets(ctx, idxCtx, &idxCtx.tempSearchSet,
-					partitionKey, idxCtx.randomized, metadata.StateDetails)
+					parentPartitionKey, sourcePartitionKey, idxCtx.randomized, state)
 				if err != nil {
 					return nil, err
 				}
@@ -654,7 +694,7 @@ func (vi *Index) searchForUpdateHelper(
 			// This partition does not exist, so try next partition. This can happen
 			// when a DrainingForSplit target partition has itself been split and
 			// deleted.
-			log.VEventf(ctx, 2, "partition %d not found: %v", result.ChildKey.PartitionKey, err)
+			log.VEventf(ctx, 2, "partition %d not found: %v", result.ChildKey.PartitionKey, lastError)
 		} else {
 			return nil, lastError
 		}
@@ -669,6 +709,8 @@ func (vi *Index) searchForUpdateHelper(
 
 	if result == nil {
 		// Inserts are expected to find a partition.
+		// TODO(andyk): Should we make this error retryable server-side and/or by
+		// the user?
 		err := errors.Errorf(
 			"search failed to find a partition (level=%d) that allows inserts", idxCtx.level)
 		return nil, errors.CombineErrors(err, lastError)
@@ -696,27 +738,29 @@ func (vi *Index) searchForUpdateHelper(
 }
 
 // fallbackOnTargets is called when none of the partitions returned by a search
-// allow inserting a vector, because they are in a Draining state. Instead, the
-// search needs to continue with the target partitions of the split (or merge).
-// fallbackOnTargets returns an ordered list of search results for the targets.
+// allow inserting a vector, because they are in a Draining or Deleting state.
+// Instead, the search needs to continue with the target partitions of the split
+// (or merge). fallbackOnTargets returns an ordered list of search results for
+// the targets.
 // NOTE: "tempResults" is overwritten within this method by results.
 func (vi *Index) fallbackOnTargets(
 	ctx context.Context,
 	idxCtx *Context,
 	searchSet *SearchSet,
-	partitionKey PartitionKey,
+	parentPartitionKey, sourcePartitionKey PartitionKey,
 	vec vector.T,
 	state PartitionStateDetails,
 ) error {
-	if state.State == DrainingForSplitState {
+	switch state.State {
+	case DrainingForSplitState:
 		// Synthesize one search result for each split target partition to pass
 		// to getFullVectors.
 		idxCtx.tempResults[0] = SearchResult{
-			ParentPartitionKey: partitionKey,
+			ParentPartitionKey: parentPartitionKey,
 			ChildKey:           ChildKey{PartitionKey: state.Target1},
 		}
 		idxCtx.tempResults[1] = SearchResult{
-			ParentPartitionKey: partitionKey,
+			ParentPartitionKey: parentPartitionKey,
 			ChildKey:           ChildKey{PartitionKey: state.Target2},
 		}
 
@@ -726,7 +770,7 @@ func (vi *Index) fallbackOnTargets(
 		if err != nil {
 			return errors.Wrapf(err,
 				"fetching centroids for target partitions %d and %d, for splitting partition %d",
-				state.Target1, state.Target2, partitionKey)
+				state.Target1, state.Target2, sourcePartitionKey)
 		}
 
 		// Calculate the distance of the query vector to the centroids.
@@ -735,6 +779,11 @@ func (vi *Index) fallbackOnTargets(
 			searchSet.Add(&tempResults[i])
 		}
 
+		return nil
+
+	case DeletingForSplitState:
+		// The partition is ready for deletion; its target partitions have already
+		// been built and may themselves been split or deleted, so don't use them.
 		return nil
 	}
 

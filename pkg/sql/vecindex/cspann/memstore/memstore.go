@@ -134,12 +134,6 @@ type Store struct {
 	rootQuantizer quantize.Quantizer
 	quantizer     quantize.Quantizer
 
-	// structureLock must be acquired by transactions that intend to modify the
-	// structure of a tree, e.g. splitting or merging a partition. This ensures
-	// that only one split or merge can be running at any given time, so that
-	// deadlocks are not possible.
-	structureLock memLock
-
 	mu struct {
 		syncutil.Mutex
 
@@ -185,7 +179,6 @@ func New(quantizer quantize.Quantizer, seed int64) *Store {
 	st.mu.vectors = make(map[string]vector.T)
 	st.mu.clock = 2
 	st.mu.nextKey = cspann.RootKey + 1
-	st.mu.stats.NumPartitions = 1
 	st.mu.pending.Init()
 	return st
 }
@@ -326,24 +319,15 @@ func (s *Store) TryCreateEmptyPartition(
 	partitionKey cspann.PartitionKey,
 	metadata cspann.PartitionMetadata,
 ) error {
-	memPart := s.lockPartition(treeKey, partitionKey, uniqueOwner, false /* isExclusive */)
-	if memPart != nil {
-		// Partition already exists, so return a ConditionFailedError.
-		defer memPart.lock.ReleaseShared()
-		return cspann.NewConditionFailedError(*memPart.lock.partition.Metadata())
+	memPart, ok := s.tryCreateEmptyPartition(treeKey, partitionKey, metadata)
+	if ok {
+		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Create the new empty partition.
-	partition := cspann.CreateEmptyPartition(s.quantizer, metadata)
-	_ = s.insertPartitionLocked(treeKey, partitionKey, partition)
-
-	// Update stats.
-	s.mu.stats.NumPartitions++
-
-	return nil
+	// Partition already exists, so return a ConditionFailedError.
+	memPart.lock.AcquireShared(uniqueOwner)
+	defer memPart.lock.ReleaseShared()
+	return cspann.NewConditionFailedError(*memPart.lock.partition.Metadata())
 }
 
 // TryDeletePartition implements the Store interface.
@@ -765,15 +749,6 @@ func (s *Store) tickLocked() uint64 {
 	return val
 }
 
-// updatedStructureLocked marks the transaction as having updated the K-means
-// tree. It also pushes the transactions current time forward so that it can
-// always observe its changes.
-// NOTE: Callers must have locked the s.mu mutex.
-func (s *Store) updatedStructureLocked(tx *memTxn) {
-	tx.updated = true
-	tx.current = s.tickLocked()
-}
-
 // getPartition returns a partition by its key, or ErrPartitionNotFound if no
 // such partition exists.
 func (s *Store) getPartition(
@@ -840,11 +815,38 @@ func (s *Store) makeEmptyRootMetadataLocked() cspann.PartitionMetadata {
 	if s.mu.emptyVec == nil {
 		s.mu.emptyVec = make(vector.T, s.dims)
 	}
-	return cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     s.mu.emptyVec,
-		StateDetails: cspann.MakeReadyDetails(),
+	return cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, s.mu.emptyVec)
+}
+
+// tryCreateEmptyPartition creates a empty partition with the given metadata and
+// inserts it into the tree if there is no existing partition with the same key.
+// If there is an existing partition, it returns that and ok=false; otherwise,
+// it returns the newly created partition and ok=true.
+func (s *Store) tryCreateEmptyPartition(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, metadata cspann.PartitionMetadata,
+) (memPart *memPartition, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check for race condition where another thread already created the
+	// partition.
+	memPart, ok = s.getPartitionLocked(treeKey, partitionKey)
+	if ok {
+		return memPart, false
 	}
+
+	// Create the new empty partition.
+	quantizer := s.quantizer
+	if partitionKey == cspann.RootKey {
+		quantizer = s.rootQuantizer
+	}
+	partition := cspann.CreateEmptyPartition(quantizer, metadata)
+	memPart = s.insertPartitionLocked(treeKey, partitionKey, partition)
+
+	// Update stats.
+	s.mu.stats.NumPartitions++
+
+	return memPart, true
 }
 
 // processPendingActionsLocked iterates over pending actions to:

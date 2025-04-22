@@ -54,11 +54,7 @@ func testEncodeDecode(
 	centroid vector.T,
 ) {
 	codec := makePartitionCodec(rootQuantizer, nonRootQuantizer)
-	metadata := cspann.PartitionMetadata{
-		Level:        cspann.LeafLevel,
-		Centroid:     centroid,
-		StateDetails: cspann.MakeReadyDetails(),
-	}
+	metadata := cspann.MakeReadyPartitionMetadata(cspann.LeafLevel, centroid)
 
 	// Encode vectors and child keys.
 	encodedVectors := make([][]byte, len(vectors))

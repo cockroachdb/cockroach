@@ -76,6 +76,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/num32",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/vector",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_datadriven//:datadriven",

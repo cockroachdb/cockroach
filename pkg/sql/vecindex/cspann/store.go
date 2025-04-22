@@ -234,16 +234,15 @@ type Txn interface {
 	) error
 
 	// GetFullVectors fetches the original full-size vectors that are referenced
-	// by the given child keys and stores them in "refs". If a vector has been
-	// deleted, then its corresponding reference will be set to nil. If a
-	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
+	// by the given child keys and stores them in "refs". This can either be
+	// interior partition centroids or leaf primary index vectors, depending on
+	// whether the child key's PartitionKey or KeyBytes field is set. Each call
+	// to GetFullVectors can only request one or the other; it cannot interleave
+	// requests for both in "refs". If a vector has been deleted, then its
+	// corresponding reference will be set to nil. If a partition cannot be found,
+	// GetFullVectors returns ErrPartitionNotFound.
 	//
 	// NOTE: The caller takes ownership of any vector memory returned in "refs".
 	// The Store implementation should not try to use it after returning it.
-	//
-	// TODO(andyk): what if the row exists but the vector column is NULL? Right
-	// now, this whole library expects vectors passed to it to be non-nil and have
-	// the same number of dims. We should look into how pgvector handles NULL
-	// values - could we just treat them as if they were missing, for example?
 	GetFullVectors(ctx context.Context, treeKey TreeKey, refs []VectorWithKey) error
 }

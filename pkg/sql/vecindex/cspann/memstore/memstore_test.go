@@ -110,6 +110,10 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
+	// Construct an empty root partition.
+	metadata := store.makeEmptyRootMetadata()
+	require.NoError(t, store.TryCreateEmptyPartition(ctx, treeKey, cspann.RootKey, metadata))
+
 	var wait sync.WaitGroup
 	wait.Add(1)
 	commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
@@ -162,6 +166,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
+	// Construct an empty root partition.
+	metadata := store.makeEmptyRootMetadata()
+	require.NoError(t, store.TryCreateEmptyPartition(ctx, treeKey, cspann.RootKey, metadata))
+
 	commontest.RunTransaction(ctx, t, store, func(txn cspann.Txn) {
 		childKey10 := cspann.ChildKey{PartitionKey: 10}
 		childKey20 := cspann.ChildKey{PartitionKey: 20}
@@ -207,11 +215,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		require.NoError(t, err)
 
 		partitionKey := store.MakePartitionKey()
-		nonRootMetadata := cspann.PartitionMetadata{
-			Level:        3,
-			Centroid:     vector.T{1, 2},
-			StateDetails: cspann.MakeReadyDetails(),
-		}
+		nonRootMetadata := cspann.MakeReadyPartitionMetadata(3, vector.T{1, 2})
 		err = store.TryCreateEmptyPartition(ctx, treeKey, partitionKey, nonRootMetadata)
 		require.NoError(t, err)
 
@@ -242,7 +246,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart := &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 1, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
+		cspann.MakeReadyPartitionMetadata(1, centroid),
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,
@@ -260,7 +264,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart = &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 2, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
+		cspann.MakeReadyPartitionMetadata(2, centroid),
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,
