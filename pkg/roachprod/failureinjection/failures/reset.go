@@ -46,15 +46,13 @@ func registerResetVM(r *FailureRegistry) {
 func MakeResetVMFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, ResetVMFailureName)
 	if err != nil {
 		return nil, err
 	}
 
-	return &resetVMFailure{
-		GenericFailure: GenericFailure{
-			c: c,
-		},
+	return &ProcessKillFailure{
+		GenericFailure: *genericFailure,
 	}, nil
 }
 

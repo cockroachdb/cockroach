@@ -2665,6 +2665,13 @@ func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
 	return &clusterCopy
 }
 
+// WithCerts creates a new copy of SyncedCluster with the given PGURLCerts.
+func (c *SyncedCluster) WithCerts(certs string) *SyncedCluster {
+	clusterCopy := *c
+	clusterCopy.PGUrlCertsDir = certs
+	return &clusterCopy
+}
+
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg

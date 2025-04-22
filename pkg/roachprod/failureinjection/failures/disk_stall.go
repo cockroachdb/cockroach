@@ -32,12 +32,11 @@ type CGroupDiskStaller struct {
 func MakeCgroupDiskStaller(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, CgroupsDiskStallName)
 	if err != nil {
 		return nil, err
 	}
-	genericFailure := GenericFailure{c: c, runTitle: CgroupsDiskStallName}
-	return &CGroupDiskStaller{GenericFailure: genericFailure}, nil
+	return &CGroupDiskStaller{GenericFailure: *genericFailure}, nil
 }
 
 func registerCgroupDiskStall(r *FailureRegistry) {
@@ -115,6 +114,7 @@ fi
 	return nil
 }
 func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+	defer s.CloseConnections()
 	diskStallArgs := args.(DiskStallArgs)
 	stallType := []bandwidthType{readBandwidth, writeBandwidth}
 	nodes := diskStallArgs.Nodes
@@ -365,13 +365,11 @@ type DmsetupDiskStaller struct {
 func MakeDmsetupDiskStaller(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, DmsetupDiskStallName)
 	if err != nil {
 		return nil, err
 	}
-
-	genericFailure := GenericFailure{c: c, runTitle: DmsetupDiskStallName}
-	return &DmsetupDiskStaller{GenericFailure: genericFailure}, nil
+	return &DmsetupDiskStaller{GenericFailure: *genericFailure}, nil
 }
 
 func registerDmsetupDiskStall(r *FailureRegistry) {
@@ -468,6 +466,8 @@ func (s *DmsetupDiskStaller) Recover(
 func (s *DmsetupDiskStaller) Cleanup(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
+	defer s.CloseConnections()
+
 	diskStallArgs := args.(DiskStallArgs)
 	if diskStallArgs.RestartNodes {
 		stopOpts := roachprod.DefaultStopOpts()

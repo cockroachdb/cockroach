@@ -12,3 +12,9 @@ func Secure(secure bool) ClusterOptionFunc {
 		o.secure = secure
 	}
 }
+
+func LocalCertsPath(localCertsPath string) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.localCertsPath = localCertsPath
+	}
+}

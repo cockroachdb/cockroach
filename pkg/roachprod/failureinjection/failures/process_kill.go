@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -37,16 +36,13 @@ func registerProcessKillFailure(r *FailureRegistry) {
 func MakeProcessKillFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, ProcessKillFailureName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ProcessKillFailure{
-		GenericFailure: GenericFailure{
-			c:        c,
-			runTitle: ProcessKillFailureName,
-		},
+		GenericFailure: *genericFailure,
 	}, nil
 }
 
