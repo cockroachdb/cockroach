@@ -65,6 +65,7 @@ func TestSearcher(t *testing.T) {
 
 	quantizer := quantize.NewUnQuantizer(2)
 	store, err := vecstore.NewWithColumnID(
+		ctx,
 		internalDB,
 		quantizer,
 		codec,

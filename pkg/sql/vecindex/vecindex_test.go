@@ -25,15 +25,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/stretchr/testify/require"
 )
 
-// TestVecindexConcurrency builds an index on multiple goroutines, with
+// TestVecIndexConcurrency builds an index on multiple goroutines, with
 // background splits and merges enabled.
-func TestVecindexConcurrency(t *testing.T) {
+func TestVecIndexConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -143,6 +147,77 @@ func TestVecindexConcurrency(t *testing.T) {
 	logProgress()
 }
 
+// TestVecIndexStandbyReader builds an index on a source tenant and verifies
+// that a PCR standby reader can read the index, but doesn't attempt to initiate
+// fixups.
+func TestVecIndexStandbyReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test")
+
+	rnd, seed := randutil.NewTestRand()
+	t.Logf("random seed: %v", seed)
+
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+
+	_, srcDB, err := ts.TenantController().StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:    serverutils.TestTenantID(),
+			TenantName:  "src",
+			UseDatabase: "defaultdb",
+		},
+	)
+	require.NoError(t, err)
+	dstTenant, dstDB, err := ts.TenantController().StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:    serverutils.TestTenantID2(),
+			TenantName:  "dst",
+			UseDatabase: "defaultdb",
+		},
+	)
+	require.NoError(t, err)
+
+	srcRunner := sqlutils.MakeSQLRunner(srcDB)
+	dstRunner := sqlutils.MakeSQLRunner(dstDB)
+
+	// Enable vector indexes.
+	srcRunner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
+	// Construct the table.
+	srcRunner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX foo (v))")
+
+	// Load features and build the index.
+	const batchSize = 10
+	const numBatches = 100
+	vectors := testutils.LoadFeatures(t, batchSize*numBatches)
+	for i := 0; i < numBatches; i++ {
+		insertVectors(t, srcRunner, i*batchSize, vectors.Slice(i*batchSize, batchSize))
+	}
+
+	// Wait for the standby reader to catch up.
+	asOf := testcluster.WaitForStandbyTenantReplication(t, ctx, ts.Clock(), dstTenant)
+
+	const queryTemplate = `SELECT * FROM t@foo %s ORDER BY v <-> '%s' LIMIT 3`
+	asOfClause := fmt.Sprintf("AS OF SYSTEM TIME %s", asOf.AsOfSystemTime())
+	for range 10 {
+		// Select a random vector from the set and run an ANN query against both
+		// tenants. The query results should be identical.
+		vec := vectors.At(rnd.Intn(vectors.Count)).String()
+		expected := srcRunner.QueryStr(t, fmt.Sprintf(queryTemplate, asOfClause, vec))
+		dstRunner.CheckQueryResults(t, fmt.Sprintf(queryTemplate, "", vec), expected)
+	}
+}
+
 // Insert block of vectors within the scope of a transaction.
 func insertVectors(t *testing.T, runner *sqlutils.SQLRunner, startId int, vectors vector.Set) {
 	var valuesClause strings.Builder
@@ -161,8 +236,8 @@ func insertVectors(t *testing.T, runner *sqlutils.SQLRunner, startId int, vector
 	runner.Exec(t, query, args...)
 }
 
-// TestVecindexDeletion tests that rows can be properly deleted from a vector index.
-func TestVecindexDeletion(t *testing.T) {
+// TestVecIndexDeletion tests that rows can be properly deleted from a vector index.
+func TestVecIndexDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

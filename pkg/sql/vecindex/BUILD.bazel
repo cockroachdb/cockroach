@@ -43,6 +43,7 @@ go_library(
 go_test(
     name = "vecindex_test",
     srcs = [
+        "main_test.go",
         "manager_test.go",
         "searcher_test.go",
         "vecindex_test.go",
@@ -51,6 +52,8 @@ go_test(
     embed = [":vecindex"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/storageccl",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -78,7 +81,9 @@ go_test(
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log",
