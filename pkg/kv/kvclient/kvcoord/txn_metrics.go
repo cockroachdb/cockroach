@@ -55,6 +55,12 @@ type TxnMetrics struct {
 	// End transaction failure counters.
 	RollbacksFailed      *metric.Counter
 	AsyncRollbacksFailed *metric.Counter
+
+	// Write buffering metrics.
+	TxnWriteBufferEnabled                *metric.Counter
+	TxnWriteBufferDisabledAfterBuffering *metric.Counter
+	TxnWriteBufferMemoryLimitExceeded    *metric.Counter
+	TxnWriteBufferFullyHandledBatches    *metric.Counter
 }
 
 var (
@@ -272,14 +278,38 @@ var (
 	}
 	metaRollbacksFailed = metric.Metadata{
 		Name:        "txn.rollbacks.failed",
-		Help:        "Number of KV transaction that failed to send final abort",
+		Help:        "Number of KV transactions that failed to send final abort",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAsyncRollbacksFailed = metric.Metadata{
 		Name:        "txn.rollbacks.async.failed",
-		Help:        "Number of KV transaction that failed to send abort asynchronously which is not always retried",
+		Help:        "Number of KV transactions that failed to send abort asynchronously which is not always retried",
 		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnWriteBufferEnabled = metric.Metadata{
+		Name:        "txn.write_buffering.num_enabled",
+		Help:        "Number of KV transactions that enabled buffered writes",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnWriteBufferDisabledAfterBuffering = metric.Metadata{
+		Name:        "txn.write_buffering.disabled_after_buffering",
+		Help:        "Number of KV transactions that disabled write buffering after buffering some writes but before an EndTxn request",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnWriteBufferLimitExceeded = metric.Metadata{
+		Name:        "txn.write_buffering.memory_limit_exceeded",
+		Help:        "Number of KV transactions that exceeded the write buffering memory limit",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnWriteBufferFullyHandledBatches = metric.Metadata{
+		Name:        "txn.write_buffering.batches.fully_handled",
+		Help:        "Number of KV batches that were fully handled by the write buffer (not sent to KV)",
+		Measurement: "KV Batches",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -321,15 +351,19 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 			SigFigs:      3,
 			BucketConfig: metric.Count1KBuckets,
 		}),
-		RestartsWriteTooOld:            telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
-		RestartsSerializable:           telemetry.NewCounterWithMetric(metaRestartsSerializable),
-		RestartsAsyncWriteFailure:      telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
-		RestartsCommitDeadlineExceeded: telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),
-		RestartsReadWithinUncertainty:  telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
-		RestartsTxnAborted:             telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
-		RestartsTxnPush:                telemetry.NewCounterWithMetric(metaRestartsTxnPush),
-		RestartsUnknown:                telemetry.NewCounterWithMetric(metaRestartsUnknown),
-		RollbacksFailed:                metric.NewCounter(metaRollbacksFailed),
-		AsyncRollbacksFailed:           metric.NewCounter(metaAsyncRollbacksFailed),
+		RestartsWriteTooOld:                  telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
+		RestartsSerializable:                 telemetry.NewCounterWithMetric(metaRestartsSerializable),
+		RestartsAsyncWriteFailure:            telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
+		RestartsCommitDeadlineExceeded:       telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),
+		RestartsReadWithinUncertainty:        telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
+		RestartsTxnAborted:                   telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
+		RestartsTxnPush:                      telemetry.NewCounterWithMetric(metaRestartsTxnPush),
+		RestartsUnknown:                      telemetry.NewCounterWithMetric(metaRestartsUnknown),
+		RollbacksFailed:                      metric.NewCounter(metaRollbacksFailed),
+		AsyncRollbacksFailed:                 metric.NewCounter(metaAsyncRollbacksFailed),
+		TxnWriteBufferEnabled:                metric.NewCounter(metaTxnWriteBufferEnabled),
+		TxnWriteBufferDisabledAfterBuffering: metric.NewCounter(metaTxnWriteBufferDisabledAfterBuffering),
+		TxnWriteBufferMemoryLimitExceeded:    metric.NewCounter(metaTxnWriteBufferLimitExceeded),
+		TxnWriteBufferFullyHandledBatches:    metric.NewCounter(metaTxnWriteBufferFullyHandledBatches),
 	}
 }

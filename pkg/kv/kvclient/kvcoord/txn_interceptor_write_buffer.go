@@ -176,7 +176,8 @@ type txnWriteBuffer struct {
 
 	bufferSeek bufferedWrite // re-use while seeking
 
-	wrapped lockedSender
+	wrapped    lockedSender
+	txnMetrics *TxnMetrics
 
 	// testingOverrideCPutEvalFn is used to mock the evaluation function for
 	// conditional puts. Intended only for tests.
@@ -188,6 +189,9 @@ func (twb *txnWriteBuffer) setEnabled(enabled bool) {
 		// When disabling write buffering, if we evaluated any requests, we need
 		// to ensure to flush the buffer.
 		twb.flushOnNextBatch = true
+	}
+	if enabled {
+		twb.txnMetrics.TxnWriteBufferEnabled.Inc(1)
 	}
 	twb.enabled = enabled
 }
@@ -249,7 +253,7 @@ func (twb *txnWriteBuffer) SendLocked(
 	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
 	if maxSize != 0 && bufSize > maxSize {
-		// TODO(arul): add some metrics for this case.
+		twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Inc(1)
 		log.VEventf(ctx, 2, "flushing buffer because buffer size (%s) exceeds max size (%s)",
 			humanizeutil.IBytes(bufSize),
 			humanizeutil.IBytes(maxSize))
@@ -279,6 +283,7 @@ func (twb *txnWriteBuffer) SendLocked(
 				return nil, pErr
 			}
 		}
+		twb.txnMetrics.TxnWriteBufferFullyHandledBatches.Inc(1)
 		return br, nil
 	}
 
@@ -1256,6 +1261,13 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	numBuffered := twb.buffer.Len()
 	if numBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
+	}
+
+	if _, ok := ba.GetArg(kvpb.EndTxn); !ok {
+		// We're flushing the buffer even though the batch doesn't contain an EndTxn
+		// request. That means we buffered some writes and decided to disable write
+		// buffering mid-way through the transaction, thus necessitating this flush.
+		twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Inc(1)
 	}
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
