@@ -593,6 +593,8 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 		{ents[0].Term, ents[1].Index, ents[1].Index, true, 1, 1},
 		// unexisting entry
 		{ents[1].Term, ents[1].Index + 1, ents[1].Index + 1, true, 2, 2},
+		// higher entry
+		{ents[1].Term, ents[1].Index + 2, ents[1].Index + 2, true, 2, 2},
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
@@ -603,7 +605,16 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 
 		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index})
 		assert.Equal(t, []pb.Message{
-			{From: 1, To: 2, Type: pb.MsgAppResp, Term: 2, Index: tt.windex, Commit: 1, Reject: tt.wreject, RejectHint: tt.wrejectHint, LogTerm: tt.wlogterm},
+			{
+				From:       1,
+				To:         2,
+				Type:       pb.MsgAppResp,
+				Term:       2,
+				Index:      tt.windex,
+				Commit:     1,
+				Reject:     tt.wreject,
+				RejectHint: tt.wrejectHint,
+				LogTerm:    tt.wlogterm},
 		}, r.readMessages(), "#%d", i)
 	}
 }
@@ -662,24 +673,31 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
-	term := uint64(9)
-	for i, tt := range [][]pb.Entry{
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6),
-		index(1).terms(1, 1, 1, 4, 4),
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
-		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
-		index(1).terms(1, 1, 1, 4, 4, 4, 4),
-		index(1).terms(1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+	ents := index(1).terms(1, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
+	term := uint64(8)
+	for i, tt := range []LeadSlice{
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 5, 5, 6, 6),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 5, 5, 6, 7, 7, 7, 7),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 5, 5, 7, 7, 7, 7, 7),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 3, 3, 4, 4, 4, 7, 7, 7, 7),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 4, 4, 4, 4),
+		entryID{index: 0, term: 0}.append(1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+		entryID{index: 0, term: 0}.append(1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3),
+		entryID{index: 0, term: 0}.append(2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		require.NoError(t, leadStorage.Append(ents))
+		leadStorage.Append(ents)
 		lead := newTestRaft(1, 10, 1, leadStorage)
 		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		require.NoError(t, followerStorage.Append(tt))
+		// followerStorage.Append(tt)
 		follower := newTestRaft(2, 10, 1, followerStorage)
 		follower.loadState(pb.HardState{Term: term - 1})
+		follower.raftLog.maybeAppend(tt)
+
 		// It is necessary to have a three-node cluster.
 		// The second may have more up-to-date log than the first one, so the
 		// first node needs the vote from the third node to become the leader.
@@ -688,7 +706,6 @@ func TestLeaderSyncFollowerLog(t *testing.T) {
 		// The election occurs in the term after the one we loaded with
 		// lead.loadState above.
 		n.send(pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp, Term: term + 1})
-
 		n.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 		assert.Empty(t, diffu(ltoa(lead.raftLog), ltoa(follower.raftLog)), "#%d", i)
