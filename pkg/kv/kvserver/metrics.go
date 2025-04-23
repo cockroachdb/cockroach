@@ -2442,6 +2442,14 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaClosedTimestampLatencyInfoMissing = metric.Metadata{
+		Name: "kv.closed_timestamp.policy_latency_info_missing",
+		Help: "Number of times closed timestamp policy refresh had to use hardcoded network RTT " +
+			"due to missing node latency info for one or more replicas",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
@@ -3045,7 +3053,8 @@ type StoreMetrics struct {
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 
 	// Closed timestamp policy change on ranges metrics.
-	ClosedTimestampPolicyChange *metric.Counter
+	ClosedTimestampPolicyChange       *metric.Counter
+	ClosedTimestampLatencyInfoMissing *metric.Counter
 
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
@@ -3865,7 +3874,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
 
-		ClosedTimestampPolicyChange: metric.NewCounter(metaClosedTimestampPolicyChange),
+		ClosedTimestampPolicyChange:       metric.NewCounter(metaClosedTimestampPolicyChange),
+		ClosedTimestampLatencyInfoMissing: metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
 	}
 	sm.categoryIterMetrics.init(storeRegistry)
 
