@@ -329,26 +329,24 @@ func TestErrorOnRollback(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
-					if !fArgs.Req.IsSingleRequest() {
-						return nil
-					}
-					req := fArgs.Req.Requests[0]
-					etReq, ok := req.GetInner().(*kvpb.EndTxnRequest)
-					// We only inject the error once. Turns out that during the
-					// life of the test there's two EndTxns being sent - one is
-					// the direct result of the test's call to tx.Rollback(),
-					// the second is sent by the TxnCoordSender - indirectly
-					// triggered by the fact that, on the server side, the
-					// transaction's context gets canceled at the SQL layer.
-					if ok &&
-						etReq.Header().Key.String() == targetKeyString.Load().(string) &&
-						atomic.LoadInt64(&injectedErr) == 0 {
+				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+					TestingPostEvalFilter: func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
+						etReq, ok := fArgs.Req.(*kvpb.EndTxnRequest)
+						// We only inject the error once. Turns out that during the life of
+						// the test there's two EndTxns being sent - one is the direct
+						// result of the test's call to tx.Rollback(), the second is sent by
+						// the TxnCoordSender - indirectly triggered by the fact that, on
+						// the server side, the transaction's context gets canceled at the
+						// SQL layer.
+						if ok &&
+							etReq.Header().Key.String() == targetKeyString.Load().(string) &&
+							atomic.LoadInt64(&injectedErr) == 0 {
 
-						atomic.StoreInt64(&injectedErr, 1)
-						return kvpb.NewErrorf("test injected error")
-					}
-					return nil
+							atomic.StoreInt64(&injectedErr, 1)
+							return kvpb.NewErrorf("test injected error")
+						}
+						return nil
+					},
 				},
 			},
 		},
