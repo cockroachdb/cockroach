@@ -397,6 +397,10 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //   - expect-pausepoint: expects the backup job to end up in a paused state because
 //     of a pausepoint error.
 //
+//   - aost: expects a tag referencing a previously saved cluster timestamp
+//     using `save-cluster-ts`. It then runs the backup as of the saved cluster
+//     timestamp.
+//
 //   - "restore" [args]
 //     Executes restore specific operations.
 //
@@ -410,13 +414,29 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //   - aost: expects a tag referencing a previously saved cluster timestamp
 //     using `save-cluster-ts`. It then runs the restore as of the saved cluster
 //     timestamp.
+
+//   - "compact" [args]
+//     Executes compaction specific operations.
+//
+//     Supported arguments:
+//
+//   - tag=<tag>: tag the compaction job to reference it in the future.
+//
+//   - expect-pausepoint: expects the restore job to end up in a paused state because
+//     of a pausepoint error.
+//
+//   - start: expects a tag referencing a previously saved cluster timestamp
+//     using `save-cluster-ts`.
+//
+//   - end: expects a tag referencing a previously saved cluster timestamp
+//     using `save-cluster-ts`.
 //
 //   - "schema" [args]
 //     Executes schema change specific operations.
 //
 //     Supported arguments:
 //
-//   - tag=<tag>: tag the schema change job to reference it in the future.
+// - tag=<tag>: tag the schema change job to reference it in the future.
 //
 //   - expect-pausepoint: expects the schema change job to end up in a paused state because
 //     of a pausepoint error.
@@ -426,9 +446,9 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //
 //     Supported arguments:
 //
-//   - type: kv request type. Currently, only DeleteRange is supported
+// - type: kv request type. Currently, only DeleteRange is supported
 //
-//   - target: SQL target. Currently, only table names are supported.
+// - target: SQL target. Currently, only table names are supported.
 //
 //   - "corrupt-backup" uri=<collectionUri>
 //     Finds the latest backup in the provided collection uri an flips a bit in one SST in the backup
@@ -797,6 +817,18 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			return ""
 
 		case "backup":
+			if d.HasArg("aost") {
+				var aost string
+				d.ScanArgs(t, "aost", &aost)
+				var ts string
+				var ok bool
+				if ts, ok = ds.clusterTimestamps[aost]; !ok {
+					t.Fatalf("no cluster timestamp found for %s", aost)
+				}
+				// Replace the ts tag with the actual timestamp.
+				d.Input = strings.Replace(d.Input, aost,
+					fmt.Sprintf("'%s'", ts), 1)
+			}
 			return execWithTagAndPausePoint(jobspb.TypeBackup)
 
 		case "import":
@@ -818,6 +850,29 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			}
 			return execWithTagAndPausePoint(jobspb.TypeRestore)
 
+		case "compact":
+			if !d.HasArg("start") || !d.HasArg("end") {
+				t.Fatalf("must specify start and end for compaction")
+			}
+			var start, end string
+			d.ScanArgs(t, "start", &start)
+			d.ScanArgs(t, "end", &end)
+			var startTs, endTs string
+			var ok bool
+			if startTs, ok = ds.clusterTimestamps[start]; !ok {
+				t.Fatalf("no cluster timestamp found for %s", start)
+			}
+			if endTs, ok = ds.clusterTimestamps[end]; !ok {
+				t.Fatalf("no cluster timestamp found for %s", end)
+			}
+			// Replace the ts tag with the actual timestamp.
+			// ds.clusterTimestamps stores a stringified nanosecond epoch.
+			d.Input = strings.Replace(d.Input, start,
+				fmt.Sprintf("'%s'::DECIMAL", startTs), 1)
+			d.Input = strings.Replace(d.Input, end,
+				fmt.Sprintf("'%s'::DECIMAL", endTs), 1)
+
+			return execWithTagAndPausePoint(jobspb.TypeBackup)
 		case "new-schema-change":
 			return execWithTagAndPausePoint(jobspb.TypeNewSchemaChange)
 
