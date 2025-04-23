@@ -9,6 +9,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -19,6 +20,18 @@ serial  CREATE TABLE public.serial (
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE public.serial (
+          a INT8 NOT NULL DEFAULT unique_rowid(),
+          b INT8 NULL DEFAULT 7:::INT8,
+          c INT8 NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
+          UNIQUE INDEX serial_c_key (c ASC)
+        ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -46,6 +59,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -56,6 +70,18 @@ smallbig  CREATE TABLE public.smallbig (
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE public.smallbig (
+            a INT8 NOT NULL DEFAULT unique_rowid(),
+            b INT8 NOT NULL DEFAULT unique_rowid(),
+            c INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
+          ) WITH (schema_locked = true);
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -68,6 +94,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -79,6 +106,19 @@ serials  CREATE TABLE public.serials (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE public.serials (
+           a INT8 NOT NULL DEFAULT unique_rowid(),
+           b INT8 NOT NULL DEFAULT unique_rowid(),
+           c INT8 NOT NULL DEFAULT unique_rowid(),
+           d INT8 NULL,
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
+         ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)
@@ -110,6 +150,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -120,6 +161,18 @@ serial  CREATE TABLE public.serial (
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE public.serial (
+          a INT8 NOT NULL DEFAULT nextval('public.serial_a_seq'::REGCLASS),
+          b INT8 NULL DEFAULT 7:::INT8,
+          c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
+          CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
+          UNIQUE INDEX serial_c_key (c ASC)
+        ) WITH (schema_locked = true);
 
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
@@ -152,6 +205,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -162,6 +216,18 @@ smallbig  CREATE TABLE public.smallbig (
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE public.smallbig (
+            a INT8 NOT NULL DEFAULT nextval('public.smallbig_a_seq'::REGCLASS),
+            b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq'::REGCLASS),
+            c INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
+          ) WITH (schema_locked = true);
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -174,6 +240,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -185,6 +252,19 @@ serials  CREATE TABLE public.serials (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE public.serials (
+           a INT8 NOT NULL DEFAULT nextval('public.serials_a_seq'::REGCLASS),
+           b INT8 NOT NULL DEFAULT nextval('public.serials_b_seq'::REGCLASS),
+           c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq'::REGCLASS),
+           d INT8 NULL,
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
+         ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)
@@ -212,6 +292,7 @@ CREATE TABLE serial (
   FAMILY "primary" (a, b, c)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serial
 ----
@@ -222,6 +303,18 @@ serial  CREATE TABLE public.serial (
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
         );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serial
+----
+serial  CREATE TABLE public.serial (
+          a INT8 NOT NULL DEFAULT nextval('public.serial_a_seq'::REGCLASS),
+          b INT8 NULL DEFAULT 7:::INT8,
+          c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
+          CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
+          UNIQUE INDEX serial_c_key (c ASC)
+        ) WITH (schema_locked = true);
 
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
@@ -278,6 +371,7 @@ CREATE TABLE "serial_MixedCase" (
   FAMILY "primary" (a, b, c)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
@@ -288,6 +382,18 @@ SHOW CREATE TABLE "serial_MixedCase"
                       CONSTRAINT "serial_MixedCase_pkey" PRIMARY KEY (a ASC),
                       UNIQUE INDEX "serial_MixedCase_c_key" (c ASC)
                     );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE "serial_MixedCase"
+----
+"serial_MixedCase"  CREATE TABLE public."serial_MixedCase" (
+                      a INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_a_seq"'::REGCLASS),
+                      b INT8 NULL DEFAULT 7:::INT8,
+                      c INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_c_seq"'::REGCLASS),
+                      CONSTRAINT "serial_MixedCase_pkey" PRIMARY KEY (a ASC),
+                      UNIQUE INDEX "serial_MixedCase_c_key" (c ASC)
+                    ) WITH (schema_locked = true);
 
 statement error multiple default values specified for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL DEFAULT 7)
@@ -304,6 +410,7 @@ CREATE TABLE smallbig (
 statement ok
 INSERT INTO smallbig (c) VALUES (7), (7)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE smallbig
 ----
@@ -314,6 +421,18 @@ smallbig  CREATE TABLE public.smallbig (
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
           );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE smallbig
+----
+smallbig  CREATE TABLE public.smallbig (
+            a INT2 NOT NULL DEFAULT nextval('public.smallbig_a_seq'::REGCLASS),
+            b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq'::REGCLASS),
+            c INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
+          ) WITH (schema_locked = true);
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -326,6 +445,7 @@ CREATE TABLE serials (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE serials
 ----
@@ -337,6 +457,19 @@ serials  CREATE TABLE public.serials (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
          );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE serials
+----
+serials  CREATE TABLE public.serials (
+           a INT2 NOT NULL DEFAULT nextval('public.serials_a_seq'::REGCLASS),
+           b INT4 NOT NULL DEFAULT nextval('public.serials_b_seq'::REGCLASS),
+           c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq'::REGCLASS),
+           d INT8 NULL,
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
+         ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)

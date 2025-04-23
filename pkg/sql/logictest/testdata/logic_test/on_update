@@ -188,6 +188,7 @@ CREATE TABLE test_show_default (
   FAMILY fam_1_k (k)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE test_show_default
 ----
@@ -199,6 +200,18 @@ test_show_default  CREATE TABLE public.test_show_default (
                      FAMILY fam_1_k (k)
                    );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE test_show_default
+----
+test_show_default  CREATE TABLE public.test_show_default (
+                     p STRING NOT NULL,
+                     k STRING NULL DEFAULT 'def':::STRING ON UPDATE 'regress':::STRING,
+                     CONSTRAINT "primary" PRIMARY KEY (p ASC),
+                     FAMILY fam_0_p (p),
+                     FAMILY fam_1_k (k)
+                   ) WITH (schema_locked = true);
+
 statement ok
 CREATE TABLE test_show_fk (
   p STRING PRIMARY KEY,
@@ -209,6 +222,7 @@ CREATE TABLE test_show_fk (
   FAMILY fam_2_k (k)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE test_show_fk
 ----
@@ -222,6 +236,21 @@ test_show_fk  CREATE TABLE public.test_show_fk (
                 FAMILY fam_1_j (j),
                 FAMILY fam_2_k (k)
               );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE test_show_fk
+----
+test_show_fk  CREATE TABLE public.test_show_fk (
+                p STRING NOT NULL,
+                j STRING NULL,
+                k STRING NULL ON UPDATE 'regress':::STRING,
+                CONSTRAINT test_show_fk_pkey PRIMARY KEY (p ASC),
+                CONSTRAINT test_show_fk_j_fkey FOREIGN KEY (j) REFERENCES public.test_fk_base(j) ON UPDATE CASCADE,
+                FAMILY fam_0_p (p),
+                FAMILY fam_1_j (j),
+                FAMILY fam_2_k (k)
+              ) WITH (schema_locked = true);
 
 # Sequence tests
 subtest SequenceDependencies

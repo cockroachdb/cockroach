@@ -40,6 +40,19 @@ ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('diff_db.test_seq')
 statement ok
 SELECT nextval('diff_db.test_seq')
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+       i INT8 NOT NULL DEFAULT nextval('public.foo_i_seq'::REGCLASS),
+       j INT8 NOT NULL DEFAULT nextval('public.test_seq'::REGCLASS),
+       k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq'::REGCLASS),
+       l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq'::REGCLASS),
+       CONSTRAINT foo_pkey PRIMARY KEY (i ASC)
+     ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -131,6 +144,19 @@ statement ok
 ALTER SEQUENCE s2 RENAME TO new_s2
 
 # Verify that the sequence rename is reflected.
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+       i INT8 NOT NULL DEFAULT nextval('public.new_bar_i_seq'::REGCLASS),
+       j INT8 NOT NULL DEFAULT currval('public.new_s1'::REGCLASS),
+       k INT8 NOT NULL DEFAULT nextval('public.new_s2'::REGCLASS),
+       CONSTRAINT bar_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j_k (i, j, k)
+     ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -188,6 +214,19 @@ statement ok
 ALTER DATABASE other_db RENAME TO new_other_db
 
 # Verify that the database rename is reflected.
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE new_other_db.t
+----
+new_other_db.public.t  CREATE TABLE public.t (
+                         i INT8 NOT NULL DEFAULT nextval('new_other_db.public.s'::REGCLASS),
+                         j INT8 NOT NULL DEFAULT currval('new_other_db.public.s2'::REGCLASS),
+                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                         CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+                         FAMILY fam_0_i_j_rowid (i, j, rowid)
+                       ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE new_other_db.t
 ----
@@ -252,6 +291,19 @@ statement ok
 ALTER SEQUENCE sc_s2 SET SCHEMA test_schema
 
 # Verify that the schema change is reflected.
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE tb
+----
+tb  CREATE TABLE public.tb (
+      i INT8 NOT NULL DEFAULT nextval('test_schema.tb_i_seq'::REGCLASS),
+      j INT8 NOT NULL DEFAULT nextval('test_schema.sc_s1'::REGCLASS),
+      k INT8 NOT NULL DEFAULT currval('test_schema.sc_s2'::REGCLASS),
+      CONSTRAINT tb_pkey PRIMARY KEY (i ASC),
+      FAMILY fam_0_i_j_k (i, j, k)
+    ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE tb
 ----
@@ -307,6 +359,19 @@ statement ok
 ALTER SCHEMA test_schema RENAME to new_test_schema
 
 # Verify that the schema rename is reflected.
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE new_test_schema.foo
+----
+new_test_schema.foo  CREATE TABLE new_test_schema.foo (
+                       i INT8 NOT NULL DEFAULT nextval('new_test_schema.foo_i_seq'::REGCLASS),
+                       j INT8 NOT NULL DEFAULT nextval('new_test_schema.s3'::REGCLASS),
+                       k INT8 NOT NULL DEFAULT currval('new_test_schema.s4'::REGCLASS),
+                       CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
+                       FAMILY fam_0_i_j_k (i, j, k)
+                     ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE new_test_schema.foo
 ----
@@ -373,6 +438,19 @@ CREATE TABLE t2 (
 statement ok
 ALTER SEQUENCE s5 RENAME TO s5_new
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t2
+----
+t2  CREATE TABLE public.t2 (
+      i INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
+      j INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_i_j_rowid (i, j, rowid)
+    ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t2
 ----

@@ -10,6 +10,7 @@ CREATE TABLE abcd(
   FAMILY (c, d)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -22,6 +23,20 @@ abcd  CREATE TABLE public.abcd (
         FAMILY f1 (a, b),
         FAMILY fam_1_c_d (c, d)
       );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b),
+        FAMILY fam_1_c_d (c, d)
+      ) WITH (schema_locked = true);
 
 statement ok
 CREATE INDEX d_idx ON abcd(d)
@@ -144,6 +159,7 @@ ALTER TABLE abcd ADD COLUMN i INT CREATE IF NOT EXISTS FAMILY F_H
 statement ok
 ALTER TABLE abcd ADD COLUMN j INT CREATE IF NOT EXISTS FAMILY f_j
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -167,9 +183,34 @@ abcd  CREATE TABLE public.abcd (
         FAMILY f_j (j)
       );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        d INT8 NULL,
+        e STRING NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        h INT8 NULL,
+        i INT8 NULL,
+        j INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        INDEX d_idx (d ASC),
+        FAMILY f1 (a, b, e, f),
+        FAMILY fam_1_c_d (c, d),
+        FAMILY fam_2_g (g),
+        FAMILY f_h (h, i),
+        FAMILY f_j (j)
+      ) WITH (schema_locked = true);
+
 statement ok
 ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE abcd
 ----
@@ -183,12 +224,27 @@ abcd  CREATE TABLE public.abcd (
         FAMILY fam_2_g (g)
       );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE abcd
+----
+abcd  CREATE TABLE public.abcd (
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        f DECIMAL NULL,
+        g INT8 NULL,
+        CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
+        FAMILY f1 (a, b, f),
+        FAMILY fam_2_g (g)
+      ) WITH (schema_locked = true);
+
 statement ok
 CREATE TABLE f1 (
   a INT PRIMARY KEY, b STRING, c STRING,
   FAMILY "primary" (a, b, c)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE f1
 ----
@@ -199,9 +255,21 @@ f1  CREATE TABLE public.f1 (
       CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE f1
+----
+f1  CREATE TABLE public.f1 (
+      a INT8 NOT NULL,
+      b STRING NULL,
+      c STRING NULL,
+      CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
+    ) WITH (schema_locked = true);
+
 statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE assign_at_create
 ----
@@ -214,6 +282,20 @@ assign_at_create  CREATE TABLE public.assign_at_create (
                     FAMILY foo (b),
                     FAMILY fam_2_c (c)
                   );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE assign_at_create
+----
+assign_at_create  CREATE TABLE public.assign_at_create (
+                    a INT8 NOT NULL,
+                    b INT8 NULL,
+                    c INT8 NULL,
+                    CONSTRAINT assign_at_create_pkey PRIMARY KEY (a ASC),
+                    FAMILY pri (a),
+                    FAMILY foo (b),
+                    FAMILY fam_2_c (c)
+                  ) WITH (schema_locked = true);
 
 # Check the the diff-column-id storage
 statement ok
@@ -240,6 +322,7 @@ ALTER TABLE rename_col RENAME b TO d
 statement ok
 ALTER TABLE rename_col RENAME c TO e
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE rename_col
 ----
@@ -251,6 +334,19 @@ rename_col  CREATE TABLE public.rename_col (
               FAMILY fam_0_a_b (a, d),
               FAMILY fam_1_c (e)
             );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE rename_col
+----
+rename_col  CREATE TABLE public.rename_col (
+              a INT8 NOT NULL,
+              d INT8 NULL,
+              e STRING NULL,
+              CONSTRAINT rename_col_pkey PRIMARY KEY (a ASC),
+              FAMILY fam_0_a_b (a, d),
+              FAMILY fam_1_c (e)
+            ) WITH (schema_locked = true);
 
 # Regression tests for https://github.com/cockroachdb/cockroach/issues/41007.
 statement ok

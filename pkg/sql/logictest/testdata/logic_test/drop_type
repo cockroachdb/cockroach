@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 statement ok
 SET sql_safe_updates = false;
 

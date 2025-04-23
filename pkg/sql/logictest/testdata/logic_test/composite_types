@@ -58,6 +58,7 @@ DROP TYPE t
 statement ok
 CREATE TABLE atyp(a t[])
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE atyp
 ----
@@ -66,6 +67,16 @@ atyp  CREATE TABLE public.atyp (
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
       );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE atyp
+----
+atyp  CREATE TABLE public.atyp (
+        a public.t[] NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
+      ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO atyp VALUES(ARRAY[(1, 2), (3, 4), NULL, (5, NULL)])

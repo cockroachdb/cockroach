@@ -228,6 +228,7 @@ CREATE TABLE t7 (
   FAMILY "primary" (x, y, z, rowid)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -244,6 +245,24 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT named_constraint CHECK (z = 1:::INT8)
     );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > 0:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > 0:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = 0:::INT8),
+      CONSTRAINT named_constraint CHECK (z = 1:::INT8)
+    ) WITH (schema_locked = true);
+
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t7 WITH REDACT
 ----
@@ -259,6 +278,23 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
       CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
     );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t7 WITH REDACT
+----
+t7  CREATE TABLE public.t7 (
+      x INT8 NULL,
+      y INT8 NULL,
+      z INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t7_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_x CHECK (x > ‹×›:::INT8),
+      CONSTRAINT check_x_y CHECK ((x + y) > ‹×›:::INT8),
+      CONSTRAINT check_y_z CHECK ((y + z) > ‹×›:::INT8),
+      CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
+      CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
+    ) WITH (schema_locked = true);
 
 # Check that table references are dequalified in their stored representation.
 
@@ -282,6 +318,7 @@ CREATE TABLE t8 (
   CHECK (test.t8.a > 0)
 )
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -293,6 +330,19 @@ t8  CREATE TABLE public.t8 (
       CONSTRAINT check_a1 CHECK (a > 0:::INT8),
       CONSTRAINT check_a2 CHECK (a > 0:::INT8)
     );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT check_a CHECK (a > 0:::INT8),
+      CONSTRAINT check_a1 CHECK (a > 0:::INT8),
+      CONSTRAINT check_a2 CHECK (a > 0:::INT8)
+    ) WITH (schema_locked = true);
 
 statement ok
 CREATE DATABASE test2

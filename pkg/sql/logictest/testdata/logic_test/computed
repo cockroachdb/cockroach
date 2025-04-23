@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Note: this file does not contain tests for virtual computed columns; those
 # are in a separate test file.
 

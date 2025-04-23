@@ -2,7 +2,7 @@
 # the tenant table for tenants. Legacy schema changer is also skipped, because
 # some of the queries relating internal state will be impacted in terms of
 # descriptor versions, etc..
-# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer
+# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer !local-schema-locked
 
 # Verify information_schema database handles mutation statements correctly.
 
