@@ -481,3 +481,33 @@ statement ok
 DROP DATABASE database_108751 CASCADE
 
 subtest end
+
+# Verify that a good error message is returned for temporary types.
+subtest temp_type
+
+statement ok
+CREATE DATABASE database_142780
+
+statement ok
+USE database_142780
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement error cannot create type "temp_type" in temporary schema
+CREATE TYPE pg_temp.temp_type AS (a int, b int);
+
+# Verify that the error message is also good if we create a temporary table first.
+statement ok
+CREATE TEMP TABLE temp_table_142780 (a int primary key, b int);
+
+statement error cannot create type "temp_type" in temporary schema
+CREATE TYPE pg_temp.temp_type AS (a int, b int);
+
+statement ok
+RESET database
+
+statement ok
+DROP DATABASE database_142780
+
+subtest end
