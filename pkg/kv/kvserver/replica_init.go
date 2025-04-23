@@ -242,7 +242,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
-	r.LeaderlessWatcher = NewLeaderlessWatcher(r)
+	r.LeaderlessWatcher = newLeaderlessWatcher()
 	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
 	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
 		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)

@@ -481,7 +481,7 @@ func TestMaybeMarkReplicaUnavailableInLeaderlessWatcher(t *testing.T) {
 		repl := tContext.repl
 		repl.LeaderlessWatcher.mu.unavailable = tc.initReplicaUnavailable
 		repl.LeaderlessWatcher.mu.leaderlessTimestamp = tc.initLeaderlessTimestamp
-		repl.maybeMarkReplicaUnavailableInLeaderlessWatcher(ctx, tc.leader, now)
+		repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, tc.leader, now, cfg.Settings)
 		require.Equal(t, tc.expectedUnavailable, repl.LeaderlessWatcher.IsUnavailable())
 		require.Equal(t, tc.expectedLeaderlessTime, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
 
