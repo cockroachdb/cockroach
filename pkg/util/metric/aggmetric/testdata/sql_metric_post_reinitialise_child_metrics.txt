@@ -1,0 +1,32 @@
+echo
+----
+test_counter 2
+test_counter{database="test_db",application_name="test_app"} 1
+test_gauge 20
+test_gauge{database="test_db",application_name="test_app"} 10
+test_histogram_bucket{database="test_db",application_name="test_app",le="+Inf"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="0"} 0
+test_histogram_bucket{database="test_db",application_name="test_app",le="10"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="20"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="30"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="40"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="50"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="60"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="70"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="80"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="90"} 1
+test_histogram_bucket{le="+Inf"} 2
+test_histogram_bucket{le="0"} 0
+test_histogram_bucket{le="10"} 2
+test_histogram_bucket{le="20"} 2
+test_histogram_bucket{le="30"} 2
+test_histogram_bucket{le="40"} 2
+test_histogram_bucket{le="50"} 2
+test_histogram_bucket{le="60"} 2
+test_histogram_bucket{le="70"} 2
+test_histogram_bucket{le="80"} 2
+test_histogram_bucket{le="90"} 2
+test_histogram_count 2
+test_histogram_count{database="test_db",application_name="test_app"} 1
+test_histogram_sum 20
+test_histogram_sum{database="test_db",application_name="test_app"} 10

@@ -323,6 +323,8 @@ sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, inte
 sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	application
 sql.log.user_audit	string		user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.	application
 sql.log.user_audit.reduced_config.enabled	boolean	false	enables logic to compute a reduced audit configuration, computing the audit configuration only once at session start instead of at each SQL event. The tradeoff with the increase in performance (~5%), is that changes to the audit configuration (user role memberships/cluster setting) are not reflected within session. Users will need to start a new session to see these changes in their auditing behaviour.	application
+sql.metrics.application_name.enabled	boolean	false	when enabled, SQL metrics would export application name as and additional label as part of child metrics. The number of unique label combinations is limited to 5000 by default.	application
+sql.metrics.database_name.enabled	boolean	false	when enabled, SQL metrics would export database name as and additional label as part of child metrics. The number of unique label combinations is limited to 5000 by default.	application
 sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics	application
 sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory	application
 sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	application
