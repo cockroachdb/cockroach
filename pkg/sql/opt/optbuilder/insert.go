@@ -310,7 +310,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */)
 
 		// Build the final insert statement, including any returned expressions.
-		mb.buildInsert(returning, ins.VectorInsert())
+		mb.buildInsert(returning, ins.VectorInsert(), false /* hasOnConflict */)
 
 	// Case 2: INSERT..ON CONFLICT DO NOTHING.
 	case ins.OnConflict.DoNothing:
@@ -325,7 +325,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
-		mb.buildInsert(returning, false /* vectorInsert */)
+		mb.buildInsert(returning, false /* vectorInsert */, true /* hasOnConflict */)
 
 	// Case 3: UPSERT statement.
 	case ins.OnConflict.IsUpsertAlias():
@@ -425,6 +425,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 //  4. Each update value is the same as the corresponding insert value.
 //  5. There are no inbound foreign keys containing non-key columns.
 //  6. There are no UPDATE triggers on the target table.
+//  7. Row-level security is disabled for the table. RLS may need to check for
+//     policy violations on the old rows, so we always need to fetch them.
 //
 // TODO(andyk): The fast path is currently only enabled when the UPSERT alias
 // is explicitly selected by the user. It's possible to fast path some queries
@@ -490,7 +492,9 @@ func (mb *mutationBuilder) needExistingRows() bool {
 		}
 	}
 
-	return false
+	// If RLS is enabled, we need to fetch the old rows to check for policy
+	// violations.
+	return mb.tab.IsRowLevelSecurityEnabled()
 }
 
 // addTargetNamedColsForInsert adds a list of user-specified column names to the
@@ -749,13 +753,16 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs, vectorInsert bool) {
+func (mb *mutationBuilder) buildInsert(
+	returning *tree.ReturningExprs, vectorInsert bool, hasOnConflict bool,
+) {
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols(false /* isUpdate */)
+	mb.addCheckConstraintCols(false, /* isUpdate */
+		cat.PolicyScopeInsert, returning != nil || hasOnConflict /* includeSelectOnInsert */)
 
 	// Project partial index PUT boolean columns.
 	mb.projectPartialIndexPutCols()
@@ -960,7 +967,8 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	mb.disambiguateColumns()
 
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols(false /* isUpdate */)
+	mb.addCheckConstraintCols(false, /* isUpdate */
+		cat.PolicyScopeUpsert, false /* includeSelectOnInsert */)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
