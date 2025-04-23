@@ -67,6 +67,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/retry",

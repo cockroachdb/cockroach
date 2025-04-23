@@ -313,6 +313,16 @@ func (c *SQLCounter) Inspect(f func(interface{})) {
 	f(c)
 }
 
+// Clear resets the counter to zero.
+func (c *SQLCounter) Clear() {
+	c.g.Clear()
+}
+
+// Count returns the aggregate count of all of its current and past children.
+func (c *SQLCounter) Count() int64 {
+	return c.g.Count()
+}
+
 // Inc increments the counter value by i for the given label values. If a
 // counter with the given label values doesn't exist yet, it creates a new
 // counter based on labelConfig and increments it. Inc increments parent metrics

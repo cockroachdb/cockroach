@@ -188,34 +188,6 @@ events.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
-### `hot_ranges_stats`
-
-An event of type `hot_ranges_stats`
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `RangeID` |  | no |
-| `Qps` |  | no |
-| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
-| `LeaseholderNodeID` | LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range. | no |
-| `WritesPerSecond` | Writes per second is the recent number of keys written per second on this range. | no |
-| `ReadsPerSecond` | Reads per second is the recent number of keys read per second on this range. | no |
-| `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
-| `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
-| `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
-| `Databases` | Databases for the range. | yes |
-| `Tables` | Tables for the range | yes |
-| `Indexes` | Indexes for the range | yes |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-
 ### `low_disk_space`
 
 An event of type `low_disk_space` is emitted when a store is reaching capacity, as we reach
@@ -474,6 +446,34 @@ Events in this category pertain to the health of one or more servers.
 
 Events in this category are logged to the `HEALTH` channel.
 
+
+### `hot_ranges_stats`
+
+An event of type `hot_ranges_stats`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeID` |  | no |
+| `Qps` |  | no |
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
+| `LeaseholderNodeID` | LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range. | no |
+| `WritesPerSecond` | Writes per second is the recent number of keys written per second on this range. | no |
+| `ReadsPerSecond` | Reads per second is the recent number of keys read per second on this range. | no |
+| `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
+| `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
+| `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
+| `Databases` | Databases for the range. | yes |
+| `Tables` | Tables for the range | yes |
+| `Indexes` | Indexes for the range | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
 
 ### `runtime_stats`
 
