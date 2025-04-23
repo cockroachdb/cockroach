@@ -489,6 +489,31 @@ func (oc *optCatalog) UserHasAdminRole(
 	return oc.planner.UserHasAdminRole(ctx, user)
 }
 
+// UserIsMemberOfAnyRole is part of the cat.Catalog interface.
+func (oc *optCatalog) UserIsMemberOfAnyRole(
+	ctx context.Context, user username.SQLUsername, roles map[username.SQLUsername]struct{},
+) (bool, error) {
+	// First check if the user directly matches any of the roles
+	if _, found := roles[user]; found {
+		return true, nil
+	}
+
+	// Get all roles the user belongs to
+	memberRoles, err := oc.planner.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if any of the target roles are in the user's roles
+	for role := range roles {
+		if _, isMember := memberRoles[role]; isMember {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // HasRoleOption is part of the cat.Catalog interface.
 func (oc *optCatalog) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
