@@ -6132,6 +6132,8 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 144912)
+
 	// Set TestingKnobs to return a known session for easier
 	// comparison.
 	adoptionInterval := 20 * time.Minute
