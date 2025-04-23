@@ -91,19 +91,19 @@ onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t DROP COLUMN j;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-24.3 local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME TO t2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-24.3 local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME COLUMN j TO j2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-24.3 local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx RENAME TO idx2;
 
-onlyif config local-mixed-24.3 local-mixed-25.1 local-legacy-schema-changer
+onlyif config local-mixed-24.3 local-mixed-25.1
 statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx INVISIBLE;
 

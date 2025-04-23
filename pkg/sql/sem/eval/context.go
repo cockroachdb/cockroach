@@ -81,8 +81,7 @@ type Context struct {
 	TxnIsSingleStmt bool
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
-
-	Settings *cluster.Settings
+	Settings    *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
 	ClusterID uuid.UUID
 	// ClusterName is the security string used to secure the RPC layer.
