@@ -85,6 +85,25 @@ func (r *RowLevelSecurityMeta) AddPoliciesUsed(
 	r.PoliciesApplied[tableID] = a
 }
 
+// GetPoliciesUsed returns the policies that are in use for a particular table.
+func (r *RowLevelSecurityMeta) GetPoliciesUsed(
+	tableID TableID,
+) (filters PolicyIDSet, checks PolicyIDSet) {
+	if a, ok := r.PoliciesApplied[tableID]; ok {
+		return a.Filter, a.Check
+	}
+	return PolicyIDSet{}, PolicyIDSet{}
+}
+
+// RefreshNoPoliciesAppliedForTable should be called after policy application
+// is complete for a given table. If no policies were recorded for the table,
+// it updates the 'NoPoliciesApplied' flag to indicate this.
+func (r *RowLevelSecurityMeta) RefreshNoPoliciesAppliedForTable(tableID TableID) {
+	if _, ok := r.PoliciesApplied[tableID]; !ok {
+		r.NoPoliciesApplied = true
+	}
+}
+
 // PoliciesApplied stores the set of policies that were applied to a table.
 type PoliciesApplied struct {
 	// NoForceExempt is true if the policies were exempt because they were the
