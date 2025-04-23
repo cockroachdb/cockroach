@@ -4150,8 +4150,9 @@ func intersectTargets(
 
 // scatterRange attempts to move replicas of a range using the replicate queue
 // to perform changes upon a range until we hit `maxAttempts` for the range.
-// scatterRange is best-effort. Ranges that cannot be moved will just break out
-// of the loop early and not return an error or fail the request.
+// scatterRange is best-effort. Ranges that cannot be moved or fail to acquire
+// the allocator token will just return early and not return an error or fail
+// the request.
 func (r *Replica) scatterRange(ctx context.Context) {
 	rq := r.store.replicateQueue
 	retryOpts := retry.Options{
@@ -4173,6 +4174,18 @@ func (r *Replica) scatterRange(ctx context.Context) {
 	maxAttempts := len(r.Desc().Replicas().Descriptors())
 	currentAttempt := 0
 
+	// Try to acquire the allocator token since r.processOneChange below bypasses
+	// replicateQueue.process which is usually where the replica acquires the
+	// allocator token before issuing replicateQueue.processOneChange. Allocator
+	// token is used by store rebalancer, replicate queue, and lease queue to
+	// synchronize replication changes to the same range.
+	if tokenErr := r.allocatorToken.TryAcquire(ctx, rq.name); tokenErr != nil {
+		log.Warningf(ctx, "failed to scatter range unable to acquire allocator token to process range: %v", tokenErr)
+		return
+	}
+	defer r.allocatorToken.Release(ctx)
+
+	// Loop until we hit an error or until we hit `maxAttempts` for the range.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			log.Eventf(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
