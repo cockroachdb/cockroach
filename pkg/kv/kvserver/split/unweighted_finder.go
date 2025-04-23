@@ -47,6 +47,7 @@ const (
 	splitKeyMinCounter         = 100              // min aggregate counters before consideration
 	splitKeyThreshold          = 0.25             // 25% difference between left/right counters
 	splitKeyContainedThreshold = 0.50             // too many spanning queries over split point
+	clearDirectionThreshold    = 0.80             // 80% accesses left or right
 )
 
 type sample struct {

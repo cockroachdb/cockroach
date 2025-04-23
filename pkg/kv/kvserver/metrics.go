@@ -2484,6 +2484,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaClearDirectionCount = metric.Metadata{
+		Name:        "kv.loadsplitter.cleardirection",
+		Help:        "Load-based splitter observed an access direction greater than 80% left or right in the samples.",
+		Measurement: "Occurrences",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaSplitEstimatedStats = metric.Metadata{
 		Name:        "kv.split.estimated_stats",
 		Help:        "Number of splits that computed estimated MVCC stats.",
@@ -3348,8 +3355,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		registry:              storeRegistry,
 		TenantsStorageMetrics: newTenantsStorageMetrics(),
 		LoadSplitterMetrics: &split.LoadSplitterMetrics{
-			PopularKeyCount: metric.NewCounter(metaPopularKeyCount),
-			NoSplitKeyCount: metric.NewCounter(metaNoSplitKeyCount),
+			PopularKeyCount:     metric.NewCounter(metaPopularKeyCount),
+			NoSplitKeyCount:     metric.NewCounter(metaNoSplitKeyCount),
+			ClearDirectionCount: metric.NewCounter(metaClearDirectionCount),
 		},
 
 		// Replica metrics.
