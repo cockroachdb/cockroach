@@ -627,6 +627,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-mixed-24.3",
 		"local-mixed-25.1",
 		"local-mixed-25.2",
+		"local-schema-locked",
 	),
 
 	// Special alias for all 5 node configs.

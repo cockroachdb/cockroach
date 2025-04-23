@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1

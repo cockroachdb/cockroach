@@ -479,13 +479,6 @@ func TestLogic_create_as(
 	runLogicTest(t, "create_as")
 }
 
-func TestLogic_create_statements(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_statements")
-}
-
 func TestLogic_cross_join(
 	t *testing.T,
 ) {
