@@ -1,0 +1,24 @@
+# LogicTest: cockroach-go-testserver-configs
+
+statement error pgcode 0A000 pq: unimplemented: set-returning PL/pgSQL functions are not yet supported
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 1; END $$;
+
+upgrade 0
+
+statement error pgcode 0A000 pq: unimplemented: PL/pgSQL set-returning functions are only supported in v25.2 and later
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 1; END $$;
+
+upgrade 1
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query B retry
+SELECT crdb_internal.is_at_least_version('25.1-02')
+----
+true
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 1; END $$;

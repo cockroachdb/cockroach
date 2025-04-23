@@ -108,6 +108,13 @@ func TestLogic_mixed_version_jsonpath(
 	runLogicTest(t, "mixed_version_jsonpath")
 }
 
+func TestLogic_mixed_version_plpgsql_srf(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_plpgsql_srf")
+}
+
 func TestLogic_mixed_version_stats(
 	t *testing.T,
 ) {
