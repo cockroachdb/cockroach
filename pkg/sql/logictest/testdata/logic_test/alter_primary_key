@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # We've seen this test hit a timeout in fakedist configs under race.
 skip under race
 

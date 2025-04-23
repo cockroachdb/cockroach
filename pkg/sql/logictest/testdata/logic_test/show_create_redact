@@ -1,6 +1,9 @@
 # Test that column defaults are redacted.
 
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 CREATE TABLE a (a STRING DEFAULT 'a')
 
 query TT

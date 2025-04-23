@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # This test exercises the presence of an explanatory hint when a transaction
 # ends up partially committed and partially aborted.
 

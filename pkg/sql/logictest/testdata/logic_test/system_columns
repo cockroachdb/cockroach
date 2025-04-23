@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
 INSERT INTO t VALUES (1, 2, 3)

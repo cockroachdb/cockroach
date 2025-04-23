@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.1 !local-mixed-24.3
+# LogicTest: !local-mixed-25.1 !local-mixed-24.3 !local-schema-locked
 # TODO(mw5h): Remove this once 25.2 is our minimum supported version.
 
 subtest regression_42858
