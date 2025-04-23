@@ -92,10 +92,10 @@ RUN case ${TARGETPLATFORM} in \
  rm -rf aws awscliv2.zip
 
 RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") ARCH=x86_64; SHASUM=ce84f2447fb7a8679e58bc54a20dc2b01b37b5802e12c57eece772a6f14bf3f0 ;; \
-    "linux/arm64") ARCH=aarch64; SHASUM=ae13e2effe077e829be759182396b931d8f85cfb9cfe9d49385516ea367ef7b2 ;; \
+    "linux/amd64") ARCH=x86_64; SHASUM=a3fb9c1de3512bc91f27cc47297d6d6cf208adee9b64ed719130da59ac13e26b ;; \
+    "linux/arm64") ARCH=aarch64; SHASUM=e5165eb592a317e1f6da0ac7fcbccf60d7fb8e5ac1f0d7336a9be51c23308b06 ;; \
   esac && \
- curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-$ARCH.tar.gz" -o "patchelf.tar.gz" && \
+ curl -fsSL "https://github.com/NixOS/patchelf/releases/download/0.17.2/patchelf-0.17.2-$ARCH.tar.gz" -o "patchelf.tar.gz" && \
  echo "$SHASUM patchelf.tar.gz" | sha256sum -c - && \
  tar --strip-components=1 -C /usr -xzf patchelf.tar.gz && \
  rm -rf patchelf.tar.gz
