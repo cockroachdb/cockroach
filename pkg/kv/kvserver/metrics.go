@@ -8,11 +8,13 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -2672,11 +2674,12 @@ type StoreMetrics struct {
 	RaftFlowStateCounts           [tracker.StateCount]*metric.Gauge
 
 	// Range metrics.
-	RangeCount                *metric.Gauge
-	UnavailableRangeCount     *metric.Gauge
-	UnderReplicatedRangeCount *metric.Gauge
-	OverReplicatedRangeCount  *metric.Gauge
-	DecommissioningRangeCount *metric.Gauge
+	RangeCount                      *metric.Gauge
+	UnavailableRangeCount           *metric.Gauge
+	UnderReplicatedRangeCount       *metric.Gauge
+	OverReplicatedRangeCount        *metric.Gauge
+	DecommissioningRangeCount       *metric.Gauge
+	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -3385,11 +3388,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftFlowStateCounts:           raftFlowStateGaugeSlice(),
 
 		// Range metrics.
-		RangeCount:                metric.NewGauge(metaRangeCount),
-		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
-		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
-		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
-		DecommissioningRangeCount: metric.NewGauge(metaDecommissioningRangeCount),
+		RangeCount:                      metric.NewGauge(metaRangeCount),
+		UnavailableRangeCount:           metric.NewGauge(metaUnavailableRangeCount),
+		UnderReplicatedRangeCount:       metric.NewGauge(metaUnderReplicatedRangeCount),
+		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
+		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
+		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
@@ -4166,6 +4170,20 @@ func raftFlowStateGaugeSlice() [tracker.StateCount]*metric.Gauge {
 	gauges[tracker.StateReplicate] = metric.NewGauge(metaRaftFlowsReplicate)
 	gauges[tracker.StateSnapshot] = metric.NewGauge(metaRaftFlowsSnapshot)
 	return gauges
+}
+
+func makePolicyRefresherMetrics() [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge {
+	var policyGauges [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
+	for policy := ctpb.LAG_BY_CLUSTER_SETTING; policy < ctpb.MAX_CLOSED_TIMESTAMP_POLICY; policy++ {
+		meta := metric.Metadata{
+			Name:        fmt.Sprintf("kv.closed_timestamp.policy.%s", strings.ToLower(policy.String())),
+			Help:        fmt.Sprintf("Number of ranges with %s closed timestamp policy", policy.String()),
+			Measurement: "Ranges",
+			Unit:        metric.Unit_COUNT,
+		}
+		policyGauges[policy] = metric.NewGauge(meta)
+	}
+	return policyGauges
 }
 
 func storageLevelMetricMetadata(

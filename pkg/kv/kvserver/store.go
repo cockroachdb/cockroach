@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
@@ -3360,17 +3361,18 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		totalRaftLogSize int64
 		maxRaftLogSize   int64
 
-		rangeCount                int64
-		unavailableRangeCount     int64
-		underreplicatedRangeCount int64
-		overreplicatedRangeCount  int64
-		decommissioningRangeCount int64
-		behindCount               int64
-		pausedFollowerCount       int64
-		ioOverload                float64
-		pendingRaftProposalCount  int64
-		slowRaftProposalCount     int64
-		raftFlowStateCounts       [tracker.StateCount]int64
+		rangeCount                  int64
+		unavailableRangeCount       int64
+		underreplicatedRangeCount   int64
+		overreplicatedRangeCount    int64
+		decommissioningRangeCount   int64
+		behindCount                 int64
+		pausedFollowerCount         int64
+		ioOverload                  float64
+		pendingRaftProposalCount    int64
+		slowRaftProposalCount       int64
+		raftFlowStateCounts         [tracker.StateCount]int64
+		closedTimestampPolicyCounts [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]int64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3429,6 +3431,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		if metrics.Leaseholder {
 			s.metrics.RaftQuotaPoolPercentUsed.RecordValue(metrics.QuotaPoolPercentUsed)
+			closedTimestampPolicyCounts[metrics.ClosedTimestampPolicy] += 1
 			leaseHolderCount++
 			switch metrics.LeaseType {
 			case roachpb.LeaseNone:
@@ -3530,6 +3533,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	for state, cnt := range raftFlowStateCounts {
 		s.metrics.RaftFlowStateCounts[state].Update(cnt)
+	}
+	for policy, count := range closedTimestampPolicyCounts {
+		s.metrics.RangeClosedTimestampPolicyCount[policy].Update(count)
 	}
 	s.metrics.RaftLogTotalSize.Update(totalRaftLogSize)
 	s.metrics.RaftLogMaxSize.Update(maxRaftLogSize)
