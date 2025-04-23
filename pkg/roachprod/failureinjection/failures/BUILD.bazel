@@ -1,12 +1,14 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "failures",
     srcs = [
         "disk_stall.go",
+        "failer.go",
         "failure.go",
         "latency.go",
         "network_partition.go",
+        "noop.go",
         "registry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures",
@@ -16,7 +18,20 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "failures_test",
+    srcs = ["failer_test.go"],
+    embed = [":failures"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
