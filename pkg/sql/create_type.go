@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -107,6 +108,14 @@ func (n *createTypeNode) startExec(params runParams) error {
 func resolveNewTypeName(
 	ctx context.Context, p *planner, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
+	// Check that we are not creating in a temporary schema. To support this,
+	// we'd need to update the type descriptor to have an IsTemporary flag, and
+	// the temporary object cleaner would need to handle these.
+	if name.HasExplicitSchema() && strings.HasPrefix(name.Schema(), catconstants.PgTempSchemaName) {
+		return nil, nil, pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot create type %q in temporary schema", name.Object(),
+		)
+	}
 	// Resolve the target schema and database.
 	db, _, prefix, err := p.ResolveTargetObject(ctx, name)
 	if err != nil {
