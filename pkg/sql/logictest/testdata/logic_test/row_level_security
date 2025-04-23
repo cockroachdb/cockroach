@@ -4485,3 +4485,267 @@ statement ok
 DROP ROLE parent_role
 
 subtest end
+
+subtest triggers_with_rls
+
+statement ok
+CREATE TABLE trigger_rls_table (id INT PRIMARY KEY, value INT, owner STRING);
+
+statement ok
+INSERT INTO trigger_rls_table VALUES (1, 100, 'alice'), (2, 200, 'bob'), (3, 300, 'alice'), (4, 400, 'bob');
+
+statement ok
+CREATE USER alice;
+
+statement ok
+CREATE USER bob;
+
+statement ok
+GRANT ALL ON trigger_rls_table TO alice, bob;
+
+# Enable RLS on the table
+statement ok
+ALTER TABLE trigger_rls_table ENABLE ROW LEVEL SECURITY;
+
+# Create a policy that only allows users to see their own data.
+statement ok
+CREATE POLICY owner_policy ON trigger_rls_table
+  USING (owner = current_user())
+  WITH CHECK (owner = current_user());
+
+# Create a trigger function that logs changes to the table.
+statement ok
+CREATE FUNCTION log_value_changes() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE NOTICE 'User % updated value for id % from % to %', current_user(), (NEW).id, (OLD).value, (NEW).value;
+  ELSIF TG_OP = 'INSERT' THEN
+    RAISE NOTICE 'User % inserted new row with id % and value %', current_user(), (NEW).id, (NEW).value;
+  ELSIF TG_OP = 'DELETE' THEN
+    RAISE NOTICE 'User % deleted row with id % and value %', current_user(), (OLD).id, (OLD).value;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+# Create a trigger function that enforces a business rule: value must be positive.
+statement ok
+CREATE FUNCTION enforce_positive_value() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  IF (NEW).value <= 0 THEN
+    RAISE EXCEPTION 'Value must be positive';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+# Create a trigger that logs changes.
+statement ok
+CREATE TRIGGER log_changes
+  AFTER INSERT OR UPDATE OR DELETE ON trigger_rls_table
+  FOR EACH ROW
+  EXECUTE FUNCTION log_value_changes();
+
+# Create a trigger that enforces the business rule.
+statement ok
+CREATE TRIGGER check_positive_value
+  BEFORE INSERT OR UPDATE ON trigger_rls_table
+  FOR EACH ROW
+  EXECUTE FUNCTION enforce_positive_value();
+
+# Test as alice.
+statement ok
+SET ROLE alice;
+
+# Alice should only see her own rows.
+query IIT
+SELECT * FROM trigger_rls_table ORDER BY id;
+----
+1  100  alice
+3  300  alice
+
+# Update a row that alice owns.
+query T noticetrace
+UPDATE trigger_rls_table SET value = 150 WHERE id = 1;
+----
+NOTICE: User alice updated value for id 1 from 100 to 150
+
+# Try to update a row that bob owns (should not error, but should not affect any rows).
+query T noticetrace
+UPDATE trigger_rls_table SET value = 250 WHERE id = 2;
+----
+
+# Test negative value should trigger error.
+statement error pq: Value must be positive
+UPDATE trigger_rls_table SET value = -100 WHERE id = 1;
+
+# Insert a new row that alice owns.
+query T noticetrace
+INSERT INTO trigger_rls_table VALUES (5, 500, 'alice');
+----
+NOTICE: User alice inserted new row with id 5 and value 500
+
+# Try to insert a row that bob owns (should fail due to RLS policy).
+statement error pq: new row violates row-level security policy for table "trigger_rls_table"
+INSERT INTO trigger_rls_table VALUES (6, 600, 'bob');
+
+# Delete a row that alice owns.
+query T noticetrace
+DELETE FROM trigger_rls_table WHERE id = 3;
+----
+NOTICE: User alice deleted row with id 3 and value 300
+
+# Test as bob.
+statement ok
+SET ROLE bob;
+
+# Bob should only see his own rows.
+query IIT
+SELECT * FROM trigger_rls_table ORDER BY id;
+----
+2  200  bob
+4  400  bob
+
+# Update a row that bob owns.
+query T noticetrace
+UPDATE trigger_rls_table SET value = 250 WHERE id = 2;
+----
+NOTICE: User bob updated value for id 2 from 200 to 250
+
+# Try to update a row that alice owns (should not error, but should not affect any rows).
+query T noticetrace
+UPDATE trigger_rls_table SET value = 175 WHERE id = 1;
+----
+
+# Insert a new row that bob owns.
+query T noticetrace
+INSERT INTO trigger_rls_table VALUES (7, 700, 'bob');
+----
+NOTICE: User bob inserted new row with id 7 and value 700
+
+# Test if bob can bypass RLS with a trigger function that modifies other rows.
+statement ok
+CREATE FUNCTION try_bypass_rls() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  UPDATE trigger_rls_table SET value = 999 WHERE owner = 'alice';
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER bypass_attempt
+  AFTER INSERT ON trigger_rls_table
+  FOR EACH ROW
+  EXECUTE FUNCTION try_bypass_rls();
+
+# Try to trigger the bypass (this insert will succeed but the trigger's UPDATE should be limited by RLS).
+statement ok
+INSERT INTO trigger_rls_table VALUES (8, 800, 'bob');
+
+# Check as root what happened.
+statement ok
+SET ROLE root;
+
+# Alice's rows should not have been affected by bob's trigger.
+query IIT
+SELECT * FROM trigger_rls_table WHERE owner = 'alice' ORDER BY id;
+----
+1  150  alice
+5  500  alice
+
+# Now test a BEFORE trigger that modifies a column in a way that would violate an RLS policy.
+statement ok
+SET ROLE alice;
+
+# Create a trigger function that tries to change the owner column to 'bob'.
+statement ok
+CREATE FUNCTION change_owner_to_bob() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  NEW.owner = 'bob';
+  RETURN NEW;
+END;
+$$;
+
+# Create a trigger that applies the function before insert.
+statement ok
+CREATE TRIGGER force_bob_ownership
+  BEFORE INSERT ON trigger_rls_table
+  FOR EACH ROW
+  EXECUTE FUNCTION change_owner_to_bob();
+
+# Try to insert a row - this should fail because the trigger modifies 
+# the owner to 'bob' which violates alice's RLS policy.
+statement error pq: new row violates row-level security policy for table "trigger_rls_table"
+INSERT INTO trigger_rls_table VALUES (9, 900, 'alice');
+
+# Now do the same with update.
+statement ok
+CREATE FUNCTION change_updated_owner_to_bob() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    NEW.owner = 'bob';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER force_update_bob_ownership
+  BEFORE UPDATE ON trigger_rls_table
+  FOR EACH ROW
+  EXECUTE FUNCTION change_updated_owner_to_bob();
+
+# Try to update a row - this should fail because the trigger modifies
+# the owner to 'bob' which violates alice's RLS policy.
+statement error pq: new row violates row-level security policy for table "trigger_rls_table"
+UPDATE trigger_rls_table SET value = 600 WHERE id = 5;
+
+# Let's try with both bob and root to see how it works for them.
+statement ok
+SET ROLE bob;
+
+# For bob, changing owner to bob is allowed by the policy.
+query T noticetrace
+INSERT INTO trigger_rls_table VALUES (10, 1000, 'alice');
+----
+NOTICE: User bob inserted new row with id 10 and value 1000
+
+# Verify the owner was changed to bob by the trigger.
+query IIT
+SELECT * FROM trigger_rls_table WHERE id = 10;
+----
+10  1000  bob
+
+# For completeness, let's see from the root perspective.
+statement ok
+SET ROLE root;
+
+# Check all rows in the table to see what happened.
+query IIT
+SELECT * FROM trigger_rls_table ORDER BY id;
+----
+1  150  alice
+2  250  bob
+4  400  bob
+5  500  alice
+7  700  bob
+8  800  bob
+10  1000  bob
+
+# Clean up the additional triggers and functions.
+statement ok
+DROP TRIGGER force_bob_ownership ON trigger_rls_table;
+DROP TRIGGER force_update_bob_ownership ON trigger_rls_table;
+DROP FUNCTION change_owner_to_bob;
+DROP FUNCTION change_updated_owner_to_bob;
+DROP TRIGGER log_changes ON trigger_rls_table;
+DROP TRIGGER check_positive_value ON trigger_rls_table;
+DROP TRIGGER bypass_attempt ON trigger_rls_table;
+DROP FUNCTION log_value_changes;
+DROP FUNCTION enforce_positive_value;
+DROP FUNCTION try_bypass_rls;
+DROP TABLE trigger_rls_table;
+DROP USER alice;
+DROP USER bob;
+
+subtest end
