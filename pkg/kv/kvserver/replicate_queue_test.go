@@ -2377,10 +2377,10 @@ func TestReplicateQueueAllocatorToken(t *testing.T) {
 	require.ErrorAs(t, processErr, &allocationError)
 }
 
-// TestAdminScatterAllocatorToken verifies issue #144579 by demonstrating that
-// AdminScatter does not acquire the allocator token. AdminScatter should not
-// have scattered replicas while the token was explicitly held by the test. But
-// the test confirms otherwise.
+// TestAdminScatterAllocatorToken verifies that AdminScatter does perform
+// allocator token acquisition. When the token is held, scatter should not move
+// any replicas. Once released, scatter should successfully rebalance replicas.
+// Regression test for #144579.
 func TestAdminScatterAllocatorToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2396,19 +2396,25 @@ func TestAdminScatterAllocatorToken(t *testing.T) {
 	require.NoError(t, err)
 	repl := tc.GetRaftLeader(t, roachpb.RKey(key))
 
+	// Hold allocator token and verify scatter is blocked
 	require.NoError(t, repl.AllocatorToken().TryAcquire(ctx, "test"))
 	s := tc.Server(0)
 	db := s.DB()
 	require.NoError(t, db.Put(ctx, key, "abc"))
-	resp, err := db.AdminScatter(ctx, key, 0)
+	scatterRespWithTokenHeld, err := db.AdminScatter(ctx, key, 0 /*maxSize*/)
+	require.NoError(t, err)
+	require.NotNil(t, scatterRespWithTokenHeld)
+	require.Equal(t, int64(0), scatterRespWithTokenHeld.ReplicasScatteredBytes)
+	require.True(t, scatterRespWithTokenHeld.NoReplicasMoved)
+
+	// Release token and verify scatter succeeds.
 	repl.AllocatorToken().Release(ctx)
 	require.NoError(t, err)
-	// A non-empty resp.ReplicasScatteredBytes indicates that the adminScatter did
-	// scatter the replica, even though it shouldn't have (because it didn't have
-	// the allocator token).
-	require.Greater(t, resp.ReplicasScatteredBytes, int64(0))
-	// We actually want resp.ReplicasScatteredBytes == 0.
-	//require.Equal(t, resp.ReplicasScatteredBytes, int64(0))
+	scatterRespAfterRelease, err := db.AdminScatter(ctx, key, 0 /*maxSize*/)
+	require.NoError(t, err)
+	require.NotNil(t, scatterRespAfterRelease)
+	require.Greater(t, scatterRespAfterRelease.ReplicasScatteredBytes, int64(0))
+	require.False(t, scatterRespAfterRelease.NoReplicasMoved)
 }
 
 // TestReplicateQueueDecommissionScannerDisabled asserts that decommissioning
