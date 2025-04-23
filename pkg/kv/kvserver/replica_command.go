@@ -4148,16 +4148,19 @@ func intersectTargets(
 	return intersection
 }
 
-// adminScatter moves replicas and leaseholders for a selection of ranges.
-func (r *Replica) adminScatter(
-	ctx context.Context, args kvpb.AdminScatterRequest,
-) (kvpb.AdminScatterResponse, error) {
-	rq := r.store.replicateQueue
-	retryOpts := retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
-		MaxRetries:     5,
+// scatterRangeAndRandomizeLeases does two things: 1. attempts to move replicas
+// of a range using the replicate queue to perform changes upon a range until we
+// hit `maxAttempts` for the range. 2. attempts to transfer lease to a randomly
+// chosen suitable replica. scatterRangeAndRandomizeLeases is best-effort and
+// does not guarantee a uniform distribution. Return number of replicas moved
+// based on comparing the state before and after the scatter operation.
+func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeLeases bool) int {
+	// Construct a mapping to store the replica IDs before we attempt to scatter
+	// them. This is used to below to check which replicas were actually moved by
+	// the replicate queue .
+	preScatterReplicaIDs := make(map[roachpb.ReplicaID]struct{})
+	for _, rd := range r.Desc().Replicas().Descriptors() {
+		preScatterReplicaIDs[rd.ReplicaID] = struct{}{}
 	}
 
 	// On every `processOneChange` call with the `scatter` option set, stores in
@@ -4172,18 +4175,12 @@ func (r *Replica) adminScatter(
 	maxAttempts := len(r.Desc().Replicas().Descriptors())
 	currentAttempt := 0
 
-	if args.MaxSize > 0 {
-		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
-			return kvpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
-		}
-	}
-
-	// Construct a mapping to store the replica IDs before we attempt to scatter
-	// them. This is used to below to check which replicas were actually moved by
-	// the replicate queue .
-	preScatterReplicaIDs := make(map[roachpb.ReplicaID]struct{})
-	for _, rd := range r.Desc().Replicas().Descriptors() {
-		preScatterReplicaIDs[rd.ReplicaID] = struct{}{}
+	rq := r.store.replicateQueue
+	retryOpts := retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     5,
 	}
 
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
@@ -4225,7 +4222,7 @@ func (r *Replica) adminScatter(
 	// queue would do on its own (#17341), do so after the replicate queue is
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
-	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+	if randomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc, conf := r.DescAndSpanConfig()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
 			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
@@ -4256,6 +4253,24 @@ func (r *Replica) adminScatter(
 			numReplicasMoved++
 		}
 	}
+	return numReplicasMoved
+}
+
+// adminScatter moves replicas and leaseholders for a selection of ranges. It is
+// best-effort. Ranges that cannot be moved will just return early and not
+// return an error. NoReplicasMoved is included in AdminScatterResponse to tell
+// clients to potentially retry the ScatterRequest if ranges fail to move.
+func (r *Replica) adminScatter(
+	ctx context.Context, args kvpb.AdminScatterRequest,
+) (kvpb.AdminScatterResponse, error) {
+	if args.MaxSize > 0 {
+		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
+			return kvpb.AdminScatterResponse{},
+				errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
+		}
+	}
+
+	numReplicasMoved := r.scatterRangeAndRandomizeLeases(ctx, args.RandomizeLeases)
 
 	ri := r.GetRangeInfo(ctx)
 	stats := r.GetMVCCStats()
