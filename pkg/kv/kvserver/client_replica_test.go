@@ -5795,6 +5795,17 @@ func BenchmarkEmptyRebalance(b *testing.B) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchRange := tc.ScratchRange(b)
+
+	// Before actually starting the benchmark, we need to make sure that the raft
+	// group is able to add/remove voters. This is important because in leader
+	// leases, it takes a few seconds for store liveness heartbeats to start.
+	// We need store liveness heartbeats for two reasons: (1) By default,
+	// followers won't campaign unless they are supported by a quorum of peers,
+	// and (2) The leader won't be able to propose config changes unless the new
+	// config doesn't cause a regression in the LeadSupportUntil.
+	tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
+	tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
+
 	b.Run("add-remove", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
