@@ -1366,12 +1366,18 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 		// policy bucket. This then controls how far in the future timestamps will
 		// be closed for the range.
 		maxLatency := time.Duration(-1)
+		replicaLatencyInfoMissing := false
 		for _, peer := range desc.InternalReplicas {
 			peerLatency := closedts.DefaultMaxNetworkRTT
 			if latency, ok := latencies[peer.NodeID]; ok {
 				peerLatency = latency
+			} else {
+				replicaLatencyInfoMissing = true
 			}
 			maxLatency = max(maxLatency, peerLatency)
+		}
+		if replicaLatencyInfoMissing {
+			r.store.metrics.ClosedTimestampLatencyInfoMissing.Inc(1)
 		}
 		return closedts.FindBucketBasedOnNetworkRTTWithDampening(
 			oldPolicy,
