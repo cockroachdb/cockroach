@@ -17,6 +17,7 @@ DROP USER madhatter;
 CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x)
 );
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE ";--notbetter"
 ----
@@ -39,6 +40,29 @@ SHOW CREATE TABLE ";--notbetter"
                 CREATE TABLE unused (x ")
                 );
 
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE ";--notbetter"
+----
+";--notbetter"  CREATE TABLE public.";--notbetter" (
+                  x INT8 NOT NULL,
+                  y INT8 NULL,
+                  "welp INT); -- concerning much
+                DROP USER dumpty;
+                CREATE TABLE unused (x " INT8 NULL,
+                  CONSTRAINT "getmeoutofhere PRIMARY KEY (x ASC)); -- saveme!
+                DROP USER madhatter;
+                CREATE TABLE unused4(x INT, CONSTRAINT woo " PRIMARY KEY (x ASC),
+                  INDEX "helpme ON (x)); -- this must stop!
+                DROP USER alice;
+                CREATE TABLE unused2(x INT, INDEX woo ON " (x ASC),
+                  FAMILY "nonotagain (x)); -- welp!
+                DROP USER queenofhearts;
+                CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning much
+                DROP USER dumpty;
+                CREATE TABLE unused (x ")
+                ) WITH (schema_locked = true);
+
 # Check that view creates handle strange things properly.
 statement ok
 CREATE VIEW ";--alsoconcerning" AS SELECT x AS a, y AS b FROM ";--notbetter"
@@ -55,6 +79,7 @@ SHOW CREATE VIEW ";--alsoconcerning"
 statement ok
 CREATE TABLE ";--dontask" AS SELECT x AS a, y AS b FROM ";--notbetter"
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE ";--dontask"
 ----
@@ -64,3 +89,14 @@ SHOW CREATE TABLE ";--dontask"
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT ";--dontask_pkey" PRIMARY KEY (rowid ASC)
               );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE ";--dontask"
+----
+";--dontask"  CREATE TABLE public.";--dontask" (
+                a INT8 NULL,
+                b INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT ";--dontask_pkey" PRIMARY KEY (rowid ASC)
+              ) WITH (schema_locked = true);

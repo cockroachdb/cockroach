@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.1 !local-mixed-24.3 local-schema-locked
+# LogicTest: !local-mixed-25.1 !local-mixed-24.3
 # TODO(mw5h): Remove this once 25.2 is our minimum supported version.
 
 statement ok
@@ -203,7 +203,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
                                  INDEX create_index_concurrently_idx (a ASC)
-                               ) WITH (schema_locked = true)
+                               ) WITH (schema_locked = true);
 
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
@@ -243,7 +243,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  a INT8 NULL,
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
-                               ) WITH (schema_locked = true)
+                               ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE create_index_concurrently_tbl
@@ -464,7 +464,7 @@ CREATE TABLE public.t_hash (
   INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
   FAMILY fam_0_pk_a_b (pk, a, b)
-) WITH (schema_locked = true)
+) WITH (schema_locked = true);
 
 statement ok
 CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
@@ -669,6 +669,7 @@ statement ok
 CREATE UNIQUE INDEX tbl_with_collate_expr3 ON tbl_with_collate ((c1::text COLLATE "en-us"));
 
 
+skipif config local-schema-locked
 query TT
 SHOW CREATE TABLE tbl_with_collate
 ----
@@ -680,5 +681,18 @@ tbl_with_collate  CREATE TABLE public.tbl_with_collate (
                     UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
                     UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
                   );
+
+onlyif config local-schema-locked
+query TT
+SHOW CREATE TABLE tbl_with_collate
+----
+tbl_with_collate  CREATE TABLE public.tbl_with_collate (
+                    c1 INT8 NULL,
+                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
+                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
+                  ) WITH (schema_locked = true);
 
 subtest end

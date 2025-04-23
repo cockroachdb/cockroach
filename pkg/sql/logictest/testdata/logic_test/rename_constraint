@@ -7,6 +7,7 @@ CREATE TABLE t (
   FAMILY "primary" (x, y, rowid)
   )
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -19,6 +20,20 @@ CREATE TABLE public.t (
   UNIQUE INDEX cu (x ASC),
   CONSTRAINT cc CHECK (x > 10:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+  x INT8 NULL,
+  y INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT cf FOREIGN KEY (x) REFERENCES public.t(x),
+  UNIQUE INDEX cu (x ASC),
+  CONSTRAINT cc CHECK (x > 10:::INT8)
+) WITH (schema_locked = true);
 
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
@@ -35,6 +50,7 @@ ALTER TABLE t RENAME CONSTRAINT cu TO cu2,
               RENAME CONSTRAINT cf TO cf2,
 			  RENAME CONSTRAINT cc TO cc2
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -47,6 +63,20 @@ CREATE TABLE public.t (
   UNIQUE INDEX cu2 (x ASC),
   CONSTRAINT cc2 CHECK (x > 10:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+  x INT8 NULL,
+  y INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT cf2 FOREIGN KEY (x) REFERENCES public.t(x),
+  UNIQUE INDEX cu2 (x ASC),
+  CONSTRAINT cc2 CHECK (x > 10:::INT8)
+) WITH (schema_locked = true);
 
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname
@@ -87,6 +117,7 @@ ALTER TABLE t RENAME CONSTRAINT cu2 TO cu3,
 			  RENAME CONSTRAINT cc3 TO cc4,
 			  RENAME CONSTRAINT cf3 TO cf4
 
+skipif config local-schema-locked
 query T
 SELECT create_statement FROM [SHOW CREATE t]
 ----
@@ -99,6 +130,20 @@ CREATE TABLE public.t (
   UNIQUE INDEX cu4 (x ASC),
   CONSTRAINT cc4 CHECK (x > 10:::INT8)
 );
+
+onlyif config local-schema-locked
+query T
+SELECT create_statement FROM [SHOW CREATE t]
+----
+CREATE TABLE public.t (
+  x INT8 NULL,
+  y INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT cf4 FOREIGN KEY (x) REFERENCES public.t(x),
+  UNIQUE INDEX cu4 (x ASC),
+  CONSTRAINT cc4 CHECK (x > 10:::INT8)
+) WITH (schema_locked = true);
 
 query TT
 SELECT conname, contype FROM pg_catalog.pg_constraint ORDER BY conname

@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
