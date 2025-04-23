@@ -46,6 +46,15 @@ const (
 	LabelQueryInternal = "query_internal"
 )
 
+type LabelConfig uint64
+
+const (
+	LabelConfigDisabled LabelConfig = iota
+	LabelConfigApp      LabelConfig = 1 << iota
+	LabelConfigDB
+	LabelConfigAppAndDB = LabelConfigApp | LabelConfigDB
+)
+
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
 	// GetName returns the fully-qualified name of the metric.
@@ -105,6 +114,19 @@ type PrometheusIterable interface {
 	// Each takes a slice of label pairs associated with the parent metric and
 	// calls the passed function with each of the children metrics.
 	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
+}
+
+// PrometheusReinitialisable is an extension of PrometheusIterable to indicate that
+// this metric comprises children metrics which label values are configurable
+// through cluster settings.
+//
+// The motivating use-case for this interface is to update labels
+// for child metrics based on cluster settings so that it would reflect
+// in prometheus export
+type PrometheusReinitialisable interface {
+	PrometheusIterable
+
+	ReinitialiseChildMetrics(labelConfig LabelConfig)
 }
 
 // WindowedHistogram represents a histogram with data over recent window of

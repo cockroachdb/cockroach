@@ -297,7 +297,7 @@ func TestAggMetricClear(t *testing.T) {
 		Name: "bar_counter",
 	})
 	r.AddMetric(d)
-	d.labelConfig.Store(LabelConfigAppAndDB)
+	d.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
@@ -367,4 +367,54 @@ func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 		return strings.Join(lines, "\n")
 	}
 	return writePrometheusMetrics
+}
+
+func TestSQLMetricsReinitialise(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	counter := NewSQLCounter(metric.Metadata{Name: "test.counter"})
+	r.AddMetric(counter)
+
+	gauge := NewSQLGauge(metric.Metadata{Name: "test.gauge"})
+	r.AddMetric(gauge)
+
+	histogram := NewSQLHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "test.histogram",
+		},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Percent100Buckets,
+	})
+	r.AddMetric(histogram)
+
+	t.Run("before invoking reinitialise sql metrics", func(t *testing.T) {
+		counter.Inc(1, "test_db", "test_app")
+		gauge.Update(10, "test_db", "test_app")
+		histogram.RecordValue(10, "test_db", "test_app")
+
+		testFile := "sql_metric_pre_reinitialise_child_metrics.txt"
+		if metric.HdrEnabled() {
+			testFile = "sql_metric_pre_reinitialise_child_metrics_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+
+	r.ReinitialiseChildMetrics(true, true)
+
+	t.Run("after invoking reinitialise sql metrics", func(t *testing.T) {
+		counter.Inc(1, "test_db", "test_app")
+		gauge.Update(10, "test_db", "test_app")
+		histogram.RecordValue(10, "test_db", "test_app")
+
+		testFile := "sql_metric_post_reinitialise_child_metrics.txt"
+		if metric.HdrEnabled() {
+			testFile = "sql_metric_post_reinitialise_child_metrics_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+
 }

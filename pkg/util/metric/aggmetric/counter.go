@@ -256,7 +256,7 @@ type SQLCounter struct {
 }
 
 var _ metric.Iterable = (*SQLCounter)(nil)
-var _ metric.PrometheusIterable = (*SQLCounter)(nil)
+var _ metric.PrometheusReinitialisable = (*SQLCounter)(nil)
 var _ metric.PrometheusExportable = (*SQLCounter)(nil)
 
 // NewSQLCounter constructs a new SQLCounter.
@@ -264,7 +264,7 @@ func NewSQLCounter(metadata metric.Metadata) *SQLCounter {
 	c := &SQLCounter{
 		g: *metric.NewCounter(metadata),
 	}
-	c.SQLMetric = NewSQLMetric(LabelConfigDisabled)
+	c.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
 	return c
 }
 
