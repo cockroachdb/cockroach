@@ -32,3 +32,7 @@ func (m Method) String() string {
 	}
 	return fmt.Sprintf(".%s()", methodTypeStrings[m.Type])
 }
+
+func (m Method) Validate(nestingLevel int, insideArraySubscript bool) error {
+	return nil
+}
