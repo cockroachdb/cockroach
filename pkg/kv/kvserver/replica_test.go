@@ -15429,8 +15429,8 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 	// The leaderless timestamp is not set.
 	require.Equal(t, time.Time{}, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
 
-	// The error is always loaded.
-	require.Regexp(t, "replica has been leaderless for 10s", repl.LeaderlessWatcher.Err())
+	// The error is nilled out.
+	require.Nil(t, repl.LeaderlessWatcher.mu.err)
 
 	// The channel is closed.
 	c := repl.LeaderlessWatcher.C()
