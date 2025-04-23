@@ -5795,6 +5795,15 @@ func BenchmarkEmptyRebalance(b *testing.B) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchRange := tc.ScratchRange(b)
+
+	// Before actually starting the benchmark, we need to make sure that the raft
+	// group is able to add/remove voters. This is important because in leader
+	// leases, it takes a few seconds for store liveness heartbeats to start.
+	// Therefore, it will take the first operation a few seconds to complete. This
+	// will skew the benchmark results.
+	tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
+	tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
+
 	b.Run("add-remove", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
