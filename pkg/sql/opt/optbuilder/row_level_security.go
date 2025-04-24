@@ -117,7 +117,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(policy cat.Policy, restrictive bool) {
-		if !policy.AppliesToRole(b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
+		if !policy.AppliesToRole(b.ctx, b.catalog, b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
 			return
 		}
 		strExpr := policy.UsingExpr

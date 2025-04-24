@@ -1150,7 +1150,7 @@ func (mb *mutationBuilder) genPolicyExpr(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(p cat.Policy, combineScalars func(opt.ScalarExpr, opt.ScalarExpr) opt.ScalarExpr) {
-		if !p.AppliesToRole(mb.b.checkPrivilegeUser) || !policyAppliesToCommandScope(p, cmdScope) {
+		if !p.AppliesToRole(mb.b.ctx, mb.b.catalog, mb.b.checkPrivilegeUser) || !policyAppliesToCommandScope(p, cmdScope) {
 			return
 		}
 		policiesUsed.Add(p.ID)
