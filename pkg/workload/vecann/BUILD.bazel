@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vecann",
+    srcs = [
+        "datasets.go",
+        "progress_writer.go",
+        "vecann.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/vecann",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//pkg/util/vector",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/workloadimpl",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
