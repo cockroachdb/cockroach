@@ -38,14 +38,8 @@ git_ssh clone "ssh://git@github.com/cockroachdb/cockroach.git" "$WORKDIR/cockroa
 
 # Push commit to fork.
 git checkout -b "$BRANCH"
-if [[ $VERSION == *"-fips:"* ]]; then
-  IMG=bazel-fips
-  echo -n "$VERSION" > build/.bazelbuilderversion-fips
-else
-  IMG=bazel
-  echo -n "$VERSION" > build/.bazelbuilderversion
-fi
-git commit -a -m "ci: update $IMG builder image
+echo -n "$VERSION" > build/.bazelbuilderversion
+git commit -a -m "ci: update bazel builder image
 
 Release note: None
 Epic: None"
