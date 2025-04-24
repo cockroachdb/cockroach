@@ -1023,11 +1023,30 @@ func AsDDecimal(e Expr) (*DDecimal, bool) {
 	return nil, false
 }
 
+// These are the maximum decimal precision and scale values as outlined in
+// https://www.postgresql.org/docs/10/datatype-numeric.html#DATATYPE-NUMERIC-TABLE
+const DecimalMaxPrecision = 131072
+const DecimalMaxScale = 16383
+
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
 	dd := &DDecimal{}
 	err := dd.SetString(s)
+	return dd, err
+}
+
+func ParseDDecimalWithPrecisionAndScale(s string, precision int32, scale int32) (*DDecimal, error) {
+	dd := &DDecimal{}
+	err := dd.SetString(s)
+	if precision == 0 {
+		precision = DecimalMaxPrecision
+	}
+	if scale == 0 {
+		dd.Exponent = min(DecimalMaxScale, precision)
+	} else {
+		dd.Exponent = scale
+	}
 	return dd, err
 }
 

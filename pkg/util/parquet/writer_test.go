@@ -89,6 +89,9 @@ func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand, nullsAllowed bo
 		datums[i] = make([]tree.Datum, len(sch.columnTypes))
 		for j := 0; j < len(sch.columnTypes); j++ {
 			datums[i][j] = randgen.RandDatum(rng, sch.columnTypes[j], nullsAllowed)
+			if datums[i][j].ResolvedType().Family() == types.DecimalFamily {
+				fmt.Println("makerandatums", datums[i][j].(*tree.DDecimal))
+			}
 		}
 	}
 	return datums
@@ -141,12 +144,39 @@ func TestRandomDatums(t *testing.T) {
 	err = writer.Close()
 	require.NoError(t, err)
 
+	for _, row := range datums {
+		for j := range row {
+			if row[j].ResolvedType().Family() != types.DecimalFamily {
+				continue
+			}
+			fmt.Println("type", sch.columnTypes[j])
+
+			decimalTupleType := types.MakeLabeledTuple([]*types.T{sch.columnTypes[j], types.String},
+				[]string{"decimal", "string"})
+			if row[j].(*tree.DDecimal).Form != 0 {
+				row[j] = tree.NewDTuple(decimalTupleType, tree.DNull, row[j])
+			} else {
+				row[j] = tree.NewDTuple(decimalTupleType, row[j], tree.DNull)
+			}
+		}
+	}
+
 	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
 }
 
 // TestBasicDatums tests roundtripability for all supported scalar data types
 // and one simple array type.
 func TestBasicDatums(t *testing.T) {
+	decimalColumnTypes := []*types.T{
+		types.Decimal, types.Decimal,
+		types.Decimal, types.Decimal,
+		types.Decimal, types.Decimal,
+		types.Decimal, types.Decimal,
+		types.Decimal, types.Decimal,
+		types.MakeDecimal(7, 2), types.MakeDecimal(7, 2),
+		types.Decimal, types.Decimal,
+	}
+
 	for _, tc := range []struct {
 		name   string
 		sch    *colSchema
@@ -223,22 +253,52 @@ func TestBasicDatums(t *testing.T) {
 		{
 			name: "decimal",
 			sch: &colSchema{
-				columnTypes: []*types.T{types.Decimal, types.Decimal, types.Decimal, types.Decimal},
-				columnNames: []string{"a", "b", "c", "d"},
+				columnTypes: decimalColumnTypes,
+				columnNames: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n"},
 			},
 			datums: func() ([][]tree.Datum, error) {
 				var err error
-				datums := make([]tree.Datum, 4)
-				if datums[0], err = tree.ParseDDecimal("-1.222"); err != nil {
+				datums := make([]tree.Datum, 14)
+				if datums[0], err = tree.ParseDDecimalWithPrecisionAndScale("-1.222", decimalColumnTypes[0].Precision(), decimalColumnTypes[0].Scale()); err != nil {
 					return nil, err
 				}
-				if datums[1], err = tree.ParseDDecimal("-inf"); err != nil {
+				if datums[1], err = tree.ParseDDecimalWithPrecisionAndScale("1.222", decimalColumnTypes[1].Precision(), decimalColumnTypes[1].Scale()); err != nil {
 					return nil, err
 				}
-				if datums[2], err = tree.ParseDDecimal("inf"); err != nil {
+				if datums[2], err = tree.ParseDDecimalWithPrecisionAndScale("0.1", decimalColumnTypes[2].Precision(), decimalColumnTypes[2].Scale()); err != nil {
 					return nil, err
 				}
-				if datums[3], err = tree.ParseDDecimal("nan"); err != nil {
+				if datums[3], err = tree.ParseDDecimalWithPrecisionAndScale("-0.1", decimalColumnTypes[3].Precision(), decimalColumnTypes[3].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[4], err = tree.ParseDDecimalWithPrecisionAndScale("1.0", decimalColumnTypes[4].Precision(), decimalColumnTypes[4].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[5], err = tree.ParseDDecimalWithPrecisionAndScale("-1.0", decimalColumnTypes[5].Precision(), decimalColumnTypes[5].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[6], err = tree.ParseDDecimalWithPrecisionAndScale("0.0", decimalColumnTypes[6].Precision(), decimalColumnTypes[6].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[7], err = tree.ParseDDecimalWithPrecisionAndScale("0", decimalColumnTypes[7].Precision(), decimalColumnTypes[7].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[8], err = tree.ParseDDecimalWithPrecisionAndScale("123456789.987654321", decimalColumnTypes[8].Precision(), decimalColumnTypes[8].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[9], err = tree.ParseDDecimalWithPrecisionAndScale("-3456789.98765", decimalColumnTypes[9].Precision(), decimalColumnTypes[9].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[10], err = tree.ParseDDecimalWithPrecisionAndScale("12345.54321", decimalColumnTypes[10].Precision(), decimalColumnTypes[10].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[11], err = tree.ParseDDecimalWithPrecisionAndScale("-12345.54321", decimalColumnTypes[11].Precision(), decimalColumnTypes[11].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[12], err = tree.ParseDDecimalWithPrecisionAndScale("nan", decimalColumnTypes[12].Precision(), decimalColumnTypes[12].Scale()); err != nil {
+					return nil, err
+				}
+				if datums[13], err = tree.ParseDDecimalWithPrecisionAndScale("inf", decimalColumnTypes[13].Precision(), decimalColumnTypes[13].Scale()); err != nil {
 					return nil, err
 				}
 				return [][]tree.Datum{datums}, nil
@@ -537,6 +597,20 @@ func TestBasicDatums(t *testing.T) {
 
 			err = writer.Close()
 			require.NoError(t, err)
+
+			if tc.name == "decimal" {
+				for _, row := range datums {
+					for j := range row {
+						decimalTupleType := types.MakeLabeledTuple([]*types.T{decimalColumnTypes[j], types.String},
+							[]string{"decimal", "string"})
+						if row[j].(*tree.DDecimal).Form != 0 {
+							row[j] = tree.NewDTuple(decimalTupleType, tree.DNull, row[j])
+						} else {
+							row[j] = tree.NewDTuple(decimalTupleType, row[j], tree.DNull)
+						}
+					}
+				}
+			}
 
 			meta := ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
 			expectedNumRowGroups := int(math.Ceil(float64(numRows) / float64(maxRowGroupSize)))
