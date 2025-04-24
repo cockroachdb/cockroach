@@ -4155,16 +4155,35 @@ func intersectTargets(
 // does not guarantee a uniform distribution. Return number of replicas moved
 // based on comparing the state before and after the scatter operation.
 func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeLeases bool) int {
-	// Acquire the allocator token explicitly, since rq.processOneChange bypasses
-	// replicateQueue.process, where the token is normally acquired. The allocator
+	retryOpts := retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     5,
+	}
+
+	var tokenErr error
+	// Acquire the allocator token explicitly, since rq.processOneChange and
+	// r.AdminTransferLease bypasses replicateQueue.process and
+	// leaseQueue.process, where the token is normally acquired. The allocator
 	// token is shared by the store rebalancer, replicate queue, and lease queue
-	// to coordinate replication changes on the same range. Do no retry if token
-	// acquisition failed and rely on client to retry (similar to the replicate
-	// queue and r.AdminTransferLease which happens later during r.adminScatter).
-	if tokenErr := r.allocatorToken.TryAcquire(ctx, "admin scatter"); tokenErr != nil {
-		log.Warningf(ctx, "failed to scatter range unable to acquire allocator token to process range: %v", tokenErr)
+	// to coordinate replication changes on the same range. Retry if token
+	// acquisition failed until the MaxRetries is hit.
+	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+		tokenErr = r.allocatorToken.TryAcquire(ctx, "admin scatter")
+		if tokenErr == nil {
+			break
+		}
+	}
+
+	// Return early with number of replicas moved as 0.
+	if tokenErr != nil {
+		log.Warningf(ctx, "failed to scatter range unable to acquire allocator "+
+			"token to process range after %d attempts: %v", retryOpts.MaxRetries, tokenErr)
 		return 0
 	}
+
+	// Successfully acquired the token.
 	defer r.allocatorToken.Release(ctx)
 
 	// Construct a mapping to store the replica IDs before we attempt to scatter
@@ -4188,13 +4207,6 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 	currentAttempt := 0
 
 	rq := r.store.replicateQueue
-	retryOpts := retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
-		MaxRetries:     5,
-	}
-
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
