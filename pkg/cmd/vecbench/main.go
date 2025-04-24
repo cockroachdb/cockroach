@@ -6,15 +6,10 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -26,18 +21,15 @@ import (
 	"syscall"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/cockroach/pkg/workload/vecann"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 )
 
-const bucketName = "cockroach-fixtures-us-east1"
-const bucketDirName = "vecindex"
 const defaultDataset = "unsplash-512-euclidean"
 const tempDir = "tmp"
 const minPartitionSize = 16
@@ -62,6 +54,9 @@ const (
 
 var flagHideProgress = flag.Bool("hide-progress", false, "Hide progress during index build.")
 
+// Insert command options.
+var flagBatchSize = flag.Int("batch-size", 3, "Number of vectors to insert in a single batch.")
+
 // Search command options.
 var flagMaxResults = flag.Int("k", 10, "Number of search results, used in recall calculation.")
 var flagBeamSize = flag.Int(
@@ -73,44 +68,10 @@ var flagSearchBeamSizes = flag.String(
 	"1,2,4,8,16,32,64,128,256,512",
 	"List of beam sizes used for search.")
 
-// Build command options.
-var flagBuildCount = flag.Int(
-	"build-count",
-	0,
-	"Subset of vectors to use for building the index.")
-
 // Store options.
 var flagMemStore = flag.Bool("memstore", false, "Use in-memory store instead of CockroachDB")
 var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 	"Database connection string (when not using --memstore)")
-
-// dataset describes a set of vectors to be benchmarked.
-type dataset struct {
-	// Train is the set of vectors to insert into the index.
-	Train vector.Set
-	// Test is the set of vectors to search for in the index. This is typically
-	// a disjoint set from Train, in order to ensure that the index works well
-	// on unseen data.
-	Test vector.Set
-	// Neighbors is the set of N nearest neighbors for each vector in the Test
-	// set. Its length is equal to Test.Count, and each entry contains a slice of
-	// N int64 values. These int64 values are offsets into the Train set that
-	// point to the nearest neighbors of that test vector.
-	Neighbors [][]int64
-}
-
-// searchData stores the subset of information from "dataset" that's needed to
-// benchmark the performance of searching the index. In particular, it assumes
-// that the index has already been built, and so does not contain the Train
-// vectors. This allows "searchData" to be loaded from disk much faster.
-type searchData struct {
-	// Count is the number of Train vectors in the original dataset.
-	Count int
-	// Test is the the same as dataset.Test.
-	Test vector.Set
-	// Neighbors is the same as dataset.Neighbors.
-	Neighbors [][]int64
-}
 
 // vecbench benchmarks vector index in-memory build and search performance on a
 // variety of datasets. Datasets are downloaded from the
@@ -123,7 +84,7 @@ type searchData struct {
 //	random-s-100-euclidean (90K vectors, 100 dims)
 //	random-xs-20-euclidean (9K vectors, 20 dims)
 //	sift-128-euclidean (1M vectors, 128 dims)
-//	unsplash-512-euclidean (1M vectors, 512 dims)
+//	dbpedia-openai-100k-angular (100K vectors, 1536 dims)
 //
 // After download, the datasets are cached in a local tmp directory and a vector
 // index is created. The built vector index is also cached in the tmp directory
@@ -215,6 +176,8 @@ type vectorBench struct {
 	stopper     *stop.Stopper
 	datasetName string
 	provider    VectorProvider
+	buildData   vecann.Dataset
+	searchData  vecann.SearchDataset
 }
 
 // newVectorBench creates a new VecBench instance for the given dataset.
@@ -229,10 +192,10 @@ func newVectorBench(ctx context.Context, stopper *stop.Stopper, datasetName stri
 // SearchIndex downloads, builds, and searches an index for the given dataset.
 func (vb *vectorBench) SearchIndex() {
 	// Ensure the data needed for the search is available.
-	data := ensureSearchData(vb.ctx, vb.datasetName)
+	vb.ensureDataset(vb.ctx, true /* forSearch */)
 
 	var err error
-	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, data.Test.Dims)
+	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, vb.searchData.Test.Dims)
 	if err != nil {
 		panic(err)
 	}
@@ -259,10 +222,10 @@ func (vb *vectorBench) SearchIndex() {
 
 		// Search for test vectors.
 		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
-		count := data.Test.Count
+		count := vb.searchData.Test.Count
 		for i := range count {
 			// Calculate truth set for the vector.
-			queryVector := data.Test.At(i)
+			queryVector := vb.searchData.Test.At(i)
 
 			var stats cspann.SearchStats
 			prediction, err := vb.provider.Search(vb.ctx, state, queryVector, &stats)
@@ -274,7 +237,7 @@ func (vb *vectorBench) SearchIndex() {
 			truth := make([]cspann.KeyBytes, maxResults)
 			for neighbor := range maxResults {
 				primaryKey := primaryKeys[neighbor*4 : neighbor*4+4]
-				binary.BigEndian.PutUint32(primaryKey, uint32(data.Neighbors[i][neighbor]))
+				binary.BigEndian.PutUint32(primaryKey, uint32(vb.searchData.Neighbors[i][neighbor]))
 				truth[neighbor] = primaryKey
 			}
 
@@ -297,7 +260,7 @@ func (vb *vectorBench) SearchIndex() {
 	fmt.Printf(White+"%s\n"+Reset, vb.datasetName)
 	fmt.Printf(
 		White+"%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, build beam size %d\n"+Reset,
-		data.Count, data.Test.Count, data.Test.Dims,
+		vb.searchData.Count, vb.searchData.Test.Count, vb.searchData.Test.Dims,
 		minPartitionSize, maxPartitionSize, *flagBeamSize)
 	fmt.Println(vb.provider.FormatStats())
 
@@ -318,22 +281,25 @@ func (vb *vectorBench) SearchIndex() {
 // it is rebuilt from scratch.
 func (vb *vectorBench) BuildIndex() {
 	// Ensure dataset is downloaded and cached.
-	data := ensureDataset(vb.ctx, vb.datasetName)
+	vb.ensureDataset(vb.ctx, false /* forSearch */)
 
 	// Construct the vector provider.
 	var err error
-	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, data.Train.Dims)
+	vb.provider, err = newVectorProvider(vb.stopper, vb.datasetName, vb.buildData.Train.Dims)
 	if err != nil {
 		panic(err)
 	}
 
 	// Start fresh.
-	vb.provider.New(vb.ctx)
+	err = vb.provider.New(vb.ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create unique primary key for each vector.
-	primaryKeys := make([]cspann.KeyBytes, data.Train.Count)
-	keyBuf := make(cspann.KeyBytes, data.Train.Count*4)
-	for i := range data.Train.Count {
+	primaryKeys := make([]cspann.KeyBytes, vb.buildData.Train.Count)
+	keyBuf := make(cspann.KeyBytes, vb.buildData.Train.Count*4)
+	for i := range vb.buildData.Train.Count {
 		primaryKeys[i] = keyBuf[i*4 : i*4+4]
 		binary.BigEndian.PutUint32(primaryKeys[i], uint32(i))
 	}
@@ -364,15 +330,15 @@ func (vb *vectorBench) BuildIndex() {
 	// Insert vectors into the provider on multiple goroutines.
 	var insertCount atomic.Uint64
 	procs := runtime.GOMAXPROCS(-1)
-	countPerProc := (data.Train.Count + procs) / procs
-	blockSize := minPartitionSize
-	for i := 0; i < data.Train.Count; i += countPerProc {
-		end := min(i+countPerProc, data.Train.Count)
+	countPerProc := (vb.buildData.Train.Count + procs) / procs
+	batchSize := *flagBatchSize
+	for i := 0; i < vb.buildData.Train.Count; i += countPerProc {
+		end := min(i+countPerProc, vb.buildData.Train.Count)
 		go func(start, end int) {
-			// Break vector group into batches that each insert a block of vectors.
-			for j := start; j < end; j += blockSize {
+			// Break vector group into batches that each insert a batch of vectors.
+			for j := start; j < end; j += batchSize {
 				startMono := crtime.NowMono()
-				vectors := data.Train.Slice(j, min(j+blockSize, end)-j)
+				vectors := vb.buildData.Train.Slice(j, min(j+batchSize, end)-j)
 				err := vb.provider.InsertVectors(vb.ctx, primaryKeys[j:j+vectors.Count], vectors)
 				if err != nil {
 					panic(err)
@@ -419,12 +385,12 @@ func (vb *vectorBench) BuildIndex() {
 		if !*flagHideProgress {
 			sinceStart := now.Sub(startAt)
 			fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v"+Reset,
-				totalInserted, data.Train.Count,
-				(float64(totalInserted)/float64(data.Train.Count))*100,
+				totalInserted, vb.buildData.Train.Count,
+				(float64(totalInserted)/float64(vb.buildData.Train.Count))*100,
 				sinceStart.Truncate(time.Second))
 		}
 
-		if totalInserted >= data.Train.Count {
+		if totalInserted >= vb.buildData.Train.Count {
 			break
 		}
 	}
@@ -435,6 +401,38 @@ func (vb *vectorBench) BuildIndex() {
 	if err = vb.provider.Save(vb.ctx); err != nil {
 		panic(err)
 	}
+}
+
+// ensureDataset ensures that the dataset has been downloaded and cached to
+// disk. It also loads the data into memory. If "forSearch" is true, then only
+// test vectors are loaded, not train vectors.
+func (vb *vectorBench) ensureDataset(ctx context.Context, forSearch bool) {
+	loader := vecann.DatasetLoader{
+		DatasetName: vb.datasetName,
+		OnProgress: func(ctx context.Context, format string, args ...any) {
+			fmt.Printf(Cyan+"%s\n"+Reset, fmt.Sprintf(format, args...))
+		},
+		OnDownloadProgress: func(downloaded, total int64, elapsed time.Duration) {
+			fmt.Printf(Cyan+"\rDownloaded %s / %s (%.2f%%) in %v          "+Reset,
+				humanizeutil.IBytes(downloaded), humanizeutil.IBytes(total),
+				(float64(downloaded)/float64(total))*100, elapsed.Truncate(time.Second))
+		},
+	}
+
+	if forSearch {
+		// Only need to load the search data, not the insert data. Loading
+		// the insert data can take 10+ seconds for large datasets.
+		if err := loader.LoadForSearch(ctx); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := loader.Load(ctx); err != nil {
+			panic(err)
+		}
+	}
+
+	vb.buildData = loader.Data
+	vb.searchData = loader.SearchData
 }
 
 // newVectorProvider creates a new in-memory or SQL based vector provider that
@@ -461,178 +459,6 @@ func newVectorProvider(
 	return provider, nil
 }
 
-// ensureDataset checks whether the given dataset has been downloaded. If not,
-// it downloads it from the GCP bucket and unzips it into the tmp directory. It
-// returns the dataset once it's cached locally.
-func ensureDataset(ctx context.Context, datasetName string) dataset {
-	objectName := fmt.Sprintf("%s/%s.zip", bucketDirName, datasetName)
-	datasetFileName := fmt.Sprintf("%s/%s.gob", tempDir, datasetName)
-	searchFileName := fmt.Sprintf("%s/%s.search.gob", tempDir, datasetName)
-
-	// If dataset file has already been downloaded, then just return it.
-	_, err := os.Stat(datasetFileName)
-	if err != nil {
-		if !oserror.IsNotExist(err) {
-			panic(err)
-		}
-	} else {
-		return loadDataset(datasetFileName)
-	}
-
-	fmt.Printf(Cyan+"Downloading %s/%s\n"+Reset, bucketName, objectName)
-
-	// Create a GCS client using Application Default Credentials.
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		panic(err)
-	}
-	defer client.Close()
-
-	// Get a handle to the object.
-	bucket := client.Bucket(bucketName)
-	object := bucket.Object(objectName)
-
-	// Get object attributes to determine its size
-	attrs, err := object.Attrs(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	// Read the object with progress tracking.
-	reader, err := object.NewReader(ctx)
-	if err != nil {
-		log.Fatalf("Failed to create object reader: %v", err)
-	}
-	defer reader.Close()
-
-	// Use progressWriter to track download progress
-	var buf bytes.Buffer
-	writer := makeProgressWriter(&buf, attrs.Size)
-
-	if _, err = io.Copy(&writer, reader); err != nil {
-		log.Fatalf("Failed to copy object data: %v", err)
-	}
-
-	// Open the zip archive.
-	fmt.Printf(Cyan+"\nUnzipping to %s\n"+Reset, datasetFileName)
-	zipReader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-	if err != nil {
-		panic(err)
-	}
-
-	// Create temp directory.
-	if err = os.MkdirAll(tempDir, os.ModePerm); err != nil {
-		panic(err)
-	}
-
-	// Extract files to the temp directory.
-	for _, file := range zipReader.File {
-		// Open the file inside the zip archive
-		zippedFile, err := file.Open()
-		if err != nil {
-			panic(err)
-		}
-
-		// Create the output file
-		path := fmt.Sprintf("%s/%s", tempDir, file.Name)
-		outputFile, err := os.Create(path)
-		if err != nil {
-			panic(err)
-		}
-
-		// Copy the contents of the zipped file to the output file
-		if _, err := io.Copy(outputFile, zippedFile); err != nil {
-			panic(err)
-		}
-		if err := outputFile.Close(); err != nil {
-			panic(err)
-		}
-		if err := zippedFile.Close(); err != nil {
-			panic(err)
-		}
-	}
-
-	// Separately store test vectors for searching, so the training data does not
-	// need to be loaded every time.
-	data := loadDataset(datasetFileName)
-	searchData := searchData{Count: data.Train.Count, Test: data.Test, Neighbors: data.Neighbors}
-
-	writeFile, err := os.Create(searchFileName)
-	if err != nil {
-		panic(err)
-	}
-	defer writeFile.Close()
-
-	encoder := gob.NewEncoder(writeFile)
-	if err = encoder.Encode(&searchData); err != nil {
-		panic(err)
-	}
-
-	return data
-}
-
-// ensureSearchData ensures that the dataset has been downloaded and cached
-// locally. However, rather than loading the full training data, which can take
-// time, it only loads the subset of data needed for search (e.g. the test
-// vectors and nearest neighbors).
-func ensureSearchData(ctx context.Context, datasetName string) searchData {
-	fileName := fmt.Sprintf("%s/%s.search.gob", tempDir, datasetName)
-
-	// If search data is not cached, download it now.
-	_, err := os.Stat(fileName)
-	if err != nil {
-		if !oserror.IsNotExist(err) {
-			panic(err)
-		}
-		ensureDataset(ctx, datasetName)
-	}
-
-	readFile, err := os.Open(fileName)
-	if err != nil {
-		panic(err)
-	}
-	defer readFile.Close()
-
-	decoder := gob.NewDecoder(readFile)
-	var data searchData
-	if err = decoder.Decode(&data); err != nil {
-		panic(err)
-	}
-
-	return data
-}
-
-// loadDataset deserializes a dataset saved as a gob file.
-func loadDataset(fileName string) dataset {
-	startTime := timeutil.Now()
-	fmt.Printf(Cyan+"Loading train and test data from %s\n"+Reset, fileName)
-
-	readFile, err := os.Open(fileName)
-	if err != nil {
-		panic(err)
-	}
-	defer readFile.Close()
-
-	decoder := gob.NewDecoder(readFile)
-	var data dataset
-	if err = decoder.Decode(&data); err != nil {
-		panic(err)
-	}
-
-	if *flagBuildCount != 0 {
-		// Load subset of data - first N vectors.
-		n := *flagBuildCount
-		if n > data.Train.Count {
-			n = data.Train.Count
-		}
-		data.Train.SplitAt(n)
-	}
-
-	elapsed := timeutil.Since(startTime)
-	fmt.Printf(Cyan+"Loaded %s in %v          \n"+Reset, fileName, roundDuration(elapsed))
-	return data
-}
-
 // calculateRecall returns the percentage overlap of the predicted set with the
 // truth set. If the predicted set has fewer items than the truth set, it is
 // treated as if the predicted set has missing/incorrect items that reduce the
@@ -651,4 +477,8 @@ func calculateRecall(prediction, truth []cspann.KeyBytes) float64 {
 		}
 	}
 	return intersect / float64(len(truth))
+}
+
+func roundDuration(duration time.Duration) time.Duration {
+	return duration.Truncate(time.Millisecond)
 }
