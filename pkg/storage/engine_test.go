@@ -1813,7 +1813,7 @@ func TestEngineClearRange(t *testing.T) {
 
 		"ClearRangeWithHeuristic individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, math.MaxInt)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, true /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: true,
@@ -1821,7 +1821,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, 1)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, true /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: true,
@@ -1829,7 +1829,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic point keys individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, 0)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, false /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: false,
@@ -1837,7 +1837,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic point keys ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, 0)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, false /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: false,
@@ -1845,7 +1845,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic range keys individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, math.MaxInt)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, true /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: false,
 			clearsRangeKeys: true,
@@ -1853,7 +1853,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic range keys ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, 1)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, true /* shouldClearRangeKeys */)
 			},
 			clearsPointKeys: false,
 			clearsRangeKeys: true,

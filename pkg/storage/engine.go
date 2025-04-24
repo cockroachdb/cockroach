@@ -1593,23 +1593,23 @@ func WriteSyncNoop(eng Engine) error {
 // either write a Pebble range tombstone or clear individual keys. If it uses
 // a range tombstone, it will tighten the span to the first encountered key.
 //
-// pointKeyThreshold and rangeKeyThreshold specify the number of point/range
-// keys respectively where it will switch from clearing individual keys to
-// Pebble range tombstones (RANGEDEL or RANGEKEYDEL respectively). A threshold
-// of 0 disables checking for and clearing that key type.
-//
-// NB: An initial scan will be done to determine the type of clear, so a large
+// The pointKeyThreshold parameter specifies the number of point keys where it
+// will switch from clearing individual keys using point tombstones to clearing
+// the entire range using Pebble range tombstones (RANGEDELs). Setting
+// pointKeyThreshold to 0 disables checking for and clearing point keys. NB: An
+// initial scan will be done to determine the type of clear, so a large
 // threshold will potentially involve scanning a large number of keys twice.
 //
-// TODO(erikgrinaker): Consider tightening the end of the range tombstone span
-// too, by doing a SeekLT when we reach the threshold. It's unclear whether it's
-// really worth it.
+// If shouldClearRangeKeys is true, it will also check for the existence of
+// range keys, and if any exist, it will write a RANGEKEYDEL clearing all range
+// keys in the span.
 func ClearRangeWithHeuristic(
 	ctx context.Context,
 	r Reader,
 	w Writer,
 	start, end roachpb.Key,
-	pointKeyThreshold, rangeKeyThreshold int,
+	pointKeyThreshold int,
+	shouldClearRangeKeys bool,
 ) error {
 	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
 		iter, err := r.NewEngineIterator(ctx, IterOptions{
@@ -1659,7 +1659,7 @@ func ClearRangeWithHeuristic(
 		return err
 	}
 
-	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
+	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key) error {
 		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
@@ -1670,39 +1670,22 @@ func ClearRangeWithHeuristic(
 		}
 		defer iter.Close()
 
-		// Scan, and drop a RANGEKEYDEL if we reach the threshold.
-		var ok bool
-		var count int
-		var firstKey roachpb.Key
-		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
-			count += len(iter.EngineRangeKeys())
-			if len(firstKey) == 0 {
-				bounds, err := iter.EngineRangeBounds()
-				if err != nil {
-					return err
-				}
-				firstKey = bounds.Key.Clone()
-			}
-			if count >= threshold {
-				return w.ClearRawRange(firstKey, end, false /* pointKeys */, true /* rangeKeys */)
-			}
-		}
-		if err != nil || count == 0 {
+		ok, err := iter.SeekEngineKeyGE(EngineKey{Key: start})
+		if err != nil {
 			return err
 		}
-		// Clear individual range keys.
-		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
-			bounds, err := iter.EngineRangeBounds()
-			if err != nil {
-				return err
-			}
-			for _, v := range iter.EngineRangeKeys() {
-				if err := w.ClearEngineRangeKey(bounds.Key, bounds.EndKey, v.Version); err != nil {
-					return err
-				}
-			}
+		if !ok {
+			// No range keys in the span.
+			return nil
 		}
-		return err
+		bounds, err := iter.EngineRangeBounds()
+		if err != nil {
+			return err
+		}
+		// TODO(erikgrinaker): Consider tightening the end of the range
+		// tombstone span too, by doing a SeekLT when we reach the threshold.
+		// It's unclear whether it's really worth it.
+		return w.ClearRawRange(bounds.Key, end, false /* pointKeys */, true /* rangeKeys */)
 	}
 
 	if pointKeyThreshold > 0 {
@@ -1711,8 +1694,8 @@ func ClearRangeWithHeuristic(
 		}
 	}
 
-	if rangeKeyThreshold > 0 {
-		if err := clearRangeKeys(r, w, start, end, rangeKeyThreshold); err != nil {
+	if shouldClearRangeKeys {
+		if err := clearRangeKeys(r, w, start, end); err != nil {
 			return err
 		}
 	}
