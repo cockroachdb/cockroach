@@ -4155,6 +4155,18 @@ func intersectTargets(
 // does not guarantee a uniform distribution. Return number of replicas moved
 // based on comparing the state before and after the scatter operation.
 func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeLeases bool) int {
+	// Acquire the allocator token explicitly, since rq.processOneChange bypasses
+	// replicateQueue.process, where the token is normally acquired. The allocator
+	// token is shared by the store rebalancer, replicate queue, and lease queue
+	// to coordinate replication changes on the same range. Do no retry if token
+	// acquisition failed and rely on client to retry (similar to the replicate
+	// queue and r.AdminTransferLease which happens later during r.adminScatter).
+	if tokenErr := r.allocatorToken.TryAcquire(ctx, "admin scatter"); tokenErr != nil {
+		log.Warningf(ctx, "failed to scatter range unable to acquire allocator token to process range: %v", tokenErr)
+		return 0
+	}
+	defer r.allocatorToken.Release(ctx)
+
 	// Construct a mapping to store the replica IDs before we attempt to scatter
 	// them. This is used to below to check which replicas were actually moved by
 	// the replicate queue .
@@ -4230,15 +4242,10 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
-				if tokenErr := r.allocatorToken.TryAcquire(ctx, "scatter"); tokenErr != nil {
-					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, tokenErr)
-				} else {
-					defer r.allocatorToken.Release(ctx)
-					log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
-					if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-						log.Warningf(ctx, "scatter lease to s%d failed due to %+v: candidates included %v",
-							targetStoreID, err, potentialLeaseTargets)
-					}
+				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
+				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
+					log.Warningf(ctx, "scatter lease to s%d failed due to %+v: candidates included %v",
+						targetStoreID, err, potentialLeaseTargets)
 				}
 			}
 		}
