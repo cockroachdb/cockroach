@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"math/rand"
 	"net"
@@ -2203,6 +2202,7 @@ func (c *clusterImpl) StartE(
 	// Do not refetch certs if that step already happened once (i.e., we
 	// are restarting a node).
 	if settings.Secure && c.localCertsDir == "" {
+		// Get the certs from the first node.
 		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
 			return err
 		}
@@ -2279,6 +2279,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	}
 
 	if settings.Secure {
+		// Get the certs from the first node.
 		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
 			return err
 		}
@@ -2336,20 +2337,7 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	// certs. Bypass that distinction (which should be fixed independently, but
 	// that might cause fallout) by using a non-existing dir here.
 	c.localCertsDir = filepath.Join(c.localCertsDir, install.CockroachNodeCertsDir)
-	// Get the certs from the first node.
-	if err := c.Get(ctx, c.l, fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir, c.Node(node)); err != nil {
-		return errors.Wrap(err, "cluster.StartE")
-	}
-	// Need to prevent world readable files or lib/pq will complain.
-	return filepath.WalkDir(c.localCertsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return errors.Wrap(err, "walking localCertsDir failed")
-		}
-		if d.IsDir() {
-			return nil
-		}
-		return os.Chmod(path, 0600)
-	})
+	return roachprod.FetchCertsDir(ctx, c.l, c.MakeNodes(c.Node(node)), fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir)
 }
 
 func (c *clusterImpl) SetDefaultVirtualCluster(name string) {
