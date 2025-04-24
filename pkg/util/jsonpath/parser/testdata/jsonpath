@@ -682,6 +682,69 @@ parse
 ----
 (1 + 123).type() -- normalized!
 
+parse
+$.**
+----
+$.**
+
+parse
+$.**.**
+----
+$.**.**
+
+parse
+$.**{0}
+----
+$.**{0}
+
+parse
+$.**{1}
+----
+$.**{1}
+
+parse
+$.**{last}
+----
+$.**{last}
+
+error
+$.**{-1}
+----
+at or near "-": syntax error
+DETAIL: source SQL:
+$.**{-1}
+     ^
+
+parse
+$.**{0 to 0}
+----
+$.**{0} -- normalized!
+
+parse
+$.**{0 to 1}
+----
+$.**{0 to 1}
+
+parse
+$.**{0 to last}
+----
+$.** -- normalized!
+
+parse
+$.**{last to last}
+----
+$.**{last} -- normalized!
+
+parse
+$.**{1 to last}
+----
+$.**{1 to last}
+
+parse
+$.**{2 to 1}
+----
+$.**{2 to 1}
+
 # parse
 # $.1a
 # ----

@@ -45,11 +45,30 @@ func (ctx *jsonpathCtx) evalAnyKey(
 	anyKey jsonpath.AnyKey, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
 	if jsonValue.Type() == json.ObjectJSONType {
-		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
+		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue,
+			!ctx.strict /* unwrapNext */, 1 /* level */, 1 /* first */, 1 /* last */)
 	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
 		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
 	} else if ctx.strict {
 		return nil, maybeThrowError(ctx, errWildcardOnNonObject)
 	}
 	return nil, nil
+}
+
+func (ctx *jsonpathCtx) evalAny(any jsonpath.Any, jsonValue json.JSON) ([]json.JSON, error) {
+	if !isBinary(jsonValue) {
+		return []json.JSON{jsonValue}, nil
+
+	}
+	var res []json.JSON
+	if any.Start == 0 {
+		res = append(res, jsonValue)
+	}
+	tmp, err := ctx.executeAnyItem(nil /* jsonPath */, jsonValue,
+		!ctx.strict /* unwrapNext */, 1 /* level */, any.Start, any.End)
+	if err != nil {
+		return nil, err
+	}
+	res = append(res, tmp...)
+	return res, nil
 }

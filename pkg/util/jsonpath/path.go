@@ -7,6 +7,7 @@ package jsonpath
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -215,5 +216,37 @@ func (a AnyKey) ToString(sb *strings.Builder, inKey, _ bool) {
 }
 
 func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
+	return nil
+}
+
+type Any struct {
+	Start int
+	End   int
+}
+
+var _ Path = Any{}
+
+func (a Any) ToString(sb *strings.Builder, inKey, printBrackets bool) {
+	if inKey {
+		sb.WriteString(".")
+	}
+	if a.Start == 0 && a.End == math.MaxInt {
+		sb.WriteString("**")
+	} else if a.Start == a.End {
+		if a.Start == math.MaxInt {
+			sb.WriteString("**{last}")
+		} else {
+			sb.WriteString(fmt.Sprintf("**{%d}", a.Start))
+		}
+	} else if a.Start == math.MaxInt {
+		sb.WriteString(fmt.Sprintf("**{last to %d}", a.End))
+	} else if a.End == math.MaxInt {
+		sb.WriteString(fmt.Sprintf("**{%d to last}", a.Start))
+	} else {
+		sb.WriteString(fmt.Sprintf("**{%d to %d}", a.Start, a.End))
+	}
+}
+
+func (a Any) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
 }
