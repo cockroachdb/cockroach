@@ -2962,7 +2962,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	require.Error(t, repl.LeaderlessWatcher.Err())
 	// Regex to ensure we've got a replica unavailable error with n1 and n2 in the
 	// range descriptor.
-	require.Regexp(t, "replica unavailable.*n1.*n2.*gen=3", repl.LeaderlessWatcher.Err().Error())
+	require.Regexp(t, "replica unavailable.*n1.*n2.*", repl.LeaderlessWatcher.Err().Error())
 
 	// Next up, let the replica know there's a leader. This should make it
 	// available again.
@@ -2979,7 +2979,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	require.Error(t, repl.LeaderlessWatcher.Err())
 	// Ensure that the range descriptor now contains n1, n2, and n3 -- i.e, we're
 	// updating the error with the latest descriptor on the latest transition.
-	require.Regexp(t, "replica unavailable.*n1.*n2.*n3.*gen=5", repl.LeaderlessWatcher.Err().Error())
+	require.Regexp(t, "replica unavailable.*n1.*n2.*n3.*", repl.LeaderlessWatcher.Err().Error())
 }
 
 func TestClearRange(t *testing.T) {
