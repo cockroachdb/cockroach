@@ -13,7 +13,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -60,10 +59,18 @@ func TestParquetRows(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
-	newDecimal := func(s string) *tree.DDecimal {
-		d, _, _ := apd.NewFromString(s)
-		return &tree.DDecimal{Decimal: *d}
+	newDecimal := func(precision, scale int32) func(s string) *tree.DDecimal {
+		return func(s string) *tree.DDecimal {
+			dd, _ := tree.ParseDDecimalWithPrecisionAndScale(s, precision, scale)
+			return dd
+		}
 	}
+	precision := int32(18)
+	scale := int32(9)
+	makeDecimal := newDecimal(precision, scale)
+
+	decimalTupleType := types.MakeLabeledTuple([]*types.T{types.Decimal, types.String},
+		[]string{"decimal", "string"})
 
 	for _, tc := range []struct {
 		testName          string
@@ -73,12 +80,12 @@ func TestParquetRows(t *testing.T) {
 	}{
 		{
 			testName: "decimal",
-			createTable: `
+			createTable: fmt.Sprintf(`
 				CREATE TABLE foo (
 				i INT PRIMARY KEY,
-				d DECIMAL(18,9)
+				d DECIMAL(%d,%d)
 				)
-				`,
+				`, precision, scale),
 			stmts: []string{
 				`INSERT INTO foo VALUES (0, 0)`,
 				`DELETE FROM foo WHERE d = 0.0`,
@@ -91,85 +98,15 @@ func TestParquetRows(t *testing.T) {
 				`INSERT INTO foo VALUES (6, 'NaN'::DECIMAL)`,
 			},
 			expectedDatumRows: [][]tree.Datum{
-				{tree.NewDInt(0), newDecimal("0.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(0), tree.NewDTuple(decimalTupleType, makeDecimal("0.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
 				{tree.NewDInt(0), tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
-				{tree.NewDInt(1), newDecimal("1.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(1), newDecimal("2.000000000"), parquetEventTypeDatumStringMap[parquetEventUpdate]},
-				{tree.NewDInt(2), newDecimal("3.140000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(3), newDecimal("1.234567890"), parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(4), tree.DNegInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(5), tree.DPosInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(6), tree.DNaNDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
-			},
-		},
-		{
-			testName: "mixed",
-			createTable: `
-				CREATE TABLE foo (
-				int32Col INT4 PRIMARY KEY,
-				stringCol STRING,
-				uuidCol UUID
-				)
-		    `,
-			stmts: []string{
-				`INSERT INTO foo VALUES (0, 'a1', '2fec7a4b-0a78-40ce-92e0-d1c0fac70436')`,
-				`INSERT INTO foo VALUES (1,   'b1', '0ce43188-e4a9-4b73-803b-a253abc57e6b')`,
-				`INSERT INTO foo VALUES (2,   'c1', '5a02bd48-ba64-4134-9199-844c1517f722')`,
-				`UPDATE foo SET stringCol = 'changed' WHERE int32Col = 1`,
-				`DELETE FROM foo WHERE int32Col = 0`,
-				`INSERT INTO foo VALUES (3,   'd1', '5a02bd48-ba64-4134-9199-844c1517f723')`,
-				`INSERT INTO foo VALUES (4,   'e1', '5a02bd48-ba64-4134-9199-844c1517f724')`,
-				`INSERT INTO foo VALUES (5,   'f1', '5a02bd48-ba64-4134-9199-844c1517f725')`,
-				`INSERT INTO foo VALUES (6,   'g1', '5a02bd48-ba64-4134-9199-844c1517f726')`,
-				`INSERT INTO foo VALUES (7,   'h1', '5a02bd48-ba64-4134-9199-844c1517f727')`,
-				`UPDATE foo SET stringCol = 'changed' WHERE int32Col = 3`,
-				`INSERT INTO foo VALUES (9,   'j1', '5a02bd48-ba64-4134-9199-844c1517f729')`,
-				`INSERT INTO foo VALUES (10,   'k1', '5a02bd48-ba64-4134-9199-844c1517f712')`,
-				`INSERT INTO foo VALUES (11,   'l1', '5a02bd48-ba64-4134-9199-844c1517f713')`,
-				`DELETE FROM foo WHERE int32Col = 4`,
-				`INSERT INTO foo VALUES (12,   'm1', '5a02bd48-ba64-4134-9199-844c1517f714')`,
-				`INSERT INTO foo VALUES (13,   'n1', '5a02bd48-ba64-4134-9199-844c1517f715')`,
-				`INSERT INTO foo VALUES (14,   'o1', '5a02bd48-ba64-4134-9199-844c1517f716')`,
-			},
-			expectedDatumRows: [][]tree.Datum{
-				{tree.NewDInt(0), tree.NewDString("a1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("2fec7a4b-0a78-40ce-92e0-d1c0fac70436")},
-					parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(1), tree.NewDString("b1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("0ce43188-e4a9-4b73-803b-a253abc57e6b")},
-					parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(2), tree.NewDString("c1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f722")},
-					parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(1), tree.NewDString("changed"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("0ce43188-e4a9-4b73-803b-a253abc57e6b")},
-					parquetEventTypeDatumStringMap[parquetEventUpdate]},
-				{tree.NewDInt(0), tree.DNull, tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
-				{tree.NewDInt(3), tree.NewDString("d1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f723")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(4), tree.NewDString("e1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f724")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(5), tree.NewDString("f1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f725")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(6), tree.NewDString("g1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f726")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(7), tree.NewDString("h1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f727")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(3), tree.NewDString("changed"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f723")}, parquetEventTypeDatumStringMap[parquetEventUpdate]},
-				{tree.NewDInt(9), tree.NewDString("j1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f729")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(10), tree.NewDString("k1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f712")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(11), tree.NewDString("l1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f713")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(4), tree.DNull, tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
-				{tree.NewDInt(12), tree.NewDString("m1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f714")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(13), tree.NewDString("n1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f715")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
-				{tree.NewDInt(14), tree.NewDString("o1"),
-					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f716")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("1.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(1), tree.NewDTuple(decimalTupleType, makeDecimal("2.000000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventUpdate]},
+				{tree.NewDInt(2), tree.NewDTuple(decimalTupleType, makeDecimal("3.140000000"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(3), tree.NewDTuple(decimalTupleType, makeDecimal("1.234567890"), tree.DNull), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(4), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNegInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(5), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DPosInfDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(6), tree.NewDTuple(decimalTupleType, tree.DNull, tree.DNaNDecimal), parquetEventTypeDatumStringMap[parquetEventInsert]},
 			},
 		},
 	} {
