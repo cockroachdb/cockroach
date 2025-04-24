@@ -198,7 +198,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				// Only drop this shard column if it's not a physical column (as is the case for all hash-sharded index in 22.1
 				// and after), or, CASCADE is set.
 				if shardColDesc.IsVirtual() || n.n.DropBehavior == tree.DropCascade {
-					ok, err := n.maybeQueueDropShardColumn(tableDesc, shardColDesc)
+					ok, err := n.maybeQueueDropShardColumn(params, index.tn, tableDesc, shardColDesc)
 					if err != nil {
 						return err
 					}
@@ -246,7 +246,7 @@ func (n *dropIndexNode) queueDropColumn(tableDesc *tabledesc.Mutable, col catalo
 //
 // Assumes that the given index is sharded.
 func (n *dropIndexNode) maybeQueueDropShardColumn(
-	tableDesc *tabledesc.Mutable, shardColDesc catalog.Column,
+	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, shardColDesc catalog.Column,
 ) (bool, error) {
 	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
 		colIDs := otherIdx.CollectKeyColumnIDs()
@@ -258,7 +258,7 @@ func (n *dropIndexNode) maybeQueueDropShardColumn(
 	}) != nil {
 		return false, nil
 	}
-	if err := n.dropShardColumnAndConstraint(tableDesc, shardColDesc); err != nil {
+	if err := n.dropShardColumnAndConstraint(params, tn, tableDesc, shardColDesc); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -267,7 +267,7 @@ func (n *dropIndexNode) maybeQueueDropShardColumn(
 // dropShardColumnAndConstraint drops the given shard column and its associated check
 // constraint.
 func (n *dropIndexNode) dropShardColumnAndConstraint(
-	tableDesc *tabledesc.Mutable, shardCol catalog.Column,
+	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, shardCol catalog.Column,
 ) error {
 	validChecks := tableDesc.Checks[:0]
 	for _, check := range tableDesc.CheckConstraints() {
@@ -284,8 +284,14 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 	if len(validChecks) != len(tableDesc.Checks) {
 		tableDesc.Checks = validChecks
 	}
-
-	n.queueDropColumn(tableDesc, shardCol)
+	if _, err := dropColumnImpl(
+		params, tn, tableDesc, tableDesc.GetRowLevelTTL(),
+		&tree.AlterTableDropColumn{
+			Column:       shardCol.ColName(),
+			DropBehavior: n.n.DropBehavior},
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
