@@ -1,0 +1,20 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# Test version gating of vector index
+
+upgrade 0
+
+user root nodeidx=0
+
+subtest upgrade_one
+
+statement error cannot create a vector index until finalizing on 25.2
+CREATE TABLE simple (id INT PRIMARY KEY, embedding VECTOR(2), VECTOR INDEX (embedding))
+
+statement ok
+CREATE TABLE noindex (id INT PRIMARY KEY, embedding VECTOR)
+
+statement error cannot create a vector index until finalizing on 25.2
+CREATE VECTOR INDEX ON noindex (embedding);
+
+subtest end
