@@ -80,9 +80,6 @@ func (s *spoolNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-// spooled implements the planNodeSpooled interface.
-func (s *spoolNode) spooled() {}
-
 // Next is part of the planNode interface.
 func (s *spoolNode) Next(params runParams) (bool, error) {
 	s.curRowIdx++
