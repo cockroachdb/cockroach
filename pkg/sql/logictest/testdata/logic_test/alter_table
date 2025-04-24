@@ -4563,3 +4563,22 @@ statement ok
 DROP TYPE e1;
 
 subtest end
+
+subtest set_logged
+
+statement ok
+CREATE TABLE t_set_logged (a INT PRIMARY KEY);
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE t_set_logged SET LOGGED;
+----
+NOTICE: SET LOGGED is not supported and has no effect
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE t_set_logged SET UNLOGGED;
+----
+NOTICE: SET UNLOGGED is not supported and has no effect
+
+subtest end

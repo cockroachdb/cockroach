@@ -91,5 +91,5 @@ func (p *planner) AlterTableSetLogged(
 			operation,
 		),
 	)
-	return nil, nil
+	return &zeroNode{}, nil
 }
