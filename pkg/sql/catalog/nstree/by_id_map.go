@@ -6,39 +6,56 @@
 package nstree
 
 import (
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
+	"cmp"
+	"sync"
+
+	"github.com/RaduBerinde/btreemap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 type byIDMap struct {
-	t *btree.BTree
+	t *btreemap.BTreeMap[descpb.ID, catalog.NameEntry]
+}
+
+var byIDMapPool = sync.Pool{
+	New: func() interface{} {
+		return btreemap.New[descpb.ID, catalog.NameEntry](degree, cmp.Compare[descpb.ID])
+	},
 }
 
 func (t byIDMap) upsert(d catalog.NameEntry) (replaced catalog.NameEntry) {
-	replaced, _ = upsert(t.t, makeByIDItem(d).get()).(catalog.NameEntry)
+	_, replaced, _ = t.t.ReplaceOrInsert(d.GetID(), d)
 	return replaced
 }
 
 func (t byIDMap) get(id descpb.ID) catalog.NameEntry {
-	got, _ := get(t.t, byIDItem{id: id}.get()).(catalog.NameEntry)
-	return got
+	_, result, _ := t.t.Get(id)
+	return result
 }
 
 func (t byIDMap) delete(id descpb.ID) (removed catalog.NameEntry) {
-	removed, _ = remove(t.t, byIDItem{id: id}.get()).(catalog.NameEntry)
+	_, removed, _ = t.t.Delete(id)
 	return removed
 }
 
 func (t byIDMap) clear() {
-	clear(t.t)
-	btreeSyncPool.Put(t.t)
+	t.t.Clear(true /* addNodesToFreeList */)
+	byIDMapPool.Put(t.t)
+}
+
+func (t byIDMap) len() int {
+	return t.t.Len()
 }
 
 func (t byIDMap) ascend(f EntryIterator) error {
-	return ascend(t.t, func(k interface{}) error {
-		return f(k.(catalog.NameEntry))
-	})
+	for _, e := range t.t.Ascend(btreemap.Min[descpb.ID](), btreemap.Max[descpb.ID]()) {
+		if err := f(e); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 func (t byIDMap) initialized() bool {
@@ -46,5 +63,5 @@ func (t byIDMap) initialized() bool {
 }
 
 func makeByIDMap() byIDMap {
-	return byIDMap{t: btreeSyncPool.Get().(*btree.BTree)}
+	return byIDMap{t: byIDMapPool.Get().(*btreemap.BTreeMap[descpb.ID, catalog.NameEntry])}
 }
