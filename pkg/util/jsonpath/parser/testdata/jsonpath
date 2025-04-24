@@ -682,6 +682,21 @@ parse
 ----
 (1 + 123).type() -- normalized!
 
+parse
+$.a.abs()
+----
+$."a".abs() -- normalized!
+
+parse
+$.a.floor()
+----
+$."a".floor() -- normalized!
+
+parse
+$.a.ceiling()
+----
+$."a".ceiling() -- normalized!
+
 # parse
 # $.1a
 # ----
