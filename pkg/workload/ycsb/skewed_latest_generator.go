@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 )
 
 // SkewedLatestGenerator is a random number generator that generates numbers in
@@ -18,7 +19,7 @@ type SkewedLatestGenerator struct {
 	mu struct {
 		syncutil.Mutex
 		iMax    uint64
-		zipfGen *ZipfGenerator
+		zipfGen *workloadimpl.ZipfGenerator
 	}
 }
 
@@ -31,7 +32,7 @@ func NewSkewedLatestGenerator(
 
 	z := SkewedLatestGenerator{}
 	z.mu.iMax = iMax
-	zipfGen, err := NewZipfGenerator(rng, 0, iMax-iMin, theta, verbose)
+	zipfGen, err := workloadimpl.NewZipfGenerator(rng, 0, iMax-iMin, theta, verbose)
 	if err != nil {
 		return nil, err
 	}
