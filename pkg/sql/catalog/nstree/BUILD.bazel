@@ -3,9 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "nstree",
     srcs = [
-        "by_id.go",
         "by_id_map.go",
-        "by_name.go",
         "by_name_map.go",
         "catalog.go",
         "catalog_entries.go",
@@ -13,7 +11,6 @@ go_library(
         "id_map.go",
         "name_map.go",
         "set.go",
-        "tree.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
     visibility = ["//visibility:public"],
@@ -30,7 +27,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_raduberinde_btree//:btree",
+        "@com_github_raduberinde_btreemap//:btreemap",
     ],
 )
 

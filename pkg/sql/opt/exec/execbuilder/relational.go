@@ -2749,14 +2749,19 @@ func (b *Builder) buildLookupJoin(
 		lookupCols.Remove(join.ContinuationCol)
 	}
 
-	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
-
+	numInputCols := inputCols.MaxOrd() + 1
+	var lookupOrdinals exec.TableColumnOrdinalSet
 	// leftAndRightCols are the columns used in expressions evaluated by this
 	// join.
-	leftAndRightCols := b.joinOutputMap(inputCols, lookupColMap)
-
-	// lookupColMap is no longer used, so it can be freed.
-	b.colOrdsAlloc.Free(lookupColMap)
+	leftAndRightCols := b.colOrdsAlloc.Copy(inputCols)
+	for i, rightOrd, n := 0, 0, md.Table(join.Table).ColumnCount(); i < n; i++ {
+		colID := join.Table.ColumnID(i)
+		if lookupCols.Contains(colID) {
+			lookupOrdinals.Add(i)
+			leftAndRightCols.Set(colID, rightOrd+numInputCols)
+			rightOrd++
+		}
+	}
 
 	// Create the output column mapping.
 	switch {

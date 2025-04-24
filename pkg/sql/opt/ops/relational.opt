@@ -230,7 +230,7 @@ define InvertedFilterPrivate {
     PreFiltererState PreFiltererState
 
     # PKCols is the set of primary key columns in the underlying table of the
-    # input inverted index scan.. It is used to build FDs for the
+    # input inverted index scan. It is used to build FDs and statistics for the
     # InvertedFilter.
     PKCols ColSet
 
