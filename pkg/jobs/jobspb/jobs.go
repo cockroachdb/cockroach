@@ -107,6 +107,14 @@ func (tsm *TimestampSpansMap) MinTimestamp() hlc.Timestamp {
 	return iterutil.MinFunc(iterutil.Keys(tsm.All()), hlc.Timestamp.Compare)
 }
 
+// TimestampCount returns the number of unique timestamps in the map.
+func (tsm *TimestampSpansMap) TimestampCount() (count int) {
+	for range tsm.All() {
+		count += 1
+	}
+	return count
+}
+
 // SpanCount returns the number of spans in the map.
 func (tsm *TimestampSpansMap) SpanCount() (count int) {
 	for _, sp := range tsm.All() {
