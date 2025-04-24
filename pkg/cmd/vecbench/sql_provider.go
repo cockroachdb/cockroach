@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -143,28 +142,27 @@ func (s *SQLProvider) New(ctx context.Context) error {
 func (s *SQLProvider) InsertVectors(
 	ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set,
 ) error {
+	// Build insert query.
+	args := make([]any, vectors.Count*2)
+	var queryBuilder strings.Builder
+	queryBuilder.Grow(100 + vectors.Count*12)
+	queryBuilder.WriteString("INSERT INTO ")
+	queryBuilder.WriteString(s.tableName)
+	queryBuilder.WriteString(" (id, embedding) VALUES")
+	for i := range vectors.Count {
+		if i > 0 {
+			queryBuilder.WriteString(", ")
+		}
+		j := i * 2
+		fmt.Fprintf(&queryBuilder, " ($%d, $%d)", j+1, j+2)
+		args[j] = keys[i]
+		args[j+1] = vectors.At(i)
+	}
+	query := queryBuilder.String()
+
 	// Retry loop.
 	for {
-		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-			// Prepare batch insert.
-			batch := &pgx.Batch{}
-
-			// Insert vectors in batches.
-			for i := range vectors.Count {
-				batch.Queue(fmt.Sprintf(
-					"INSERT INTO %s (id, embedding) VALUES ($1, $2)",
-					s.tableName),
-					keys[i],
-					vectors.At(i),
-				)
-			}
-
-			br := tx.SendBatch(ctx, batch)
-			if err := br.Close(); err != nil {
-				return errors.Wrap(err, "closing batch")
-			}
-			return nil
-		})
+		_, err := s.pool.Exec(ctx, query, args...)
 
 		var pgErr *pgconn.PgError
 		if err != nil && errors.As(err, &pgErr) {

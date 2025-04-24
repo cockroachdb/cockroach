@@ -92,6 +92,10 @@ type MultiConnPoolCfg struct {
 	// QueryTracer is an optional tracer to attach to the pgx connections from
 	// this pool. See [pgx.ConnConfig] for details.
 	QueryTracer pgx.QueryTracer
+
+	// AfterConnect is called after a connection is established, but before it is
+	// added to the pool.
+	AfterConnect func(context.Context, *pgx.Conn) error
 }
 
 // NewMultiConnPoolCfgFromFlags constructs a new MultiConnPoolCfg object based
@@ -238,6 +242,7 @@ func NewMultiConnPool(
 				}
 				return true
 			}
+			poolCfg.AfterConnect = cfg.AfterConnect
 
 			// Attach the supplied tracer to the ConnConfig.
 			poolCfg.ConnConfig.Tracer = cfg.QueryTracer
