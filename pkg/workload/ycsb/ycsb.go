@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -461,13 +462,15 @@ func (g *ycsb) Ops(
 	requestGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
-		requestGen, err = NewZipfGenerator(
-			requestGenRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
+		requestGen, err = workloadimpl.NewZipfGenerator(
+			requestGenRng, zipfIMin,
+			workloadimpl.DefaultIMax-1, workloadimpl.DefaultTheta, false /* verbose */)
 	case "uniform":
 		requestGen, err = NewUniformGenerator(requestGenRng, 0, uint64(g.recordCount)-1)
 	case "latest":
 		requestGen, err = NewSkewedLatestGenerator(
-			requestGenRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
+			requestGenRng, zipfIMin, uint64(g.recordCount)-1,
+			workloadimpl.DefaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
 	}
@@ -479,7 +482,9 @@ func (g *ycsb) Ops(
 	scanLengthGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
-		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
+		scanLengthGen, err = workloadimpl.NewZipfGenerator(
+			scanLengthGenRng, g.minScanLength, g.maxScanLength,
+			workloadimpl.DefaultTheta, false /* verbose */)
 	case "uniform":
 		scanLengthGen, err = NewUniformGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength)
 	default:
