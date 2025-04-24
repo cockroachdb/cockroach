@@ -4225,12 +4225,13 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
 				if tokenErr := r.allocatorToken.TryAcquire(ctx, "scatter"); tokenErr != nil {
-					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, tokenErr)
+					log.Warningf(ctx, "failed to scatter lease to s%d: %v", targetStoreID, tokenErr)
 				} else {
 					defer r.allocatorToken.Release(ctx)
 					log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
 					if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-						log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+						log.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
+							targetStoreID, err, potentialLeaseTargets)
 					}
 				}
 			}
