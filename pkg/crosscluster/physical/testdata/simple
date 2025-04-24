@@ -32,9 +32,9 @@ postgres://root@?redacted
 
 # The session on the source should have an app name set.
 query-sql as=source-system
-SELECT application_name FROM [SHOW SESSIONS] WHERE application_name LIKE '%repstream%' LIMIT 1
+SELECT application_name FROM [SHOW ALL SESSIONS] WHERE application_name LIKE '%repstream%' LIMIT 1
 ----
-repstream job id=$_producerJobID
+$ internal repstream job id=$_producerJobID
 
 
 query-sql as=source-system
