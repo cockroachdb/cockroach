@@ -527,4 +527,61 @@ CREATE INDEX roaches_value_idx ON roaches(value);
 statement error pq: rejected \(sql_safe_updates = true\): DROP INDEX
 DROP INDEX IF EXISTS roaches@roaches_value_idx;
 
+statement ok
+SET sql_safe_updates = false;
+
+subtest drop_hash_sharded_index_depended_on_by_procedure
+
+statement ok
+CREATE TABLE tab_145100 (
+  id UUID PRIMARY KEY,
+  i INT NOT NULL,
+  j int not null,
+  INDEX (i ASC) USING HASH,
+  FAMILY (id, i, j)
+)
+
+statement ok
+CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
+  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
+$$;
+
+# Note: Due to https://github.com/cockroachdb/cockroach/issues/145098, the
+# procedure has a dependency on the shard column. When that issue is resolved,
+# this DROP statement should succeed.
+statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_insert_145100" depends on it
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_insert_145100
+
+statement ok
+CREATE PROCEDURE proc_select_145100() LANGUAGE SQL AS $$
+  SELECT *, crdb_internal_i_shard_16 FROM tab_145100;
+$$;
+
+statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_select_145100" depends on it
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP INDEX tab_145100@tab_145100_i_idx CASCADE
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+)
+
+# DROP INDEX ... CASCADE should have caused the procedure to be dropped.
+statement error procedure proc_select_145100 does not exist
+CALL proc_select_145100()
+
+statement ok
+DROP TABLE tab_145100
+
 subtest end
