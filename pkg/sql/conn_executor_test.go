@@ -1471,7 +1471,7 @@ func TestShowLastQueryStatistics(t *testing.T) {
 			expectNonTrivialSchemaChangeTime: false,
 		},
 		{
-			stmt: `CREATE TABLE t1(a INT); 
+			stmt: `CREATE TABLE t1(a INT);
 INSERT INTO t1 SELECT i FROM generate_series(1, 10000) AS g(i);
 ALTER TABLE t1 ADD COLUMN b INT DEFAULT 1`,
 			usesExecEngine:                   true,
@@ -2040,20 +2040,40 @@ func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
 		if ba.Txn == nil {
 			return nil
 		}
-		if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
-			put := req.(*kvpb.ConditionalPutRequest)
-			_, tableID, err := codec.DecodeTablePrefix(put.Key)
+
+		maybeInject := func(r kvpb.Request) *kvpb.Error {
+			_, tableID, err := codec.DecodeTablePrefix(r.Header().Key)
 			if err != nil || tableID != barTableID {
 				return nil
 			}
 			if !injectedRetry {
+				t.Logf("injecting error for %s on %s", r.Method(), r.Header().Key)
 				injectedRetry = true
 				defer injectedRetryWG.Done()
 				return kvpb.NewErrorWithTxn(
 					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
 				)
 			} else {
+				t.Logf("waiting on second conn for %s on %s", r.Method(), r.Header().Key)
 				secondConnWG.Wait()
+				return nil
+			}
+		}
+
+		for _, ru := range ba.Requests {
+			req := ru.GetInner()
+			switch req.(type) {
+			// We match both Put and ConditionalPut to account for either buffered or
+			// unbuffered writes.
+			case *kvpb.PutRequest, *kvpb.ConditionalPutRequest:
+				if err := maybeInject(req); err != nil {
+					return err
+				}
+			default:
+				_, tableID, err := codec.DecodeTablePrefix(req.Header().Key)
+				if err != nil && tableID == barTableID {
+					t.Logf("unhandled request on bar %s", req.Method())
+				}
 			}
 		}
 		return nil
@@ -2071,7 +2091,9 @@ func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
 			return err
 		}
 
+		t.Log("second conn: waiting on injection")
 		injectedRetryWG.Wait()
+		t.Log("second conn: running UPDATE")
 		_, err = conn2.ExecContext(ctx, "UPDATE foo SET b = 100 WHERE a = 1")
 		if !testutils.IsError(err, "query execution canceled due to statement timeout") {
 			// NB: errors.Wrapf(nil, ...) returns nil.
@@ -2082,7 +2104,7 @@ func TestRetriableErrorDuringTransactionHoldsLocks(t *testing.T) {
 		return nil
 	})
 
-	fmt.Printf("running txn\n")
+	t.Log("first conn: running txn")
 	testDB.Exec(t, "UPDATE foo SET b = 10 WHERE a = 1; INSERT INTO bar VALUES(2); COMMIT;")
 
 	// Verify that the implicit transaction completed successfully, and the second
@@ -2415,7 +2437,7 @@ func noopRequestFilter(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Er
 func getTxnID(t *testing.T, tx *gosql.Tx) (id string) {
 	t.Helper()
 	sqlutils.MakeSQLRunner(tx).QueryRow(t, `
-SELECT id 
+SELECT id
   FROM crdb_internal.node_transactions a
   JOIN [SHOW session_id] b ON a.session_id = b.session_id
 `,
