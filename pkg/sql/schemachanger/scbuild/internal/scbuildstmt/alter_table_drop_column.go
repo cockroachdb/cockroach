@@ -172,6 +172,11 @@ func dropColumn(
 			if indexTargetStatus == scpb.ToAbsent {
 				return
 			}
+			// If we entered this function because of a DROP INDEX statement (e.g. for
+			// a hash-sharded index), avoid recursive calls to drop the index again.
+			if _, isDropIndex := stmt.(*tree.DropIndex); isDropIndex {
+				return
+			}
 			name := tree.TableIndexName{
 				Table: *tn,
 				Index: tree.UnrestrictedName(indexName.Name),
@@ -181,7 +186,7 @@ func dropColumn(
 				indexName.Name,
 				cn.Name,
 			))
-			dropSecondaryIndex(b, &name, behavior, e)
+			dropSecondaryIndex(b, &name, behavior, e, stmt)
 		case *scpb.View:
 			if behavior != tree.DropCascade {
 				_, _, ns := scpb.FindNamespace(b.QueryByID(col.TableID))
