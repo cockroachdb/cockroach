@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -2788,7 +2789,6 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
 
 	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
@@ -2851,12 +2851,8 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 		return nil
 	})
 
-	// Increment the clock by the leaderlessWatcher unavailable threshold.
-	manualClock.Increment(threshold.Nanoseconds())
-
 	// Wait for the leaderlessWatcher to indicate that the range is unavailable.
 	testutils.SucceedsSoon(t, func() error {
-		tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 		if !repl.LeaderlessWatcher.IsUnavailable() {
 			return errors.New("range is still available")
 		}
@@ -2913,6 +2909,77 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 		}
 		return pErr.GoError()
 	})
+}
+
+// TestLeaderlessWatcherUnavailabilityErrorRefreshedOnUnavailabilityTransition
+// ensures that the leaderless watcher constructs a new error every time it
+// transitions to the unavailable state. In particular, the descriptor used
+// in the error should be the latest descriptor.
+// Serves as a regression test for
+// https://github.com/cockroachdb/cockroach/issues/144639.
+func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	manual := hlc.NewHybridManualClock()
+	st := cluster.MakeTestingClusterSettings()
+	// Set the leaderless threshold to 10 second.
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, &st.SV, 10*time.Second)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manual,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
+	repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
+
+	// The leaderlessWatcher starts off as available.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// Let it know it's leaderless.
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// Even though the replica is leaderless, enough time hasn't passed for it to
+	// be considered unavailable.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// The error should be nil as we're not considered leaderless at this point.
+	require.NoError(t, repl.LeaderlessWatcher.Err())
+	// Let enough time pass.
+	manual.Increment(10 * time.Second.Nanoseconds())
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// Now the replica is considered unavailable.
+	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.Error(t, repl.LeaderlessWatcher.Err())
+	// Regex to ensure we've got a replica unavailable error with n1 and n2 in the
+	// range descriptor.
+	require.Regexp(t, "replica unavailable.*n1.*n2.*", repl.LeaderlessWatcher.Err().Error())
+
+	// Next up, let the replica know there's a leader. This should make it
+	// available again.
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, 1, manual.Now(), st)
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	// Change the range descriptor. Mark it leaderless and let enough time pass
+	// for it to be considered unavailable again.
+	tc.AddVotersOrFatal(t, key, tc.Targets(2)...)
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	manual.Increment(10 * time.Second.Nanoseconds())
+	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	// The replica should now be considered unavailable again.
+	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.Error(t, repl.LeaderlessWatcher.Err())
+	// Ensure that the range descriptor now contains n1, n2, and n3 -- i.e, we're
+	// updating the error with the latest descriptor on the latest transition.
+	require.Regexp(t, "replica unavailable.*n1.*n2.*n3.*", repl.LeaderlessWatcher.Err().Error())
 }
 
 func TestClearRange(t *testing.T) {
