@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/sem/catconstants",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
