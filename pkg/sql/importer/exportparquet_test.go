@@ -367,6 +367,15 @@ INDEX (y))`)
 			stmt: `EXPORT INTO PARQUET 'nodelocal://1/uncompress'
 							FROM SELECT * FROM foo `,
 		},
+		{
+			filePrefix: "null_vals_with_index",
+			prep: []string{
+				`CREATE TABLE null_vals_with_index (a STRING PRIMARY KEY, b STRING, INDEX b_idx (b ASC))`,
+				`INSERT INTO null_vals_with_index VALUES ('a', NULL)`,
+			},
+			stmt: `EXPORT INTO PARQUET 'nodelocal://1/null_vals_with_index'
+							FROM SELECT * FROM null_vals_with_index@b_idx`,
+		},
 	}
 
 	for _, test := range tests {
