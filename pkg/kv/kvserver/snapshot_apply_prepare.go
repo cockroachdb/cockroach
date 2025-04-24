@@ -272,7 +272,6 @@ func clearSubsumedReplicaDiskData(
 			keySpans[i].EndKey,
 			totalKeySpans[i].EndKey,
 			kvstorage.ClearRangeThresholdPointKeys,
-			kvstorage.ClearRangeThresholdRangeKeys,
 		); err != nil {
 			subsumedReplSST.Close()
 			return nil, err
