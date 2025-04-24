@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -62,6 +63,7 @@ type ReplicaMetrics struct {
 	PendingRaftProposalCount int64
 	SlowRaftProposalCount    int64
 	RaftFlowStateCounts      [tracker.StateCount]int64
+	ClosedTimestampPolicy    ctpb.RangeClosedTimestampPolicy
 
 	QuotaPoolPercentUsed int64 // [0,100]
 
@@ -123,6 +125,7 @@ func (r *Replica) Metrics(
 		paused:                   r.mu.pausedFollowers,
 		pendingRaftProposalCount: r.numPendingProposalsRLocked(),
 		slowRaftProposalCount:    r.mu.slowProposalCount,
+		closedTimestampPolicy:    ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load()),
 	}
 
 	r.mu.RUnlock()
@@ -154,6 +157,7 @@ type calcReplicaMetricsInput struct {
 	paused                   map[roachpb.ReplicaID]struct{}
 	pendingRaftProposalCount int64
 	slowRaftProposalCount    int64
+	closedTimestampPolicy    ctpb.RangeClosedTimestampPolicy
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
@@ -226,6 +230,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		QuotaPoolPercentUsed:     calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
 		LatchMetrics:             d.latchMetrics,
 		LockTableMetrics:         d.lockTableMetrics,
+		ClosedTimestampPolicy:    d.closedTimestampPolicy,
 	}
 }
 

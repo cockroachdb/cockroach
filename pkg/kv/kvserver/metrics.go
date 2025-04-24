@@ -8,11 +8,13 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -2432,6 +2434,22 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	// Closed timestamp policy change metrics.
+	metaClosedTimestampPolicyChange = metric.Metadata{
+		Name:        "kv.closed_timestamp.policy_change",
+		Help:        "Number of times closed timestamp policy change occurred on ranges",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaClosedTimestampLatencyInfoMissing = metric.Metadata{
+		Name: "kv.closed_timestamp.policy_latency_info_missing",
+		Help: "Number of times closed timestamp policy refresh had to use hardcoded network RTT " +
+			"due to missing node latency info for one or more replicas",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica circuit breaker.
 	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
@@ -2664,11 +2682,12 @@ type StoreMetrics struct {
 	RaftFlowStateCounts           [tracker.StateCount]*metric.Gauge
 
 	// Range metrics.
-	RangeCount                *metric.Gauge
-	UnavailableRangeCount     *metric.Gauge
-	UnderReplicatedRangeCount *metric.Gauge
-	OverReplicatedRangeCount  *metric.Gauge
-	DecommissioningRangeCount *metric.Gauge
+	RangeCount                      *metric.Gauge
+	UnavailableRangeCount           *metric.Gauge
+	UnderReplicatedRangeCount       *metric.Gauge
+	OverReplicatedRangeCount        *metric.Gauge
+	DecommissioningRangeCount       *metric.Gauge
+	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -3033,6 +3052,10 @@ type StoreMetrics struct {
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 
+	// Closed timestamp policy change on ranges metrics.
+	ClosedTimestampPolicyChange       *metric.Counter
+	ClosedTimestampLatencyInfoMissing *metric.Counter
+
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
 	ReplicaCircuitBreakerCumTripped *metric.Counter
@@ -3374,11 +3397,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftFlowStateCounts:           raftFlowStateGaugeSlice(),
 
 		// Range metrics.
-		RangeCount:                metric.NewGauge(metaRangeCount),
-		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
-		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
-		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
-		DecommissioningRangeCount: metric.NewGauge(metaDecommissioningRangeCount),
+		RangeCount:                      metric.NewGauge(metaRangeCount),
+		UnavailableRangeCount:           metric.NewGauge(metaUnavailableRangeCount),
+		UnderReplicatedRangeCount:       metric.NewGauge(metaUnderReplicatedRangeCount),
+		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
+		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
+		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
@@ -3849,6 +3873,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
 		SplitEstimatedTotalBytesDiff: metric.NewCounter(metaSplitEstimatedTotalBytesDiff),
+
+		ClosedTimestampPolicyChange:       metric.NewCounter(metaClosedTimestampPolicyChange),
+		ClosedTimestampLatencyInfoMissing: metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
 	}
 	sm.categoryIterMetrics.init(storeRegistry)
 
@@ -4153,6 +4180,20 @@ func raftFlowStateGaugeSlice() [tracker.StateCount]*metric.Gauge {
 	gauges[tracker.StateReplicate] = metric.NewGauge(metaRaftFlowsReplicate)
 	gauges[tracker.StateSnapshot] = metric.NewGauge(metaRaftFlowsSnapshot)
 	return gauges
+}
+
+func makePolicyRefresherMetrics() [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge {
+	var policyGauges [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
+	for policy := ctpb.LAG_BY_CLUSTER_SETTING; policy < ctpb.MAX_CLOSED_TIMESTAMP_POLICY; policy++ {
+		meta := metric.Metadata{
+			Name:        fmt.Sprintf("kv.closed_timestamp.policy.%s", strings.ToLower(policy.String())),
+			Help:        fmt.Sprintf("Number of ranges with %s closed timestamp policy", policy.String()),
+			Measurement: "Ranges",
+			Unit:        metric.Unit_COUNT,
+		}
+		policyGauges[policy] = metric.NewGauge(meta)
+	}
+	return policyGauges
 }
 
 func storageLevelMetricMetadata(
