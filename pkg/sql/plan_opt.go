@@ -926,6 +926,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
+		// Disable elision of a spoolNode at the root in order to have valid
+		// association with exec metadata.
+		explainFactory.DisableSpoolElision()
 		bld = execbuilder.New(
 			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),

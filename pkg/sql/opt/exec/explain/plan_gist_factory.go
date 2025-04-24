@@ -102,6 +102,11 @@ type PlanGistFactory struct {
 
 var _ exec.Factory = &PlanGistFactory{}
 
+// DisableSpoolElision implements the Factory interface.
+func (f *PlanGistFactory) DisableSpoolElision() {
+	f.wrappedFactory.DisableSpoolElision()
+}
+
 // Ctx implements the Factory interface.
 func (f *PlanGistFactory) Ctx() context.Context {
 	return f.wrappedFactory.Ctx()
