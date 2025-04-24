@@ -1254,9 +1254,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	// -----------------------------------
 	// Inverted filters de-duplicate inverted index tuples by the primary key,
 	// so they produce no more rows than the distinct count of the PK columns.
-	tabID := sb.md.ColumnMeta(invFilter.InvertedColumn).Table
-	pkCols := sb.md.TableMeta(tabID).IndexKeyColumns(0)
-	keyStats := sb.colStatFromChild(pkCols, invFilter, 0 /* childIdx */)
+	keyStats := sb.colStatFromChild(invFilter.PKCols, invFilter, 0 /* childIdx */)
 	s.RowCount = keyStats.DistinctCount
 	inputStats := invFilter.Input.Relational().Statistics()
 	s.VirtualCols.UnionWith(inputStats.VirtualCols)

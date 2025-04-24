@@ -308,3 +308,21 @@ func ExampleClient() {
 	// kv: "key_1"->value_1@1
 	// resolved 100
 }
+
+func TestStreamClientAppName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	expectAppName := func(t *testing.T, name string, options ...Option) {
+		o := processOptions(options)
+		cfg, err := setupPGXConfig(url.URL{
+			Scheme: "postgresql",
+			Host:   "localhost:26257",
+		}, o)
+		require.NoError(t, err)
+		require.Equal(t, name, cfg.RuntimeParams["application_name"])
+	}
+
+	expectAppName(t, "$ internal repstream")
+	expectAppName(t, "$ internal repstream job id=1337", WithStreamID(1337))
+}
