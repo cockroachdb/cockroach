@@ -3838,7 +3838,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
 	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
-	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+	if err := ex.state.mu.autoRetryReason; err != nil && errors.Is(err, minTSErr) {
 		evalCtx.AsOfSystemTime.MaxTimestampBound = ex.extraTxnState.descCollection.GetMaxTimestampBound()
 	} else if newTxn {
 		evalCtx.AsOfSystemTime = nil
