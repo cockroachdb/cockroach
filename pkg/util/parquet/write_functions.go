@@ -278,6 +278,35 @@ func formatDatum(d tree.Datum, a *batchAlloc) error {
 	return nil
 }
 
+func twosComplement(input []byte) []byte {
+	out := make([]byte, len(input))
+	copy(out, input)
+
+	// Invert the bits
+	for i := range out {
+		out[i] = ^out[i]
+	}
+
+	// Add 1 (from the least significant byte upward)
+	for i := len(out) - 1; i >= 0; i-- {
+		out[i]++
+		if out[i] != 0 {
+			break
+		}
+	}
+
+	return out
+}
+
+func formatDecimal(dd *tree.DDecimal, a *batchAlloc) error {
+	coeffBytes := dd.Coeff.Bytes()
+	if dd.Negative {
+		coeffBytes = twosComplement(coeffBytes)
+	}
+	a.byteArrayBatch[0] = coeffBytes
+	return nil
+}
+
 func writeInt32(
 	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
 ) error {
@@ -442,11 +471,12 @@ func writeDecimal(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDDecimal(d)
+	dd, ok := tree.AsDDecimal(d)
+	// Negative × Coeff × 10**Exponent
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDecimal, found %T", d)
 	}
-	if err := formatDatum(d, a); err != nil {
+	if err := formatDecimal(dd, a); err != nil {
 		return err
 	}
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)

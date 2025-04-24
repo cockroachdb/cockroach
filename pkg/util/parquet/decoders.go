@@ -6,9 +6,11 @@
 package parquet
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/apache/arrow/go/v11/parquet"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
@@ -77,8 +79,39 @@ func (int32Decoder) decode(v int32) (tree.Datum, error) {
 
 type decimalDecoder struct{}
 
+func TwosComplementToBigInt(data []byte) *big.Int {
+	if len(data) == 0 {
+		return big.NewInt(0)
+	}
+
+	if isNegative := data[0]&0x80 != 0; !isNegative {
+		return new(big.Int).SetBytes(data)
+	}
+
+	// invert bits and add 1, then negate
+	inverted := make([]byte, len(data))
+	for i := 0; i < len(data); i++ {
+		inverted[i] = ^data[i]
+	}
+	one := big.NewInt(1)
+	invertedInt := new(big.Int).SetBytes(inverted)
+	invertedInt.Add(invertedInt, one)
+
+	return invertedInt.Neg(invertedInt)
+}
+
 func (decimalDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
-	return tree.ParseDDecimal(string(v))
+	unsignedCoeff := TwosComplementToBigInt(v)
+	// Decode is currently only used for testing. The exponent is always
+	// set as 0 as a placeholder as it is not used in test. If this was
+	// actually used in prod we would need to get the scale from the
+	// parquet schema itself and set exponent as -scale, but that would
+	// require a lot of refactoring.
+	dd := &tree.DDecimal{
+		Decimal: *apd.New(unsignedCoeff.Int64(), 0),
+	}
+	return dd, nil
+
 }
 
 type timestampDecoder struct{}

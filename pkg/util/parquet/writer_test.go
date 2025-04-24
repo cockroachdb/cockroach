@@ -223,22 +223,42 @@ func TestBasicDatums(t *testing.T) {
 		{
 			name: "decimal",
 			sch: &colSchema{
-				columnTypes: []*types.T{types.Decimal, types.Decimal, types.Decimal, types.Decimal},
-				columnNames: []string{"a", "b", "c", "d"},
+				columnTypes: []*types.T{
+					types.Decimal, types.Decimal,
+					types.Decimal, types.Decimal,
+					types.Decimal, types.Decimal,
+					types.Decimal, types.Decimal,
+					types.Decimal},
+				columnNames: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"},
 			},
 			datums: func() ([][]tree.Datum, error) {
 				var err error
-				datums := make([]tree.Datum, 4)
+				datums := make([]tree.Datum, 9)
 				if datums[0], err = tree.ParseDDecimal("-1.222"); err != nil {
 					return nil, err
 				}
-				if datums[1], err = tree.ParseDDecimal("-inf"); err != nil {
+				if datums[1], err = tree.ParseDDecimal("1.222"); err != nil {
 					return nil, err
 				}
-				if datums[2], err = tree.ParseDDecimal("inf"); err != nil {
+				if datums[2], err = tree.ParseDDecimal("0.1"); err != nil {
 					return nil, err
 				}
-				if datums[3], err = tree.ParseDDecimal("nan"); err != nil {
+				if datums[3], err = tree.ParseDDecimal("-0.1"); err != nil {
+					return nil, err
+				}
+				if datums[4], err = tree.ParseDDecimal("1.0"); err != nil {
+					return nil, err
+				}
+				if datums[5], err = tree.ParseDDecimal("-1.0"); err != nil {
+					return nil, err
+				}
+				if datums[6], err = tree.ParseDDecimal("0.0"); err != nil {
+					return nil, err
+				}
+				if datums[7], err = tree.ParseDDecimal("0"); err != nil {
+					return nil, err
+				}
+				if datums[8], err = tree.ParseDDecimal("123456789.987654321"); err != nil {
 					return nil, err
 				}
 				return [][]tree.Datum{datums}, nil
