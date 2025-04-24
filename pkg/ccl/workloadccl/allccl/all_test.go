@@ -139,9 +139,13 @@ func TestAllRegisteredSetup(t *testing.T) {
 				t.Fatal(err)
 			}
 		case `interleavedpartitioned`:
-			// This require a specific node locality setup
+			// This require a specific node locality setup.
 			continue
 		case `ttlbench`:
+			continue
+		case `vecann`:
+			// This requires downloading from a GCP bucket and storing in the
+			// machine's ~/.cache directory.
 			continue
 		}
 
