@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -65,7 +66,9 @@ func alterPrimaryKey(
 	noticeSent := false
 	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		if idx.Type == idxtype.VECTOR {
-			if b.EvalCtx().SessionData().SafeUpdates {
+			if !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+				panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot alter primary key on a table with vector indexes until finalizing on 25.2"))
+			} else if b.EvalCtx().SessionData().SafeUpdates {
 				panic(pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
 			} else if !noticeSent {
 				noticeSender := b.EvalCtx().ClientNoticeSender
