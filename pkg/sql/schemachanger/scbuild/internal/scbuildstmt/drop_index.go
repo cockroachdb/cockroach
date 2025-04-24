@@ -104,7 +104,7 @@ func maybeDropIndex(
 			"use CASCADE if you really want to drop it.",
 		))
 	}
-	dropSecondaryIndex(b, indexName, n.DropBehavior, sie)
+	dropSecondaryIndex(b, indexName, n.DropBehavior, sie, n)
 	return sie
 }
 
@@ -115,6 +115,7 @@ func dropSecondaryIndex(
 	indexName *tree.TableIndexName,
 	dropBehavior tree.DropBehavior,
 	sie *scpb.SecondaryIndex,
+	stmt tree.Statement,
 ) {
 	{
 		next := b.WithNewSourceElementID()
@@ -141,7 +142,9 @@ func dropSecondaryIndex(
 
 		// If shard index, also drop the shard column and all check constraints that
 		// uses this shard column if no other index uses the shard column.
-		maybeDropAdditionallyForShardedIndex(next, sie, indexName.Index.String(), dropBehavior)
+		maybeDropAdditionallyForShardedIndex(
+			next, sie, indexName.Index.String(), stmt, dropBehavior,
+		)
 
 		// If expression index, also drop the expression column if no other index is
 		// using the expression column.
@@ -208,7 +211,7 @@ func maybeDropDependentFunctions(
 			if forwardRef.IndexID != toBeDroppedIndex.IndexID {
 				continue
 			}
-			// This view depends on the to-be-dropped index;
+			// This function depends on the to-be-dropped index.
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
@@ -292,6 +295,7 @@ func maybeDropAdditionallyForShardedIndex(
 	b BuildCtx,
 	toBeDroppedIndex *scpb.SecondaryIndex,
 	toBeDroppedIndexName string,
+	stmt tree.Statement,
 	dropBehavior tree.DropBehavior,
 ) {
 	if toBeDroppedIndex.Sharding == nil || !toBeDroppedIndex.Sharding.IsSharded {
@@ -349,6 +353,11 @@ func maybeDropAdditionallyForShardedIndex(
 			b.Drop(e)
 		}
 	})
+	tbl := b.QueryByID(toBeDroppedIndex.TableID).FilterTable().MustGetOneElement()
+	ns := b.QueryByID(toBeDroppedIndex.TableID).FilterNamespace().MustGetOneElement()
+	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
+	shardCol := shardColElms.FilterColumn().MustGetOneElement()
+	dropColumn(b, &tn, tbl, stmt, stmt, shardCol, shardColElms, dropBehavior)
 }
 
 // dropAdditionallyForExpressionIndex attempts to drop the additional
