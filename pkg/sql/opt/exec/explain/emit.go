@@ -1422,6 +1422,8 @@ func (e *emitter) emitPolicies(ob *OutputBuilder, table cat.Table, n *Node) {
 
 	if applied.PoliciesSkippedForRole {
 		ob.AddField("policies", "exempt for role")
+	} else if applied.PoliciesFilteredAllRows {
+		ob.AddField("policies", "applied (filtered all rows)")
 	} else if applied.Policies.Len() == 0 {
 		ob.AddField("policies", "row-level security enabled, no policies applied.")
 	} else {
