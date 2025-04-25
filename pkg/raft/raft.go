@@ -1540,14 +1540,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, matchGuess tracker.MatchGuess,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, matchGuess)
 	return r.electionTracker.TallyVotes()
 }
 
