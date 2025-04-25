@@ -203,6 +203,23 @@ func TestEncodeKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, metadata1.Equal(&metadata2),
 		"metadata does not match\n%+v\n\n%+v", metadata1, metadata2)
+
+	// EncodeChildKey and DecodeChildKey.
+	childKey := cspann.ChildKey{KeyBytes: []byte{1, 2}}
+	var buf []byte
+	buf = vecencoding.EncodeChildKey(buf, childKey)
+	require.Equal(t, []byte{1, 2}, buf)
+	childKey2, err := vecencoding.DecodeChildKey(buf, cspann.LeafLevel)
+	require.NoError(t, err)
+	require.Equal(t, childKey, childKey2)
+
+	buf = buf[:0]
+	childKey = cspann.ChildKey{PartitionKey: 10}
+	buf = vecencoding.EncodeChildKey(buf, childKey)
+	require.Equal(t, []byte{146, 136}, buf)
+	childKey2, err = vecencoding.DecodeChildKey(buf, cspann.SecondLevel)
+	require.NoError(t, err)
+	require.Equal(t, childKey, childKey2)
 }
 
 func TestDecodeVectorKey(t *testing.T) {
