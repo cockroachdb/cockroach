@@ -2718,6 +2718,12 @@ Testing three, two, three
 query error pq: format\(\): error parsing format string: not enough arguments
 SELECT format(E'%2\x24s','foo');
 
+statement error pgcode 42883 pq: unknown signature: format\(\)
+SELECT format();
+
+statement error pgcode 42883 pq: unknown signature: format\(int\)
+SELECT format(42);
+
 subtest pg_is_in_recovery
 
 query B colnames
