@@ -245,7 +245,10 @@ func EncodeChildKey(appendTo []byte, key cspann.ChildKey) []byte {
 		// The primary key is already in encoded form.
 		return append(appendTo, key.KeyBytes...)
 	}
-	return EncodePartitionKey(appendTo, key.PartitionKey)
+
+	// Encode the partition key, along with the final family ID 0 value.
+	appendTo = EncodePartitionKey(appendTo, key.PartitionKey)
+	return keys.MakeFamilyKey(appendTo, 0)
 }
 
 // DecodeMetadataValue decodes the metadata KV value for a partition.
@@ -353,7 +356,8 @@ func DecodeChildKey(encChildKey []byte, level cspann.Level) (cspann.ChildKey, er
 		// encoded form, so just use it as-is.
 		return cspann.ChildKey{KeyBytes: encChildKey}, nil
 	} else {
-		// Non-leaf vectors point to the partition key.
+		// Non-leaf vectors point to the partition key. Note that the Family ID
+		// value at the end of the encoding is ignored.
 		_, childPartitionKey, err := encoding.DecodeUvarintAscending(encChildKey)
 		if err != nil {
 			return cspann.ChildKey{}, err

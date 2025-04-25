@@ -17,7 +17,7 @@ import (
 )
 
 type equaler interface {
-	Equal(that interface{}) bool
+	Equal(that any) bool
 }
 
 var vec1 = vector.T{1, 2}
@@ -26,10 +26,10 @@ var vec3 = vector.T{4, 3}
 var vec4 = vector.T{6, -2}
 var vec5 = vector.T{0, 5}
 
-var primaryKey1 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{1, 00}}
-var primaryKey2 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{2, 00}}
-var primaryKey3 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{3, 00}}
-var primaryKey5 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{5, 00}}
+var primaryKey1 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{1, 136}}
+var primaryKey2 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{2, 136}}
+var primaryKey3 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{3, 136}}
+var primaryKey5 = cspann.ChildKey{KeyBytes: cspann.KeyBytes{5, 136}}
 
 var partitionKey1 = cspann.ChildKey{PartitionKey: 10}
 var partitionKey2 = cspann.ChildKey{PartitionKey: 20}
@@ -62,6 +62,10 @@ type TestStore interface {
 	// InsertVector inserts a vector into the store and returns the primary key
 	// bytes that can be used to retrieve that vector via GetFullVectors.
 	InsertVector(t *testing.T, treeID int, vec vector.T) cspann.KeyBytes
+
+	// Close gives the store a chance to perform any validation or cleanup once
+	// the store is no longer needed.
+	Close(t *testing.T)
 }
 
 // MakeStoreFunc defines a function that creates a new TestStore instance for
@@ -91,9 +95,10 @@ func NewStoreTestSuite(ctx context.Context, makeStore MakeStoreFunc) *StoreTestS
 
 func (suite *StoreTestSuite) TestRunTransaction() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	rootVec := vector.T{1, 2}
-	rootChildKey := cspann.ChildKey{KeyBytes: cspann.KeyBytes{10, 20}}
+	rootChildKey := cspann.ChildKey{KeyBytes: cspann.KeyBytes{10, 20, 136}}
 	treeKey := store.MakeTreeKey(suite.T(), 0)
 
 	// No error, should commit.
@@ -116,6 +121,7 @@ func (suite *StoreTestSuite) TestRunTransaction() {
 
 func (suite *StoreTestSuite) TestGetPartitionMetadata() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		var metadata cspann.PartitionMetadata
@@ -187,6 +193,7 @@ func (suite *StoreTestSuite) TestGetPartitionMetadata() {
 
 func (suite *StoreTestSuite) TestAddToPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -272,6 +279,7 @@ func (suite *StoreTestSuite) TestAddToPartition() {
 
 func (suite *StoreTestSuite) TestRemoveFromPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -348,6 +356,7 @@ func (suite *StoreTestSuite) TestRemoveFromPartition() {
 // TestSearchMultiplePartitions tests the store's SearchPartitions method.
 func (suite *StoreTestSuite) TestSearchPartitions() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -425,6 +434,7 @@ func (suite *StoreTestSuite) TestSearchPartitions() {
 // vectors by primary key and centroids by partition key.
 func (suite *StoreTestSuite) TestGetFullVectors() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		// Create partitions.
@@ -510,6 +520,7 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 
 func (suite *StoreTestSuite) TestEstimatePartitionCount() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -540,6 +551,7 @@ func (suite *StoreTestSuite) TestEstimatePartitionCount() {
 
 func (suite *StoreTestSuite) TestTryCreateEmptyPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -589,6 +601,7 @@ func (suite *StoreTestSuite) TestTryCreateEmptyPartition() {
 
 func (suite *StoreTestSuite) TestTryDeletePartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -628,6 +641,7 @@ func (suite *StoreTestSuite) TestTryDeletePartition() {
 
 func (suite *StoreTestSuite) TestTryGetPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -681,6 +695,7 @@ func (suite *StoreTestSuite) TestTryGetPartition() {
 // TestTryGetPartitionMetadata tests the Store's TryGetPartitionMetadata method.
 func (suite *StoreTestSuite) TestTryGetPartitionMetadata() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -725,6 +740,7 @@ func (suite *StoreTestSuite) TestTryGetPartitionMetadata() {
 
 func (suite *StoreTestSuite) TestTryUpdatePartitionMetadata() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -771,6 +787,7 @@ func (suite *StoreTestSuite) TestTryUpdatePartitionMetadata() {
 
 func (suite *StoreTestSuite) TestTryAddToPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -883,6 +900,7 @@ func (suite *StoreTestSuite) TestTryAddToPartition() {
 
 func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
@@ -966,6 +984,7 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 
 func (suite *StoreTestSuite) TestTryClearPartition() {
 	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
 
 	doTest := func(treeID int) {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
