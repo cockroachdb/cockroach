@@ -34,6 +34,9 @@ type Setter interface {
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
 	RunPostChecks() error
+	// IsNewTableObject returns true if the storage parameter is being set on a new
+	// table.
+	IsNewTableObject() bool
 }
 
 // Set sets the given storage parameters using the
@@ -45,7 +48,7 @@ func Set(
 	params tree.StorageParams,
 	setter Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, params, nil /* resetParams */); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, setter, params, nil /* resetParams */); err != nil {
 		return err
 	}
 	for _, sp := range params {
@@ -92,7 +95,7 @@ func Set(
 func Reset(
 	ctx context.Context, evalCtx *eval.Context, params []string, paramObserver Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, nil /* setParam */, params); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, paramObserver, nil /* setParam */, params); err != nil {
 		return err
 	}
 	for _, p := range params {
@@ -126,7 +129,11 @@ func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum
 // storageParamPreChecks is where we specify pre-conditions for setting/resetting
 // storage parameters `param`.
 func storageParamPreChecks(
-	ctx context.Context, evalCtx *eval.Context, setParams tree.StorageParams, resetParams []string,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	setter Setter,
+	setParams tree.StorageParams,
+	resetParams []string,
 ) error {
 	if setParams != nil && resetParams != nil {
 		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
@@ -152,7 +159,11 @@ func storageParamPreChecks(
 			// change we make to the descriptor in the transaction, so we can uphold
 			// the "one-version invariant" as discussed further in RFC
 			// https://github.com/ajwerner/cockroach/blob/ajwerner/low-latency-rfc-take-3/docs/RFCS/20230328_low_latency_changefeeds.md
-			if len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt {
+			// For newly created tables we will allow schema_locked to be set upon creation,
+			// since later operations cannot unset schema_locked (i.e. only implicit single
+			// statement transactions are allowed to manipulate schema_locked, see
+			// checkSchemaChangeIsAllowed).
+			if !setter.IsNewTableObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}

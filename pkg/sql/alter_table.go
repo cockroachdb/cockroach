@@ -731,7 +731,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
-			setter := tablestorageparam.NewSetter(n.tableDesc)
+			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
 			if err := storageparam.Set(
 				params.ctx,
 				params.p.SemaCtx(),
@@ -761,7 +761,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableResetStorageParams:
-			setter := tablestorageparam.NewSetter(n.tableDesc)
+			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
 			if err := storageparam.Reset(
 				params.ctx,
 				params.EvalContext(),
