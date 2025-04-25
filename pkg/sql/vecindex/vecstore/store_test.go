@@ -16,11 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
@@ -39,6 +41,9 @@ import (
 type testStore struct {
 	*Store
 
+	kvDB      *kv.DB
+	codec     keys.SQLCodec
+	tableDesc catalog.TableDescriptor
 	inserted  int64
 	usePrefix bool
 	runner    *sqlutils.SQLRunner
@@ -62,6 +67,22 @@ func (ts *testStore) InsertVector(t *testing.T, treeID int, vec vector.T) cspann
 	// below.
 	ts.inserted++
 	return keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, ts.inserted), 0 /* famID */)
+}
+
+func (ts *testStore) Close(t *testing.T) {
+	// Validate that all index keys are suffixed by the zero byte (136 in
+	// encoded form). This is required for KV splits to work properly.
+	validate := func(indexID descpb.IndexID) {
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(ts.codec, ts.tableDesc.GetID(), indexID))
+		keyVals, err := ts.kvDB.Scan(context.Background(), prefix, prefix.PrefixEnd(), 0)
+		require.NoError(t, err)
+		for _, kv := range keyVals {
+			require.Equal(t, byte(136), kv.Key[len(kv.Key)-1])
+		}
+	}
+
+	validate(42)
+	validate(43)
 }
 
 func TestStore(t *testing.T) {
@@ -100,7 +121,8 @@ func TestStore(t *testing.T) {
 		require.NoError(t, err)
 
 		indexDesc1 := descpb.IndexDescriptor{
-			ID: 42, Name: "t_idx1",
+			ID:                  42,
+			Name:                "t_idx1",
 			Type:                idxtype.VECTOR,
 			KeyColumnIDs:        []descpb.ColumnID{vCol.GetID()},
 			KeyColumnNames:      []string{vCol.GetName()},
@@ -111,7 +133,8 @@ func TestStore(t *testing.T) {
 		}
 
 		indexDesc2 := descpb.IndexDescriptor{
-			ID: 43, Name: "t_idx2",
+			ID:                  43,
+			Name:                "t_idx2",
 			Type:                idxtype.VECTOR,
 			KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
 			KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
@@ -140,7 +163,15 @@ func TestStore(t *testing.T) {
 		// Use CONSISTENT reads to ensure test is deterministic.
 		store.SetMinimumConsistency(kvpb.CONSISTENT)
 
-		return &testStore{Store: store, usePrefix: usePrefix, runner: runner}
+		return &testStore{
+			Store: store,
+
+			kvDB:      kvDB,
+			codec:     srv.ApplicationLayer().Codec(),
+			tableDesc: tableDesc,
+			usePrefix: usePrefix,
+			runner:    runner,
+		}
 	}
 
 	// Run tests with a non-prefixed index.
