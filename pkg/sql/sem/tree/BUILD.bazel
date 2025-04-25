@@ -132,6 +132,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/col/coldata",
         "//pkg/col/typeconv",  # keep
         "//pkg/geo",
@@ -139,6 +140,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
+        "//pkg/sql/oidext",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -71,9 +73,9 @@ type SemaContext struct {
 	// IntervalStyle refers to the IntervalStyle to parse as.
 	IntervalStyle duration.IntervalStyle
 
-	// UnsupportedTypeChecker is used to determine whether a builtin data type is
-	// supported by the current cluster version. It may be unset.
-	UnsupportedTypeChecker UnsupportedTypeChecker
+	// UnsupportedTypeChecker is used to determine whether a builtin data type
+	// is supported by the current cluster version. It may be uninitialized.
+	UnsupportedTypeChecker
 
 	// UsePre_25_2VariadicBuiltins is set to true when we should use the pre-25.2
 	// variadic builtins behavior.
@@ -3753,22 +3755,40 @@ func ResolvePolymorphicArgTypes(
 	return true, numPolyParams, anyElemTyp
 }
 
-// UnsupportedTypeChecker is used to check that a type is supported by the
-// current cluster version. It is an interface because some packages cannot
-// import the clusterversion package.
-type UnsupportedTypeChecker interface {
-	// CheckType returns an error if the given type is not supported by the
-	// current cluster version.
-	CheckType(ctx context.Context, typ *types.T) error
+// UnsupportedTypeChecker can be used to check whether a type is allowed by the
+// current cluster version.
+type UnsupportedTypeChecker struct {
+	//lint:ignore U1000 unused
+	version clusterversion.Handle
+}
+
+// Init initializes the UnsupportedTypeChecker.
+func (tc *UnsupportedTypeChecker) Init(handle clusterversion.Handle) {
+	tc.version = handle
+}
+
+// CheckType implements the tree.UnsupportedTypeChecker interface.
+func (tc UnsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) error {
+	if tc.version == nil {
+		// Some (non-test) locations don't initialize all fields of the
+		// SemaContext.
+		return nil
+	}
+	if (typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath) &&
+		!tc.version.IsActive(ctx, clusterversion.V25_2) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s not supported until version 25.2", typ.String(),
+		)
+	}
+	return nil
 }
 
 // CheckUnsupportedType returns an error if the given type is not supported by
 // the current cluster version. If the given SemaContext is nil or
 // uninitialized, CheckUnsupportedType returns nil.
 func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.T) error {
-	if semaCtx == nil || semaCtx.UnsupportedTypeChecker == nil {
-		// Sometimes TypeCheck() is called with a nil SemaContext for tests, and
-		// some (non-test) locations don't initialize all fields of the SemaContext.
+	if semaCtx == nil {
+		// Sometimes TypeCheck() is called with a nil SemaContext for tests.
 		return nil
 	}
 	return semaCtx.UnsupportedTypeChecker.CheckType(ctx, typ)
