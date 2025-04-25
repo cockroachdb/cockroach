@@ -66,7 +66,7 @@ func TestDRPCBatchServer(t *testing.T) {
 
 		desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
 
-		client := kvpb.NewDRPCBatchClient(conn)
+		client := kvpb.NewDRPCInternalClient(conn)
 		ba := &kvpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		var ok bool
