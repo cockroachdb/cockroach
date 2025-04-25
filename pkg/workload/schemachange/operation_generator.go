@@ -5171,3 +5171,145 @@ func (og *operationGenerator) dropPolicy(ctx context.Context, tx pgx.Tx) (*opStm
 
 	return opStmt, nil
 }
+
+func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Try to find an existing policy to alter
+	policyWithInfo, policyExists, err := findExistingPolicy(ctx, tx, og)
+	if err != nil {
+		return nil, err
+	}
+
+	// Variable to track table existence
+	var tableExists bool = true
+
+	if !policyExists {
+		// Fall back to random table if no tables with policies were found
+		randomTable, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		policyWithInfo.table = *randomTable
+
+		// If we didn't get a real policy name, generate a random one
+		if policyWithInfo.policyName == "" {
+			policyWithInfo.policyName = fmt.Sprintf("dummy_policy_%s", og.newUniqueSeqNumSuffix())
+		}
+
+		// Check if table exists to include appropriate expected error
+		tableExists, err = og.tableExists(ctx, tx, randomTable)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Determine which ALTER POLICY features to include
+	alterType := og.randIntn(4) // 0-3 for different types of alterations
+
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("ALTER POLICY %s ON %s", policyWithInfo.policyName, &policyWithInfo.table))
+
+	usesDummyRole := false
+	includeUsing := false
+	includeWithCheck := false
+
+	var columns []string
+
+	switch alterType {
+	case 0: // RENAME TO
+		newName := fmt.Sprintf("policy_%s", og.newUniqueSeqNumSuffix())
+		sqlStatement.WriteString(fmt.Sprintf(" RENAME TO %s", newName))
+	case 1: // TO roles
+		// Define roles to grant the policy to
+		var roles string
+		if og.randIntn(2) == 0 {
+			// 50% chance to a real username
+			roles, err = og.randUser(ctx, tx)
+			if err != nil {
+				return nil, err
+			}
+		} else if og.randIntn(4) == 0 {
+			// Fall back to two options: 25% chance for PUBLIC or a 75% for generated dummy role
+			roles = "PUBLIC"
+		} else {
+			// Generate a random role name that doesn't exist
+			roles = fmt.Sprintf("dummy_role_%s", og.newUniqueSeqNumSuffix())
+			usesDummyRole = true
+		}
+
+		sqlStatement.WriteString(fmt.Sprintf(" TO %s", roles))
+	default: // USING and/or WITH CHECK expressions
+		// For case 2 and 3, we generate USING, WITH CHECK, or both
+		includeUsing = alterType == 2 || og.randIntn(2) == 0
+		includeWithCheck = alterType == 3 || og.randIntn(2) == 0
+
+		// If neither was selected, default to including USING
+		if !includeUsing && !includeWithCheck {
+			includeUsing = true
+		}
+
+		// Get columns for the table to reference in expressions
+		if tableExists {
+			columns, err = og.tableColumnsShuffled(ctx, tx, policyWithInfo.table.String())
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Generate expressions for USING and WITH CHECK
+		if includeUsing {
+			usingExpr := og.generatePolicyExpression(columns, -1) // -1 means no preferred column
+			sqlStatement.WriteString(fmt.Sprintf(" USING (%s)", usingExpr))
+		}
+
+		if includeWithCheck {
+			// Try to use a different column for WITH CHECK if possible
+			preferredColIdx := -1
+			if len(columns) > 1 && includeUsing {
+				preferredColIdx = og.randIntn(len(columns))
+			}
+
+			withCheckExpr := og.generatePolicyExpression(columns, preferredColIdx)
+			sqlStatement.WriteString(fmt.Sprintf(" WITH CHECK (%s)", withCheckExpr))
+		}
+	}
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: !policyExists},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+		{code: pgcode.UndefinedObject, condition: usesDummyRole},
+	})
+
+	return opStmt, nil
+}
+
+// randUser returns a real username from the database.
+// It returns an error if no user is found.
+func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, error) {
+	query := "SELECT username FROM [SHOW USERS] ORDER BY random() LIMIT 1"
+	rows, err := tx.Query(ctx, query)
+	if rows.Err() != nil {
+		return "", rows.Err()
+	}
+
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var realUser string
+	if rows.Next() {
+		if err := rows.Scan(&realUser); err != nil {
+			return "", err
+		}
+		og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
+		return realUser, nil
+	}
+
+	// This should never happen in a valid CockroachDB instance.
+	// There should always be at least one user.
+	return "", errors.New("no users found in the database")
+}
