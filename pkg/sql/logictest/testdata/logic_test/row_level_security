@@ -2236,7 +2236,8 @@ CREATE TABLE t (
       a INT,
       b INT,
       c INT,
-      v INT AS (c + 1) VIRTUAL
+      v INT AS (c + 1) VIRTUAL,
+      FAMILY (k, a, b, c)
 );
 
 statement ok
@@ -2334,7 +2335,8 @@ CREATE TABLE t (
       a INT,
       b INT,
       c INT,
-      v INT AS (c + 1) STORED
+      v INT AS (c + 1) STORED,
+      FAMILY (k, a, b, c, v)
 );
 
 statement ok
