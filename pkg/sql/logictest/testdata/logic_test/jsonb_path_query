@@ -1601,6 +1601,17 @@ SELECT jsonb_path_query('[1, 2, 3]', '$[-0.99999999]');
 ----
 1
 
+query empty
+SELECT jsonb_path_query('[1, 2, 3]', '$[-1.01]');
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[-0.9999999999999]');
+----
+1
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('[1, 2, 3]', 'strict $[-1.01]');
+
 statement error pgcode 42704 pq: could not find jsonpath variable "value"
 SELECT jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
 
