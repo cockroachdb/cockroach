@@ -6,6 +6,7 @@
 package colbuilder
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -876,17 +878,34 @@ func NewColOperator(
 						core.TableReader.LockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 						return false
 					}
-					// At the moment, the ColBatchDirectScan cannot handle Gets
-					// (it's not clear whether it is worth to handle them via
-					// the same path as for Scans and ReverseScans (which could
-					// have too large of an overhead) or by teaching the
-					// operator to also decode a single KV (similar to what
-					// regular ColBatchScan does)).
-					// TODO(yuzefovich, 23.1): explore supporting Gets somehow.
+					var prevRowPrefix, curRowPrefix []byte
+					var prevRowPrefixOk, curRowPrefixOk bool
 					for i := range core.TableReader.Spans {
 						if len(core.TableReader.Spans[i].EndKey) == 0 {
+							// At the moment, the ColBatchDirectScan cannot
+							// handle Gets (it's not clear whether it is worth
+							// to handle them via the same path as for Scans and
+							// ReverseScans (which could have too large of an
+							// overhead) or by teaching the operator to also
+							// decode a single KV (similar to what regular
+							// ColBatchScan does)).
+							// TODO(yuzefovich, 23.1): explore supporting Gets
+							// somehow.
 							return false
 						}
+						if l, err := keys.GetRowPrefixLength(core.TableReader.Spans[i].Key); err == nil {
+							curRowPrefix = core.TableReader.Spans[i].Key[:l]
+							curRowPrefixOk = true
+						}
+						if prevRowPrefixOk && curRowPrefixOk && bytes.Equal(prevRowPrefix, curRowPrefix) {
+							// Two consecutive requests are part of the
+							// same SQL row in which case we cannot use direct
+							// columnar scans since we'd create a separate
+							// coldata.Batch for each.
+							return false
+						}
+						prevRowPrefix, curRowPrefix = curRowPrefix, nil
+						prevRowPrefixOk, curRowPrefixOk = curRowPrefixOk, false
 					}
 					fetchSpec := core.TableReader.FetchSpec
 					// Handling user-defined types requires type hydration which
