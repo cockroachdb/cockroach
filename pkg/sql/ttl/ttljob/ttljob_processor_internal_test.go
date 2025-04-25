@@ -20,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -230,6 +233,113 @@ func TestRetryDeleteBatch(t *testing.T) {
 			}
 			// Check the metric to ensure we actually did the expected number of retries.
 			require.Equal(t, tc.expectedRetryCount, metrics.NumDeleteBatchRetries.Value())
+		})
+	}
+}
+
+// mockTTLWorker is a mock implementation of the TTLWorker interface. It allows
+// you to control the behavior of the worker and simulate different scenarios.
+type mockTTLWorker struct {
+	workersDoneCh chan error
+	output        metadataCache
+	setupError    error
+}
+
+func (m *mockTTLWorker) startAsyncWork(
+	ctx context.Context,
+) (
+	completeCallback func() error,
+	workersDoneCh chan error,
+	cancelFunc context.CancelFunc,
+	retErr error,
+) {
+	return func() error { return nil }, m.workersDoneCh, func() {}, m.setupError
+}
+
+func (m *mockTTLWorker) getMetadataPushInterval() time.Duration {
+	return 10 * time.Microsecond
+}
+
+func (m *mockTTLWorker) MoveToDraining(err error) {
+	m.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+}
+
+// metadataCache is a RowReceiver that caches any metadata it receives for later
+// inspection.
+type metadataCache struct {
+	bufferedMeta []execinfrapb.ProducerMetadata
+}
+
+var _ execinfra.RowReceiver = &metadataCache{}
+
+// Push is part of the execinfra.RowReceiver interface.
+func (m *metadataCache) Push(
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta != nil {
+		m.bufferedMeta = append(m.bufferedMeta, *meta)
+	}
+	return execinfra.NeedMoreRows
+}
+
+// ProducerDone is part of the execinfra.RowReceiver interface.
+func (m *metadataCache) ProducerDone() {}
+
+func (m *metadataCache) getLastError() error {
+	if len(m.bufferedMeta) == 0 {
+		return nil
+	}
+	return m.bufferedMeta[len(m.bufferedMeta)-1].Err
+}
+
+func TestProcessorEmitsMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		desc             string
+		workerSetupError error
+		workerTaskError  error
+	}{
+		{desc: "no-error", workerSetupError: nil, workerTaskError: nil},
+		{desc: "error-during-setup", workerSetupError: errors.New("setup error"), workerTaskError: nil},
+		{desc: "error-during-work", workerSetupError: nil, workerTaskError: errors.New("test error")},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			mock := &mockTTLWorker{
+				workersDoneCh: make(chan error),
+				setupError:    tc.workerSetupError,
+			}
+			defer close(mock.workersDoneCh)
+
+			ctx := context.Background()
+			group := ctxgroup.WithContext(ctx)
+			group.Go(func() error {
+				performTask(ctx, mock, &mock.output)
+				return nil
+			})
+			// We should emit metadata, even before any error occurs.
+			testutils.SucceedsSoon(t, func() error {
+				if len(mock.output.bufferedMeta) == 0 {
+					return errors.New("no metadata emitted")
+				}
+				return nil
+			})
+			if tc.workerSetupError != nil {
+				require.Equal(t, 1, len(mock.output.bufferedMeta))
+				require.Error(t, mock.output.getLastError())
+				require.ErrorIs(t, mock.output.getLastError(), tc.workerSetupError)
+				return
+			}
+			// Now we can close the channel to signal that the workers are done.
+			mock.workersDoneCh <- tc.workerTaskError
+			require.NoError(t, group.Wait())
+			// If an error was passed to the channel, ensure it flows back in the metadata.
+			if tc.workerTaskError == nil {
+				require.NoError(t, mock.output.getLastError())
+			} else {
+				require.Error(t, mock.output.getLastError())
+			}
 		})
 	}
 }
