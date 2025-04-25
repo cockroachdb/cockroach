@@ -261,64 +261,19 @@ EXPLAIN CREATE DATABASE foo
 statement ok
 EXPLAIN ANALYZE CREATE DATABASE foo
 
-# Regression test for #144273.
+# Regression test for #144273 (not supporting ReturnRawMVCCValues option).
+
+# Get request.
 statement ok
-CREATE TABLE t144273 (
-  k INT PRIMARY KEY,
-  a INT,
-  b INT,
-  INDEX (a),
-  INDEX (b),
-  FAMILY (k, a, b)
-)
+SELECT k, crdb_internal_origin_id FROM t4 WHERE k = 1
 
+# Scan request.
 statement ok
-PREPARE p AS UPDATE t144273 t1 SET a = t2.a + 1, b = t2.b + 1 FROM t144273 t2 WHERE t1.k = t2.a AND t1.k = $1
+SELECT k, crdb_internal_origin_id FROM t4
 
+# ReverseScan request.
 statement ok
-SET vectorize = on
-
-statement ok
-INSERT INTO t144273 VALUES (1, 1, 1);
-
-# The table IDs in the kv trace below are different with the legacy schema
-# changer, so disable that configuration.
-skipif config local-legacy-schema-changer
-query T kvtrace
-EXECUTE p(1)
-----
-Scan /Table/114/2/{1-2}
-Scan /Table/114/1/1/0
-Scan /Table/114/1/1/0
-Put (locking) /Table/114/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
-Del /Table/114/2/1/1/0
-Put /Table/114/2/2/1/0 -> /BYTES/
-Del /Table/114/3/1/1/0
-Put /Table/114/3/2/1/0 -> /BYTES/
-
-statement ok
-SET vectorize = off
-
-statement ok
-INSERT INTO t144273 VALUES (2, 2, 2);
-
-# The table IDs in the kv trace below are different with the legacy schema
-# changer, so disable that configuration.
-skipif config local-legacy-schema-changer
-query T kvtrace
-EXECUTE p(2)
-----
-Scan /Table/114/2/{2-3}
-Scan /Table/114/1/1/0, /Table/114/1/2/0
-Scan /Table/114/1/2/0
-Put (locking) /Table/114/1/2/0 -> /TUPLE/2:2:Int/3/1:3:Int/3
-Del /Table/114/2/2/2/0
-Put /Table/114/2/3/2/0 -> /BYTES/
-Del /Table/114/3/2/2/0
-Put /Table/114/3/3/2/0 -> /BYTES/
-
-statement ok
-RESET vectorize
+SELECT k, crdb_internal_origin_id FROM t4 ORDER BY k DESC
 
 statement ok
 CREATE TABLE uvw (
@@ -439,6 +394,19 @@ query I
 SELECT count(*) FROM uvw
 ----
 64
+
+# Increase the closed timestamp interval since the transaction below can take
+# long time under race which could result in a RETRY_SERIALIZABLE error on
+# COMMIT (#145065).
+#
+# The cluster setting is SystemVisible, so we must run this query on the host
+# cluster in multi-tenant environment.
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '30s'
+
+user root
 
 # Create some large blobs that will require the scans to be paginated (in 10MiB
 # chunks).
