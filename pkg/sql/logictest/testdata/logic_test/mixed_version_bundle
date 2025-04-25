@@ -42,6 +42,9 @@ SELECT pg_sleep(1);
 statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
 
+statement ok
+SELECT crdb_internal.request_statement_bundle('SELECT _, _, _ FROM _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL);
+
 upgrade 0
 
 statement ok
@@ -50,10 +53,60 @@ SELECT pg_sleep(1);
 statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
 
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser;
+GRANT SELECT ON t TO testuser;
+
+user testuser
+
+# Request a statement bundle as testuser. The user won't be captured since
+# the cluster setting is not yet active.
+statement ok
+SELECT crdb_internal.request_statement_bundle('SELECT _, _, _, _ FROM _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL);
+
+user root
+
 upgrade 2
+
+# Block until upgrade is complete.
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query B retry
+SELECT crdb_internal.is_at_least_version('25.1-08')
+----
+true
 
 statement ok
 SELECT pg_sleep(1);
 
+user testuser
+
+# Request a statement bundle as testuser. Since it's an explicit
+# EXPLAIN ANALYZE (DEBUG) invocation, we don't store the username in
+# system.statement_diagnostics_requests.
 statement ok
 EXPLAIN ANALYZE (DEBUG) SELECT * FROM t;
+
+# Request a statement bundle as testuser. The user should be captured since
+# the cluster setting is now active.
+statement ok
+SELECT crdb_internal.request_statement_bundle('SELECT _, _, _, _, _ FROM _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL);
+
+user root
+
+# Currently the user is not set for requests added with EXPLAIN ANALYZE (DEBUG).
+# For other requests, the user is only set once the cluster setting is active,
+# in this case for the final invocation of crdb_internal.request_statement_bundle.
+query TT
+SELECT statement_fingerprint, username FROM system.statement_diagnostics_requests
+ORDER BY statement_fingerprint;
+----
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t  ·
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t  ·
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t  ·
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM t  ·
+SELECT _, _ FROM _                       ·
+SELECT _, _, _ FROM _                    ·
+SELECT _, _, _, _ FROM _                 ·
+SELECT _, _, _, _, _ FROM _              testuser
