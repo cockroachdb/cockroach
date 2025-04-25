@@ -51,6 +51,9 @@ func (ts *testStore) InsertVector(t *testing.T, treeID int, vec vector.T) cspann
 	return key
 }
 
+func (ts *testStore) Close(t *testing.T) {
+}
+
 func TestMemStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

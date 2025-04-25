@@ -38,11 +38,14 @@ BAZEL_BIN=$(bazel info bazel-bin -c opt)
 cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 chmod a+w bin/roachtest
 
-# Pull in the latest version of Pebble from upstream. The benchmarks run
-# against the tip of the 'master' branch. We do this by `go get`ting the
-# latest version of the module, and then running `mirror` to update `DEPS.bzl`
+# Pull in the version of Pebble from upstream. If none is specified, the
+# benchmarks run against the tip of the 'master' branch. We do this by `go
+# get`ting the SHA of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
-bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@master
+pebble_go_get_version="${PEBBLE_SHA:-master}"
+echo "Benchmarking against: ${pebble_go_get_version}"
+
+bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@${pebble_go_get_version}"
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 bazel build @com_github_cockroachdb_pebble//cmd/pebble -c opt
