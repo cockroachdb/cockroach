@@ -4132,8 +4132,8 @@ WHERE tablename = 'vector_table'
 ORDER BY indexname
 ----
 indexname          indexdef
-idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a)
-idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a)
+idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a vector_l2_ops)
+idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a vector_l2_ops)
 vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON test.public.vector_table USING btree (id ASC)
 
 subtest partial_index
