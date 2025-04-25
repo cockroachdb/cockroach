@@ -35,6 +35,8 @@ func ParsePartitionState(s string) PartitionState {
 		return DrainingForSplitState
 	case "DrainingForMerge":
 		return DrainingForMergeState
+	case "DeletingForSplit":
+		return DeletingForSplitState
 	case "AddingLevel":
 		return AddingLevelState
 	case "RemovingLevel":
@@ -71,6 +73,8 @@ func (s PartitionState) String() string {
 		return "DrainingForSplit"
 	case DrainingForMergeState:
 		return "DrainingForMerge"
+	case DeletingForSplitState:
+		return "DeletingForSplitState"
 	case AddingLevelState:
 		return "AddingLevel"
 	case RemovingLevelState:
@@ -117,6 +121,10 @@ const (
 	// decreased by one. What remains is to move vectors from the child into the
 	// root. Searches, inserts, and deletes are allowed, but not splits or merges.
 	RemovingLevelState
+	// DeletingForSplitState indicates that a non-root splitting partition is
+	// about to be removed from its tree and deleted. Searches are allowed, but
+	// not inserts, deletes, splits, or merges.
+	DeletingForSplitState
 )
 
 // PartitionStateDetails records information about the current state of a
@@ -126,9 +134,9 @@ type PartitionStateDetails struct {
 	// state machine diagram for details.
 	State PartitionState
 	// Target1 is set differently depending on the state:
-	// - SplittingState, DrainingForSplitState, AddingLevelState: key of a new
-	//   partition which will contain a subset of the vectors in the splitting
-	//   partition.
+	// - SplittingState, DrainingForSplitState, DeletingForSplitState,
+	//   AddingLevelState: key of a new partition which will contain a subset of
+	//   the vectors in the splitting partition.
 	// - DrainingForMergeState (non-root): key of an existing partition at the
 	//   same level where vectors can be inserted if no better partition has been
 	//   found; this guarantees that inserts always find a target partition that
@@ -137,7 +145,8 @@ type PartitionStateDetails struct {
 	//   that will be merged into the root partition.
 	Target1 PartitionKey
 	// Target2 is set the same way as Target1 for these states:
-	// SplittingState, DrainingForSplitState, AddingLevelState.
+	// SplittingState, DrainingForSplitState, DeletingForSplitState,
+	// AddingLevelState.
 	Target2 PartitionKey
 	// Source is set differently depending on the state:
 	// - UpdatingState: key of the partition that is currently moving vectors into
@@ -153,66 +162,89 @@ type PartitionStateDetails struct {
 	Timestamp time.Time
 }
 
-// MakeReadyDetails constructs state for a Ready partition.
-func MakeReadyDetails() PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeReady sets Ready partition state details.
+func (psd *PartitionStateDetails) MakeReady() {
+	*psd = PartitionStateDetails{
 		State:     ReadyState,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
 
-// MakeSplittingDetails constructs state for a Splitting partition, including
-// the two target sub-partitions to which vectors are copied.
-func MakeSplittingDetails(target1, target2 PartitionKey) PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeSplitting sets Splitting partition state details, including the two
+// target sub-partitions to which vectors are copied.
+func (psd *PartitionStateDetails) MakeSplitting(target1, target2 PartitionKey) {
+	*psd = PartitionStateDetails{
 		State:     SplittingState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
 
-// MakeDrainingForSplitDetails constructs state for a Splitting partition,
-// including the two target sub-partitions to which vectors are copied.
-func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeDrainingForSplit sets DrainingForSplit partition state details, including
+// the two target sub-partitions to which vectors are copied.
+func (psd *PartitionStateDetails) MakeDrainingForSplit(target1, target2 PartitionKey) {
+	*psd = PartitionStateDetails{
 		State:     DrainingForSplitState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
 
-// MakeDrainingForMergeDetails constructs state for a Merging partition,
-// including the target sub-partition to which vectors can be copied.
-func MakeDrainingForMergeDetails(target PartitionKey) PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeDrainingForMerge sets DrainingForMerge partition state details, including
+// the target sub-partition to which vectors can be copied.
+func (psd *PartitionStateDetails) MakeDrainingForMerge(target PartitionKey) {
+	*psd = PartitionStateDetails{
 		State:     DrainingForMergeState,
 		Target1:   target,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
 
-// MakeUpdatingDetails constructs state for an Updating partition, including the
-// source partition from which vectors are being copied.
-func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeUpdating sets Updating partition state details, including the source
+// partition from which vectors are being copied.
+func (psd *PartitionStateDetails) MakeUpdating(source PartitionKey) {
+	*psd = PartitionStateDetails{
 		State:     UpdatingState,
 		Source:    source,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
 }
 
-// MakeAddingLevelDetails constructs state for an AddingLevel partition,
-// including the target partitions which will become the new children of the
-// root partition.
-func MakeAddingLevelDetails(target1, target2 PartitionKey) PartitionStateDetails {
-	return PartitionStateDetails{
+// MakeAddingLevel sets AddingLevel partition state details, including the
+// target partitions which will become the new children of the root partition.
+func (psd *PartitionStateDetails) MakeAddingLevel(target1, target2 PartitionKey) {
+	*psd = PartitionStateDetails{
 		State:     AddingLevelState,
 		Target1:   target1,
 		Target2:   target2,
-		Timestamp: timeutil.NowNoMono(),
+		Timestamp: getHigherTimestamp(psd.Timestamp),
 	}
+}
+
+// MakeDeletingForSplit sets DeletingForSplit partition state details.
+func (psd *PartitionStateDetails) MakeDeletingForSplit(target1, target2 PartitionKey) {
+	*psd = PartitionStateDetails{
+		State:     DeletingForSplitState,
+		Target1:   target1,
+		Target2:   target2,
+		Timestamp: getHigherTimestamp(psd.Timestamp),
+	}
+}
+
+// getHigherTimestamp takes an existing timestamp (can be zero) and returns a
+// time that's greater than the existing timestamp. It prefers to use the
+// current time, but if that is not greater, it simply adds one nanosecond to
+// the existing time.
+func getHigherTimestamp(existing time.Time) time.Time {
+	// Use NowNoMono since it is round-trippable. However, it only retains
+	// millisecond precision on MacOS, so rapid calls can return the same value.
+	ts := timeutil.NowNoMono()
+	if ts.After(existing) {
+		return ts
+	}
+	return existing.Add(time.Nanosecond)
 }
 
 // DefaultStalledOpTimeout specifies how long a split/merge operation can remain
@@ -223,7 +255,7 @@ var DefaultStalledOpTimeout = 100 * time.Millisecond
 // state for longer than the timeout, possibly indicating the fixup is stalled.
 func (psd *PartitionStateDetails) MaybeSplitStalled(stalledOpTimeout time.Duration) bool {
 	switch psd.State {
-	case SplittingState, DrainingForSplitState, AddingLevelState:
+	case SplittingState, DrainingForSplitState, DeletingForSplitState, AddingLevelState:
 		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
 	}
 	return false
@@ -246,6 +278,11 @@ func (psd *PartitionStateDetails) MaybeMergeStalled(stalledOpTimeout time.Durati
 //	Splitting:2,3
 //	Updating:4
 func (psd *PartitionStateDetails) String() string {
+	if psd.State == ReadyState {
+		// Short-circuit the common case.
+		return "Ready"
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString(psd.State.String())
 	if psd.Target1 != InvalidKey {
@@ -306,4 +343,18 @@ func (md *PartitionMetadata) Equal(other *PartitionMetadata) bool {
 		}
 	}
 	return slices.Equal(md.Centroid, other.Centroid)
+}
+
+// HasSameTimestamp returns true if this metadata's timestamp is the same as the
+// other's timestamp.
+func (md *PartitionMetadata) HasSameTimestamp(other *PartitionMetadata) bool {
+	return md.StateDetails.Timestamp.Equal(other.StateDetails.Timestamp)
+}
+
+// MakeReadyPartitionMetadata returns metadata for the given level and centroid,
+// in the Ready state.
+func MakeReadyPartitionMetadata(level Level, centroid vector.T) PartitionMetadata {
+	metadata := PartitionMetadata{Level: level, Centroid: centroid}
+	metadata.StateDetails.MakeReady()
+	return metadata
 }

@@ -42,28 +42,29 @@ import (
 //  8. Copy the "right" subset of vectors to the right sub-partition. At this
 //     point, the splitting vectors are duplicated in the index. Any searches
 //     will filter out duplicates.
-//  9. Update the left sub-partition's state from Updating to Ready.
-//  10. Update the right sub-partition's state from Updating to Ready.
-//  11. Remove the splitting partition from its parent. The duplicates are no
-//     longer visible to searches.
-//  12. Delete the splitting partition from the index.
+//  9. Clear all vectors from the splitting partition, so that it's empty.
+//     Searches can still find these vectors because they were copied to the
+//     left and right sub-partitions in steps #7 and #8.
+//  10. Update the splitting partition's state from DrainingForSplit to
+//     DeletingForSplit.
+//  11. Update the left sub-partition's state from Updating to Ready.
+//  12. Update the right sub-partition's state from Updating to Ready.
+//  13. Remove the splitting partition from its parent. The partition is no
+//     longer visible in the index. However, leave its metadata record behind
+//     as a tombstone, to ensure the partition is not re-created by a racing
+//     worker still stuck on the creation step of a previous split.
 //
 // Splitting a root partition changes the above flow in the following ways:
 //
-//	a. The root partition does not have a parent, so step #3 is skipped.
-//	b. Similarly, step #5 is skipped.
-//	c. The root partition cannot be removed from its parent and is not deleted,
-//	   so steps #11 and #12 are skipped.
-//	d. Instead, all vectors in the root partition are cleared so that it is
-//	   temporarily empty. Searches can still find these vectors because they
-//	   were copied to the left and right sub-partitions in steps #7 and #9.
-//	   Searches can find the keys of the sub-partitions in the Target fields of
-//	   the root partition metadata.
-//	e. Update the root partition's state to AddingLevel and increase its level
-//	   by one.
-//	f. Add the left sub-partition as a child of the root partition.
-//	g. Add the right sub-partition as a child of the root partition.
-//	h. Update the root partition's state to Ready.
+//		a. Follow steps #1 - #9, skipping steps #3 and #5, since the root partition
+//	    does not have a parent.
+//	 b. Update the root partition's state from DrainingForSplit to AddingLevel
+//	    and increase its level by one.
+//	 c. Add the left sub-partition as a child of the root partition.
+//	 d. Update the left sub-partition's state from Updating to Ready.
+//	 e. Add the right sub-partition as a child of the root partition.
+//	 f. Update the right sub-partition's state from Updating to Ready.
+//		g. Update the root partition's state to Ready.
 //
 // The following diagrams show the partition state machines for the split
 // operation:
@@ -82,7 +83,7 @@ import (
 // +-------+--------+      +-------+--------+      +----------------+
 // .       |                       |
 // +-------v--------+      +-------v--------+
-// |    Missing     |      |  AddingLevel   |
+// |   Deleting     |      |  AddingLevel   |
 // +----------------+      +-------+--------+
 // .                               |
 // .                       +-------v--------+
@@ -138,19 +139,19 @@ func (fw *fixupWorker) splitPartition(
 		}
 	}
 
-	log.VEventf(ctx, 2, "splitting partition %d with %d vectors (parent=%d, state=%s)",
-		partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
-
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
 		expected := metadata
-		metadata.StateDetails = MakeSplittingDetails(
+		metadata.StateDetails.MakeSplitting(
 			fw.index.store.MakePartitionKey(), fw.index.store.MakePartitionKey())
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
 		}
 		partition.Metadata().StateDetails = metadata.StateDetails
+
+		log.VEventf(ctx, 2, "splitting partition %d with %d vectors (parent=%d, state=%s)",
+			partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
 	}
 
 	// Create target sub-partitions.
@@ -195,7 +196,7 @@ func (fw *fixupWorker) splitPartition(
 
 		// Move to the DrainingForSplit state.
 		expected := metadata
-		metadata.StateDetails = MakeDrainingForSplitDetails(leftPartitionKey, rightPartitionKey)
+		metadata.StateDetails.MakeDrainingForSplit(leftPartitionKey, rightPartitionKey)
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
@@ -209,7 +210,11 @@ func (fw *fixupWorker) splitPartition(
 		if err != nil || partition == nil {
 			return err
 		}
-	} else if metadata.StateDetails.State == DrainingForSplitState {
+		if !metadata.HasSameTimestamp(partition.Metadata()) {
+			// Another worker must have updated the metadata, so abort.
+			return errors.Wrapf(errFixupAborted, "reloading partition, metadata timestamp changed")
+		}
+	} else if metadata.StateDetails.State != MissingState {
 		leftMetadata, err = fw.getPartitionMetadata(ctx, leftPartitionKey)
 		if err != nil {
 			return err
@@ -228,57 +233,41 @@ func (fw *fixupWorker) splitPartition(
 		}
 
 		// If still updating the sub-partitions, then distribute vectors among them.
-		if leftMetadata.StateDetails.State == UpdatingState {
+		leftState := leftMetadata.StateDetails.State
+		rightState := rightMetadata.StateDetails.State
+		if leftState == UpdatingState && rightState == UpdatingState {
 			err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
 			if err != nil {
 				return err
 			}
 		}
 
-		// Update sub-partition states from Updating to Ready.
-		if leftMetadata.StateDetails.State == UpdatingState {
-			expected := leftMetadata
-			leftMetadata.StateDetails = MakeReadyDetails()
-			err = fw.updateMetadata(ctx, leftPartitionKey, leftMetadata, expected)
-			if err != nil {
-				return err
-			}
-		}
-		if rightMetadata.StateDetails.State == UpdatingState {
-			expected := rightMetadata
-			rightMetadata.StateDetails = MakeReadyDetails()
-			err = fw.updateMetadata(ctx, rightPartitionKey, rightMetadata, expected)
-			if err != nil {
-				return err
-			}
+		// Partition should not be needed after this point.
+		partition = nil
+
+		// Clear all vectors from the splitting partition. Note that the vectors
+		// have already been copied to the two target partitions, so they're still
+		// accessible to splits.
+		err = fw.clearPartition(ctx, partitionKey, metadata)
+		if err != nil {
+			return err
 		}
 
 		// Check whether the splitting partition is the root.
 		if parentPartitionKey != InvalidKey {
-			// The source partition has been drained, so remove it from its parent
-			// and delete it.
-			err = fw.deletePartition(ctx, parentPartitionKey, partitionKey)
+			// This is a non-root partition, so move to DeletingForSplit state.
+			expected := metadata
+			metadata.StateDetails.MakeDeletingForSplit(leftPartitionKey, rightPartitionKey)
+			err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 			if err != nil {
 				return err
-			}
-
-			if fw.fp.onSuccessfulSplit != nil {
-				// Notify listener that a partition has been successfully split.
-				fw.fp.onSuccessfulSplit()
 			}
 		} else {
-			// This is the root partition, so remove all of its vectors rather than
-			// delete the root partition itself. Note that the vectors have already
-			// been copied to the two target partitions.
-			err = fw.clearPartition(ctx, partitionKey, *partition.Metadata())
-			if err != nil {
-				return err
-			}
-
-			// Increase level by one and move to the AddingLevel state.
+			// This is the root partition, so move to the AddingLevel state and
+			// increase its level by one.
 			expected := metadata
 			metadata.Level++
-			metadata.StateDetails = MakeAddingLevelDetails(leftPartitionKey, rightPartitionKey)
+			metadata.StateDetails.MakeAddingLevel(leftPartitionKey, rightPartitionKey)
 			err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 			if err != nil {
 				return err
@@ -286,26 +275,68 @@ func (fw *fixupWorker) splitPartition(
 		}
 	}
 
-	if metadata.StateDetails.State == AddingLevelState {
-		fw.tempChildKey[0] = ChildKey{PartitionKey: leftPartitionKey}
-		fw.tempValueBytes[0] = nil
-		err = fw.addToPartition(ctx, partitionKey,
-			leftMetadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], metadata)
+	if metadata.StateDetails.State == DeletingForSplitState {
+		// Update sub-partition states from Updating to Ready.
+		if leftMetadata.StateDetails.State == UpdatingState {
+			expected := leftMetadata
+			leftMetadata.StateDetails.MakeReady()
+			err = fw.updateMetadata(ctx, leftPartitionKey, leftMetadata, expected)
+			if err != nil {
+				return err
+			}
+		}
+		if rightMetadata.StateDetails.State == UpdatingState {
+			expected := rightMetadata
+			rightMetadata.StateDetails.MakeReady()
+			err = fw.updateMetadata(ctx, rightPartitionKey, rightMetadata, expected)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Remove the splitting partition from the its parent. Note that we don't
+		// delete the partition's metadata record, instead leaving it behind as a
+		// "tombstone". This prevents other racing workers from resurrecting the
+		// partition as a zombie, which could otherwise happen like this:
+		//
+		//  1. Partition A begins splitting into partition B and partition C.
+		//  2. Multiple workers are racing to create empty partitions B and C.
+		//  3. Partition B is marked as Ready and immediately gets split into
+		//     partitions D and E.
+		//  4. Partition B is deleted from the index.
+		//  5. Meanwhile, there's still a worker running step #2, and it
+		//     re-creates partition B.
+		//
+		// The reborn partition is empty and in a zombie Updating state that will
+		// never be set to Ready. Even worse, vectors can be inserted into the
+		// zombie partition, and then the partition can be re-deleted by another
+		// racing worker running step #4, which can cause its vectors to disappear
+		// forever.
+		err = fw.removeFromParentPartition(ctx, parentPartitionKey, partitionKey, metadata.Level+1)
 		if err != nil {
 			return err
 		}
 
-		fw.tempChildKey[0] = ChildKey{PartitionKey: rightPartitionKey}
-		fw.tempValueBytes[0] = nil
-		err = fw.addToPartition(ctx, partitionKey,
-			rightMetadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], metadata)
+		if fw.fp.onSuccessfulSplit != nil {
+			// Notify listener that a partition has been successfully split.
+			fw.fp.onSuccessfulSplit()
+		}
+	}
+
+	if metadata.StateDetails.State == AddingLevelState {
+		// Add the left and right target partitions to the root partition.
+		err = fw.addTargetPartitionToRoot(ctx, leftPartitionKey, metadata, leftMetadata)
+		if err != nil {
+			return err
+		}
+		err = fw.addTargetPartitionToRoot(ctx, rightPartitionKey, metadata, rightMetadata)
 		if err != nil {
 			return err
 		}
 
 		// Move to the Ready state.
 		expected := metadata
-		metadata.StateDetails = MakeReadyDetails()
+		metadata.StateDetails.MakeReady()
 		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
@@ -366,15 +397,56 @@ func (fw *fixupWorker) updateMetadata(
 				partitionKey, expected.StateDetails.String(), metadata.StateDetails.String())
 		}
 		return errors.Wrapf(err, "updating metadata for partition %d", partitionKey)
-	} else if fw.singleStep {
+	}
+
+	log.VEventf(ctx, 2, "updated partition %d from %s to %s",
+		partitionKey, expected.StateDetails.String(), metadata.StateDetails.String())
+
+	if fw.singleStep {
 		return errFixupAborted
 	}
 	return nil
 }
 
+// addTargetPartitionToRoot adds a partition's key (and its centroid) to the
+// root partition, on the condition that the root's metadata matches
+// "rootMetadata". This is used when the root partition is being split, in the
+// AddingLevel state.
+func (fw *fixupWorker) addTargetPartitionToRoot(
+	ctx context.Context, partitionKey PartitionKey, rootMetadata, metadata PartitionMetadata,
+) error {
+	if metadata.StateDetails.State == UpdatingState {
+		// Add the target partition key to the root paritition.
+		fw.tempChildKey[0] = ChildKey{PartitionKey: partitionKey}
+		fw.tempValueBytes[0] = nil
+		added, err := fw.addToPartition(ctx, RootKey,
+			metadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], rootMetadata)
+		if added {
+			log.VEventf(ctx, 2,
+				"added partition %d (state=%s) to root partition (state=%s)",
+				partitionKey, metadata.StateDetails.String(), rootMetadata.StateDetails.String())
+		}
+		if err != nil {
+			return errors.Wrapf(err, "adding partition %d (state=%s) to root partition (state=%s)",
+				partitionKey, metadata.StateDetails.String(), rootMetadata.StateDetails.String())
+		}
+
+		// Change target partition's state from Updating to Ready.
+		expected := metadata
+		metadata.StateDetails.MakeReady()
+		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // addToPartition adds vectors and associated data to the given partition, on
 // the condition that its metadata matches the expected value. If not, it
-// returns errFixupAborted.
+// returns errFixupAborted. If at least one vector was added to the partition,
+// it returns added=true.
 func (fw *fixupWorker) addToPartition(
 	ctx context.Context,
 	partitionKey PartitionKey,
@@ -382,26 +454,28 @@ func (fw *fixupWorker) addToPartition(
 	childKeys []ChildKey,
 	valueBytes []ValueBytes,
 	expected PartitionMetadata,
-) error {
+) (added bool, err error) {
 	if !expected.StateDetails.State.AllowAddOrRemove() {
-		return errors.AssertionFailedf("cannot add to partition in state that disallows adds/removes")
+		return false, errors.AssertionFailedf(
+			"cannot add to partition in state that disallows adds/removes")
 	}
 
-	added, err := fw.index.store.TryAddToPartition(ctx, fw.treeKey, partitionKey,
+	added, err = fw.index.store.TryAddToPartition(ctx, fw.treeKey, partitionKey,
 		vectors, childKeys, valueBytes, expected)
 	if err != nil {
 		metadata, err := suppressRaceErrors(err)
 		if err == nil {
 			// Another worker raced to update the metadata, so abort.
-			return errors.Wrapf(errFixupAborted,
+			return false, errors.Wrapf(errFixupAborted,
 				"adding %d vectors to partition %d expected %s, found %s", vectors.Count, partitionKey,
 				expected.StateDetails.String(), metadata.StateDetails.String())
 		}
-		return errors.Wrap(err, "adding to partition")
+		return false, errors.Wrap(err, "adding to partition")
 	} else if fw.singleStep && added {
-		return errFixupAborted
+		return true, errFixupAborted
 	}
-	return nil
+
+	return added, nil
 }
 
 // clearPartition removes all vectors from the given partition. This only
@@ -411,13 +485,15 @@ func (fw *fixupWorker) clearPartition(
 	ctx context.Context, partitionKey PartitionKey, metadata PartitionMetadata,
 ) (err error) {
 	if metadata.StateDetails.State.AllowAddOrRemove() {
-		return errors.AssertionFailedf("cannot clear partition in state that allows adds/removes")
+		return errors.AssertionFailedf(
+			"cannot clear partition %d in state %s that allows adds/removes",
+			partitionKey, metadata.StateDetails.String())
 	}
 
 	// Remove all children in the partition.
 	count, err := fw.index.store.TryClearPartition(ctx, fw.treeKey, partitionKey, metadata)
 	if err != nil {
-		metadata, err := suppressRaceErrors(err)
+		metadata, err = suppressRaceErrors(err)
 		if err == nil {
 			// Another worker raced to update the metadata, so abort.
 			return errors.Wrapf(errFixupAborted,
@@ -425,8 +501,15 @@ func (fw *fixupWorker) clearPartition(
 				partitionKey, metadata.StateDetails.String(), metadata.StateDetails.String())
 		}
 		return errors.Wrap(err, "clearing vectors")
-	} else if fw.singleStep && count > 0 {
-		return errFixupAborted
+	}
+
+	if count > 0 {
+		log.VEventf(ctx, 2, "cleared %d vectors from partition %d (state=%s)",
+			count, partitionKey, metadata.StateDetails.String())
+
+		if fw.singleStep {
+			return errFixupAborted
+		}
 	}
 
 	return nil
@@ -484,28 +567,30 @@ func (fw *fixupWorker) createSplitSubPartition(
 	partitionKey PartitionKey,
 	centroid vector.T,
 ) (targetMetadata PartitionMetadata, err error) {
-	const format = "creating split sub-partition %d (source=%d, parent=%d)"
-
 	defer func() {
-		err = errors.Wrapf(err, format, partitionKey, sourcePartitionKey, parentPartitionKey)
+		err = errors.Wrapf(err, "creating split sub-partition %d (source=%d, parent=%d)",
+			partitionKey, sourcePartitionKey, parentPartitionKey)
 	}()
-
-	log.VEventf(ctx, 2, format, partitionKey, sourcePartitionKey, parentPartitionKey)
 
 	// Create an empty partition in the Updating state.
 	targetMetadata = PartitionMetadata{
-		Level:        sourceMetadata.Level,
-		Centroid:     centroid,
-		StateDetails: MakeUpdatingDetails(sourcePartitionKey),
+		Level:    sourceMetadata.Level,
+		Centroid: centroid,
 	}
+	targetMetadata.StateDetails.MakeUpdating(sourcePartitionKey)
 	err = fw.index.store.TryCreateEmptyPartition(ctx, fw.treeKey, partitionKey, targetMetadata)
 	if err != nil {
 		targetMetadata, err = suppressRaceErrors(err)
 		if err != nil {
 			return PartitionMetadata{}, errors.Wrap(err, "creating empty sub-partition")
 		}
-	} else if fw.singleStep {
-		return PartitionMetadata{}, errFixupAborted
+	} else {
+		log.VEventf(ctx, 2, "created split sub-partition %d (source=%d, parent=%d)",
+			partitionKey, sourcePartitionKey, parentPartitionKey)
+
+		if fw.singleStep {
+			return PartitionMetadata{}, errFixupAborted
+		}
 	}
 
 	// Ensure that the new sub-partition is linked into a parent partition.
@@ -531,27 +616,18 @@ func (fw *fixupWorker) addToParentPartition(
 	parentLevel Level,
 	centroid vector.T,
 ) (err error) {
-	const format = "adding partition %d to parent partition %d (level=%d, state=%s)"
 	var parentMetadata PartitionMetadata
 
 	defer func() {
-		err = errors.Wrapf(err, format,
-			partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.State)
+		err = errors.Wrapf(err, "adding partition %d to parent partition %d (level=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentLevel, parentMetadata.StateDetails.String())
 	}()
 
-	// Load parent parentPartition to verify that it's in a state that allows
-	// inserts.
-	var parentPartition *Partition
-	parentPartition, err = fw.getPartition(ctx, parentPartitionKey)
+	// Load parent metadata to verify that it's in a state that allows inserts.
+	parentMetadata, err = fw.getPartitionMetadata(ctx, parentPartitionKey)
 	if err != nil {
-		return errors.Wrapf(err, "getting parent partition")
+		return errors.Wrapf(err, "getting parent partition %d metadata", parentPartitionKey)
 	}
-	if parentPartition != nil {
-		parentMetadata = *parentPartition.Metadata()
-	}
-
-	log.VEventf(ctx, 2, format,
-		partitionKey, parentPartitionKey, parentMetadata.Level, parentMetadata.StateDetails.State)
 
 	if parentMetadata.StateDetails.State != ReadyState || parentMetadata.Level != parentLevel {
 		// Only parent partitions in the Ready state at the expected level (level
@@ -563,8 +639,13 @@ func (fw *fixupWorker) addToParentPartition(
 	// Parent partition is ready, so try to add to it.
 	fw.tempChildKey[0] = ChildKey{PartitionKey: partitionKey}
 	fw.tempValueBytes[0] = nil
-	err = fw.addToPartition(ctx, parentPartitionKey,
+	added, err := fw.addToPartition(ctx, parentPartitionKey,
 		centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], parentMetadata)
+	if added {
+		log.VEventf(ctx, 2,
+			"added partition %d to parent partition %d (level=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentLevel, parentMetadata.StateDetails.String())
+	}
 	if err != nil {
 		return err
 	}
@@ -572,37 +653,30 @@ func (fw *fixupWorker) addToParentPartition(
 	return nil
 }
 
-// deletePartition removes the given partition from its parent and then deletes
-// the partition. If the parent is not in a state that allows inserts, then this
-// fixup is aborted.
-func (fw *fixupWorker) deletePartition(
-	ctx context.Context, parentPartitionKey, partitionKey PartitionKey,
+// removeFromParentPartition removes any reference to a child partition from the
+// parent partition with the given key and level. If the parent is not in a
+// state that allows inserts, or if its level does not match the given level,
+// then this fixup is aborted.
+func (fw *fixupWorker) removeFromParentPartition(
+	ctx context.Context, parentPartitionKey, partitionKey PartitionKey, parentLevel Level,
 ) (err error) {
-	const format = "deleting partition %d (parent=%d, state=%s)"
 	var parentMetadata PartitionMetadata
 
 	defer func() {
-		err = errors.Wrapf(err, format,
-			partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
+		err = errors.Wrapf(err, "removing partition %d from parent partition %d (level=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentLevel, parentMetadata.StateDetails.String())
 	}()
 
-	// Load parent partition to verify that it's in a state that allows removes.
-	var parentPartition *Partition
-	parentPartition, err = fw.getPartition(ctx, parentPartitionKey)
+	// Load parent metadata to verify that it's in a state that allows deletes.
+	parentMetadata, err = fw.getPartitionMetadata(ctx, parentPartitionKey)
 	if err != nil {
-		return err
-	}
-	if parentPartition != nil {
-		parentMetadata = *parentPartition.Metadata()
+		return errors.Wrapf(err, "getting parent partition %d metadata", parentPartitionKey)
 	}
 
-	log.VEventf(ctx, 2, format,
-		partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
-
-	if !parentMetadata.StateDetails.State.AllowAddOrRemove() {
+	if !parentMetadata.StateDetails.State.AllowAddOrRemove() || parentMetadata.Level != parentLevel {
 		// Child could not be removed from the parent because it doesn't exist or
-		// it no longer allows deletes.
-		// TODO(andyk): Use parent state to identify alternate insert partition.
+		// it no longer allows deletes, or its level has changed (i.e. in root
+		// partition case).
 		return errFixupAborted
 	}
 
@@ -620,23 +694,11 @@ func (fw *fixupWorker) deletePartition(
 		return errors.Wrap(err, "removing partition from parent")
 	}
 
-	// Delete the partition, ignoring any partition not found error, as it means
-	// another worker already deleted the partition. Do not delete the partition
-	// unless it was successfully removed from its parent, as otherwise we might
-	// delete a partition that has been re-parented, leaving the parent with a
-	// dangling reference.
-	//
-	// TODO(andyk): If the worker crashes or errors after removing this partition
-	// from its parent but before deleting it, it won't be cleaned up. This should
-	// be extremely rare, and therefore waste a tiny amount of storage, so it's
-	// probably not worth addressing.
 	if removed {
-		err = fw.index.store.TryDeletePartition(ctx, fw.treeKey, partitionKey)
-		if err != nil {
-			if !errors.Is(err, ErrPartitionNotFound) {
-				return errors.Wrapf(err, "deleting partition")
-			}
-		} else if fw.singleStep {
+		log.VEventf(ctx, 2, "removed partition %d (parent=%d, state=%s)",
+			partitionKey, parentPartitionKey, parentMetadata.StateDetails.String())
+
+		if fw.singleStep {
 			return errFixupAborted
 		}
 	}
@@ -652,13 +714,12 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	vectors vector.Set,
 	leftMetadata, rightMetadata PartitionMetadata,
 ) (err error) {
-	const format = "assigning %d vectors to left partition %d and %d vectors to right partition %d"
-
 	var leftOffsets, rightOffsets []uint64
 	sourceState := sourcePartition.Metadata().StateDetails
 
 	defer func() {
-		err = errors.Wrapf(err, format,
+		err = errors.Wrapf(err,
+			"assigning %d vectors to left partition %d and %d vectors to right partition %d",
 			len(leftOffsets), sourceState.Target1, len(rightOffsets), sourceState.Target2)
 	}()
 
@@ -681,16 +742,17 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	leftValueBytes := valueBytes[:len(leftOffsets)]
 	rightValueBytes := valueBytes[len(leftOffsets):]
 
-	log.VEventf(ctx, 2, format,
-		len(leftOffsets), sourceState.Target1, len(rightOffsets), sourceState.Target2)
-
 	// Add vectors to left and right sub-partitions. Note that this may not be
 	// transactional; if an error occurs, any vectors already added may not be
 	// rolled back. This is OK, since the vectors are still present in the
 	// source partition.
 	leftPartitionKey := sourceState.Target1
-	err = fw.addToPartition(ctx,
+	added, err := fw.addToPartition(ctx,
 		leftPartitionKey, leftVectors, leftChildKeys, leftValueBytes, leftMetadata)
+	if added {
+		log.VEventf(ctx, 2, "assigned %d vectors to left partition %d (level=%d, state=%s)",
+			len(leftOffsets), leftPartitionKey, leftMetadata.Level, leftMetadata.StateDetails.String())
+	}
 	if err != nil {
 		return err
 	}
@@ -705,8 +767,13 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	}
 
 	rightPartitionKey := sourceState.Target2
-	err = fw.addToPartition(ctx,
+	added, err = fw.addToPartition(ctx,
 		rightPartitionKey, rightVectors, rightChildKeys, rightValueBytes, rightMetadata)
+	if added {
+		log.VEventf(ctx, 2, "assigned %d vectors to right partition %d (level=%d, state=%s)",
+			len(rightOffsets), rightPartitionKey,
+			rightMetadata.Level, rightMetadata.StateDetails.String())
+	}
 	if err != nil {
 		return err
 	}

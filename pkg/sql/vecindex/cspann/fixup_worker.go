@@ -176,23 +176,6 @@ func (fw *fixupWorker) deleteVector(
 			return nil
 		}
 
-		// If removing from a root partition, check that its level is LeafLevel. It
-		// might not be if it was recently split.
-		if partitionKey == RootKey {
-			metadata, err := txn.GetPartitionMetadata(
-				ctx, fw.treeKey, partitionKey, false /* forUpdate */)
-			if metadata.Level != LeafLevel {
-				// Root partition's level has been updated, so just abort.
-				return nil
-			} else if err != nil {
-				if errors.Is(err, ErrPartitionNotFound) {
-					log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
-					return nil
-				}
-				return errors.Wrapf(err, "getting root partition's level")
-			}
-		}
-
 		err = fw.index.removeFromPartition(ctx, txn, fw.treeKey, partitionKey, LeafLevel, childKey)
 		if errors.Is(err, ErrPartitionNotFound) {
 			log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
