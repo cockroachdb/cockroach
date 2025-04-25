@@ -34,6 +34,7 @@ go_library(
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/utils",
         "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/util/buildutil",
         "//pkg/util/container/heap",
         "//pkg/util/log",
         "//pkg/util/num32",
