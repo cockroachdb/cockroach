@@ -26,6 +26,13 @@ var (
 		Measurement: "Bytes",
 	}
 
+	metaTimestampCount = metric.Metadata{
+		Name:        "changefeed.checkpoint.timestamp_count",
+		Help:        "Number of unique timestamps in a changefeed checkpoint",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Timestamps",
+	}
+
 	metaSpanCount = metric.Metadata{
 		Name:        "changefeed.checkpoint.span_count",
 		Help:        "Number of spans in a changefeed checkpoint",
@@ -35,9 +42,10 @@ var (
 )
 
 type AggMetrics struct {
-	CreateNanos *aggmetric.AggHistogram
-	TotalBytes  *aggmetric.AggHistogram
-	SpanCount   *aggmetric.AggHistogram
+	CreateNanos    *aggmetric.AggHistogram
+	TotalBytes     *aggmetric.AggHistogram
+	TimestampCount *aggmetric.AggHistogram
+	SpanCount      *aggmetric.AggHistogram
 }
 
 func NewAggMetrics(b aggmetric.Builder) *AggMetrics {
@@ -54,6 +62,12 @@ func NewAggMetrics(b aggmetric.Builder) *AggMetrics {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
+		TimestampCount: b.Histogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaTimestampCount,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.DataCount16MBuckets,
+		}),
 		SpanCount: b.Histogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaSpanCount,
@@ -65,9 +79,10 @@ func NewAggMetrics(b aggmetric.Builder) *AggMetrics {
 
 func (a *AggMetrics) AddChild(labelVals ...string) *Metrics {
 	return &Metrics{
-		CreateNanos: a.CreateNanos.AddChild(labelVals...),
-		TotalBytes:  a.TotalBytes.AddChild(labelVals...),
-		SpanCount:   a.SpanCount.AddChild(labelVals...),
+		CreateNanos:    a.CreateNanos.AddChild(labelVals...),
+		TotalBytes:     a.TotalBytes.AddChild(labelVals...),
+		TimestampCount: a.TimestampCount.AddChild(labelVals...),
+		SpanCount:      a.SpanCount.AddChild(labelVals...),
 	}
 }
 
@@ -77,9 +92,10 @@ func (*AggMetrics) MetricStruct() {}
 var _ metric.Struct = (*AggMetrics)(nil)
 
 type Metrics struct {
-	CreateNanos *aggmetric.Histogram
-	TotalBytes  *aggmetric.Histogram
-	SpanCount   *aggmetric.Histogram
+	CreateNanos    *aggmetric.Histogram
+	TotalBytes     *aggmetric.Histogram
+	TimestampCount *aggmetric.Histogram
+	SpanCount      *aggmetric.Histogram
 }
 
 // MetricStruct implements the metric.Struct interface.
