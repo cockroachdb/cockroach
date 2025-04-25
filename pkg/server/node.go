@@ -1906,7 +1906,7 @@ func (n *Node) batchStreamImpl(
 	}
 }
 
-func (n *Node) AsDRPCBatchServer() kvpb.DRPCBatchServer {
+func (n *Node) AsDRPCInternalServer() kvpb.DRPCInternalServer {
 	return (*drpcNode)(n)
 }
 
@@ -1918,7 +1918,7 @@ func (n *drpcNode) Batch(
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *drpcNode) BatchStream(stream kvpb.DRPCBatch_BatchStreamStream) error {
+func (n *drpcNode) BatchStream(stream kvpb.DRPCInternal_BatchStreamStream) error {
 	return (*Node)(n).batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
 		return stream.(interface {
 			RecvMsg(request *kvpb.BatchRequest) error
@@ -2066,6 +2066,13 @@ func filterRangeLookupResponseForTenant(
 	return truncated
 }
 
+// RangeLookup implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) RangeLookup(
+	ctx context.Context, request *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
+	return (*Node)(n).RangeLookup(ctx, request)
+}
+
 // RangeLookup implements the kvpb.InternalServer interface.
 func (n *Node) RangeLookup(
 	ctx context.Context, req *kvpb.RangeLookupRequest,
@@ -2095,22 +2102,6 @@ func (n *Node) RangeLookup(
 		resp.PrefetchedDescriptors = filterRangeLookupResponseForTenant(ctx, preRs)
 	}
 	return resp, nil
-}
-
-// lockedMuxStream provides support for concurrent calls to Send. The underlying
-// MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
-// Send.
-type lockedMuxStream struct {
-	wrapped kvpb.Internal_MuxRangeFeedServer
-	sendMu  syncutil.Mutex
-}
-
-func (s *lockedMuxStream) SendIsThreadSafe() {}
-
-func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
-	return s.wrapped.Send(e)
 }
 
 // perConsumerLimiter is a ConcurrentRequestLimiter for a given mux rangefeed
@@ -2175,8 +2166,40 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 		unique.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID()))
 }
 
-// MuxRangeFeed implements the roachpb.InternalServer interface.
+// muxRangeFeedStreamer defines the minimal interface for MuxRangeFeed.
+type muxRangeFeedStreamer interface {
+	Context() context.Context
+	Recv() (*kvpb.RangeFeedRequest, error)
+	Send(*kvpb.MuxRangeFeedEvent) error
+}
+
+// lockedMuxStream provides support for concurrent calls to Send. The underlying
+// MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
+// Send.
+type lockedMuxStream struct {
+	wrapped muxRangeFeedStreamer
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedMuxStream) SendIsThreadSafe() {}
+
+func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.wrapped.Send(e)
+}
+
+// MuxRangeFeed implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) MuxRangeFeed(stream kvpb.DRPCInternal_MuxRangeFeedStream) error {
+	return (*Node)(n).muxRangeFeed(stream)
+}
+
+// MuxRangeFeed implements the kvpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+	return n.muxRangeFeed(muxStream)
+}
+
+func (n *Node) muxRangeFeed(muxStream muxRangeFeedStreamer) error {
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is
@@ -2271,6 +2294,13 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 		}
 	}
+}
+
+// ResetQuorum implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) ResetQuorum(
+	ctx context.Context, request *kvpb.ResetQuorumRequest,
+) (*kvpb.ResetQuorumResponse, error) {
+	return (*Node)(n).ResetQuorum(ctx, request)
 }
 
 // ResetQuorum implements the kvpb.InternalServer interface.
@@ -2382,9 +2412,27 @@ func (n *Node) ResetQuorum(
 	return &kvpb.ResetQuorumResponse{}, nil
 }
 
+type gossipSubscriptionStreamer interface {
+	Context() context.Context
+	Send(*kvpb.GossipSubscriptionEvent) error
+}
+
+// GossipSubscription implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) GossipSubscription(
+	request *kvpb.GossipSubscriptionRequest, stream kvpb.DRPCInternal_GossipSubscriptionStream,
+) error {
+	return (*Node)(n).gossipSubscription(request, stream)
+}
+
 // GossipSubscription implements the kvpb.InternalServer interface.
 func (n *Node) GossipSubscription(
 	args *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
+) error {
+	return n.gossipSubscription(args, stream)
+}
+
+func (n *Node) gossipSubscription(
+	args *kvpb.GossipSubscriptionRequest, stream gossipSubscriptionStreamer,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2471,9 +2519,28 @@ func (n *Node) waitForTenantWatcherReadiness(
 	return settingsWatcher, infoWatcher, nil
 }
 
+type tenantSettingsStreamer interface {
+	Context() context.Context
+	Send(*kvpb.TenantSettingsEvent) error
+}
+
+// TenantSettings implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) TenantSettings(
+	request *kvpb.TenantSettingsRequest, stream kvpb.DRPCInternal_TenantSettingsStream,
+) error {
+	return (*Node)(n).tenantSettings(request, stream)
+}
+
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
+) error {
+	return n.tenantSettings(args, stream)
+}
+
+// TenantSettings implements the kvpb.InternalServer interface.
+func (n *Node) tenantSettings(
+	args *kvpb.TenantSettingsRequest, stream tenantSettingsStreamer,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2698,6 +2765,13 @@ func (n *Node) notifyClusterVersionChange(
 	n.versionUpdateMu.updateCh = make(chan struct{})
 }
 
+// Join implements the kvpb.DRPCInternalServer service.
+func (n *drpcNode) Join(
+	ctx context.Context, request *kvpb.JoinNodeRequest,
+) (*kvpb.JoinNodeResponse, error) {
+	return (*Node)(n).Join(ctx, request)
+}
+
 // Join implements the kvpb.InternalServer service. This is the
 // "connectivity" API; individual CRDB servers are passed in a --join list and
 // the join targets are addressed through this API.
@@ -2742,6 +2816,13 @@ func (n *Node) Join(
 		StoreID:       int32(storeID),
 		ActiveVersion: &activeVersion.Version,
 	}, nil
+}
+
+// TokenBucket is part of the kvpb.DRPCInternalServer service.
+func (n *drpcNode) TokenBucket(
+	ctx context.Context, request *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
+	return (*Node)(n).TokenBucket(ctx, request)
 }
 
 // TokenBucket is part of the kvpb.InternalServer service.
@@ -2807,6 +2888,13 @@ var _ metric.Struct = emptyMetricStruct{}
 
 func (emptyMetricStruct) MetricStruct() {}
 
+// GetSpanConfigs implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) GetSpanConfigs(
+	ctx context.Context, request *roachpb.GetSpanConfigsRequest,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return (*Node)(n).GetSpanConfigs(ctx, request)
+}
+
 // GetSpanConfigs implements the kvpb.InternalServer interface.
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
@@ -2825,6 +2913,14 @@ func (n *Node) GetSpanConfigs(
 	}, nil
 }
 
+// GetAllSystemSpanConfigsThatApply implements the kvpb.DRPCInternalServer
+// interface.
+func (n *drpcNode) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, request *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	return (*Node)(n).GetAllSystemSpanConfigsThatApply(ctx, request)
+}
+
 // GetAllSystemSpanConfigsThatApply implements the kvpb.InternalServer
 // interface.
 func (n *Node) GetAllSystemSpanConfigsThatApply(
@@ -2838,6 +2934,13 @@ func (n *Node) GetAllSystemSpanConfigsThatApply(
 	return &roachpb.GetAllSystemSpanConfigsThatApplyResponse{
 		SpanConfigs: spanConfigs,
 	}, nil
+}
+
+// UpdateSpanConfigs implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) UpdateSpanConfigs(
+	ctx context.Context, request *roachpb.UpdateSpanConfigsRequest,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return (*Node)(n).UpdateSpanConfigs(ctx, request)
 }
 
 // UpdateSpanConfigs implements the kvpb.InternalServer interface.
@@ -2862,6 +2965,13 @@ func (n *Node) UpdateSpanConfigs(
 	return &roachpb.UpdateSpanConfigsResponse{}, nil
 }
 
+// SpanConfigConformance implements the kvpb.DRPCInternalServer interface.
+func (n *drpcNode) SpanConfigConformance(
+	ctx context.Context, request *roachpb.SpanConfigConformanceRequest,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	return (*Node)(n).SpanConfigConformance(ctx, request)
+}
+
 // SpanConfigConformance implements the kvpb.InternalServer interface.
 func (n *Node) SpanConfigConformance(
 	ctx context.Context, req *roachpb.SpanConfigConformanceRequest,
@@ -2877,11 +2987,28 @@ func (n *Node) SpanConfigConformance(
 	return &roachpb.SpanConfigConformanceResponse{Report: report}, nil
 }
 
+type rangeDescStreamer interface {
+	Context() context.Context
+	Send(*kvpb.GetRangeDescriptorsResponse) error
+}
+
+// GetRangeDescriptors implements the kvpb.InternalServer interface.
+func (n *drpcNode) GetRangeDescriptors(
+	request *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCInternal_GetRangeDescriptorsStream,
+) error {
+	return (*Node)(n).getRangeDescriptors(request, stream)
+}
+
 // GetRangeDescriptors implements the kvpb.InternalServer interface.
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
+	return n.getRangeDescriptors(args, stream)
+}
 
+func (n *Node) getRangeDescriptors(
+	args *kvpb.GetRangeDescriptorsRequest, stream rangeDescStreamer,
+) error {
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
 		return err
