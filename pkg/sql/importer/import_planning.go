@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -811,6 +812,13 @@ func importPlanHook(
 			err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
 			if err != nil {
 				return err
+			}
+			// Check if the table has any vector indexes
+			for _, idx := range found.NonDropIndexes() {
+				if idx.GetType() == idxtype.VECTOR {
+					return unimplemented.NewWithIssueDetail(145227, "import.vector-index",
+						"IMPORT INTO is not supported for tables with vector indexes")
+				}
 			}
 
 			if len(found.LDRJobIDs) > 0 {
