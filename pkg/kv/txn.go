@@ -222,7 +222,7 @@ func NewTxnFromProto(
 		proto.UpdateObservedTimestamp(gatewayNodeID, now)
 	}
 
-	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
+	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID} // TODO: 0.7% of allocations.
 	txn.mu.ID = proto.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.RootTransactionalSender(proto, txn.mu.userPriority)
@@ -866,7 +866,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
 	et := endTxnReq(true, txn.deadline())
-	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
+	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]} // TODO: This is 0.6% of allocations
 	_, pErr := txn.Send(ctx, ba)
 	return pErr.GoError()
 }
@@ -1088,7 +1088,7 @@ type endTxnReqAlloc struct {
 }
 
 func endTxnReq(commit bool, deadline hlc.Timestamp) *endTxnReqAlloc {
-	alloc := new(endTxnReqAlloc)
+	alloc := new(endTxnReqAlloc) // TODO: This is 0.7% of allocations.
 	alloc.req.Commit = commit
 	alloc.req.Deadline = deadline
 	alloc.union.EndTxn = &alloc.req
