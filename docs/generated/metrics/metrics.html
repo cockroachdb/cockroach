@@ -952,6 +952,7 @@
 <tr><td>APPLICATION</td><td>changefeed.bytes.messages_pushback_nanos</td><td>Total time spent throttled for bytes quota</td><td>Nanoseconds</td><td>COUNTER</td><td>NANOSECONDS</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.checkpoint.create_nanos</td><td>Time it takes to create a changefeed checkpoint</td><td>Nanoseconds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.checkpoint.span_count</td><td>Number of spans in a changefeed checkpoint</td><td>Spans</td><td>HISTOGRAM</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>changefeed.checkpoint.timestamp_count</td><td>Number of unique timestamps in a changefeed checkpoint</td><td>Timestamps</td><td>HISTOGRAM</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.checkpoint.total_bytes</td><td>Total size of a changefeed checkpoint</td><td>Bytes</td><td>HISTOGRAM</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.checkpoint_hist_nanos</td><td>Time spent checkpointing changefeed progress</td><td>Changefeeds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.checkpoint_progress</td><td>The earliest timestamp of any changefeed&#39;s persisted checkpoint (values prior to this timestamp will never need to be re-emitted)</td><td>Unix Timestamp Nanoseconds</td><td>GAUGE</td><td>TIMESTAMP_NS</td><td>AVG</td><td>NONE</td></tr>
