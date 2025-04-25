@@ -2395,8 +2395,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	// the valid interval, which then will return a valid (index, term) pair with
 	// a non-zero term (unless the log is empty). However, it is safe to send a zero
 	// LogTerm in this response in any case, so we don't verify it here.
-	hintIndex := min(m.Index, r.raftLog.lastIndex())
-	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
+	hintIndex, hintTerm := r.raftLog.findConflictByTerm(m.Index, m.LogTerm)
 	r.send(pb.Message{
 		To:    m.From,
 		Type:  pb.MsgAppResp,

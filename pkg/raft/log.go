@@ -239,10 +239,11 @@ func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 // an unsuccessful append to a follower, and ultimately restore the steady flow
 // of appends.
 func (l *raftLog) findConflictByTerm(index uint64, term uint64) (uint64, uint64) {
-	for ; index > 0; index-- {
-		// If there is an error (likely ErrCompacted or ErrUnavailable), we don't
-		// know whether it's a match or not, so assume a possible match and return
-		// the index, with 0 term indicating an unknown term.
+	// FIXME(pav-kv): proof.
+	for index = min(index, l.lastIndex()); index > 0; index-- {
+		// If there is an error (likely ErrCompacted), we don't know whether it's a
+		// match or not, so assume a possible match and return the index, with 0
+		// term indicating an unknown term.
 		if ourTerm, err := l.term(index); err != nil {
 			return index, 0
 		} else if ourTerm <= term {
