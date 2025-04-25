@@ -623,3 +623,28 @@ SELECT a FROM test_144621@vec_idx ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 
 subtest end
+
+subtest import_into
+
+statement ok
+CREATE TABLE import_test (a INT PRIMARY KEY, v VECTOR(3))
+
+statement ok
+INSERT INTO import_test VALUES (1, '[1, 2, 3]')
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/vector_import_test' FROM SELECT * FROM import_test) SELECT filename FROM cte;
+
+statement ok
+TRUNCATE TABLE import_test
+
+statement ok
+CREATE VECTOR INDEX vec_idx ON import_test (v)
+
+statement error IMPORT INTO is not supported for tables with vector indexes
+IMPORT INTO import_test (a, v) CSV DATA ('nodelocal://1/vector_import_test/$exp_file')
+
+statement ok
+DROP TABLE import_test
+
+subtest end
