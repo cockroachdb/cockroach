@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +173,7 @@ func runOneTLP(
 			continue
 		}
 
-		if err := runTLPQuery(t, conn, tlpSmither, logStmt); err != nil {
+		if err := runTLPQuery(t, conn, rnd, tlpSmither, logStmt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,14 +210,31 @@ func runMutationStatement(
 // partitioned query. See GenerateTLP for more information on TLP and the
 // generated queries.
 func runTLPQuery(
-	t task.Tasker, conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string),
-) error {
+	t task.Tasker, conn *gosql.DB, rnd *rand.Rand, smither *sqlsmith.Smither, logStmt func(string),
+) (err error) {
 	// Ignore panics from GenerateTLP.
 	defer func() {
 		if r := recover(); r != nil {
 			return
 		}
 	}()
+
+	// Force generic query plans for 25% of queries.
+	if rnd.Intn(4) == 0 {
+		const (
+			forceGeneric = "SET plan_cache_mode = force_generic_plan"
+			auto         = "SET plan_cache_mode = auto"
+		)
+		_, err = conn.Exec(forceGeneric)
+		if err != nil {
+			return err
+		}
+		logStmt(forceGeneric)
+		defer func() {
+			_, err = conn.Exec(auto)
+			logStmt(auto)
+		}()
+	}
 
 	unpartitioned, partitioned, args := smither.GenerateTLP()
 	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
