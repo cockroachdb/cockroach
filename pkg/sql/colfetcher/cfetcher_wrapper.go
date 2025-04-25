@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -36,11 +35,6 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	directScansEnabledDefault,
-)
-
-var directScansEnabledDefault = metamorphic.ConstantWithTestBool(
-	"direct-scans-enabled",
 	false,
 )
 
