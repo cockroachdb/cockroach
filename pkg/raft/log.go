@@ -229,9 +229,9 @@ func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 // another log, given that the only information known about the other log is the
 // (index, term) of its single entry.
 //
-// Specifically, the first returned value is the max guessIndex <= index, such
+// The first returned value is the max guessIndex <= min(index, lastIndex), such
 // that term(guessIndex) <= term or term(guessIndex) is not known (because this
-// index is compacted or not yet stored).
+// index is compacted).
 //
 // The second returned value is the term(guessIndex), or 0 if it is unknown.
 //
@@ -239,10 +239,37 @@ func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 // an unsuccessful append to a follower, and ultimately restore the steady flow
 // of appends.
 func (l *raftLog) findConflictByTerm(index uint64, term uint64) (uint64, uint64) {
-	for ; index > 0; index-- {
-		// If there is an error (likely ErrCompacted or ErrUnavailable), we don't
-		// know whether it's a match or not, so assume a possible match and return
-		// the index, with 0 term indicating an unknown term.
+	// Entry terms in a log are monotonic. A specific entry being (index, term)
+	// means term(i) <= term for all i <= index in that log. That is, we know the
+	// following information about the other log:
+	//
+	//	[0: 0] [1: ≤term] [2: ≤term] ... [index-1: ≤term] [index: term]
+	//
+	// In our log, for i <= min(index, lastIndex):
+	//	1. if term(i) > term, then the logs definitely mismatch at indices >= i;
+	//	2. if term(i) == term, then the logs definitely match at indices <= i;
+	//	3. if term(i) < term, then the logs may or may not match at indices <= i;
+	//	4. if term(i) is unknown, then the logs may or may not match at <= i.
+	//
+	// Property 1 follows from the inverse of the Log Matching Property: if two
+	// logs mismatch at a particular index, they mismatch at all higher indices.
+	//
+	// Property 2 follows from the Log Matching Property. Since the other log has
+	// [index: term], it necessarily has all same-term entries with lower indices
+	// (otherwise this prefix wouldn't match that term leader's log). So it
+	// necessarily also contains the [i: term] entry of our log.
+	//
+	//	Their: [0: 0] ... [i-1: ≤term] [i: term] ... [index: term]
+	//	  Our: [0: 0] ... [i-1: ≤term] [i: term] ...
+	//
+	// Property 3 stems from the fact that we don't know terms of indices < index
+	// of the other log. The term at index i may or may not match ours.
+	//
+	// The loop below finds the highest index i for which one of 2-4 holds.
+	for index = min(index, l.lastIndex()); index > 0; index-- {
+		// If there is an error (likely ErrCompacted), we don't know whether it's a
+		// match or not, so assume a possible match and return the index, with 0
+		// term indicating an unknown term.
 		if ourTerm, err := l.term(index); err != nil {
 			return index, 0
 		} else if ourTerm <= term {
