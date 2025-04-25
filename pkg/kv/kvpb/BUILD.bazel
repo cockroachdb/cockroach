@@ -13,10 +13,6 @@ go_library(
         ":gen-method-stringer",  # keep
         "ambiguous_result_error.go",
         "api.go",
-        # DRPC protobuf file (api_drpc.pb.go) is currently generated manually.
-        # TODO (chandrat): Remove this once DRPC protobuf generation is
-        # integrated into the build process.
-        "api_drpc_hacky.go",
         "batch.go",
         "data.go",
         "errors.go",
