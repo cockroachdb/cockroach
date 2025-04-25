@@ -223,3 +223,9 @@ func (po *Setter) RunPostChecks() error {
 
 	return nil
 }
+
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
+	//Not applicable to indexes.
+	return false
+}
