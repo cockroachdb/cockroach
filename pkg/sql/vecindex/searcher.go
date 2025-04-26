@@ -7,7 +7,6 @@ package vecindex
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,8 +47,7 @@ func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults
 		BaseBeamSize: baseBeamSize,
 		SkipRerank:   true,
 	}
-	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
-	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
+	s.searchSet.MaxResults, s.searchSet.MaxExtraResults = cspann.IncreaseRerankResults(maxResults)
 }
 
 // Search triggers a search over the index for the given vector, within the
