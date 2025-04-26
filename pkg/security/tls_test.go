@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,6 +124,8 @@ func verifyX509Cert(cert *x509.Certificate, dnsName string, roots *x509.CertPool
 func TestTLSCipherRestrict(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "http server accessing previous test's restriction fn")
+	skip.UnderRace(t)
 
 	// since the listener does not return rpc/sql/http connection errors, we
 	// need to have a separate hook to obtain and validate it.
@@ -142,6 +145,11 @@ func TestTLSCipherRestrict(t *testing.T) {
 	})()
 
 	ctx := context.Background()
+
+	// Start with a clean cipher configuration state
+	err := security.SetTLSCipherSuitesConfigured([]string{})
+	require.NoError(t, err)
+
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	defer require.NoError(t, security.SetTLSCipherSuitesConfigured([]string{}))
@@ -181,8 +189,17 @@ func TestTLSCipherRestrict(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// set the custom test ciphers
-			err := security.SetTLSCipherSuitesConfigured(tt.ciphers)
+			// First ensure we're starting with no restrictions
+			err := security.SetTLSCipherSuitesConfigured([]string{})
+			require.NoError(t, err)
+
+			// Reset the error container before each test
+			cipherErrC.Lock()
+			cipherErrC.err = nil
+			cipherErrC.Unlock()
+
+			// Now set the custom test ciphers
+			err = security.SetTLSCipherSuitesConfigured(tt.ciphers)
 			require.NoError(t, err)
 			// unset the ciphers after test
 			defer func() { _ = security.SetTLSCipherSuitesConfigured([]string{}) }()
