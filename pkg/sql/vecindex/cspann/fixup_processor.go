@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -290,7 +291,8 @@ func (fp *FixupProcessor) AddDeleteVector(
 	ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, vectorKey KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:      treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:      slices.Clone(treeKey),
 		Type:         vectorDeleteFixup,
 		PartitionKey: partitionKey,
 		VectorKey:    vectorKey,
@@ -306,7 +308,8 @@ func (fp *FixupProcessor) AddSplit(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               splitFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
@@ -323,7 +326,8 @@ func (fp *FixupProcessor) AddMerge(
 	singleStep bool,
 ) {
 	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
+		// Clone the tree key, since we don't own the memory.
+		TreeKey:            slices.Clone(treeKey),
 		Type:               mergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
