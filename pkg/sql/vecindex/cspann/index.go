@@ -8,6 +8,7 @@ package cspann
 import (
 	"bytes"
 	"context"
+	"math"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -28,12 +29,32 @@ import (
 // of search results that will be reranked with the original full-size vectors.
 const RerankMultiplier = 10
 
-// DeletedMultiplier increases the number of results that will be reranked, in
+// DeletedMinCount sets a minimum number of results that will be reranked, in
 // order to account for vectors that may have been deleted in the primary index.
+const DeletedMinCount = 10
+
+// DeletedMultiplier increases the number of results that will be reranked by
+// this factor, in order to account for vectors that may have been deleted in
+// the primary index.
 const DeletedMultiplier = 1.2
 
 // MaxQualitySamples specifies the max value of the QualitySamples index option.
 const MaxQualitySamples = 32
+
+// IncreaseRerankResults returns good values for maxResults and maxExtraResults
+// that have a high probability of returning the desired number of results, even
+// when there are deleted results. Deleted results will be filtered out by the
+// rerank process, so we need to make sure there are additional results that can
+// be returned instead.
+//
+// TODO(andyk): Switch the index to use a search iterator so the caller can keep
+// requesting further results rather than guessing at how many additional
+// results might be needed.
+func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults int) {
+	maxResults = max(int(math.Ceil(float64(desiredMaxResults)*DeletedMultiplier)), DeletedMinCount)
+	maxExtraResults = desiredMaxResults * RerankMultiplier
+	return maxResults, maxExtraResults
+}
 
 // IndexOptions specifies options that control how the index will be built, as
 // well as default options for how it will be searched. A given search operation

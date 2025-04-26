@@ -147,7 +147,7 @@ search max-results=3 beam-size=3
 vec7: 2 (centroid=2.12)
 vec10: 5 (centroid=0.71)
 vec12: 9 (centroid=0.71)
-6 leaf vectors, 14 vectors, 5 full vectors, 6 partitions
+6 leaf vectors, 14 vectors, 6 full vectors, 6 partitions
 
 # ----------------------------------------------------------------------
 # Test linking nearby vectors from other partitions.
