@@ -120,8 +120,10 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 				maxResults = s.searchSet.MaxResults
 				maxExtraResults = s.searchSet.MaxExtraResults
 				if !s.idxCtx.options.SkipRerank {
-					maxResults = int(math.Ceil(float64(maxResults) * DeletedMultiplier))
-					maxExtraResults = maxResults * RerankMultiplier
+					maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
+					if s.searchSet.MaxExtraResults > maxExtraResults {
+						maxExtraResults = s.searchSet.MaxExtraResults
+					}
 				}
 				if s.idxCtx.level != LeafLevel && s.idxCtx.options.UpdateStats {
 					maxResults = max(maxResults, s.idx.options.QualitySamples)

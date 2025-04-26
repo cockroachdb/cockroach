@@ -156,7 +156,7 @@ search max-results=1 tree=1
 (1, 2)
 ----
 vec6: 5 (centroid=2.36)
-6 leaf vectors, 8 vectors, 2 full vectors, 3 partitions
+6 leaf vectors, 8 vectors, 6 full vectors, 3 partitions
 
 # Vector should now be gone from the index.
 format-tree tree=1

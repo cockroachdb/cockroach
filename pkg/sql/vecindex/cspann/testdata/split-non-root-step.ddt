@@ -781,7 +781,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-7 leaf vectors, 17 vectors, 3 full vectors, 11 partitions
+7 leaf vectors, 17 vectors, 5 full vectors, 11 partitions
 
 format-tree
 ----
@@ -820,7 +820,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-5 leaf vectors, 17 vectors, 3 full vectors, 13 partitions
+5 leaf vectors, 17 vectors, 5 full vectors, 13 partitions
 
 format-tree
 ----
@@ -863,7 +863,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0 (centroid=1)
-5 leaf vectors, 19 vectors, 3 full vectors, 15 partitions
+5 leaf vectors, 19 vectors, 5 full vectors, 15 partitions
 
 format-tree
 ----
@@ -1042,7 +1042,7 @@ search
 vec2: 0 (centroid=0)
 vec6: 0 (centroid=0)
 vec7: 0 (centroid=0)
-5 leaf vectors, 12 vectors, 4 full vectors, 6 partitions
+5 leaf vectors, 12 vectors, 5 full vectors, 6 partitions
 
 format-tree
 ----
