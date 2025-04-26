@@ -1107,17 +1107,6 @@ func (vi *Index) Format(
 	return buf.String(), nil
 }
 
-// ensureSliceCap returns a slice of length = 0, of the given capacity and
-// generic type. If the existing slice has enough capacity, that slice is
-// returned after setting its length to zero. Otherwise, a new, larger slice is
-// allocated.
-func ensureSliceCap[T any](s []T, c int) []T {
-	if cap(s) < c {
-		return make([]T, 0, c)
-	}
-	return s[:0]
-}
-
 // ensureSliceLen returns a slice of the given length and generic type. If the
 // existing slice has enough capacity, that slice is returned after adjusting
 // its length. Otherwise, a new, larger slice is allocated.
