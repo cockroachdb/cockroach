@@ -61,6 +61,9 @@ func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults
 // Search triggers a search over the index for the given vector, within the
 // scope of the given prefix. "maxResults" specifies the maximum number of
 // results that will be returned.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
 func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T) error {
 	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, s.options)
 	if err != nil {

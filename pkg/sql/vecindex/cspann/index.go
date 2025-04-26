@@ -350,6 +350,10 @@ func (vi *Index) Close() {
 // before Insert when a vector is updated. Even then, it's not guaranteed that
 // Delete will find the old vector. The search set handles this rare case by
 // filtering out results with duplicate key bytes.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Insert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) error {
@@ -393,6 +397,10 @@ func (vi *Index) Insert(
 //
 // NOTE: Even if the vector is removed, there may still be duplicate dangling
 // instances of the vector still remaining in the index.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Delete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) (deleted bool, err error) {
@@ -423,6 +431,10 @@ func (vi *Index) Delete(
 // and returns them in the search set. Set searchSet.MaxResults to limit the
 // number of results. This is called within the scope of a transaction so that
 // the index does not appear to change during the search.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Search(
 	ctx context.Context,
 	idxCtx *Context,
@@ -440,6 +452,10 @@ func (vi *Index) Search(
 // partition, as well as the centroid of the partition (in the Vector field).
 // This is useful for callers that directly insert KV rows rather than using
 // this library to do it.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) SearchForInsert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T,
 ) (*SearchResult, error) {
@@ -471,6 +487,10 @@ func (vi *Index) SearchForInsert(
 // It returns a single search result containing the key of that partition, or
 // nil if the vector cannot be found. This is useful for callers that directly
 // delete KV rows rather than using this library to do it.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) SearchForDelete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) (*SearchResult, error) {
