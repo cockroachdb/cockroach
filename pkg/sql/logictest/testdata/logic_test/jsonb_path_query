@@ -1812,3 +1812,91 @@ SELECT jsonb_path_query('"1"', '$.abs()');
 
 statement error pgcode 22036 pq: jsonpath item method .floor\(\) can only be applied to a numeric value
 SELECT jsonb_path_query('{}', '(null).floor()');
+
+query T
+SELECT jsonb_path_query('"Hello"', '$ like_regex "hello" flag "i"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag "i"');
+----
+true
+
+# Use the same pattern but different flags to ensure that ReCache recognizes
+# the change of flags.
+query T
+SELECT jsonb_path_query('"HELLO"', '$ like_regex "hello" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "s"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag "m"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line2$" flag ""');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag "q"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "Hello.*World" flag ""');
+----
+true
+
+# Case insensitive and dot matches newline
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "hello.world" flag "is"');
+----
+true
+
+# Case insensitive and multiline
+query T
+SELECT jsonb_path_query('"Line1\nline2"', '$ like_regex "^LINE2$" flag "im"');
+----
+true
+
+# Case insensitive and literal matching
+query T
+SELECT jsonb_path_query('"Hello123World"', '$ like_regex "HELLO.*WORLD" flag "iq"');
+----
+false
+
+# Dot matches newline and multiline
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "ms"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"Line1\nLine2\nLine3"', '$ like_regex "^Line1.Line2.Line3$" flag "m"');
+----
+false
+
+# Dot matches newline and literal matching
+query T
+SELECT jsonb_path_query('"Hello\nWorld"', '$ like_regex "Hello.World" flag "sq"');
+----
+false
+
+# Multiline and literal matching
+query T
+SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
+----
+false

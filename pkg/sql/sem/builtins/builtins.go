@@ -10780,7 +10780,9 @@ type regexpEscapeKey struct {
 	sqlEscape  string
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = regexpEscapeKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k regexpEscapeKey) Pattern() (string, error) {
 	pattern := k.sqlPattern
 	if k.sqlEscape != `\` {
@@ -10812,7 +10814,9 @@ type regexpFlagKey struct {
 	sqlFlags   string
 }
 
-// Pattern implements the RegexpCacheKey interface.
+var _ tree.RegexpCacheKey = regexpFlagKey{}
+
+// Pattern implements the tree.RegexpCacheKey interface.
 func (k regexpFlagKey) Pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
 }

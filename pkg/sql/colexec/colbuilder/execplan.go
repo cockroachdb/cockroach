@@ -6,6 +6,7 @@
 package colbuilder
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -876,17 +878,38 @@ func NewColOperator(
 						core.TableReader.LockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 						return false
 					}
-					// At the moment, the ColBatchDirectScan cannot handle Gets
-					// (it's not clear whether it is worth to handle them via
-					// the same path as for Scans and ReverseScans (which could
-					// have too large of an overhead) or by teaching the
-					// operator to also decode a single KV (similar to what
-					// regular ColBatchScan does)).
-					// TODO(yuzefovich, 23.1): explore supporting Gets somehow.
-					for i := range core.TableReader.Spans {
-						if len(core.TableReader.Spans[i].EndKey) == 0 {
+					var prevRowPrefix []byte
+					for i, sp := range core.TableReader.Spans {
+						if len(sp.EndKey) == 0 {
+							// At the moment, the ColBatchDirectScan cannot
+							// handle Gets (it's not clear whether it is worth
+							// to handle them via the same path as for Scans and
+							// ReverseScans (which could have too large of an
+							// overhead) or by teaching the operator to also
+							// decode a single KV (similar to what regular
+							// ColBatchScan does)).
+							// TODO(yuzefovich, 23.1): explore supporting Gets
+							// somehow.
 							return false
 						}
+						l, err := keys.GetRowPrefixLength(sp.Key)
+						if err != nil {
+							// This should rarely happen since an error here
+							// indicates that we're dealing with a non-SQL key,
+							// so we'll be conservative and simply disable
+							// direct columnar scans. (One example where we can
+							// get an error if we had manually split the range.)
+							return false
+						}
+						curRowPrefix := sp.Key[:l]
+						if i > 0 && bytes.Equal(prevRowPrefix, curRowPrefix) {
+							// Two consecutive requests are part of the
+							// same SQL row in which case we cannot use direct
+							// columnar scans since we'd create a separate
+							// coldata.Batch for each.
+							return false
+						}
+						prevRowPrefix = curRowPrefix
 					}
 					fetchSpec := core.TableReader.FetchSpec
 					// Handling user-defined types requires type hydration which

@@ -1,0 +1,26 @@
+statement ok
+SET direct_columnar_scans_enabled = true
+
+statement ok
+CREATE TABLE t145232 (
+      k INT PRIMARY KEY,
+      a INT NOT NULL,
+      b INT NOT NULL,
+      c INT NOT NULL,
+      v INT NOT NULL DEFAULT 5,
+      FAMILY (c),
+      FAMILY (v),
+      FAMILY (k),
+      FAMILY (a),
+      FAMILY (b)
+);
+
+statement ok
+INSERT INTO t145232 VALUES (2,2,2,2);
+
+# Regression test for #145232 where we tried to use direct columnar scans even
+# though a single SQL row is handled by multiple Scan requests.
+query IIIII
+SELECT * FROM t145232 WHERE k = 2
+----
+2  2  2  2  5
