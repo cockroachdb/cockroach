@@ -287,9 +287,10 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
 func (fp *FixupProcessor) AddDeleteVector(
-	ctx context.Context, partitionKey PartitionKey, vectorKey KeyBytes,
+	ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, vectorKey KeyBytes,
 ) {
 	fp.addFixup(ctx, fixup{
+		TreeKey:      treeKey,
 		Type:         vectorDeleteFixup,
 		PartitionKey: partitionKey,
 		VectorKey:    vectorKey,

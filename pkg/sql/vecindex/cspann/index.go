@@ -921,8 +921,8 @@ func (vi *Index) getFullVectors(
 			// the case of a dangling partition key.
 			if candidates[i].ChildKey.KeyBytes != nil {
 				// Vector was deleted, so add fixup to delete it.
-				vi.fixups.AddDeleteVector(
-					ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
+				vi.fixups.AddDeleteVector(ctx, idxCtx.treeKey,
+					candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
 			}
 
 			// Move the last candidate to the current position and reduce size
