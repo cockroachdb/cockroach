@@ -88,11 +88,11 @@ SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *rowexec.joinReader
-│     └ *colfetcher.ColBatchDirectScan
+│     └ *colfetcher.ColBatchScan
 └ Node 3
   └ *colrpc.Outbox
     └ *rowexec.joinReader
-      └ *colfetcher.ColBatchDirectScan
+      └ *colfetcher.ColBatchScan
 
 query I
 SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
