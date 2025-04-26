@@ -14,7 +14,7 @@ CV stats:
 search max-results=1 use-feature=5000 beam-size=1
 ----
 vec771: 0.5624 (centroid=0.63)
-23 leaf vectors, 43 vectors, 2 full vectors, 4 partitions
+23 leaf vectors, 43 vectors, 12 full vectors, 4 partitions
 
 # Search for additional results.
 search max-results=6 use-feature=5000 beam-size=1
@@ -36,7 +36,7 @@ vec640: 0.6525 (centroid=0.52)
 vec329: 0.6871 (centroid=0.52)
 vec95: 0.7008 (centroid=0.61)
 vec386: 0.7301 (centroid=0.61)
-85 leaf vectors, 141 vectors, 13 full vectors, 13 partitions
+85 leaf vectors, 141 vectors, 18 full vectors, 13 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-feature=5000 beam-size=4 skip-rerank
