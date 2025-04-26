@@ -38,6 +38,8 @@ func columnByteSize(col *coldata.Vec) int64 {
 		return col.Bytes().Size() - coldata.FlatBytesOverhead
 	case types.TimestampTZFamily:
 		return int64(col.Timestamp().Len()) * memsize.Time
+	case types.DecimalFamily:
+		return int64(col.Decimal().Len()) * memsize.Decimal
 	default:
 		panic(fmt.Sprintf(`unhandled type %s`, t))
 	}

@@ -72,5 +72,6 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
+        "@com_github_stretchr_testify//require",
     ],
 )
