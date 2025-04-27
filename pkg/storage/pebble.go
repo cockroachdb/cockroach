@@ -367,7 +367,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		// NB: Options.MaxConcurrentCompactions may be "wrapped" in NewPebble to
 		// allow overriding the max at runtime through
 		// Engine.SetCompactionConcurrency.
-		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
+		MaxConcurrentCompactions:    func() int { return defaultMaxConcurrentCompactions },
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -683,7 +683,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 
-	cfg.opts.MaxConcurrentCompactions = getMaxConcurrentCompactions
+	cfg.opts.MaxConcurrentCompactions = func() int { return defaultMaxConcurrentCompactions }
 
 	cfg.opts.EnsureDefaults()
 

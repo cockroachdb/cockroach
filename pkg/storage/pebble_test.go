@@ -1567,7 +1567,7 @@ func TestCompactionConcurrencyEnvVars(t *testing.T) {
 				} else {
 					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
 				}
-				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+				require.Equal(t, tc.want, getDefaultMaxConcurrentCompactions())
 			})
 	}
 }
