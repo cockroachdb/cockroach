@@ -43,9 +43,10 @@ import (
 
 func registerFollowerReads(r registry.Registry) {
 	register := func(
-		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool,
+		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool, withAutoTuning bool,
 	) {
-		name := fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc)
+		name := fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s/auto_tune=%t",
+			survival, locality, rc, withAutoTuning)
 		if insufficientQuorum {
 			name = name + "/insufficient-quorum"
 		}
@@ -98,53 +99,63 @@ func registerFollowerReads(r registry.Registry) {
 
 				rng, _ := randutil.NewPseudoRand()
 				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
-				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
+				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, withAutoTuning, data)
 			},
 		})
 	}
-	for _, survival := range []survivalGoal{zone, region} {
-		for _, locality := range []localitySetting{regional, global} {
-			for _, rc := range []readConsistency{strong, exactStaleness, boundedStaleness} {
-				if rc == strong && locality != global {
-					// Only GLOBAL tables can perform strongly consistent reads off followers.
-					continue
-				}
-				register(survival, locality, rc, false /* insufficientQuorum */)
-			}
-		}
 
-		// Register an additional variant that cuts off the primary region and
-		// verifies that bounded staleness reads are still available elsewhere.
-		register(survival, regional, boundedStaleness, true /* insufficientQuorum */)
+	for _, withAutoTuning := range []bool{true, false} {
+		for _, survival := range []survivalGoal{zone, region} {
+			for _, locality := range []localitySetting{regional, global} {
+				for _, rc := range []readConsistency{strong, exactStaleness, boundedStaleness} {
+					if rc == strong && locality != global {
+						// Only GLOBAL tables can perform strongly consistent reads off followers.
+						continue
+					}
+					register(survival, locality, rc, false /* insufficientQuorum */, withAutoTuning)
+				}
+			}
+
+			// Register an additional variant that cuts off the primary region and
+			// verifies that bounded staleness reads are still available elsewhere.
+			register(survival, regional, boundedStaleness, true /* insufficientQuorum */, withAutoTuning)
+		}
 	}
 
-	r.Add(registry.TestSpec{
-		Name:  "follower-reads/mixed-version/single-region",
-		Owner: registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(
-			4, /* nodeCount */
-			spec.CPU(2),
-		),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Randomized:       true,
-		Run:              runFollowerReadsMixedVersionSingleRegionTest,
-	})
+	for _, withAutoTuning := range []bool{true, false} {
+		r.Add(registry.TestSpec{
+			Name:  fmt.Sprintf("follower-reads/mixed-version/single-region/auto_tune=%t", withAutoTuning),
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(
+				4, /* nodeCount */
+				spec.CPU(2),
+			),
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+			Randomized:       true,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, withAutoTuning)
+			},
+		})
 
-	r.Add(registry.TestSpec{
-		Name:  "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
-		Owner: registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(
-			6, /* nodeCount */
-			spec.CPU(4),
-			spec.Geo(),
-			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
-		),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Randomized:       true,
-		Run:              runFollowerReadsMixedVersionGlobalTableTest,
-	})
+		r.Add(registry.TestSpec{
+			Name: fmt.Sprintf("follower-reads/mixed-version/survival=region/locality=global/reads=strong/auto_tune=%t",
+				withAutoTuning),
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(
+				6, /* nodeCount */
+				spec.CPU(4),
+				spec.Geo(),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+			),
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+			Randomized:       true,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runFollowerReadsMixedVersionGlobalTableTest(ctx, t, c, withAutoTuning)
+			},
+		})
+	}
 }
 
 // The survival goal of a multi-region database: ZONE or REGION.
@@ -210,6 +221,7 @@ func runFollowerReadsTest(
 	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
+	withAutoTuning bool,
 	data map[int]int64,
 ) {
 	// Set the default_transaction_isolation variable for each connection to a
@@ -220,19 +232,24 @@ func runFollowerReadsTest(
 	require.NoError(t, func() error {
 		db := connectFunc(1)
 		systemDB := systemConnectFunc(1)
-		err := enableClosedTsAutoTune(ctx, rng, systemDB, t)
-		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
-			// Versions v25.1 and earlier do not support these cluster settings and
-			// should ignore them. The cluster will continue operating normally, with
-			// old-version nodes ignoring the settings and newer-version nodes
-			// continuing to run. Auto-tuning of closed timestamps should only start
-			// taking effect when the entire cluster has been upgraded to v25.2.
-			err = nil
+		if withAutoTuning {
+			l.Printf("enabled auto-tuning closed timestamp")
+			err := enableClosedTsAutoTune(ctx, systemDB)
+			if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
+				// Versions v25.1 and earlier do not support these cluster settings and
+				// should ignore them. The cluster will continue operating normally, with
+				// old-version nodes ignoring the settings and newer-version nodes
+				// continuing to run. Auto-tuning of closed timestamps should only start
+				// taking effect when the entire cluster has been upgraded to v25.2.
+				err = nil
+			}
+			if err != nil {
+				return err
+			}
+		} else {
+			l.Printf("disabled auto-tuning closed timestamp")
 		}
-		if err != nil {
-			return err
-		}
-		err = enableIsolationLevels(ctx, t, db)
+		err := enableIsolationLevels(ctx, t, db)
 		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
 			// v23.1 and below does not have these cluster settings. That's fine, as
 			// all isolation levels will be transparently promoted to "serializable".
@@ -991,10 +1008,10 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // single region is sufficient for this purpose; we're not testing non-voting
 // replicas here (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t test.Test, c cluster.Cluster,
+	ctx context.Context, t test.Test, c cluster.Cluster, withAutoTuning bool,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness, withAutoTuning,
 		// This test is incompatible with separate process mode as it queries metrics from
 		// TSDB. Separate process clusters currently do not write to TSDB as serverless uses
 		// third party metrics persistence solutions instead.
@@ -1013,14 +1030,14 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 // test with a region-survivable global table while performing a cluster upgrade.
 // The point is to exercise global tables in a mixed-version cluster.
 func runFollowerReadsMixedVersionGlobalTableTest(
-	ctx context.Context, t test.Test, c cluster.Cluster,
+	ctx context.Context, t test.Test, c cluster.Cluster, withAutoTuning bool,
 ) {
 	topology := topologySpec{
 		multiRegion: true,
 		locality:    global,
 		survival:    region,
 	}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, strong,
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, strong, withAutoTuning,
 		// Disable fixtures because we're using a 6-node, multi-region cluster.
 		mixedversion.NeverUseFixtures,
 		// Use a longer upgrade timeout to give the migrations enough time to finish
@@ -1054,6 +1071,7 @@ func runFollowerReadsMixedVersionTest(
 	c cluster.Cluster,
 	topology topologySpec,
 	rc readConsistency,
+	withAutoTuning bool,
 	opts ...mixedversion.CustomOption,
 ) {
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
@@ -1072,7 +1090,7 @@ func runFollowerReadsMixedVersionTest(
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
-		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, data)
+		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, withAutoTuning, data)
 		return nil
 	}
 
@@ -1095,18 +1113,15 @@ func enableTenantMultiRegion(l *logger.Logger, r *rand.Rand, h *mixedversion.Hel
 }
 
 // enableClosedTsAutoTune metamorphically enables closed timestamp auto-tuning.
-func enableClosedTsAutoTune(ctx context.Context, rng *rand.Rand, db *gosql.DB, t test.Test) error {
-	if rng.Intn(2) == 0 {
-		for _, cmd := range []string{
-			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true';`,
-			`SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s';`,
-			`SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s';`,
-		} {
-			if _, err := db.ExecContext(ctx, cmd); err != nil {
-				return err
-			}
+func enableClosedTsAutoTune(ctx context.Context, db *gosql.DB) error {
+	for _, cmd := range []string{
+		`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true';`,
+		`SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s';`,
+		`SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s';`,
+	} {
+		if _, err := db.ExecContext(ctx, cmd); err != nil {
+			return err
 		}
-		t.L().Printf("metamorphically enabled closed timestamp auto-tuning")
 	}
 	return nil
 }
