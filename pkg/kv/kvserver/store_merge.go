@@ -62,7 +62,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 						// TODO(tbg): this deadlocks, see #74384. By disabling this branch,
 						// the only check that we perform is the one that the monitored
 						// keyspace isn't all a gap.
-						if last.item != nil {
+						if !last.isEmpty() {
 							gapStart, gapEnd := last.Desc().EndKey, cur.Desc().StartKey
 							if !gapStart.Equal(gapEnd) {
 								return errors.AssertionFailedf(
@@ -77,7 +77,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 				if err != nil {
 					log.Fatalf(ctx, "%v", err)
 				}
-				if last.item == nil {
+				if last.isEmpty() {
 					log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
 				}
 				runtime.Gosched()

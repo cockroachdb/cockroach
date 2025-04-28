@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/google/btree"
 )
 
 // Change is a state change for a range, to a target store that has some delay.
@@ -404,7 +404,7 @@ func (rc *ReplicaChange) Blocking() bool {
 // pushed before a change.
 type replicaChanger struct {
 	lastTicket     int
-	completeAt     *btree.BTree
+	completeAt     *btree.BTreeG[*pendingChange]
 	pendingTickets map[int]Change
 	pendingTarget  map[StoreID]time.Time
 	pendingRange   map[RangeID]int
@@ -414,7 +414,7 @@ type replicaChanger struct {
 // replica changes.
 func NewReplicaChanger() Changer {
 	return &replicaChanger{
-		completeAt:     btree.New(8),
+		completeAt:     btree.NewG[*pendingChange](8, (*pendingChange).Less),
 		pendingTickets: make(map[int]Change),
 		pendingTarget:  make(map[StoreID]time.Time),
 		pendingRange:   make(map[RangeID]int),
@@ -426,11 +426,10 @@ type pendingChange struct {
 	completeAt time.Time
 }
 
-// Less is part of the btree.Item interface.
-func (pc *pendingChange) Less(than btree.Item) bool {
-	// Targettal order on (completeAt, ticket)
-	return pc.completeAt.Before(than.(*pendingChange).completeAt) ||
-		(pc.completeAt.Equal(than.(*pendingChange).completeAt) && pc.ticket < than.(*pendingChange).ticket)
+func (pc *pendingChange) Less(than *pendingChange) bool {
+	// Order on (completeAt, ticket).
+	return pc.completeAt.Before(than.completeAt) ||
+		(pc.completeAt.Equal(than.completeAt) && pc.ticket < than.ticket)
 }
 
 // Push appends a state change to occur. There must not be more than one
@@ -477,8 +476,7 @@ func (rc *replicaChanger) Tick(tick time.Time, state State) {
 	// NB: Add the smallest unit of time, in order to find all items in
 	// [smallest, tick].
 	pivot := &pendingChange{completeAt: tick.Add(time.Nanosecond)}
-	rc.completeAt.AscendLessThan(pivot, func(i btree.Item) bool {
-		nextChange, _ := i.(*pendingChange)
+	rc.completeAt.AscendLessThan(pivot, func(nextChange *pendingChange) bool {
 		changeList = append(changeList, nextChange)
 		return true
 	})

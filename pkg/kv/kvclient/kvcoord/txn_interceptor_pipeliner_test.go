@@ -208,7 +208,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	w := tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ := tp.ifWrites.t.Min()
 	require.Equal(t, putArgs.Key, w.Key)
 	require.Equal(t, putArgs.Sequence, w.Sequence)
 
@@ -266,10 +266,10 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.Nil(t, pErr)
 	require.Equal(t, 4, tp.ifWrites.len())
 
-	wMin := tp.ifWrites.t.Min().(*inFlightWrite)
+	wMin, _ := tp.ifWrites.t.Min()
 	require.Equal(t, cputArgs.Key, wMin.Key)
 	require.Equal(t, cputArgs.Sequence, wMin.Sequence)
-	wMax := tp.ifWrites.t.Max().(*inFlightWrite)
+	wMax, _ := tp.ifWrites.t.Max()
 	require.Equal(t, delArgs.Key, wMax.Key)
 	require.Equal(t, delArgs.Sequence, wMax.Sequence)
 
@@ -384,10 +384,10 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 
-	w := tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ := tp.ifWrites.t.Min()
 	require.Equal(t, putArgs1.Key, w.Key)
 	require.Equal(t, putArgs1.Sequence, w.Sequence)
-	w = tp.ifWrites.t.Max().(*inFlightWrite)
+	w, _ = tp.ifWrites.t.Max()
 	require.Equal(t, putArgs2.Key, w.Key)
 	require.Equal(t, putArgs2.Sequence, w.Sequence)
 
@@ -434,7 +434,7 @@ func TestTxnPipelinerTrackInFlightWritesPaginatedResponse(t *testing.T) {
 	require.Nil(t, pErr)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	w = tp.ifWrites.t.Min().(*inFlightWrite)
+	w, _ = tp.ifWrites.t.Min()
 	require.Equal(t, putArgs2.Key, w.Key)
 	require.Equal(t, putArgs2.Sequence, w.Sequence)
 }

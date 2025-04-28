@@ -264,13 +264,13 @@ func (s *Store) addToReplicasByKeyLocked(repl *Replica, desc *roachpb.RangeDescr
 	if got := s.GetReplicaIfExists(repl.RangeID); got != repl { // NB: got can be nil too
 		return errors.Errorf("%s: replica %s not in replicasByRangeID; got %s", s, repl, got)
 	}
-	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+	if it := s.getOverlappingKeyRangeLocked(desc); !it.isEmpty() {
 		return errors.Errorf(
 			"%s: cannot add to replicasByKey: range %s overlaps with %s", s, repl, it.Desc())
 	}
-	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
+	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); !it.isEmpty() {
 		return errors.Errorf(
-			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.item.key())
+			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.key())
 	}
 	return nil
 }
@@ -279,8 +279,8 @@ func (s *Store) addToReplicasByKeyLocked(repl *Replica, desc *roachpb.RangeDescr
 // and the raftMu of the replica whose place is being held are locked.
 func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	rangeID := placeholder.Desc().RangeID
-	if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(context.Background(), placeholder); it.item != nil {
-		return errors.Errorf("%s overlaps with existing replicaOrPlaceholder %+v in replicasByKey btree", placeholder, it.item)
+	if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(context.Background(), placeholder); !it.isEmpty() {
+		return errors.Errorf("%s overlaps with existing replicaOrPlaceholder %+v in replicasByKey btree", placeholder, it.item())
 	}
 	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
 		return errors.Errorf("%s has ID collision with placeholder %+v", placeholder, exRng)
