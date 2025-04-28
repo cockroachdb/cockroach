@@ -484,7 +484,7 @@ func (r *Replica) applySnapshot(
 		ingestion time.Time
 	}
 	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
-	appliedAsWrite := false
+	ingested := true
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
@@ -500,7 +500,7 @@ func (r *Replica) applySnapshot(
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
 		var appliedAsWriteStr string
-		if appliedAsWrite {
+		if !ingested {
 			appliedAsWriteStr = "as write "
 		}
 		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
@@ -534,10 +534,11 @@ func (r *Replica) applySnapshot(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
+	st := r.ClusterSettings()
 	prepInput := prepareSnapshotInput{
 		ctx:                   ctx,
 		id:                    r.ID(),
-		st:                    r.ClusterSettings(),
+		st:                    st,
 		truncState:            truncState,
 		hs:                    hs,
 		logSL:                 &r.raftMu.stateLoader.StateLoader,
@@ -566,39 +567,33 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+
+	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
+		ingested = false
+	}
+
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
-	// TODO: separate ingestions for log and statemachine engine. See:
-	//
-	// https://github.com/cockroachdb/cockroach/issues/93251
-	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
+	if ingested {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
-		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
-			exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), nil, nil, exciseSpan); err != nil {
-				return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
-					inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
-			}
-		} else {
-			appliedAsWrite = true
-			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-				ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
-			if err != nil {
-				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
-			}
-			// Admission control wants the writeBytes to be roughly equivalent to
-			// the bytes in the SST when these writes are eventually flushed. We use
-			// the SST size of the incoming snapshot as that approximation. We've
-			// written additional SSTs to clear some data earlier in this method,
-			// but we ignore those since the bulk of the data is in the incoming
-			// snapshot.
-			writeBytes = uint64(inSnap.SSTSize)
+		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+		if err != nil {
+			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
+		// Admission control wants the writeBytes to be roughly equivalent to
+		// the bytes in the SST when these writes are eventually flushed. We use
+		// the SST size of the incoming snapshot as that approximation. We've
+		// written additional SSTs to clear some data earlier in this method,
+		// but we ignore those since the bulk of the data is in the incoming
+		// snapshot.
+		writeBytes = uint64(inSnap.SSTSize)
 	}
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
