@@ -294,6 +294,11 @@ func (sh *SQLHistogram) GetMetadata() metric.Metadata {
 
 // Inspect is part of the metric.Iterable interface.
 func (sh *SQLHistogram) Inspect(f func(interface{})) {
+	func() {
+		sh.ticker.Lock()
+		defer sh.ticker.Unlock()
+		tick.MaybeTick(&sh.ticker)
+	}()
 	f(sh)
 }
 

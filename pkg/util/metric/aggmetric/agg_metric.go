@@ -268,6 +268,8 @@ func (sm *SQLMetric) getChildByLabelConfig(
 ) (ChildMetric, bool) {
 	var childMetric ChildMetric
 	switch sm.labelConfig.Load() {
+	case uint64(metric.LabelConfigDisabled):
+		return nil, false
 	case uint64(metric.LabelConfigDB):
 		childMetric = sm.getOrAddChild(f, db)
 		return childMetric, true
