@@ -77,7 +77,7 @@ const jepsenRepo = "https://github.com/cockroachdb/jepsen"
 const repoBranch = "tc-nightly"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
-const binaryVersion = "0.1.0-cdeef40-standalone"
+const binaryVersion = "0.1.0-6699eb4-standalone"
 
 var jepsenNemeses = []struct {
 	name, config string
@@ -105,6 +105,11 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 		// run jepsen locally we let the test run to indicate which commands it
 		// would have run remotely.
 		return
+	}
+
+	// Jepsen requires DNS resolution to work, so we need to set up /etc/hosts.
+	if err := c.PopulateEtcHosts(ctx, t.L()); err != nil {
+		t.Fatal(err)
 	}
 
 	controller := c.Node(c.Spec().NodeCount)
@@ -161,7 +166,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	// Install Jepsen's prereqs on the controller.
 	if result, err := c.RunWithDetailsSingleNode(
 		ctx, t.L(), option.WithNodes(controller), "sh", "-c",
-		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
+		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-17-jre openjdk-17-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
 		if result.RemoteExitStatus == 100 {
 			t.Skip("apt-get failure (#31944)", result.Stdout+result.Stderr)

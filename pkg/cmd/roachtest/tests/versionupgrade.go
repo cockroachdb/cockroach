@@ -305,7 +305,7 @@ func registerHTTPRestart(r registry.Registry) {
 		Name:             "http-register-routes/mixed-version",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runHTTPRestart,
