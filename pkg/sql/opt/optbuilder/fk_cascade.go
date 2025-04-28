@@ -527,7 +527,8 @@ func (cb *onDeleteSetBuilder) Build(
 			// against the parent we are cascading from. Need to investigate in which
 			// cases this is safe (e.g. other cascades could have messed with the parent
 			// table in the meantime).
-			mb.buildUpdate(nil /* returning */)
+			// The exempt policy is used for RLS to maintain data integrity.
+			mb.buildUpdate(nil /* returning */, cat.PolicyScopeExempt)
 			return mb.outScope.expr
 		})
 }
@@ -783,7 +784,8 @@ func (cb *onUpdateCascadeBuilder) Build(
 			// Cascades can fire triggers on the child table.
 			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
 
-			mb.buildUpdate(nil /* returning */)
+			// The exempt policy is used for RLS to maintain data integrity.
+			mb.buildUpdate(nil /* returning */, cat.PolicyScopeExempt)
 			return mb.outScope.expr
 		})
 }

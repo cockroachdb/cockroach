@@ -1311,3 +1311,262 @@ update t
       │         └── c_new:15 + 1 [as=v_comp:16]
       └── projections
            └── (v_comp:16 > 0) AND (v_comp:16 > 5) [as=rls:17]
+
+# Tests that verify FK maintenance operations are exempt from RLS checks on the
+# referencing table.
+
+exec-ddl
+CREATE TABLE customers (
+    id INT PRIMARY KEY,
+    name TEXT
+);
+----
+
+exec-ddl
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+);
+----
+
+exec-ddl
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+----
+
+# Validate that without any RLS policies, direct reads from orders are denied.
+build
+SELECT id, customer_id FROM orders
+----
+project
+ ├── columns: id:1!null customer_id:2
+ └── select
+      ├── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── scan orders
+      │    └── columns: id:1!null customer_id:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      └── filters
+           └── false
+
+# Update the customer ID. This should cascade the update to orders, bypassing
+# RLS on orders.
+build-post-queries
+UPDATE customers SET id = 2 WHERE id = 1 RETURNING id, name
+----
+root
+ ├── update customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── update-mapping:
+ │    │    └── id_new:9 => id:1
+ │    ├── return-mapping:
+ │    │    ├── id_new:9 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── project
+ │         ├── columns: id_new:9!null id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── select
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    │    └── flags: avoid-full-scan
+ │         │    └── filters
+ │         │         └── id:5 = 1
+ │         └── projections
+ │              └── 2 [as=id_new:9]
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:14 orders.customer_id:15
+           ├── update-mapping:
+           │    └── customer_id_new:19 => orders.customer_id:11
+           ├── check columns: rls:20
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: rls:20!null orders.id:14!null orders.customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+           │    ├── inner-join (hash)
+           │    │    ├── columns: orders.id:14!null orders.customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+           │    │    ├── scan orders
+           │    │    │    ├── columns: orders.id:14!null orders.customer_id:15
+           │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    │    ├── select
+           │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+           │    │    │    ├── with-scan &1
+           │    │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+           │    │    │    │    └── mapping:
+           │    │    │    │         ├──  customers.id:5 => customer_id_old:18
+           │    │    │    │         └──  id_new:9 => customer_id_new:19
+           │    │    │    └── filters
+           │    │    │         └── customer_id_old:18 IS DISTINCT FROM customer_id_new:19
+           │    │    └── filters
+           │    │         └── orders.customer_id:15 = customer_id_old:18
+           │    └── projections
+           │         └── true [as=rls:20]
+           └── f-k-checks
+                └── f-k-checks-item: orders(customer_id) -> customers(id)
+                     └── anti-join (hash)
+                          ├── columns: customer_id:21!null
+                          ├── with-scan &2
+                          │    ├── columns: customer_id:21!null
+                          │    └── mapping:
+                          │         └──  customer_id_new:19 => customer_id:21
+                          ├── scan customers
+                          │    ├── columns: customers.id:22!null
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── customer_id:21 = customers.id:22
+
+# Delete the customer. This should set customer_id in orders to NULL, bypassing
+# RLS on orders.
+build-post-queries
+DELETE FROM customers WHERE id = 2 RETURNING id, name
+----
+root
+ ├── delete customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── return-mapping:
+ │    │    ├── id:5 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── select
+ │         ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan customers
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── id:5 = 2
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:13 customer_id:14
+           ├── update-mapping:
+           │    └── customer_id_new:18 => customer_id:10
+           ├── check columns: rls:19
+           └── project
+                ├── columns: rls:19!null orders.id:13!null customer_id:14 customer_id_new:18
+                ├── project
+                │    ├── columns: customer_id_new:18 orders.id:13!null customer_id:14
+                │    ├── semi-join (hash)
+                │    │    ├── columns: orders.id:13!null customer_id:14
+                │    │    ├── scan orders
+                │    │    │    ├── columns: orders.id:13!null customer_id:14
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── with-scan &1
+                │    │    │    ├── columns: id:17!null
+                │    │    │    └── mapping:
+                │    │    │         └──  customers.id:5 => id:17
+                │    │    └── filters
+                │    │         └── customer_id:14 = id:17
+                │    └── projections
+                │         └── NULL::INT8 [as=customer_id_new:18]
+                └── projections
+                     └── true [as=rls:19]
+
+# Repeat the operations but using different actions for ON UPDATE and ON DELETE
+exec-ddl
+DROP TABLE orders
+----
+
+exec-ddl
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(id) ON UPDATE SET NULL ON DELETE CASCADE
+);
+----
+
+exec-ddl
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+----
+
+build-post-queries
+UPDATE customers SET id = 2 WHERE id = 1 RETURNING id, name
+----
+root
+ ├── update customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── update-mapping:
+ │    │    └── id_new:9 => id:1
+ │    ├── return-mapping:
+ │    │    ├── id_new:9 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── project
+ │         ├── columns: id_new:9!null id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── select
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── scan customers
+ │         │    │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    │    └── flags: avoid-full-scan
+ │         │    └── filters
+ │         │         └── id:5 = 1
+ │         └── projections
+ │              └── 2 [as=id_new:9]
+ └── cascade
+      └── update orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:14 customer_id:15
+           ├── update-mapping:
+           │    └── customer_id_new:20 => customer_id:11
+           ├── check columns: rls:21
+           └── project
+                ├── columns: rls:21!null orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null customer_id_new:20
+                ├── project
+                │    ├── columns: customer_id_new:20 orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+                │    ├── inner-join (hash)
+                │    │    ├── columns: orders.id:14!null customer_id:15!null customer_id_old:18!null customer_id_new:19!null
+                │    │    ├── scan orders
+                │    │    │    ├── columns: orders.id:14!null customer_id:15
+                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    ├── select
+                │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+                │    │    │    ├── with-scan &1
+                │    │    │    │    ├── columns: customer_id_old:18!null customer_id_new:19!null
+                │    │    │    │    └── mapping:
+                │    │    │    │         ├──  customers.id:5 => customer_id_old:18
+                │    │    │    │         └──  id_new:9 => customer_id_new:19
+                │    │    │    └── filters
+                │    │    │         └── customer_id_old:18 IS DISTINCT FROM customer_id_new:19
+                │    │    └── filters
+                │    │         └── customer_id:15 = customer_id_old:18
+                │    └── projections
+                │         └── NULL::INT8 [as=customer_id_new:20]
+                └── projections
+                     └── true [as=rls:21]
+
+build-post-queries
+DELETE FROM customers WHERE id = 2 RETURNING id, name
+----
+root
+ ├── delete customers
+ │    ├── columns: id:1!null name:2
+ │    ├── fetch columns: id:5 name:6
+ │    ├── return-mapping:
+ │    │    ├── id:5 => id:1
+ │    │    └── name:6 => name:2
+ │    ├── cascades
+ │    │    └── orders_customer_id_fkey
+ │    └── select
+ │         ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── scan customers
+ │         │    ├── columns: id:5!null name:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
+ │         └── filters
+ │              └── id:5 = 2
+ └── cascade
+      └── delete orders
+           ├── columns: <none>
+           ├── fetch columns: orders.id:13 customer_id:14
+           └── select
+                ├── columns: orders.id:13!null customer_id:14!null
+                ├── scan orders
+                │    ├── columns: orders.id:13!null customer_id:14
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── customer_id:14 = 2
+                     └── customer_id:14 IS DISTINCT FROM CAST(NULL AS INT8)
