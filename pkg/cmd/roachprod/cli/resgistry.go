@@ -12,6 +12,7 @@ func (cr *commandRegistry) register() {
 	cr.addCommand([]*cobra.Command{
 		cr.buildCreateCmd(),
 		cr.buildGrowCmd(),
+		cr.buildPopulateEtcHosts(),
 		cr.buildShrinkCmd(),
 		cr.buildResetCmd(),
 		cr.buildDestroyCmd(),

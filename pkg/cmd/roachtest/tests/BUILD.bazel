@@ -136,6 +136,7 @@ go_library(
         "multitenant_upgrade.go",
         "mvcc_gc.go",
         "network.go",
+        "node_helpers.go",
         "nodejs_postgres.go",
         "npgsql.go",
         "npgsql_blocklist.go",
