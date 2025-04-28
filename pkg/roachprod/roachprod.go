@@ -1754,6 +1754,14 @@ func Create(
 	return SetupSSH(ctx, l, clusterName, false /* sync */)
 }
 
+func PopulateEtcHosts(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	return c.PopulateEtcHosts(ctx, l)
+}
+
 func Grow(
 	ctx context.Context, l *logger.Logger, clusterName string, secure bool, numNodes int,
 ) error {

@@ -302,10 +302,12 @@ done
 // did not initialize the cluster version in time.
 func registerHTTPRestart(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "http-register-routes/mixed-version",
-		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllClouds,
+		Name:    "http-register-routes/mixed-version",
+		Owner:   registry.OwnerObservability,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master
+		// and version upgrade is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runHTTPRestart,

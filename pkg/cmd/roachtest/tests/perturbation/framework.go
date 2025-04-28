@@ -107,7 +107,12 @@ var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
 var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
-var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
+var cloudSets = []registry.CloudSet{
+	registry.OnlyAWS,
+	registry.OnlyGCE,
+	registry.OnlyAzure,
+	registry.OnlyIBM,
+}
 var admissionControlOptions = []admissionControlMode{elasticOnlyBoth, fullNormalElasticRepl, fullBoth}
 var diskBandwidthLimitOptions = []string{"0", "350MiB"}
 

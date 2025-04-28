@@ -36,10 +36,12 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 	// sql-tats/mixed-version tests that requesting sql stats from admin-ui works across
 	// mixed version clusters.
 	r.Add(registry.TestSpec{
-		Name:             "sql-stats/mixed-version",
-		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
+		Name:    "sql-stats/mixed-version",
+		Owner:   registry.OwnerObservability,
+		Cluster: r.MakeClusterSpec(5, spec.WorkloadNode()),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runSQLStatsMixedVersion,
