@@ -515,18 +515,7 @@ func (r *Replica) applySnapshot(
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
 	clearedSpans := inSnap.clearedSpans
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, r.ID(), r.ClusterSettings(), truncState, hs, &r.raftMu.stateLoader.StateLoader,
-	)
-	if err != nil {
-		return err
-	}
-	clearedSpans = append(clearedSpans, clearedSpan)
-	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-	// buffering in a MemObject first.
-	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return err
-	}
+
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
 
@@ -549,6 +538,21 @@ func (r *Replica) applySnapshot(
 
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
+
+	prepInput := prepareSnapshotInput{
+		ctx:        ctx,
+		id:         r.ID(),
+		st:         r.ClusterSettings(),
+		truncState: truncState,
+		hs:         hs,
+		logSL:      &r.raftMu.stateLoader.StateLoader,
+		writeSST:   inSnap.SSTStorageScratch.WriteSST,
+	}
+	prepResult, err := prepareSnapshot(prepInput)
+	if err != nil {
+		return err
+	}
+	clearedSpans = append(clearedSpans, prepResult.clearedSpan)
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the

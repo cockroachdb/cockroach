@@ -85,6 +85,7 @@ go_library(
         "replicate_queue.go",
         "scanner.go",
         "scheduler.go",
+        "snapshot_apply_prepare.go",
         "snapshot_settings.go",
         "split_delay_helper.go",
         "split_queue.go",
