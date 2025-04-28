@@ -45,7 +45,7 @@ exit_status=$?
 # s3 bucket. If PEBBLE_SHA is set, we don't pollute the nightly benchmark
 # results with our non-master runs.
 
-if [ -z "$PEBBLE_SHA" ]; then
+if [[ -z "${PEBBLE_SHA:-}" ]]; then
   build_mkbench
 
   prepare_datadir
