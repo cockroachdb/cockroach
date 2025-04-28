@@ -1495,11 +1495,19 @@ func applyZoneConfigForMultiRegionTable(
 	tableID catid.DescID,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
-	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
-	if err != nil {
-		return err
+	// Base the zone config on the most recent copy of the table
+	// zone config.
+	mostRecentSeqNum := uint32(0)
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig != nil {
+		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}
-	if currentZoneConfigWithRaw == nil {
+	var currentZoneConfigWithRaw *zone.ZoneConfigWithRawBytes
+	var err error
+	if mostRecentTableZoneConfig != nil {
+		zc := protoutil.Clone(mostRecentTableZoneConfig.ZoneConfig).(*zonepb.ZoneConfig)
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zc, nil)
+	} else {
 		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
 	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
@@ -1579,11 +1587,6 @@ func applyZoneConfigForMultiRegionTable(
 	}
 	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
 		return nil
-	}
-	mostRecentSeqNum := uint32(0)
-	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
-	if mostRecentTableZoneConfig != nil {
-		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}
 	tzc := &scpb.TableZoneConfig{
 		TableID:    tableID,
