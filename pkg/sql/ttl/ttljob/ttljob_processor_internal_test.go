@@ -15,14 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -96,13 +94,7 @@ func TestRetryDeleteBatch(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	// Create a descriptor collection for inclusion in the flowCtx
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "test" /* opName */)
-	sds := sessiondata.NewStack(sd)
-	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
-	descsCol := execCfg.CollectionFactory.NewCollection(ctx, descs.WithDescriptorSessionDataProvider(dsdp))
-
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB:       s.InternalDB().(descs.DB),
@@ -113,7 +105,6 @@ func TestRetryDeleteBatch(t *testing.T) {
 			Codec:    s.Codec(),
 			Settings: s.ClusterSettings(),
 		},
-		Descriptors: descsCol,
 	}
 
 	// We need to create a dummy table so that we have a table descriptor. The
