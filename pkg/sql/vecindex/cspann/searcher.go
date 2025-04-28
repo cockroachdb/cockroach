@@ -93,7 +93,7 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 			// Next must have been called by an insert operation. This code path
 			// should only be hit when the insert needs to go into the root partition.
 			if root.Level() != s.idxCtx.level-1 {
-				panic(errors.AssertionFailedf("caller passed invalid level %d", s.idxCtx.level))
+				return false, errors.AssertionFailedf("caller passed invalid level %d", s.idxCtx.level)
 			}
 			s.searchSet.Add(&SearchResult{
 				ChildKey: ChildKey{PartitionKey: RootKey},
@@ -120,8 +120,10 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 				maxResults = s.searchSet.MaxResults
 				maxExtraResults = s.searchSet.MaxExtraResults
 				if !s.idxCtx.options.SkipRerank {
-					maxResults = int(math.Ceil(float64(maxResults) * DeletedMultiplier))
-					maxExtraResults = maxResults * RerankMultiplier
+					maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
+					if s.searchSet.MaxExtraResults > maxExtraResults {
+						maxExtraResults = s.searchSet.MaxExtraResults
+					}
 				}
 				if s.idxCtx.level != LeafLevel && s.idxCtx.options.UpdateStats {
 					maxResults = max(maxResults, s.idx.options.QualitySamples)
@@ -479,10 +481,14 @@ func (s *levelSearcher) searchChildPartitions(
 		// In the DrainingForSplit state, the target partitions are still at
 		// the same level as the root partition, so merge their contents into
 		// the search set (which will remove any duplicates).
-		s.idxCtx.tempToSearch = ensureSliceCap(s.idxCtx.tempToSearch, 2)
-		level, err = s.searchChildPartitions(ctx, s.tempResults[:2])
+		targetLevel, err := s.searchChildPartitions(ctx, s.tempResults[:2])
 		if err != nil {
 			return InvalidLevel, err
+		}
+		if targetLevel != level {
+			return InvalidLevel, errors.AssertionFailedf(
+				"target partitions cannot have level %d when DrainingForSplit root has level %d",
+				targetLevel, level)
 		}
 	} else if rootState.State == AddingLevelState {
 		// In the AddingLevel state, the target partitions should be treated as
