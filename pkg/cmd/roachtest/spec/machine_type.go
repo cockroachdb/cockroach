@@ -277,3 +277,38 @@ func SelectAzureMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, v
 		return "", selectedArch, errors.Newf("invalid azure machine series %q", series)
 	}
 }
+
+// SelectIBMMachineType selects a machine type given the desired number of CPUs,
+// memory per CPU and CPU architecture. It returns a compatible machine type
+// and its architecture.
+func SelectIBMMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch, error) {
+
+	// IBM Z only supports s390x architecture.
+	if arch != vm.ArchS390x {
+		return "", arch, errors.Newf("invalid architecture %q for IBM", arch)
+	}
+
+	// CPU count is limited to 2, 4, 8, or 16.
+	if cpus != 2 && cpus != 4 && cpus != 8 && cpus != 16 {
+		return "", arch, errors.Newf("invalid number of cpus %d for IBM", cpus)
+	}
+
+	// Ratio of RAM to CPU is fixed for each series.
+	seriesCpuRamRatio := map[string]int{
+		"bz2": 4, // balanced
+		"cz2": 2, // compute optimized
+		"mz2": 8, // memory optimized
+	}
+
+	series := "bz2" // 4 GB RAM per CPU
+	switch mem {
+	case Auto, Standard:
+		// nothing to do, family is already configured as per above
+	case High:
+		series = "mz2" // 8 GB RAM per CPU
+	case Low:
+		series = "cz2" // 2 GB RAM per CPU
+	}
+
+	return fmt.Sprintf("%s-%dx%d", series, cpus, (cpus * seriesCpuRamRatio[series])), arch, nil
+}

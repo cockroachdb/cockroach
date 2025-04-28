@@ -16,11 +16,12 @@ func TestCloudSet(t *testing.T) {
 	expect := func(c CloudSet, exp string) {
 		require.Equal(t, exp, c.String())
 	}
-	expect(AllClouds, "local,gce,aws,azure")
-	expect(AllExceptAWS, "local,gce,azure")
-	expect(AllExceptLocal, "gce,aws,azure")
-	expect(AllExceptLocal.NoAWS(), "gce,azure")
-	expect(AllClouds.NoAWS().NoAzure(), "local,gce")
+	expect(AllClouds, "local,gce,aws,azure,ibm")
+	expect(AllExceptAWS, "local,gce,azure,ibm")
+	expect(AllExceptLocal, "gce,aws,azure,ibm")
+	expect(AllExceptLocal.NoAWS(), "gce,azure,ibm")
+	expect(AllClouds.NoAWS().NoAzure(), "local,gce,ibm")
+	expect(AllClouds.NoIBM(), "local,gce,aws,azure")
 
 	require.True(t, AllExceptAWS.Contains(spec.GCE))
 	require.True(t, AllExceptAWS.Contains(spec.Local))
