@@ -23,17 +23,16 @@ import (
 
 // prepareSnapshotInput contains the data needed to prepare the on-disk state for a snapshot.
 type prepareSnapshotInput struct {
-	ctx                   context.Context
-	id                    storage.FullReplicaID
-	st                    *cluster.Settings
-	truncState            kvserverpb.RaftTruncatedState
-	hs                    raftpb.HardState
-	logSL                 *logstore.StateLoader
-	writeSST              func(context.Context, []byte) error
-	desc                  *roachpb.RangeDescriptor
-	subsumedDescs         []*roachpb.RangeDescriptor
-	todoEng               storage.Engine
-	subsumedNextReplicaID roachpb.ReplicaID
+	ctx           context.Context
+	id            storage.FullReplicaID
+	st            *cluster.Settings
+	truncState    kvserverpb.RaftTruncatedState
+	hs            raftpb.HardState
+	logSL         *logstore.StateLoader
+	writeSST      func(context.Context, []byte) error
+	desc          *roachpb.RangeDescriptor
+	subsumedDescs []*roachpb.RangeDescriptor
+	todoEng       storage.Engine
 }
 
 // preparedSnapshot contains the results of preparing the snapshot on disk.
@@ -57,16 +56,9 @@ func prepareSnapshot(input prepareSnapshotInput) (preparedSnapshot, error) {
 
 	var clearedSubsumedSpans []roachpb.Span
 	if len(input.subsumedDescs) > 0 {
-		// If we're subsuming a replica below, we don't have its last NextReplicaID,
-		// nor can we obtain it. That's OK: we can just be conservative and use the
-		// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
-		// tombstone using this maximum possible replica ID, which would normally be
-		// problematic, as it would prevent this store from ever having a new replica
-		// of the removed range. In this case, however, it's copacetic, as subsumed
-		// ranges _can't_ have new replicas.
 		spans, err := clearSubsumedReplicaDiskData(
 			input.ctx, input.st, input.todoEng, input.writeSST,
-			input.desc, input.subsumedDescs, input.subsumedNextReplicaID,
+			input.desc, input.subsumedDescs,
 		)
 		if err != nil {
 			return preparedSnapshot{}, err
@@ -168,7 +160,6 @@ func clearSubsumedReplicaDiskData(
 	writeSST func(context.Context, []byte) error,
 	desc *roachpb.RangeDescriptor,
 	subsumedDescs []*roachpb.RangeDescriptor,
-	subsumedNextReplicaID roachpb.ReplicaID,
 ) (clearedSpans []roachpb.Span, _ error) {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
@@ -198,7 +189,7 @@ func clearSubsumedReplicaDiskData(
 			UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 		})
 		clearedSpans = append(clearedSpans, subsumedClearedSpans...)
-		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, mergedTombstoneReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
 			return nil, err
 		}
