@@ -356,13 +356,13 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			// ReturnRawMVCCValues is unsupported because we don't know how to serve
 			// such reads from the write buffer currently.
 			if t.ReturnRawMVCCValues {
-				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
 			}
 		case *kvpb.ScanRequest:
 			// ReturnRawMVCCValues is unsupported because we don't know how to serve
 			// such reads from the write buffer currently.
 			if t.ReturnRawMVCCValues {
-				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
 			}
 			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
 				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
@@ -371,7 +371,7 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			// ReturnRawMVCCValues is unsupported because we don't know how to serve
 			// such reads from the write buffer currently.
 			if t.ReturnRawMVCCValues {
-				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValue")
+				return unsupportedOptionError(t.Method(), "ReturnRawMVCCValues")
 			}
 			if t.ScanFormat == kvpb.COL_BATCH_RESPONSE {
 				return unsupportedOptionError(t.Method(), "COL_BATCH_RESPONSE scan format")
