@@ -3121,7 +3121,7 @@ func (ds *DistSender) sendToReplicas(
 			if ambiguousError != nil {
 				err = kvpb.NewAmbiguousResultError(errors.Wrapf(ambiguousError, "context done during DistSender.Send"))
 			} else {
-				err = errors.Wrap(ctx.Err(), "aborted during DistSender.Send")
+				err = ctx.Err()
 			}
 			log.Eventf(ctx, "%v", err)
 			return nil, err
