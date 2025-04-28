@@ -3824,8 +3824,6 @@ rm -f go.mod go.sum
 go mod init create-msk-topic
 go mod tidy
 go build .
-
-./create-msk-topic --broker "$1" --topic "$2" --role-arn "$3"
 `, createMSKTopicBinPath)
 
 // CreateTopic creates a topic on the MSK cluster.
@@ -3835,8 +3833,21 @@ func (m *mskManager) CreateTopic(ctx context.Context, topic string, c cluster.Cl
 
 	require.NoError(m.t, c.RunE(ctx, withCTN, "mkdir", "-p", createMSKTopicBinPath))
 	require.NoError(m.t, c.PutString(ctx, createMskTopicMain, path.Join(createMSKTopicBinPath, "main.go"), 0700, createTopicNode))
-	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript, path.Join(createMSKTopicBinPath, "run.sh"), 0700, createTopicNode))
-	require.NoError(m.t, c.RunE(ctx, withCTN, path.Join(createMSKTopicBinPath, "run.sh"), m.connectInfo.broker, topic, mskRoleArn))
+	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript,
+		path.Join(createMSKTopicBinPath, "setup.sh"), 0700, createTopicNode))
+	require.NoError(m.t, c.RunE(ctx, withCTN,
+		path.Join(createMSKTopicBinPath, "setup.sh"), m.connectInfo.broker, topic, mskRoleArn))
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	require.NoError(m.t, retry.WithMaxAttempts(ctx, retryOpts, 3,
+		func() error {
+			return c.RunE(ctx, withCTN,
+				path.Join(createMSKTopicBinPath, "create-msk-topic"),
+				"--broker", m.connectInfo.broker, "--topic", topic, "--role-arn", mskRoleArn)
+
+		}))
 }
 
 // TearDown deletes the MSK cluster.
