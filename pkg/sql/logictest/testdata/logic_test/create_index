@@ -606,3 +606,33 @@ statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
 CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
 
 subtest end
+
+
+subtest create_index_expression_with_default_collation
+
+statement ok
+CREATE TABLE tbl_with_collate (c1 int);
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr ON tbl_with_collate ((c1::text COLLATE "C"));
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr2 ON tbl_with_collate ((c1::text COLLATE "POSIX"));
+
+statement ok
+CREATE UNIQUE INDEX tbl_with_collate_expr3 ON tbl_with_collate ((c1::text COLLATE "en-us"));
+
+
+query TT
+SHOW CREATE TABLE tbl_with_collate
+----
+tbl_with_collate  CREATE TABLE public.tbl_with_collate (
+                    c1 INT8 NULL,
+                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
+                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
+                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
+                  )
+
+subtest end
