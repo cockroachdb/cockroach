@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -94,11 +93,6 @@ func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 
 func (r *ReplicaPlaceholder) key() roachpb.RKey {
 	return r.Desc().StartKey
-}
-
-// Less implements the btree.Item interface.
-func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
-	return r.Desc().StartKey.Less(i.(rangeKeyItem).key())
 }
 
 func (r *ReplicaPlaceholder) String() string {
