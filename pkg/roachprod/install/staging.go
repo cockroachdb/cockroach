@@ -66,6 +66,13 @@ var (
 		ExecutableExtension:     "",
 		ReleaseArchiveExtension: "tgz",
 	}
+	linux_s390x_ArchInfo = archInfo{
+		DebugArchitecture:       "linux-gnu-s390x",
+		ReleaseArchitecture:     "linux-s390x",
+		LibraryExtension:        ".so",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
+	}
 	linux_arm64_ArchInfo = archInfo{
 		DebugArchitecture:       "linux-gnu-arm64",
 		ReleaseArchitecture:     "linux-arm64",
@@ -100,7 +107,7 @@ var (
 
 // ArchInfoForOS returns an ArchInfo for the given OS and Architecture if currently supported.
 func ArchInfoForOS(os string, arch vm.CPUArch) (archInfo, error) {
-	if arch != "" && arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
+	if arch != "" && arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS && arch != vm.ArchS390x {
 		return archInfo{}, errors.Errorf("unsupported architecture %q", arch)
 	}
 
@@ -111,6 +118,9 @@ func ArchInfoForOS(os string, arch vm.CPUArch) (archInfo, error) {
 		}
 		if arch == vm.ArchFIPS {
 			return linux_x86_64_fips_ArchInfo, nil
+		}
+		if arch == vm.ArchS390x {
+			return linux_s390x_ArchInfo, nil
 		}
 		return linux_x86_64_ArchInfo, nil
 	case "darwin":

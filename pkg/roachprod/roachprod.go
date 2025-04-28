@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1724,7 +1725,7 @@ func Create(
 			for _, provider := range o.CreateOpts.VMProviders {
 				// TODO(DarrylWong): support zfs on other providers, see: #123775.
 				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName) {
+				if !(provider == gce.ProviderName || provider == aws.ProviderName || provider == ibm.ProviderName) {
 					return fmt.Errorf(
 						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
 					)
@@ -1853,6 +1854,10 @@ func GC(l *logger.Logger, dryrun bool) error {
 		return cloud.GCAzure(l, dryrun)
 	})
 
+	addOpFn(func() error {
+		return cloud.GCIBM(l, dryrun)
+	})
+
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
 	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
@@ -1946,6 +1951,11 @@ func InitProviders() map[string]string {
 			name:  azure.ProviderName,
 			init:  azure.Init,
 			empty: &azure.Provider{},
+		},
+		{
+			name:  ibm.ProviderName,
+			init:  ibm.Init,
+			empty: &ibm.Provider{},
 		},
 		{
 			name: local.ProviderName,
