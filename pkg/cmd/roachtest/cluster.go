@@ -101,6 +101,8 @@ func validateBinaryFormat(path string, arch vm.CPUArch, checkEA bool) (string, e
 	} else if arch == vm.ArchAMD64 && !strings.Contains(fileFormat, "x86-64") && !strings.Contains(fileFormat, "x86_64") {
 		// Otherwise, we expect a binary that was built for amd64.
 		return "", errors.Newf("%s has incompatible architecture; want: %q, got: %q", abspath, arch, fileFormat)
+	} else if arch == vm.ArchS390x && !strings.Contains(fileFormat, "ibm s/390") {
+		return "", errors.Newf("%s has incompabile architecture; want: %q, got: %q", abspath, arch, fileFormat)
 	}
 	if arch == vm.ArchFIPS && strings.HasSuffix(abspath, "cockroach") {
 		// Check that the binary is patched to use OpenSSL FIPS.
@@ -278,6 +280,8 @@ func initBinariesAndLibraries() {
 		if string(defaultArch) != runtime.GOARCH {
 			fmt.Printf("WARN: local cluster's architecture (%q) differs from default (%q)\n", runtime.GOARCH, defaultArch)
 		}
+	} else if roachtestflags.Cloud == spec.IBM {
+		defaultArch = vm.ArchS390x
 	}
 	fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, defaultArch)
 
@@ -356,7 +360,7 @@ func initBinariesAndLibraries() {
 
 	// In v20.2 or higher, optionally expect certain library files to exist.
 	// Since they may not be found in older versions, do not hard error if they are not found.
-	for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS} {
+	for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS, vm.ArchS390x} {
 		if roachtestflags.ARM64Probability == 0 && defaultArch != vm.ArchARM64 && arch == vm.ArchARM64 {
 			// arm64 isn't used, skip finding libs for it.
 			continue
@@ -541,7 +545,7 @@ func makeClusterName(name string) string {
 	return vm.DNSSafeName(name)
 }
 
-// MachineTypeToCPUs returns a CPU count for GCE, AWS, and Azure machine types.
+// MachineTypeToCPUs returns a CPU count for GCE, AWS, Azure and IBM machine types.
 // -1 is returned for unknown machine types.
 func MachineTypeToCPUs(s string) int {
 	{
@@ -560,6 +564,23 @@ func MachineTypeToCPUs(s string) int {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
+			return v
+		}
+	}
+
+	{
+		// IBM machine types.
+		var v int
+		// bz2 is the balanced IBM Z machine type family.
+		if _, err := fmt.Sscanf(s, "bz2-%dx", &v); err == nil {
+			return v
+		}
+		// bz2 is the compute optimized IBM Z machine type family.
+		if _, err := fmt.Sscanf(s, "cz2-%dx", &v); err == nil {
+			return v
+		}
+		// bz2 is the memory optimized IBM Z machine type family.
+		if _, err := fmt.Sscanf(s, "mx2-%dx", &v); err == nil {
 			return v
 		}
 	}
@@ -3227,6 +3248,12 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 	if testSpec.Cluster.Arch != "" {
 		l.PrintfCtx(ctx, "Using specified arch=%q, %s", testSpec.Cluster.Arch, testSpec.Name)
 		return testSpec.Cluster.Arch
+	}
+
+	if roachtestflags.Cloud == spec.IBM {
+		// N.B. IBM only supports S390x on the "s390x" architecture.
+		l.PrintfCtx(ctx, "IBM Cloud: forcing arch=%q (only supported), %s", vm.ArchS390x, testSpec.Name)
+		return vm.ArchS390x
 	}
 
 	// CPU architecture is unspecified, choose one according to the

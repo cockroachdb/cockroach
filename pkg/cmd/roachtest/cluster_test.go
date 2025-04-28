@@ -643,6 +643,134 @@ func TestAzureMachineType(t *testing.T) {
 	require.Error(t, err2)
 }
 
+func TestIBMMachineType(t *testing.T) {
+	testCases := []struct {
+		name            string
+		cpus            int
+		mem             spec.MemPerCPU
+		arch            vm.CPUArch
+		expectedMachine string
+		expectedArch    vm.CPUArch
+		expectedError   string
+	}{}
+
+	// Helper function to generate the expected machine type string
+	ibmMachineType := func(series string, cpus int, ramRatio int) string {
+		return fmt.Sprintf("%s-%dx%d", series, cpus, cpus*ramRatio)
+	}
+
+	// IBM Z only supports s390x architecture
+	arch := vm.ArchS390x
+
+	// Add test cases for each memory configuration
+	addTestCases := func(mem spec.MemPerCPU) {
+		var series string
+		var ramRatio int
+
+		switch mem {
+		case spec.Auto, spec.Standard:
+			series = "bz2" // balanced
+			ramRatio = 4
+		case spec.High:
+			series = "mz2" // memory optimized
+			ramRatio = 8
+		case spec.Low:
+			series = "cz2" // compute optimized
+			ramRatio = 2
+		}
+
+		// IBM Z only supports 2, 4, 8, or 16 CPUs
+		for _, cpus := range []int{2, 4, 8, 16} {
+			testName := fmt.Sprintf("valid_%dcpu_%s", cpus, mem)
+			testCases = append(testCases, struct {
+				name            string
+				cpus            int
+				mem             spec.MemPerCPU
+				arch            vm.CPUArch
+				expectedMachine string
+				expectedArch    vm.CPUArch
+				expectedError   string
+			}{
+				name:            testName,
+				cpus:            cpus,
+				mem:             mem,
+				arch:            arch,
+				expectedMachine: ibmMachineType(series, cpus, ramRatio),
+				expectedArch:    arch,
+				expectedError:   "",
+			})
+		}
+
+		// Add test cases for unsupported CPU counts
+		invalidCPUs := []int{1, 6, 10, 32, 96, 128}
+		for _, cpus := range invalidCPUs {
+			testName := fmt.Sprintf("invalid_%dcpu_%s", cpus, mem)
+			testCases = append(testCases, struct {
+				name            string
+				cpus            int
+				mem             spec.MemPerCPU
+				arch            vm.CPUArch
+				expectedMachine string
+				expectedArch    vm.CPUArch
+				expectedError   string
+			}{
+				name:            testName,
+				cpus:            cpus,
+				mem:             mem,
+				arch:            arch,
+				expectedMachine: "",
+				expectedArch:    arch,
+				expectedError:   fmt.Sprintf("invalid number of cpus %d for IBM", cpus),
+			})
+		}
+	}
+
+	// Add test cases for each memory configuration
+	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High, spec.Low} {
+		addTestCases(mem)
+	}
+
+	// Add test cases for unsupported architectures
+	for _, invalidArch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS} {
+		testName := fmt.Sprintf("invalid_arch_%s", invalidArch)
+		testCases = append(testCases, struct {
+			name            string
+			cpus            int
+			mem             spec.MemPerCPU
+			arch            vm.CPUArch
+			expectedMachine string
+			expectedArch    vm.CPUArch
+			expectedError   string
+		}{
+			name:            testName,
+			cpus:            4,
+			mem:             spec.Auto,
+			arch:            invalidArch,
+			expectedMachine: "",
+			expectedArch:    invalidArch,
+			expectedError:   fmt.Sprintf("invalid architecture %q for IBM", invalidArch),
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			machineType, selectedArch, err := spec.SelectIBMMachineType(tc.cpus, tc.mem, tc.arch)
+
+			if tc.expectedError != "" {
+				// We expect a specific error
+				require.Error(t, err)
+				require.Equal(t, tc.expectedError, err.Error())
+				require.Equal(t, tc.expectedMachine, machineType)
+				require.Equal(t, tc.expectedArch, selectedArch)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedMachine, machineType)
+				require.Equal(t, tc.expectedArch, selectedArch)
+			}
+		})
+	}
+}
+
 func TestMachineTypes(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "cluster_test"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
