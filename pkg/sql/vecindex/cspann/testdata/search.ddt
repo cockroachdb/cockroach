@@ -217,3 +217,64 @@ vec2: 28.1958 ±10.12 (centroid=1.58)
 vec3: 45.6359 ±15.23 (centroid=1.41)
 vec5: 74.3641 ±15.23 (centroid=1.41)
 4 leaf vectors, 7 vectors, 0 full vectors, 3 partitions
+
+# ----------------------------------------------------------------------
+# Search tree with many deleted vectors.
+# ----------------------------------------------------------------------
+new-index min-partition-size=1 max-partition-size=4 beam-size=3
+vec1: (0, 0)
+vec2: (100, 100)
+vec3: (200, 200)
+vec4: (300, 300)
+vec5: (400, 400)
+vec6: (500, 500)
+----
+• 1 (0, 0)
+│
+├───• 5 (450, 450)
+│   │
+│   ├───• vec5 (400, 400)
+│   └───• vec6 (500, 500)
+│
+├───• 3 (50, 50)
+│   │
+│   ├───• vec1 (0, 0)
+│   └───• vec2 (100, 100)
+│
+└───• 4 (250, 250)
+    │
+    ├───• vec3 (200, 200)
+    └───• vec4 (300, 300)
+
+# Delete all but one vector.
+delete not-found
+vec1
+vec2
+vec3
+vec4
+vec5
+----
+• 1 (0, 0)
+│
+├───• 5 (450, 450)
+│   │
+│   ├───• vec5 (MISSING)
+│   └───• vec6 (500, 500)
+│
+├───• 3 (50, 50)
+│   │
+│   ├───• vec1 (MISSING)
+│   └───• vec2 (MISSING)
+│
+└───• 4 (250, 250)
+    │
+    ├───• vec3 (MISSING)
+    └───• vec4 (MISSING)
+
+# Search for the vector that's farthest from vec6, so it's last in the result
+# set. This ensures that DeletedMinCount is working as intended.
+search max-results=1
+(0, 0)
+----
+vec6: 500000 (centroid=70.71)
+6 leaf vectors, 9 vectors, 6 full vectors, 4 partitions

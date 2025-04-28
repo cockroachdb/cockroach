@@ -7,7 +7,6 @@ package vecindex
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,8 +47,7 @@ func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults
 		BaseBeamSize: baseBeamSize,
 		SkipRerank:   true,
 	}
-	s.searchSet.MaxResults = int(math.Ceil(float64(maxResults) * cspann.DeletedMultiplier))
-	s.searchSet.MaxExtraResults = s.searchSet.MaxResults * cspann.RerankMultiplier
+	s.searchSet.MaxResults, s.searchSet.MaxExtraResults = cspann.IncreaseRerankResults(maxResults)
 
 	// If the index is deterministic, then synchronously run the background worker
 	// to process any pending fixups.
@@ -61,6 +59,9 @@ func (s *Searcher) Init(idx *cspann.Index, txn *kv.Txn, baseBeamSize, maxResults
 // Search triggers a search over the index for the given vector, within the
 // scope of the given prefix. "maxResults" specifies the maximum number of
 // results that will be returned.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
 func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T) error {
 	err := s.idx.Search(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, &s.searchSet, s.options)
 	if err != nil {

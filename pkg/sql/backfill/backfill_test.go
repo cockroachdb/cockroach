@@ -181,3 +181,63 @@ func TestConcurrentOperationsDuringVectorIndexCreation(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT id FROM vectors@vec_idx ORDER BY vec <-> '[1, 2, 3]' LIMIT 1`).Scan(&id)
 	require.Equal(t, 1, id)
 }
+
+// Regression for issue #145261: vector index backfill with a prefix column
+// crashes the node.
+func TestVectorIndexWithPrefixBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Enable vector indexes.
+	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+
+	// Create a table with a vector column + a prefix column.
+	sqlDB.Exec(t, `
+		CREATE TABLE items (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			customer_id INT NOT NULL,
+			name TEXT,
+			embedding VECTOR(3)
+		);
+	`)
+
+	// Generate 10 customer id's, each with 100 vectors.
+	sqlDB.Exec(t, `
+		INSERT INTO items (customer_id, name, embedding)
+		SELECT
+			(i % 10) + 1 AS customer_id,
+			'Item ' || i,
+			ARRAY[random(), random(), random()]::vector
+		FROM generate_series(1, 1000) AS s(i);
+	`)
+
+	// Create the vector index with a small partition size so that the trees
+	// have more levels and splits to get there.
+	sqlDB.Exec(t, `
+		CREATE VECTOR INDEX ON items (customer_id, embedding)
+		WITH (min_partition_size=2, max_partition_size=8, build_beam_size=2);
+	`)
+
+	// Ensure that each customer has 100 vectors.
+	for i := range 10 {
+		func() {
+			rows := sqlDB.Query(t, `
+				SELECT id FROM items
+				WHERE customer_id = $1
+				ORDER BY embedding <-> $2
+				LIMIT 200`, i+1, "[0, 0, 0]")
+			defer rows.Close()
+
+			count := 0
+			for rows.Next() {
+				count++
+			}
+			require.Equal(t, 100, count)
+		}()
+	}
+}
