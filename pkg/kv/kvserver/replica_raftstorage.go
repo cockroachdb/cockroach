@@ -536,17 +536,16 @@ func (r *Replica) applySnapshot(
 
 	st := r.ClusterSettings()
 	prepInput := prepareSnapshotInput{
-		ctx:                   ctx,
-		id:                    r.ID(),
-		st:                    st,
-		truncState:            truncState,
-		hs:                    hs,
-		logSL:                 &r.raftMu.stateLoader.StateLoader,
-		writeSST:              inSnap.SSTStorageScratch.WriteSST,
-		desc:                  desc,
-		subsumedDescs:         subsumedDescs,
-		todoEng:               r.store.TODOEngine(),
-		subsumedNextReplicaID: mergedTombstoneReplicaID,
+		ctx:           ctx,
+		id:            r.ID(),
+		st:            st,
+		truncState:    truncState,
+		hs:            hs,
+		logSL:         &r.raftMu.stateLoader.StateLoader,
+		writeSST:      inSnap.SSTStorageScratch.WriteSST,
+		desc:          desc,
+		subsumedDescs: subsumedDescs,
+		todoEng:       r.store.TODOEngine(),
 	}
 
 	prepResult, err := prepareSnapshot(prepInput)
