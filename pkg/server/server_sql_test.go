@@ -1,3 +1,8 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package server
 
 import (
@@ -6,10 +11,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUpdateLocalityAddresses_UpdatesPortCorrectly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Given a slice of locality addresses with host parts and a valid advertised address.
 	originalAddrs := []roachpb.LocalityAddress{
 		{
@@ -39,6 +48,8 @@ func TestUpdateLocalityAddresses_UpdatesPortCorrectly(t *testing.T) {
 }
 
 func TestUpdateLocalityAddresses_EmptyInputReturnsEmptySlice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Given an empty slice of locality addresses and a valid advertised address.
 	var originalAddrs []roachpb.LocalityAddress
 	advertiseAddr := "127.0.0.1:8080"
@@ -52,6 +63,8 @@ func TestUpdateLocalityAddresses_EmptyInputReturnsEmptySlice(t *testing.T) {
 }
 
 func TestUpdateLocalityAddresses_InvalidAdvertiseAddrReturnsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Given a valid slice of locality addresses and an invalid advertise address.
 	originalAddrs := []roachpb.LocalityAddress{
 		{
