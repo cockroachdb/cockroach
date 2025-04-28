@@ -112,11 +112,11 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
 
 	// Build the final update statement, including any returned expressions.
+	var returningExpr *tree.ReturningExprs
 	if resultsNeeded(upd.Returning) {
-		mb.buildUpdate(upd.Returning.(*tree.ReturningExprs))
-	} else {
-		mb.buildUpdate(nil /* returning */)
+		returningExpr = upd.Returning.(*tree.ReturningExprs)
 	}
+	mb.buildUpdate(returningExpr, cat.PolicyScopeUpdate)
 
 	return mb.outScope
 }
@@ -331,14 +331,16 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
+func (mb *mutationBuilder) buildUpdate(
+	returning *tree.ReturningExprs, policyScopeCmd cat.PolicyCommandScope,
+) {
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols(true, /* isUpdate */
-		cat.PolicyScopeUpdate, false /* includeSelectOnInsert */)
+		policyScopeCmd, false /* includeSelectOnInsert */)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during

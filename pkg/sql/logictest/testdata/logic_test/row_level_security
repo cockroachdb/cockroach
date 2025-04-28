@@ -1955,6 +1955,92 @@ DROP TABLE parent;
 statement ok
 DROP USER fk_user;
 
+# Test FK propagation with RLS enabled on child table.
+subtest fk_cascade
+
+statement ok
+CREATE TABLE customers (
+    id INT PRIMARY KEY,
+    name TEXT
+);
+
+statement ok
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    customer_id INT REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+statement ok
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+
+statement ok
+INSERT INTO customers VALUES (1, 'bob');
+
+statement ok
+INSERT INTO orders VALUES (1000, 1), (1001, 1);
+
+statement ok
+CREATE USER u1;
+
+statement ok
+GRANT ALL ON orders, customers TO u1;
+
+statement ok
+SET ROLE u1;
+
+# Verify u1 cannot ready anything from orders
+query II
+SELECT id, customer_id FROM orders
+----
+
+# Update the customer ID. This should succeed and cascade to orders.
+query IT
+UPDATE customers SET id = 2 WHERE id = 1 RETURNING id, name
+----
+2 bob
+
+statement ok
+RESET ROLE
+
+query II
+SELECT id, customer_id FROM orders ORDER BY id
+----
+1000 2
+1001 2
+
+statement ok
+SET ROLE u1;
+
+# Delete the customer. This should set customer_id in orders to NULL.
+query IT
+DELETE FROM customers WHERE id = 2 RETURNING id, name
+----
+2 bob
+
+# Try to validate oders as u1, but invisible due to RLS
+query IT
+SELECT id, customer_id FROM orders ORDER BY id
+----
+
+statement ok
+RESET ROLE;
+
+# validate as the root user, should see the cascaded update
+query II
+SELECT id, customer_id FROM orders ORDER BY id
+----
+1000 NULL
+1001 NULL
+
+statement ok
+DROP TABLE orders;
+
+statement ok
+DROP TABLE customers;
+
+statement ok
+DROP USER u1;
+
 # Ensure CHECK constraints can work alongside RLS policies
 subtest check_constraint
 
