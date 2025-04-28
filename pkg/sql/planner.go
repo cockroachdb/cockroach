@@ -935,7 +935,9 @@ func (p *planner) resetPlanner(
 	p.semaCtx.Annotations = nil
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
-	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
+	p.semaCtx.UnsupportedTypeChecker = eval.ResetUnsupportedTypeChecker(
+		p.execCfg.Settings.Version, p.semaCtx.UnsupportedTypeChecker,
+	)
 	p.semaCtx.UsePre_25_2VariadicBuiltins = sd.UsePre_25_2VariadicBuiltins
 
 	p.autoCommit = false
