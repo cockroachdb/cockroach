@@ -168,6 +168,9 @@ func optInToDiagnosticsStatReporting(
 	_, err := deps.InternalExecutor.Exec(
 		ctx, "optInToDiagnosticsStatReporting", nil, /* txn */
 		`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
+	if errors.Is(err, cluster.SettingOverrideErr) {
+		return nil
+	}
 	return err
 }
 
