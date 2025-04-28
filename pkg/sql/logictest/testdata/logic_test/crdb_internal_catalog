@@ -106,7 +106,7 @@ $$;
 # unconditionally dump the entire catalog as this makes the test brittle to any
 # change anywhere in the catalog, creating a maintence burden and making it
 # unsuable in mixed versions.
-skipif config local-mixed-24.3 local-mixed-25.1
+skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
 query IT
 SELECT id, strip_volatile(descriptor) FROM crdb_internal.kv_catalog_descriptor WHERE id IN (1, 2, 3, 29, 4294966962) OR (id > 100 and id < 200) ORDER BY id
 ----
