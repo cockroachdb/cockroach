@@ -114,6 +114,7 @@ go_library(
         "exec_factory_util.go",
         "exec_log.go",
         "exec_util.go",
+        "exec_util_backup.go",
         "execute.go",
         "executor_statement_metrics.go",
         "explain_bundle.go",

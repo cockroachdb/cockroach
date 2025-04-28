@@ -106,3 +106,70 @@ format-tree
 ├───• vec1 (1, 2)
 ├───• vec2 (7, 4)
 └───• vec3 (4, 3)
+
+# ----------------------------------------------------------------------
+# Test delete vector fixup in non-default tree.
+# ----------------------------------------------------------------------
+new-index min-partition-size=2 max-partition-size=4 beam-size=2 tree=1
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (8, 11)
+vec5: (14, 1)
+vec6: (0, 0)
+----
+• 1 (0, 0)
+│
+├───• 2 (1.6667, 1.6667)
+│   │
+│   ├───• vec1 (1, 2)
+│   ├───• vec6 (0, 0)
+│   └───• vec3 (4, 3)
+│
+└───• 3 (9.6667, 5.3333)
+    │
+    ├───• vec4 (8, 11)
+    ├───• vec5 (14, 1)
+    └───• vec2 (7, 4)
+
+# Delete vector from primary index, but not from secondary index.
+delete not-found tree=1
+vec1
+----
+• 1 (0, 0)
+│
+├───• 2 (1.6667, 1.6667)
+│   │
+│   ├───• vec1 (MISSING)
+│   ├───• vec6 (0, 0)
+│   └───• vec3 (4, 3)
+│
+└───• 3 (9.6667, 5.3333)
+    │
+    ├───• vec4 (8, 11)
+    ├───• vec5 (14, 1)
+    └───• vec2 (7, 4)
+
+# Ensure deleted vector is not returned by search. This should enqueue a fixup
+# that removes the vector from the index.
+search max-results=1 tree=1
+(1, 2)
+----
+vec6: 5 (centroid=2.36)
+6 leaf vectors, 8 vectors, 6 full vectors, 3 partitions
+
+# Vector should now be gone from the index.
+format-tree tree=1
+----
+• 1 (0, 0)
+│
+├───• 2 (1.6667, 1.6667)
+│   │
+│   ├───• vec3 (4, 3)
+│   └───• vec6 (0, 0)
+│
+└───• 3 (9.6667, 5.3333)
+    │
+    ├───• vec4 (8, 11)
+    ├───• vec5 (14, 1)
+    └───• vec2 (7, 4)

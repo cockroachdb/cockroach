@@ -51,6 +51,9 @@ func (s *MutationSearcher) Init(idx *cspann.Index, txn *kv.Txn) {
 // SearchForInsert triggers a search for the partition in which to insert the
 // input vector. The partition's key is returned by PartitionKey() and the
 // input vector's quantized and encoded form is returned by EncodedVector().
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
 func (s *MutationSearcher) SearchForInsert(
 	ctx context.Context, prefix roachpb.Key, vec vector.T,
 ) error {
@@ -79,6 +82,9 @@ func (s *MutationSearcher) SearchForInsert(
 // SearchForDelete triggers a search for the partition which contains the vector
 // to be deleted, identified by its primary key. If the input vector is found,
 // its partition is returned by PartitionKey().
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
 func (s *MutationSearcher) SearchForDelete(
 	ctx context.Context, prefix roachpb.Key, vec vector.T, key cspann.KeyBytes,
 ) error {

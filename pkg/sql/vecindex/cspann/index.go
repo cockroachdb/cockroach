@@ -8,6 +8,7 @@ package cspann
 import (
 	"bytes"
 	"context"
+	"math"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -28,12 +29,32 @@ import (
 // of search results that will be reranked with the original full-size vectors.
 const RerankMultiplier = 10
 
-// DeletedMultiplier increases the number of results that will be reranked, in
+// DeletedMinCount sets a minimum number of results that will be reranked, in
 // order to account for vectors that may have been deleted in the primary index.
+const DeletedMinCount = 10
+
+// DeletedMultiplier increases the number of results that will be reranked by
+// this factor, in order to account for vectors that may have been deleted in
+// the primary index.
 const DeletedMultiplier = 1.2
 
 // MaxQualitySamples specifies the max value of the QualitySamples index option.
 const MaxQualitySamples = 32
+
+// IncreaseRerankResults returns good values for maxResults and maxExtraResults
+// that have a high probability of returning the desired number of results, even
+// when there are deleted results. Deleted results will be filtered out by the
+// rerank process, so we need to make sure there are additional results that can
+// be returned instead.
+//
+// TODO(andyk): Switch the index to use a search iterator so the caller can keep
+// requesting further results rather than guessing at how many additional
+// results might be needed.
+func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults int) {
+	maxResults = max(int(math.Ceil(float64(desiredMaxResults)*DeletedMultiplier)), DeletedMinCount)
+	maxExtraResults = desiredMaxResults * RerankMultiplier
+	return maxResults, maxExtraResults
+}
 
 // IndexOptions specifies options that control how the index will be built, as
 // well as default options for how it will be searched. A given search operation
@@ -350,6 +371,10 @@ func (vi *Index) Close() {
 // before Insert when a vector is updated. Even then, it's not guaranteed that
 // Delete will find the old vector. The search set handles this rare case by
 // filtering out results with duplicate key bytes.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Insert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) error {
@@ -393,6 +418,10 @@ func (vi *Index) Insert(
 //
 // NOTE: Even if the vector is removed, there may still be duplicate dangling
 // instances of the vector still remaining in the index.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Delete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) (deleted bool, err error) {
@@ -423,6 +452,10 @@ func (vi *Index) Delete(
 // and returns them in the search set. Set searchSet.MaxResults to limit the
 // number of results. This is called within the scope of a transaction so that
 // the index does not appear to change during the search.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) Search(
 	ctx context.Context,
 	idxCtx *Context,
@@ -440,6 +473,10 @@ func (vi *Index) Search(
 // partition, as well as the centroid of the partition (in the Vector field).
 // This is useful for callers that directly insert KV rows rather than using
 // this library to do it.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) SearchForInsert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T,
 ) (*SearchResult, error) {
@@ -471,6 +508,10 @@ func (vi *Index) SearchForInsert(
 // It returns a single search result containing the key of that partition, or
 // nil if the vector cannot be found. This is useful for callers that directly
 // delete KV rows rather than using this library to do it.
+//
+// NOTE: The caller is assumed to own the memory for all parameters and can
+// reuse the memory after the call returns.
+// TODO(andyk): This is not true of the MemStore.
 func (vi *Index) SearchForDelete(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) (*SearchResult, error) {
@@ -921,8 +962,8 @@ func (vi *Index) getFullVectors(
 			// the case of a dangling partition key.
 			if candidates[i].ChildKey.KeyBytes != nil {
 				// Vector was deleted, so add fixup to delete it.
-				vi.fixups.AddDeleteVector(
-					ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
+				vi.fixups.AddDeleteVector(ctx, idxCtx.treeKey,
+					candidates[i].ParentPartitionKey, candidates[i].ChildKey.KeyBytes)
 			}
 
 			// Move the last candidate to the current position and reduce size
@@ -1085,17 +1126,6 @@ func (vi *Index) Format(
 		return "", err
 	}
 	return buf.String(), nil
-}
-
-// ensureSliceCap returns a slice of length = 0, of the given capacity and
-// generic type. If the existing slice has enough capacity, that slice is
-// returned after setting its length to zero. Otherwise, a new, larger slice is
-// allocated.
-func ensureSliceCap[T any](s []T, c int) []T {
-	if cap(s) < c {
-		return make([]T, 0, c)
-	}
-	return s[:0]
 }
 
 // ensureSliceLen returns a slice of the given length and generic type. If the

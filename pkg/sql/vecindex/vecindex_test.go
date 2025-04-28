@@ -96,9 +96,7 @@ func TestVecIndexConcurrency(t *testing.T) {
 				insertCount.Add(uint64(count))
 
 				// Remove the first vector in the block.
-				// TODO(matt.white): Re-enable once deletion does not assert when
-				// it cannot find a vector to delete.
-				// runner.Exec(t, "DELETE FROM t WHERE id = $1", j)
+				runner.Exec(t, "DELETE FROM t WHERE id = $1", j)
 			}
 		}(i, end)
 	}
@@ -131,8 +129,7 @@ func TestVecIndexConcurrency(t *testing.T) {
 		if insertCount.Load() > 0 {
 			var id int
 			vec := vectors.At(vecOffset % vectors.Count)
-			row := runner.QueryRow(t,
-				`SELECT id FROM t ORDER BY v <-> $1 LIMIT 1`, vec.String())
+			row := runner.QueryRow(t, `SELECT id FROM t ORDER BY v <-> $1 LIMIT 1`, vec.String())
 			row.Scan(&id)
 			vecOffset++
 		}
@@ -226,9 +223,10 @@ func insertVectors(t *testing.T, runner *sqlutils.SQLRunner, startId int, vector
 		if i > 0 {
 			valuesClause.WriteString(", ")
 		}
-		valuesClause.WriteString(fmt.Sprintf("($%d, $%d)", i*2+1, i*2+2))
-		args[i*2] = startId + i
-		args[i*2+1] = vectors.At(i).String()
+		j := i * 2
+		valuesClause.WriteString(fmt.Sprintf("($%d, $%d)", j+1, j+2))
+		args[j] = startId + i
+		args[j+1] = vectors.At(i).String()
 	}
 
 	// Execute the batch insert.
