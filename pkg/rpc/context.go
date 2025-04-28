@@ -114,7 +114,7 @@ func NewServerEx(
 		if err != nil {
 			return nil, sii, err
 		}
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		grpcOpts = append(grpcOpts, grpc.Creds(newTLSCipherRestrictCred(tlsConfig)))
 	}
 
 	// These interceptors will be called in the order in which they appear, i.e.
