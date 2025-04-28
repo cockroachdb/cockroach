@@ -18,10 +18,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/IBM/go-sdk-core/v5/core"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -621,5 +623,52 @@ func GCAzure(l *logger.Logger, dryrun bool) error {
 			combinedErrors = errors.CombineErrors(combinedErrors, err)
 		}
 	}
+	return combinedErrors
+}
+
+// GCIBM iterates through the IBM Cloud accounts passed with --ibm-accounts
+// and performs GC on them.
+// The accounts specified are used to identify which IBM Cloud API key to get
+// from the environment and use for the GC process.
+// API keys are expected in the format: `IBM_<account>_APIKEY“
+func GCIBM(l *logger.Logger, dryrun bool) error {
+
+	provider := vm.Providers[ibm.ProviderName]
+	var ibmAccounts []string
+	p, ok := provider.(*ibm.Provider)
+	if ok {
+		ibmAccounts = p.GCAccounts
+	}
+
+	if len(ibmAccounts) == 0 {
+		// If no accounts were specified, then fall back to cleaning up
+		// the account specified in the env or the default account.
+		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{ibm.ProviderName}})
+		return GCClusters(l, cld, dryrun)
+	}
+
+	// Create a new provider for each account and set it in the provider map.
+	var combinedErrors error
+	for _, account := range ibmAccounts {
+
+		authenticator, err := core.GetAuthenticatorFromEnvironment(fmt.Sprintf("IBM_%s", account))
+		if err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+			continue
+		}
+
+		p, err := ibm.NewProvider(ibm.WithAuthenticator(authenticator))
+		if err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+			continue
+		}
+
+		vm.Providers[ibm.ProviderName] = p
+		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{ibm.ProviderName}})
+		if err := GCClusters(l, cld, dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+	}
+
 	return combinedErrors
 }
