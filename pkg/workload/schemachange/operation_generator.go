@@ -5115,6 +5115,10 @@ func findExistingPolicy(
 		policyExists = true
 	}
 
+	if rows.Err() != nil {
+		return nil, false, rows.Err()
+	}
+
 	return &policyWithInfo, policyExists, nil
 }
 
@@ -5236,7 +5240,7 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 			usesDummyRole = true
 		}
 
-		sqlStatement.WriteString(fmt.Sprintf(" TO %s", roles))
+		sqlStatement.WriteString(fmt.Sprintf(" TO %s", lexbase.EscapeSQLIdent(roles)))
 	default: // USING and/or WITH CHECK expressions
 		// For case 2 and 3, we generate USING, WITH CHECK, or both
 		includeUsing = alterType == 2 || og.randIntn(2) == 0
@@ -5278,9 +5282,8 @@ func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.sql = sqlStatement.String()
 
 	opStmt.expectedExecErrors.addAll(codesWithConditions{
-		{code: pgcode.UndefinedObject, condition: !policyExists},
+		{code: pgcode.UndefinedObject, condition: !policyExists || usesDummyRole},
 		{code: pgcode.UndefinedTable, condition: !tableExists},
-		{code: pgcode.UndefinedObject, condition: usesDummyRole},
 	})
 
 	return opStmt, nil
