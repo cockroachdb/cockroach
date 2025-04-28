@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // defaultTaskLimit is the maximum number of asynchronous tasks that may be
@@ -902,23 +903,16 @@ type ResolveOptions struct {
 	MinTimestamp hlc.Timestamp
 	// AdmissionHeader of the caller.
 	AdmissionHeader kvpb.AdmissionHeader
-	// If set, instructs the IntentResolver to send the intent resolution requests
-	// immediately, instead of adding them to a batch and waiting for that batch
-	// to fill up with other intent resolution requests. This can be used to avoid
-	// any batching-induced latency, and should be used only by foreground traffic
-	// that is willing to trade off some throughput for lower latency.
+	// If set, instructs the IntentResolver to send a single intent resolution
+	// request immediately, instead of adding it to a batch and waiting for that
+	// batch to fill up with other intent resolution requests. This can be used to
+	// avoid any batching-induced latency, and should be used only by foreground
+	// traffic that is willing to trade off some throughput for lower latency.
 	//
-	// In addition to disabling batching, the option will also disable key count
-	// and byte size pagination. All requests will be sent in the same batch
-	// (subject to splitting on range boundaries) and no MaxSpanRequestKeys or
-	// TargetBytes limits will be assigned to limit the number or size of intents
-	// resolved by multi-point or ranged intent resolution. Users of the flag
-	// should be conscious of this.
-	//
-	// Because of these limitations, the flag is kept internal to this package. If
+	// Because of this limitations, the flag is kept internal to this package. If
 	// we want to expose the flag and use it in more cases, we will first need to
 	// support key count and byte size pagination when bypassing the batcher.
-	sendImmediately bool
+	sendOneImmediately bool
 }
 
 // lookupRangeID maps a key to a RangeID for best effort batching of intent
@@ -1003,8 +997,8 @@ func (ir *IntentResolver) ResolveIntent(
 		//
 		// We don't set this flag when resolving a range of keys or when resolving
 		// multiple point intents (in ResolveIntents) due to the limitations around
-		// pagination described in the comment on ResolveOptions.sendImmediately.
-		opts.sendImmediately = true
+		// pagination described in the comment on ResolveOptions.sendOneImmediately.
+		opts.sendOneImmediately = true
 	}
 	return ir.resolveIntents(ctx, (*singleLockUpdate)(&intent), opts)
 }
@@ -1016,7 +1010,7 @@ func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
 ) (pErr *kvpb.Error) {
 	// TODO(nvanbenschoten): unlike IntentResolver.ResolveIntent, we don't set
-	// sendImmediately on the ResolveOptions here. This is because we don't
+	// sendOneImmediately on the ResolveOptions here. This is because we don't
 	// support pagination when sending intent resolution immediately and not
 	// through the batcher. If this becomes important, we'll need to lift this
 	// limitation.
@@ -1062,15 +1056,40 @@ func (ir *IntentResolver) resolveIntents(
 			"test-only warning: if you see this, please report to https://github.com/cockroachdb/cockroach/issues/112680. empty admission header provided by %s", debugutil.Stack())
 	}
 	// Send the requests ...
-	if opts.sendImmediately {
-		bypassAdmission := sendImmediatelyBypassAdmissionControl.Get(&ir.settings.SV)
+	if opts.sendOneImmediately {
+		// Invariant: sendOneImmediately implies only a single request. If this
+		// assumption ever changes, the tenant ID extraction logic below should be
+		// revisited.
+		if sz := len(reqs); sz != 1 {
+			panic(redact.Sprintf("sendOneImmediately invoked with with %d requests; expected 1", sz))
+		}
+		req := reqs[0]
+
+		bypassAdmission := sendOneImmediatelyBypassAdmissionControl.Get(&ir.settings.SV)
 		if bypassAdmission {
 			h = kv.AdmissionHeaderForBypass(h)
 		}
 		// ... using a single batch.
 		b := &kv.Batch{}
 		b.AdmissionHeader = h
-		b.AddRawRequest(reqs...)
+		b.AddRawRequest(req)
+
+		// Set the tenant ID for this request on the client context. This ensures
+		// proper resource accounting for intent resolution.
+		// NOTE: The tenant ID is set here directly as the request is sent out
+		// inline, rather than having it set via the RequestBatcher, which is done
+		// for all requests that are NOT made in "immediate mode". Duplication of
+		// the tenant ID extraction logic is incurred here, rather than sacrifice
+		// performance.
+		_, tenID, err := keys.DecodeTenantPrefix(req.Header().Key)
+		if err != nil {
+			return kvpb.NewError(err)
+		}
+		if !tenID.IsSet() {
+			tenID = roachpb.SystemTenantID
+		}
+		ctx = roachpb.ContextWithClientTenant(ctx, tenID)
+
 		if err := ir.db.Run(ctx, b); err != nil {
 			return b.MustPErr()
 		}

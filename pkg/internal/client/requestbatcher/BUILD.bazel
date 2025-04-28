@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher",
     visibility = ["//pkg:__subpackages__"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
@@ -22,6 +23,7 @@ go_test(
     srcs = ["batcher_test.go"],
     embed = [":requestbatcher"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/testutils",

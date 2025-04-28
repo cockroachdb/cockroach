@@ -146,14 +146,13 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 // resolve using priority +10 and will acquire subsequent intents with
 // priority +10.
 
-// sendImmediatelyBypassAdmissionControl sets the admission control behavior
-// for the less commonly used sendImmediately option. Since that option is
-// used when a waiter on the lock table is trying to resolve one intent, and
-// the waiter has already been admitted, the default is to bypass admission
-// control.
-var sendImmediatelyBypassAdmissionControl = settings.RegisterBoolSetting(
+// sendOneImmediatelyBypassAdmissionControl sets the admission control behavior
+// for the less commonly used sendOneImmediately option. Since that option is
+// used when a waiter on the lock table is trying to resolve one intent, and the
+// waiter has already been admitted, the default is to bypass admission control.
+var sendOneImmediatelyBypassAdmissionControl = settings.RegisterBoolSetting(
 	settings.SystemOnly, "kv.intent_resolver.send_immediately.bypass_admission_control.enabled",
-	"determines whether the sendImmediately option on intent resolution bypasses admission control",
+	"determines whether the sendOneImmediately option on intent resolution bypasses admission control",
 	true)
 
 // batchBypassAdmissionControl sets the admission control behavior for the
