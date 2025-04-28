@@ -8,7 +8,7 @@ package kvserver
 import (
 	"context"
 
-	"github.com/RaduBerinde/btree" // TODO(#144504): switch to the newer btree
+	"github.com/RaduBerinde/btreemap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
@@ -30,26 +30,51 @@ const (
 // Exactly one of these two fields is set. The zero replicaOrPlaceholder represents no
 // value.
 type replicaOrPlaceholder struct {
-	item rangeKeyItem
 	repl *Replica
 	ph   *ReplicaPlaceholder
 }
 
-func (it *replicaOrPlaceholder) Desc() *roachpb.RangeDescriptor {
+func (it replicaOrPlaceholder) Desc() *roachpb.RangeDescriptor {
 	if it.repl != nil {
 		return it.repl.Desc()
 	}
 	return it.ph.Desc()
 }
 
+// isEmpty returns true if the replicaOrPlacholder is empty.
+func (it replicaOrPlaceholder) isEmpty() bool {
+	return it.repl == nil && it.ph == nil
+}
+
+func (it replicaOrPlaceholder) item() interface{} {
+	if it.repl != nil {
+		return it.repl
+	}
+	if it.ph != nil {
+		return it.ph
+	}
+	return nil
+}
+
+func (it replicaOrPlaceholder) key() roachpb.RKey {
+	if it.repl != nil {
+		return it.repl.startKey
+	}
+	if it.ph != nil {
+		return it.ph.Desc().StartKey
+	}
+	return nil
+}
+
 // storeReplicaBTree is a wrapper around a Btree specialized for use as
 // a Store's replicasByKey btree. Please use only the "exported" (upper-case)
 // methods; everything else should be considered internal and only for use
 // from within storeReplicaBTree.
-type storeReplicaBTree btree.BTree
+type storeReplicaBTree btreemap.BTreeMap[roachpb.RKey, replicaOrPlaceholder]
 
 func newStoreReplicaBTree() *storeReplicaBTree {
-	return (*storeReplicaBTree)(btree.New(64 /* degree */))
+	m := btreemap.New[roachpb.RKey, replicaOrPlaceholder](64 /* degree */, roachpb.RKey.Compare)
+	return (*storeReplicaBTree)(m)
 }
 
 // LookupReplica returns the *Replica containing the specified key,
@@ -121,32 +146,30 @@ func (b *storeReplicaBTree) VisitKeyRange(
 	}
 	// Align startKey on a range start. Otherwise the ascendRange below would skip
 	// startKey's range.
-	b.mustDescendLessOrEqual(ctx, startKey,
-		func(_ context.Context, it replicaOrPlaceholder) error {
-			desc := it.Desc()
-			if startKey.Less(desc.EndKey) {
-				// We are in the situation below, and want to
-				// use desc.StartKey instead of startKey going
-				// forward.
-				//
-				//
-				//  desc.StartKey   startKey     desc.EndKey
-				//      |                |           |
-				//      v                v           v
-				//  ----:----------------:-----------:--
-				startKey = it.item.key()
-			} else {
-				// The previous range does not actually overlap
-				// start key, so we hold on to our original startKey.
-				//
-				//  desc.StartKey   desc.EndKey startKey
-				//      |                |           |
-				//      v                v           v
-				//  ----:----------------:-----------:--
-				_ = startKey
-			}
-			return iterutil.StopIteration()
-		})
+	for k, r := range b.bt().Descend(btreemap.LE(startKey), btreemap.Min[roachpb.RKey]()) {
+		desc := r.Desc()
+		if startKey.Less(desc.EndKey) {
+			// We are in the situation below, and want to
+			// use desc.StartKey instead of startKey going
+			// forward.
+			//
+			//
+			//  desc.StartKey   startKey     desc.EndKey
+			//      |                |           |
+			//      v                v           v
+			//  ----:----------------:-----------:--
+			startKey = k
+		} else {
+			// The previous range does not actually overlap
+			// start key, so we hold on to our original startKey.
+			//
+			//  desc.StartKey   desc.EndKey startKey
+			//      |                |           |
+			//      v                v           v
+			//  ----:----------------:-----------:--
+		}
+		break
+	}
 
 	// Iterate through overlapping replicas.
 	if order == AscendingKeyOrder {
@@ -155,26 +178,25 @@ func (b *storeReplicaBTree) VisitKeyRange(
 
 	// Note that we can't use DescendRange() because it treats the lower end as
 	// exclusive and the high end as inclusive.
-	return b.descendLessOrEqual(ctx, endKey,
-		func(ctx context.Context, it replicaOrPlaceholder) error {
-			if it.item.key().Equal(endKey) {
-				// Skip the range starting at endKey.
-				return nil
-			}
-			desc := it.Desc()
 
-			if desc.EndKey.Compare(startKey) <= 0 {
-				// Stop when we hit a range below startKey.
-				return iterutil.StopIteration()
-			}
-			return visitor(ctx, it)
-		})
+	for _, r := range b.bt().Descend(btreemap.LT(endKey), btreemap.Min[roachpb.RKey]()) {
+		desc := r.Desc()
+		if desc.EndKey.Compare(startKey) <= 0 {
+			// Stop when we hit a range below startKey.
+			return nil
+		}
+		if err := visitor(ctx, r); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 // DeleteReplica deletes a *Replica from the btree, returning it as an replicaOrPlaceholder if
 // found.
 func (b *storeReplicaBTree) DeleteReplica(ctx context.Context, repl *Replica) replicaOrPlaceholder {
-	return itemToReplicaOrPlaceholder(b.bt().Delete((*btreeReplica)(repl)))
+	_, r, _ := b.bt().Delete(repl.startKey)
+	return r
 }
 
 // DeletePlaceholder deletes a *ReplicaPlaceholder from the btree, returning it as
@@ -182,7 +204,8 @@ func (b *storeReplicaBTree) DeleteReplica(ctx context.Context, repl *Replica) re
 func (b *storeReplicaBTree) DeletePlaceholder(
 	ctx context.Context, ph *ReplicaPlaceholder,
 ) replicaOrPlaceholder {
-	return itemToReplicaOrPlaceholder(b.bt().Delete(ph))
+	_, r, _ := b.bt().Delete(ph.Desc().StartKey)
+	return r
 }
 
 // ReplaceOrInsertReplica inserts a *Replica into the btree. If it replaces an
@@ -190,15 +213,17 @@ func (b *storeReplicaBTree) DeletePlaceholder(
 func (b *storeReplicaBTree) ReplaceOrInsertReplica(
 	ctx context.Context, repl *Replica,
 ) replicaOrPlaceholder {
-	return itemToReplicaOrPlaceholder(b.bt().ReplaceOrInsert((*btreeReplica)(repl)))
+	_, r, _ := b.bt().ReplaceOrInsert(repl.startKey, replicaOrPlaceholder{repl: repl})
+	return r
 }
 
-// ReplaceOrInsertReplica inserts a *ReplicaPlaceholder into the btree. If it
-// replaces an existing element, that element is returned.
+// ReplaceOrInsertPlaceholder inserts a *ReplicaPlaceholder into the btree. If
+// it replaces an existing element, that element is returned.
 func (b *storeReplicaBTree) ReplaceOrInsertPlaceholder(
 	ctx context.Context, ph *ReplicaPlaceholder,
 ) replicaOrPlaceholder {
-	return itemToReplicaOrPlaceholder(b.bt().ReplaceOrInsert(ph))
+	_, r, _ := b.bt().ReplaceOrInsert(ph.Desc().StartKey, replicaOrPlaceholder{ph: ph})
+	return r
 }
 
 func (b *storeReplicaBTree) mustDescendLessOrEqual(
@@ -216,12 +241,12 @@ func (b *storeReplicaBTree) descendLessOrEqual(
 	startKey roachpb.RKey,
 	visitor func(context.Context, replicaOrPlaceholder) error,
 ) error {
-	var err error
-	b.bt().DescendLessOrEqual(rangeBTreeKey(startKey), func(it btree.Item) (more bool) {
-		err = visitor(ctx, itemToReplicaOrPlaceholder(it))
-		return err == nil // more?
-	})
-	return iterutil.Map(err)
+	for _, r := range b.bt().Descend(btreemap.LE(startKey), btreemap.Min[roachpb.RKey]()) {
+		if err := visitor(ctx, r); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 func (b *storeReplicaBTree) ascendRange(
@@ -229,82 +254,32 @@ func (b *storeReplicaBTree) ascendRange(
 	startKey, endKey roachpb.RKey,
 	visitor func(context.Context, replicaOrPlaceholder) error,
 ) error {
-	var err error
-	b.bt().AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey), func(it btree.Item) (more bool) {
-		err = visitor(ctx, itemToReplicaOrPlaceholder(it))
-		return err == nil // more
-	})
-	return iterutil.Map(err)
+	for _, r := range b.bt().Ascend(btreemap.GE(startKey), btreemap.LT(endKey)) {
+		if err := visitor(ctx, r); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
-func (b *storeReplicaBTree) bt() *btree.BTree {
-	return (*btree.BTree)(b)
+func (b *storeReplicaBTree) bt() *btreemap.BTreeMap[roachpb.RKey, replicaOrPlaceholder] {
+	return (*btreemap.BTreeMap[roachpb.RKey, replicaOrPlaceholder])(b)
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (b *storeReplicaBTree) SafeFormat(w redact.SafePrinter, _ rune) {
 	var i int
-	b.bt().Ascend(func(bi btree.Item) (more bool) {
+	for _, r := range b.bt().Ascend(btreemap.Min[roachpb.RKey](), btreemap.Max[roachpb.RKey]()) {
 		if i > -1 {
 			w.SafeString("\n")
 		}
-		it := itemToReplicaOrPlaceholder(bi)
-		desc := it.Desc()
+		desc := r.Desc()
 		w.Printf("%v - %v (%s - %s)", []byte(desc.StartKey), []byte(desc.EndKey), desc.StartKey, desc.EndKey)
 		i++
-		return true
-	})
+	}
 }
 
 // String implements fmt.Stringer.
 func (b *storeReplicaBTree) String() string {
 	return redact.StringWithoutMarkers(b)
-}
-
-// rangeKeyItem is a common interface for *btreeReplica (*Replica),
-// *ReplicaPlaceholder, and rangeBTreeKey (roachpb.RKey).
-type rangeKeyItem interface {
-	key() roachpb.RKey
-}
-
-// rangeBTreeKey is a type alias of roachpb.RKey that implements the
-// rangeKeyItem interface and the btree.Item interface.
-type rangeBTreeKey roachpb.RKey
-
-var _ rangeKeyItem = rangeBTreeKey{}
-
-func (k rangeBTreeKey) key() roachpb.RKey {
-	return (roachpb.RKey)(k)
-}
-
-var _ btree.Item = rangeBTreeKey{}
-
-func (k rangeBTreeKey) Less(i btree.Item) bool {
-	return k.key().Less(i.(rangeKeyItem).key())
-}
-
-type btreeReplica Replica
-
-func (r *btreeReplica) key() roachpb.RKey {
-	return r.startKey
-}
-
-func (r *btreeReplica) Less(i btree.Item) bool {
-	return r.key().Less(i.(rangeKeyItem).key())
-}
-
-func itemToReplicaOrPlaceholder(it btree.Item) replicaOrPlaceholder {
-	if it == nil {
-		return replicaOrPlaceholder{}
-	}
-	vit := replicaOrPlaceholder{
-		item: it.(rangeKeyItem),
-	}
-	switch t := it.(type) {
-	case *btreeReplica:
-		vit.repl = (*Replica)(t)
-	case *ReplicaPlaceholder:
-		vit.ph = t
-	}
-	return vit
 }

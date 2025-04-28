@@ -42,7 +42,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "@com_github_raduberinde_btree//:btree",
+        "@com_github_google_btree//:btree",
         "@org_golang_google_protobuf//proto",
     ],
 )
