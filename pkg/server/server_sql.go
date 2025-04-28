@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -1563,11 +1564,15 @@ func (s *SQLServer) preStart(
 		stopper.ShouldQuiesce(),
 		"sql create node instance row",
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
+			updatedLocalityAddresses, err := updateLocalityAddressesForSharedSecondaryTenants(s.distSQLServer.LocalityAddresses, s.cfg.AdvertiseAddr)
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
 			if hasNodeID {
 				// Write/acquire our instance row.
-				return s.sqlInstanceStorage.CreateNodeInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), nodeID, s.distSQLServer.LocalityAddresses)
+				return s.sqlInstanceStorage.CreateNodeInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), nodeID, updatedLocalityAddresses)
 			}
-			return s.sqlInstanceStorage.CreateInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), s.distSQLServer.LocalityAddresses)
+			return s.sqlInstanceStorage.CreateInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), updatedLocalityAddresses)
 		})
 	if err != nil {
 		return err
@@ -1768,6 +1773,34 @@ func (s *SQLServer) preStart(
 	}
 
 	return nil
+}
+
+// updateLocalityAddressesForSharedSecondaryTenants updates the locality addresses of this sql instance
+// if the instance is a shared secondary tenant. We update the port part of each address to that of the
+// advertised address as this will be stored in the sql_instances table and will be consulted by the
+// sqlInstanceDialer when attempting to dial this sql instance.
+func updateLocalityAddressesForSharedSecondaryTenants(
+	localityAddresses []roachpb.LocalityAddress, advertiseAddr string,
+) ([]roachpb.LocalityAddress, error) {
+	// Extract port from advertise address.
+	_, portStr, err := net.SplitHostPort(advertiseAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract port from advertise address %q: %w", advertiseAddr, err)
+	}
+
+	updatedLocalityAddresses := make([]roachpb.LocalityAddress, len(localityAddresses))
+	// Loop over the slice and update the port in a copy.
+	for i, locAddr := range localityAddresses {
+		host, _, err := net.SplitHostPort(locAddr.Address.AddressField)
+		if err != nil {
+			return nil, fmt.Errorf("failed to split locality address %q: %w", locAddr.Address.AddressField, err)
+		}
+		newAddr := net.JoinHostPort(host, portStr)
+		// Copy the locality address and update the AddressField.
+		updatedLocalityAddresses[i] = locAddr
+		updatedLocalityAddresses[i].Address.AddressField = newAddr
+	}
+	return updatedLocalityAddresses, nil
 }
 
 func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKnobs) {
