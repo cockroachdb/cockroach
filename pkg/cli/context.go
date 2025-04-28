@@ -492,6 +492,7 @@ var startCtx struct {
 	serverListenAddr       string
 	serverRootCertDN       string
 	serverNodeCertDN       string
+	serverTLSCipherSuites  []string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
