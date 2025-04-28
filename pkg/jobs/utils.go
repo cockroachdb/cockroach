@@ -12,17 +12,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
+
+var testingAvoidFullScans = metamorphic.ConstantWithTestBool(
+	"jobs.avoid_full_scans_in_find_running_jobs",
+	false, /* defaultValue */
+)
+
+var avoidFullScans = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"jobs.avoid_full_scans_in_find_running_jobs.enabled",
+	"when true, enables hints to avoid full scans for internal, jobs-related queries",
+	testingAvoidFullScans)
 
 // RunningJobExists checks that whether there are any job of the given types
 // in the pending, running, or paused status, optionally ignoring the job with
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
 func RunningJobExists(
-	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
+	ctx context.Context,
+	cs *cluster.Settings,
+	ignoreJobID jobspb.JobID,
+	txn isql.Txn,
+	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
 	var typeStrs string
 	switch len(jobTypes) {
@@ -42,22 +60,21 @@ func RunningJobExists(
 		typeStrs = s.String()
 	}
 
-	orderBy := " ORDER BY created"
+	orderBy := "ORDER BY created"
 	if ignoreJobID == jobspb.InvalidJobID {
 		// There is no need to order by the created column if there is no job to
 		// ignore.
 		orderBy = ""
 	}
 
-	stmt := `
-SELECT
-  id
-FROM
-  system.jobs@jobs_status_created_idx
-WHERE
-	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + orderBy + `
-LIMIT 1`
+	hint := "jobs_status_created_idx"
+	if avoidFullScans.Get(&cs.SV) {
+		hint = "{FORCE_INDEX=jobs_status_created_idx,AVOID_FULL_SCAN}"
+	}
+
+	q := `SELECT id FROM system.jobs@%s WHERE job_type IN %s AND status IN %s %s LIMIT 1`
+	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStatusTupleString, orderBy)
+
 	it, err := txn.QueryIterator(
 		ctx,
 		"find-running-jobs-of-type",
