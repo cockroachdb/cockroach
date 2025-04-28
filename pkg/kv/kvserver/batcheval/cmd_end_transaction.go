@@ -1339,6 +1339,25 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
+	// Copy the last consistency checker run timestamp from the LHS to the RHS.
+	// This avoids running the consistency checker on the RHS immediately after
+	// the split.
+	lastTS := hlc.Timestamp{}
+	if _, err := storage.MVCCGetProto(ctx, batch,
+		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
+		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to fetch the last consistency checker run for LHS")
+	}
+
+	if err := storage.MVCCPutProto(ctx, batch,
+		keys.QueueLastProcessedKey(split.RightDesc.StartKey, "consistencyChecker"),
+		hlc.Timestamp{}, &lastTS,
+		storage.MVCCWriteOptions{Stats: h.AbsPostSplitRight(), Category: fs.BatchEvalReadCategory}); err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to copy the last consistency checker run to RHS")
+	}
+
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The

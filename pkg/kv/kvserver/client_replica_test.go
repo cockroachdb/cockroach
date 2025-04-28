@@ -2506,6 +2506,141 @@ func TestRemoveLeaseholder(t *testing.T) {
 	require.NotEqual(t, tc.Target(0), leaseHolder)
 }
 
+// TestConsistencyQueueDelaysProcessingNewRanges verifies that the consistency
+// queue delays processing of new ranges.
+func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// checkConsistency runs a consistency check on the specified key range and
+	// verifies that all ranges are consistent. Useful to verify that we don't
+	// break the consistency after splits/merges.
+	checkConsistency := func() error {
+		req := kvpb.CheckConsistencyRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    roachpb.Key("a"),
+				EndKey: roachpb.Key("z"),
+			},
+			Mode: kvpb.ChecksumMode_CHECK_FULL,
+		}
+
+		b := kv.Batch{}
+		b.AddRawRequest(&req)
+		err := s.DB().Run(ctx, &b)
+		require.NoError(t, err)
+
+		if len(b.RawResponse().Responses) == 0 {
+			return errors.Errorf("received 0 responses")
+		}
+
+		constResp := b.RawResponse().Responses[0].GetInner().(*kvpb.CheckConsistencyResponse)
+		for i := range len(b.RawResponse().Responses) {
+			if constResp.Result[i].Status != kvpb.CheckConsistencyResponse_RANGE_CONSISTENT &&
+				constResp.Result[i].Status !=
+					kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED {
+				return errors.Errorf("expected range to be consistent, but found: %+v", constResp.Result[i])
+			}
+		}
+		return nil
+	}
+
+	// splitHelper helps create splits for TestServerInterface.
+	splitHelper := func(key roachpb.Key) error {
+		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
+		h := kvpb.Header{RangeID: rngID}
+		args := adminSplitArgs(key)
+		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	}
+
+	// splitHelper helps create merges for TestServerInterface.
+	mergeHelper := func(key roachpb.Key) error {
+		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
+		h := kvpb.Header{RangeID: rngID}
+		args := adminMergeArgs(key)
+		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	}
+
+	keyA := roachpb.Key("a")
+	require.NoError(t, splitHelper(keyA))
+	_, replA := getFirstStoreReplica(t, s, keyA)
+	lastConsistencyTSReplA, err := replA.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+
+	// Assert that the last consistency check was set to a recent timestamp.
+	require.LessOrEqual(t, timeutil.Since(lastConsistencyTSReplA.GoTime()), time.Minute)
+
+	// Assert that the range is consistent.
+	require.NoError(t, checkConsistency())
+
+	// Assert that splitting the range copied the last consistency check timestamp
+	// from the LHS to the RHS.
+	keyB := roachpb.Key("b")
+	require.NoError(t, splitHelper(keyB))
+	_, replB := getFirstStoreReplica(t, s, keyB)
+	lastConsistencyTSReplB, err := replB.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+	require.Equal(t, lastConsistencyTSReplA, lastConsistencyTSReplB)
+
+	// Assert that ranges are still consistent.
+	require.NoError(t, checkConsistency())
+
+	// isEligibleForConsistencyQueue returns true if the range is eligible for the consistency queue.
+	isEligibleForConsistencyQueue := func(
+		ctx context.Context, manualClock *hlc.HybridManualClock, desc *roachpb.RangeDescriptor,
+	) bool {
+		getQueueLastProcessed := func(ctx context.Context) (hlc.Timestamp, error) {
+			_, repl := getFirstStoreReplica(t, s, roachpb.Key(desc.StartKey))
+			lastConsistencyTSRepl, err := repl.GetQueueLastProcessed(ctx, "consistencyChecker")
+			require.NoError(t, err)
+			return lastConsistencyTSRepl, nil
+		}
+
+		isNodeAvailable := func(nodeID roachpb.NodeID) bool {
+			return true
+		}
+
+		shouldQ, _ := kvserver.ConsistencyQueueShouldQueue(
+			ctx, hlc.ClockTimestamp{WallTime: manualClock.Now().UnixNano()}, desc, getQueueLastProcessed,
+			isNodeAvailable, false, 24*time.Hour)
+		return shouldQ
+	}
+
+	// Assert that the ranges are not eligible for the consistency queue.
+	manualClock := hlc.NewHybridManualClock()
+	lhsDesc := store.LookupReplica(roachpb.RKey(keyA)).Desc()
+	rhsDesc := store.LookupReplica(roachpb.RKey(keyB)).Desc()
+	require.False(t, isEligibleForConsistencyQueue(context.Background(), manualClock, lhsDesc))
+	require.False(t, isEligibleForConsistencyQueue(context.Background(), manualClock, rhsDesc))
+
+	// Advance the clock to simulate enough time passing to make the ranges
+	// eligible for the consistency queue.
+	manualClock.Increment(24 * time.Hour.Nanoseconds())
+	require.True(t, isEligibleForConsistencyQueue(context.Background(), manualClock, lhsDesc))
+	require.True(t, isEligibleForConsistencyQueue(context.Background(), manualClock, rhsDesc))
+
+	// Merge the two ranges together, and make sure that the last consistency check remains the same.
+	require.NoError(t, mergeHelper(keyA))
+	_, replMerged := getFirstStoreReplica(t, s, keyA)
+	lastConsistencyTSMergedRepl, err := replMerged.GetQueueLastProcessed(ctx, "consistencyChecker")
+	require.NoError(t, err)
+	require.Equal(t, lastConsistencyTSReplA, lastConsistencyTSMergedRepl)
+
+	// Assert that ranges are still consistent.
+	require.NoError(t, checkConsistency())
+}
+
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
