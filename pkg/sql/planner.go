@@ -930,12 +930,15 @@ func (p *planner) resetPlanner(
 
 	p.cancelChecker.Reset(ctx)
 
+	utc := p.semaCtx.UnsupportedTypeChecker
 	p.semaCtx = tree.MakeSemaContext(p)
 	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
-	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
+	p.semaCtx.UnsupportedTypeChecker = eval.ResetUnsupportedTypeChecker(
+		p.execCfg.Settings.Version, utc,
+	)
 	p.semaCtx.UsePre_25_2VariadicBuiltins = sd.UsePre_25_2VariadicBuiltins
 
 	p.autoCommit = false
