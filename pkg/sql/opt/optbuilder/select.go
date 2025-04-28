@@ -771,7 +771,8 @@ func (b *Builder) buildScan(
 	}
 
 	// Apply any filters required to enforce RLS policies. This must be done
-	// after projecting out virtual columns, in case any policies reference them.
+	// after adding projections for virtual columns, in case any policies
+	// reference them.
 	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
 
 	if b.trackSchemaDeps {
