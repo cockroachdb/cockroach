@@ -62,6 +62,8 @@ type OverridesInformer interface {
 	IsOverridden(settingKey settings.InternalKey) bool
 }
 
+var SettingOverrideErr = errors.New("cluster setting is overridden by system virtual cluster")
+
 // TelemetryOptOut controls whether to opt out of telemetry (including Sentry) or not.
 var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
