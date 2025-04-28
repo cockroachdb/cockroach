@@ -516,9 +516,6 @@ func (r *Replica) applySnapshot(
 	}
 	clearedSpans := inSnap.clearedSpans
 
-	// Update Raft entries.
-	r.store.raftEntryCache.Drop(r.RangeID)
-
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
@@ -540,36 +537,29 @@ func (r *Replica) applySnapshot(
 	}
 
 	prepInput := prepareSnapshotInput{
-		ctx:        ctx,
-		id:         r.ID(),
-		st:         r.ClusterSettings(),
-		truncState: truncState,
-		hs:         hs,
-		logSL:      &r.raftMu.stateLoader.StateLoader,
-		writeSST:   inSnap.SSTStorageScratch.WriteSST,
+		ctx:                   ctx,
+		id:                    r.ID(),
+		st:                    r.ClusterSettings(),
+		truncState:            truncState,
+		hs:                    hs,
+		logSL:                 &r.raftMu.stateLoader.StateLoader,
+		writeSST:              inSnap.SSTStorageScratch.WriteSST,
+		desc:                  desc,
+		subsumedDescs:         subsumedDescs,
+		todoEng:               r.store.TODOEngine(),
+		subsumedNextReplicaID: mergedTombstoneReplicaID,
 	}
+
 	prepResult, err := prepareSnapshot(prepInput)
 	if err != nil {
 		return err
 	}
 	clearedSpans = append(clearedSpans, prepResult.clearedSpan)
+	clearedSpans = append(clearedSpans, prepResult.clearedSubsumedSpans...)
 
-	// If we're subsuming a replica below, we don't have its last NextReplicaID,
-	// nor can we obtain it. That's OK: we can just be conservative and use the
-	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
-	// tombstone using this maximum possible replica ID, which would normally be
-	// problematic, as it would prevent this store from ever having a new replica
-	// of the removed range. In this case, however, it's copacetic, as subsumed
-	// ranges _can't_ have new replicas.
-	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
-		// TODO(sep-raft-log): needs access to both engines.
-		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
-		desc, subsumedDescs, mergedTombstoneReplicaID,
-	)
-	if err != nil {
-		return err
-	}
-	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
+	// Update Raft entries.
+	r.store.raftEntryCache.Drop(r.RangeID)
+
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
