@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -890,11 +889,8 @@ func ValidateEndTimeAndTruncate(
 	includeCompacted bool,
 ) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	if !includeCompacted {
-		mainBackupManifests = util.Filter(
-			mainBackupManifests,
-			func(manifest backuppb.BackupManifest) bool {
-				return !manifest.IsCompacted
-			},
+		defaultURIs, mainBackupManifests, localityInfo = skipCompactedBackups(
+			defaultURIs, mainBackupManifests, localityInfo,
 		)
 	}
 
@@ -963,6 +959,25 @@ func ValidateEndTimeAndTruncate(
 	return nil, nil, nil, errors.Errorf(
 		"invalid RESTORE timestamp: supplied backups do not cover requested time",
 	)
+}
+
+// skipCompactedBackups removes any compacted backups from the list of
+// backups and returns the updated list of URIs, manifests, and locality info.
+//
+// NOTE: This function modifies the underlying memory of the slices passed in.
+func skipCompactedBackups(
+	defaultURIs []string,
+	manifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+) ([]string, []backuppb.BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo) {
+	for i := len(manifests) - 1; i >= 0; i-- {
+		if manifests[i].IsCompacted {
+			defaultURIs = slices.Delete(defaultURIs, i, i+1)
+			manifests = slices.Delete(manifests, i, i+1)
+			localityInfo = slices.Delete(localityInfo, i, i+1)
+		}
+	}
+	return defaultURIs, manifests, localityInfo
 }
 
 // validateContinuity checks that the backups are continuous.
