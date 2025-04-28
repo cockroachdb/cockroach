@@ -157,7 +157,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
 		s.mu.Unlock()
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
+		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item())
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -202,7 +202,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(ctx, ph); it.repl != rep {
 			// We already checked that our replica was present in replicasByKey
 			// above. Nothing should have been able to change that.
-			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item)
+			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, it.item())
 		}
 		if exPH, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
 			log.Fatalf(ctx, "cannot insert placeholder %s, already have %s", ph, exPH)
@@ -218,8 +218,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 		s.mu.replicasByKey.DeletePlaceholder(ctx, ph)
 		delete(s.mu.replicaPlaceholders, desc.RangeID)
-		if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil && it.item != ph {
-			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, it.item)
+		if it := s.getOverlappingKeyRangeLocked(desc); !it.isEmpty() && it.item() != ph {
+			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, it.item())
 		}
 		return nil
 	}()
@@ -400,8 +400,8 @@ func (s *Store) removePlaceholderLocked(
 		return false, errors.AssertionFailedf("placeholder %+v not found, got %+v", placeholder, it)
 	}
 	delete(s.mu.replicaPlaceholders, rngID)
-	if it := s.getOverlappingKeyRangeLocked(&placeholder.rangeDesc); it.item != nil {
-		return false, errors.AssertionFailedf("corrupted replicasByKey map: %+v and %+v overlapped", it.ph, it.item)
+	if it := s.getOverlappingKeyRangeLocked(&placeholder.rangeDesc); !it.isEmpty() {
+		return false, errors.AssertionFailedf("corrupted replicasByKey map: %+v and %+v overlapped", it.ph, it.item())
 	}
 	switch typ {
 	case removePlaceholderDropped:

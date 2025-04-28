@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RaduBerinde/btreemap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 func makeAmbCtx() log.AmbientContext {
@@ -31,16 +31,15 @@ func makeAmbCtx() log.AmbientContext {
 // Test implementation of a range set backed by btree.BTree.
 type testRangeSet struct {
 	syncutil.Mutex
-	replicasByKey *btree.BTreeG[*Replica]
+	replicasByKey *btreemap.BTreeMap[roachpb.RKey, *Replica]
 	visited       int
 }
 
 // newTestRangeSet creates a new range set that has the count number of ranges.
 func newTestRangeSet(count int, t *testing.T) *testRangeSet {
-	lessFn := func(a, b *Replica) bool {
-		return a.startKey.Less(b.startKey)
+	rs := &testRangeSet{
+		replicasByKey: btreemap.New[roachpb.RKey, *Replica](64 /* degree */, roachpb.RKey.Compare),
 	}
-	rs := &testRangeSet{replicasByKey: btree.NewG[*Replica](64 /* degree */, lessFn)}
 	for i := 0; i < count; i++ {
 		desc := &roachpb.RangeDescriptor{
 			RangeID:  roachpb.RangeID(i),
@@ -59,7 +58,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		}
 		repl.shMu.state.Desc = desc
 		repl.startKey = desc.StartKey // actually used by replicasByKey
-		if exRngItem, _ := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+		if _, exRngItem, _ := rs.replicasByKey.ReplaceOrInsert(repl.startKey, repl); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)
 		}
 	}
@@ -70,12 +69,15 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.visited = 0
-	rs.replicasByKey.Ascend(func(r *Replica) bool {
-		rs.visited++
-		rs.Unlock()
-		defer rs.Lock()
-		return visitor(r)
-	})
+	rs.replicasByKey.AscendFunc(
+		btreemap.Min[roachpb.RKey](), btreemap.Max[roachpb.RKey](),
+		func(_ roachpb.RKey, r *Replica) bool {
+			rs.visited++
+			rs.Unlock()
+			defer rs.Lock()
+			return visitor(r)
+		},
+	)
 }
 
 func (rs *testRangeSet) EstimatedCount() int {
@@ -93,7 +95,7 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	endKey := roachpb.RKey(fmt.Sprintf("%03d", index+1))
 	rs.Lock()
 	defer rs.Unlock()
-	repl, _ := rs.replicasByKey.Delete(&Replica{startKey: endKey})
+	_, repl, _ := rs.replicasByKey.Delete(endKey)
 	if repl == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}

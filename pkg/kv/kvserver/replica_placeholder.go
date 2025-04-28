@@ -84,15 +84,9 @@ type ReplicaPlaceholder struct {
 	tainted   int32 // atomic
 }
 
-var _ rangeKeyItem = (*ReplicaPlaceholder)(nil)
-
 // Desc returns the range Placeholder's descriptor.
 func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 	return &r.rangeDesc
-}
-
-func (r *ReplicaPlaceholder) key() roachpb.RKey {
-	return r.Desc().StartKey
 }
 
 func (r *ReplicaPlaceholder) String() string {
