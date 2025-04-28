@@ -150,6 +150,7 @@ func TestStore(t *testing.T) {
 		}
 
 		store, err := NewWithColumnID(
+			ctx,
 			internalDB,
 			quantizer,
 			codec,
