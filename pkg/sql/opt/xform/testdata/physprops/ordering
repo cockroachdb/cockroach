@@ -3280,3 +3280,49 @@ top-k
       ├── cardinality: [0 - 3]
       └── scan t106678
            └── columns: a:1 b:2
+
+# Regression test for #137508 - handle unsimplified group-by orderings.
+exec-ddl
+CREATE TABLE table_4 (
+  c_ol4_0 REGCLASS,
+  col4_1 BOOL NOT NULL,
+  col4_2 INT2 NOT NULL,
+  col4_3 REGCLASS NOT NULL,
+  col4_4 STRING NOT NULL AS (lower(CAST(col4_1 AS STRING))) STORED,
+  PRIMARY KEY (col4_3 DESC, col4_2 ASC)
+);
+----
+
+opt disable=(SimplifyWindowOrdering,SimplifyGroupByOrdering,PruneRootCols)
+SELECT concat_agg(col4_4 ORDER BY col4_4)
+FROM table_4 WHERE col4_1
+GROUP BY tableoid, col4_4
+ORDER BY tableoid, col4_4;
+----
+sort
+ ├── columns: concat_agg:8!null  [hidden: col4_4:5!null tableoid:7]
+ ├── key: (7)
+ ├── fd: ()-->(5), (7)-->(5,8)
+ ├── ordering: +7 opt(5) [actual: +7]
+ └── group-by (hash)
+      ├── columns: col4_4:5!null tableoid:7 concat_agg:8!null
+      ├── grouping columns: tableoid:7
+      ├── internal-ordering: +5
+      ├── key: (7)
+      ├── fd: ()-->(5), (7)-->(5,8)
+      ├── select
+      │    ├── columns: col4_1:2!null col4_4:5!null tableoid:7
+      │    ├── fd: ()-->(2,5)
+      │    ├── scan table_4
+      │    │    ├── columns: col4_1:2!null col4_4:5!null tableoid:7
+      │    │    ├── computed column expressions
+      │    │    │    └── col4_4:5
+      │    │    │         └── lower(col4_1:2::STRING)
+      │    │    └── fd: (2)-->(5)
+      │    └── filters
+      │         └── col4_1:2 [outer=(2), fd=()-->(2)]
+      └── aggregations
+           ├── concat-agg [as=concat_agg:8, outer=(5)]
+           │    └── col4_4:5
+           └── const-agg [as=col4_4:5, outer=(5)]
+                └── col4_4:5
