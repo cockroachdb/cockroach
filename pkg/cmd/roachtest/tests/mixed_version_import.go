@@ -28,7 +28,7 @@ func registerImportMixedVersions(r registry.Registry) {
 		Name:             "import/mixed-versions",
 		Owner:            registry.OwnerSQLQueries,
 		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

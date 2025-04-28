@@ -150,7 +150,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Name:             `rebalance/by-load/leases/mixed-version`,
 			Owner:            registry.OwnerKV,
 			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -186,7 +186,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Name:             `rebalance/by-load/replicas/mixed-version`,
 			Owner:            registry.OwnerKV,
 			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

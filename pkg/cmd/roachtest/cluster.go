@@ -2681,6 +2681,15 @@ func (c *clusterImpl) Install(
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
 }
 
+// PopulatesEtcHosts populates the cluster's /etc/hosts file with the private IP
+// addresses of the nodes in the cluster.
+func (c *clusterImpl) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Install")
+	}
+	return errors.Wrap(roachprod.PopulateEtcHosts(ctx, l, c.name), "cluster.PopulatesEtcHosts")
+}
+
 // pgURLErr returns the Postgres endpoint for the specified nodes. It accepts a
 // flag specifying whether the URL should include the node's internal or
 // external IP address. In general, inter-cluster communication and should use
