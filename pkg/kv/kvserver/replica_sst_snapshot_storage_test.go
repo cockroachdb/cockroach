@@ -298,7 +298,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	// Disabling columnar blocks causes stats changes.
 	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 
-	msstw, err := newMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, 0)
+	msstw, err := newMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, multiSSTWriterOptions{})
 	require.NoError(t, err)
 
 	var buf redact.StringBuilder
@@ -459,7 +459,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 
 	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
 
-	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0)
+	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, multiSSTWriterOptions{})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
@@ -541,7 +541,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0)
+	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, multiSSTWriterOptions{})
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))

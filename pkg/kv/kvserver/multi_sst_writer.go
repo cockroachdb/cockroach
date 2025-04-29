@@ -64,13 +64,18 @@ type multiSSTWriter struct {
 	rangeDelFrag rangedel.Fragmenter
 }
 
+type multiSSTWriterOptions struct {
+	SSTChunkSize int64
+	MaxSSTSize   int64
+}
+
 func newMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
 	scratch *snaprecv.SSTSnapshotStorageScratch,
 	localKeySpans []roachpb.Span,
 	mvccKeySpan roachpb.Span,
-	sstChunkSize int64,
+	opts multiSSTWriterOptions,
 ) (*multiSSTWriter, error) {
 	msstw := &multiSSTWriter{
 		st:            st,
@@ -81,8 +86,8 @@ func newMultiSSTWriter(
 			Start: storage.EngineKey{Key: mvccKeySpan.Key},
 			End:   storage.EngineKey{Key: mvccKeySpan.EndKey},
 		}},
-		sstChunkSize: sstChunkSize,
-		maxSSTSize:   MaxSnapshotSSTableSize.Get(&st.SV),
+		sstChunkSize: opts.SSTChunkSize,
+		maxSSTSize:   opts.MaxSSTSize,
 	}
 	msstw.rangeKeyFrag = rangekey.Fragmenter{
 		Cmp:    storage.EngineComparer.Compare,
