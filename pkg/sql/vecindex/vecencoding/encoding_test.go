@@ -172,7 +172,7 @@ func TestEncodeKeys(t *testing.T) {
 
 	// EncodeMetadataKey.
 	encodedMeta := vecencoding.EncodeMetadataKey(input, input, 10)
-	require.Equal(t, roachpb.Key{1, 2, 3, 1, 2, 3, 146, 136}, encodedMeta)
+	require.Equal(t, roachpb.Key{1, 2, 3, 1, 2, 3, 146, 136, 136}, encodedMeta)
 
 	// EncodeStartVectorKey.
 	encodedStart := vecencoding.EncodeStartVectorKey(encodedMeta)
@@ -190,7 +190,7 @@ func TestEncodeKeys(t *testing.T) {
 	require.Equal(t, roachpb.Key{1, 2, 3, 1, 2, 3, 146, 138}, encodedPrefix)
 	require.Negative(t, bytes.Compare(encodedStart, encodedPrefix))
 	require.Negative(t, bytes.Compare(encodedPrefix, encodedEnd))
-	require.Equal(t, 3, vecencoding.EncodedPrefixVectorKeyLen(input, cspann.SecondLevel))
+	require.Equal(t, 8, vecencoding.EncodedPrefixVectorKeyLen(encodedMeta, cspann.SecondLevel))
 
 	// EncodeMetadataValue and DecodeMetadataValue.
 	metadata1 := cspann.PartitionMetadata{
