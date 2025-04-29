@@ -377,6 +377,25 @@ func registerRestore(r registry.Registry) {
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
+			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
+			// by default.
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				storesPerNode: largeMultiStoreStoresPerNode,
+				nodes:         largeMultiStoreNodes,
+				cpus:          8,
+				volumeSize:    5000,
+				ebsThroughput: 250, /* MB/s */
+			}),
+			namePrefix: "multi-store",
+			backup: makeRestoringBackupSpecs(backupSpecs{
+				workload: tpceRestore{customers: 2000000},
+				cloud:    spec.GCE,
+			}),
+			timeout:                24 * time.Hour,
+			suites:                 registry.Suites(registry.Weekly),
+			restoreUptoIncremental: defaultRestoreUptoIncremental,
+		},
+		{
 			// The weekly 32TB, 400 incremental layer Restore test on AWS.
 			//
 			// NB: Prior to 23.1, restore would OOM on backups that had many
@@ -504,6 +523,7 @@ var defaultHardware = hardwareSpecs{
 // hardwareSpecs define the cluster setup for a restore roachtest. These values
 // should not get updated as the test runs.
 type hardwareSpecs struct {
+	storesPerNode int
 
 	// cpus is the per node cpu count.
 	cpus int
@@ -532,6 +552,9 @@ type hardwareSpecs struct {
 func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 	clusterOpts := make([]spec.Option, 0)
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
+	if hw.storesPerNode != 0 {
+		clusterOpts = append(clusterOpts, spec.SSD(hw.storesPerNode))
+	}
 	if hw.volumeSize != 0 {
 		clusterOpts = append(clusterOpts, spec.VolumeSize(hw.volumeSize))
 	}
@@ -596,6 +619,9 @@ func (hw hardwareSpecs) getCRDBNodes() option.NodeListOption {
 // Unless the caller provides any explicit specs, the default specs are used.
 func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	specs := defaultHardware
+	if override.storesPerNode != 0 {
+		specs.storesPerNode = override.storesPerNode
+	}
 	if override.cpus != 0 {
 		specs.cpus = override.cpus
 	}
@@ -835,6 +861,8 @@ func (tpce tpceRestore) String() string {
 		builder.WriteString("8TB")
 	case 2000000:
 		builder.WriteString("32TB")
+	case 4000000:
+		builder.WriteString("64TB")
 	default:
 		panic("tpce customer count not recognized")
 	}
@@ -1012,11 +1040,29 @@ func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
+	rd.t.Status("starting cluster")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.StoreCount = largeMultiStoreStoresPerNode
+	startOpts.RoachprodOpts.WALFailover = ""
+	startSettings := install.MakeClusterSettings()
+	startSettings.Env = append(startSettings.Env, "COCKROACH_SCAN_INTERVAL=30s")
 	rd.c.Start(ctx, rd.t.L(),
 		rd.roachprodOpts(),
 		install.MakeClusterSettings(rd.defaultClusterSettings()...),
 		rd.sp.hardware.getCRDBNodes())
 	rd.getAOST(ctx)
+	rd.t.Status("store setup")
+	conn := rd.c.Conn(ctx, rd.t.L(), 2)
+	defer conn.Close()
+	var count int
+	r := conn.QueryRowContext(ctx, `SELECT count(*) FROM crdb_internal.kv_store_status;`)
+	if err := r.Scan(&count); err != nil {
+		rd.t.Fatalf("store status: %s", err)
+	}
+	wantStores := largeMultiStoreNodes * largeMultiStoreStoresPerNode
+	if count != wantStores {
+		rd.t.Fatalf("expected %d stores; got %d", wantStores, count)
+	}
 }
 
 // getAOST gets the AOST to use in the restore cmd.
