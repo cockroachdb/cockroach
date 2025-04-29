@@ -197,7 +197,7 @@ test_show_default  CREATE TABLE public.test_show_default (
                      CONSTRAINT "primary" PRIMARY KEY (p ASC),
                      FAMILY fam_0_p (p),
                      FAMILY fam_1_k (k)
-                   )
+                   );
 
 statement ok
 CREATE TABLE test_show_fk (
@@ -221,7 +221,7 @@ test_show_fk  CREATE TABLE public.test_show_fk (
                 FAMILY fam_0_p (p),
                 FAMILY fam_1_j (j),
                 FAMILY fam_2_k (k)
-              )
+              );
 
 # Sequence tests
 subtest SequenceDependencies

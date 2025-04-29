@@ -34,7 +34,7 @@ CREATE TABLE public.t (
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
   VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-)
+);
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
@@ -53,7 +53,7 @@ CREATE TABLE public.t (
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
   VECTOR INDEX t_vec (a DESC, (v::VECTOR(3)) vector_l2_ops),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-)
+);
 
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
@@ -216,7 +216,7 @@ CREATE TABLE public.t (
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
   FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-)
+);
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
@@ -478,7 +478,7 @@ CREATE TABLE public.copy (
   comp INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy should not have any crdb_internal_idx_expr columns.
@@ -503,7 +503,7 @@ CREATE TABLE public.copy_generated (
   comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy_generated should not have any crdb_internal_idx_expr columns.
@@ -532,7 +532,7 @@ CREATE TABLE public.copy_indexes (
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
-)
+);
 
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_indexes should have crdb_internal_idx_expr columns.
@@ -561,7 +561,7 @@ CREATE TABLE public.copy_all (
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
   VECTOR INDEX src_b_expr_idx (b ASC, (v::VECTOR(3)) vector_l2_ops)
-)
+);
 
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_all should have crdb_internal_idx_expr columns.
@@ -605,7 +605,7 @@ CREATE TABLE public.anon (
   INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
-)
+);
 
 statement ok
 DROP TABLE anon;
@@ -639,7 +639,7 @@ CREATE TABLE public.anon (
   INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
-)
+);
 
 # Querying expression indexes.
 
@@ -1200,7 +1200,7 @@ t72012  CREATE TABLE public.t72012 (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
           INDEX t72012_idx (abs(col) ASC)
-        )
+        );
 
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
@@ -1267,7 +1267,7 @@ CREATE TABLE public.expr_tab (
   CONSTRAINT expr_tab_pkey PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
   FAMILY fam (a, b, c)
-)
+);
 
 query TT
 SELECT c.conname, c.condef
@@ -1299,7 +1299,7 @@ CREATE TABLE public.expr_tab2 (
   CONSTRAINT expr_tab2_pkey PRIMARY KEY ((a + b) ASC, c ASC),
   INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
   FAMILY fam (a, b, c)
-)
+);
 
 query TT
 SELECT c.conname, c.condef
@@ -1331,7 +1331,7 @@ CREATE TABLE public.expr_tab3 (
   CONSTRAINT expr_tab3_pkey PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC),
   UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
   FAMILY fam (a, b, c)
-)
+);
 
 query TT
 SELECT c.conname, c.condef
@@ -1362,7 +1362,7 @@ CREATE TABLE public.expr_tab4 (
   CONSTRAINT expr_tab4_pkey PRIMARY KEY ((a + b) ASC),
   INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
   FAMILY fam (a, b)
-)
+);
 
 query TT
 SELECT c.conname, c.condef
@@ -1402,7 +1402,7 @@ CREATE TABLE public.expr_tab5 (
   INVERTED INDEX expr_tab5_expr_idx ((j->'data':::STRING)),
   VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
   FAMILY fam (a, b, c, j, v)
-)
+);
 
 query TT
 SELECT c.conname, c.condef

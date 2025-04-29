@@ -51,7 +51,7 @@ CREATE TABLE public.s (
   FAMILY fam_0_k (k),
   FAMILY fam_1_a (a),
   FAMILY fam_2_geom (geom)
-)
+);
 
 # Dropping the inverted column of the index drops the index.
 statement ok
@@ -74,7 +74,7 @@ CREATE TABLE public.drop_j (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT drop_j_pkey PRIMARY KEY (rowid ASC),
   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
-)
+);
 
 # Dropping the non-inverted column of the index drops the index.
 statement ok
@@ -97,7 +97,7 @@ CREATE TABLE public.drop_a (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT drop_a_pkey PRIMARY KEY (rowid ASC),
   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
-)
+);
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies multi-column inverted indexes.
 statement ok
@@ -115,7 +115,7 @@ CREATE TABLE public.dst (
   CONSTRAINT dst_pkey PRIMARY KEY (rowid ASC),
   INVERTED INDEX src_a_j_idx (a ASC, j),
   INVERTED INDEX src_a_b_j_idx (a ASC, b ASC, j)
-)
+);
 
 # Test dropping a table with a multi-column inverted index.
 statement ok

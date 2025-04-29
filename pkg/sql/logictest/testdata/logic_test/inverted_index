@@ -44,7 +44,7 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX "c_bAr_idx" ("bAr")
-   )
+   );
 
 # Test that only the permitted opclasses are usable to make an inverted index.
 statement error operator class \"blah_ops\" does not exist
@@ -1563,7 +1563,7 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX c_bar_idx (bar)
-   )
+   );
 
 query ITT
 SELECT * FROM c WHERE bar @> ARRAY['foo']
@@ -1934,7 +1934,7 @@ CREATE TABLE public.table_desc_inverted_index (
   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
   FAMILY f1 (id, last_accessed),
   FAMILY f2 (testdata)
-)
+);
 
 subtest overlaps_with_array
 

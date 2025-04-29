@@ -27,30 +27,30 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
-   a INT8 NOT NULL,
-   b INT8 NULL,
-   v INT8 NULL AS (a + b) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-   FAMILY fam_0_a (a),
-   FAMILY fam_1_b (b)
-)
+     a INT8 NOT NULL,
+     b INT8 NULL,
+     v INT8 NULL AS (a + b) VIRTUAL,
+     CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+     FAMILY fam_0_a (a),
+     FAMILY fam_1_b (b)
+   );
 
 query TT
 SHOW CREATE TABLE t_idx
 ----
 t_idx  CREATE TABLE public.t_idx (
-       a INT8 NOT NULL,
-       b INT8 NULL,
-       c INT8 NULL,
-       v INT8 NULL AS (a + b) VIRTUAL,
-       w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
-       CONSTRAINT t_idx_pkey PRIMARY KEY (a ASC),
-       INDEX t_idx_v_idx (v ASC),
-       UNIQUE INDEX t_idx_w_key (w ASC),
-       FAMILY fam_0_a (a),
-       FAMILY fam_1_b (b),
-       FAMILY fam_2_c (c)
-)
+         a INT8 NOT NULL,
+         b INT8 NULL,
+         c INT8 NULL,
+         v INT8 NULL AS (a + b) VIRTUAL,
+         w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
+         CONSTRAINT t_idx_pkey PRIMARY KEY (a ASC),
+         INDEX t_idx_v_idx (v ASC),
+         UNIQUE INDEX t_idx_w_key (w ASC),
+         FAMILY fam_0_a (a),
+         FAMILY fam_1_b (b),
+         FAMILY fam_2_c (c)
+       );
 
 subtest Select
 

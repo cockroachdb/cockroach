@@ -111,6 +111,7 @@ CREATE TABLE public.t (
   PARTITION pk_implicit VALUES IN ((1))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 statement ok
 CREATE INDEX new_idx ON t(d) PARTITION BY LIST (a) (
@@ -148,6 +149,7 @@ CREATE TABLE public.t (
   PARTITION pk_implicit VALUES IN ((1))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -241,14 +243,14 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE fk_using_implicit_columns_against_t_one_family]
 ----
 CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
-   pk INT8 NOT NULL,
-   ref_t_pk INT8 NOT NULL,
-   ref_t_c INT8 NOT NULL,
-   CONSTRAINT fk_using_implicit_columns_against_t_one_family_pkey PRIMARY KEY (pk ASC),
-   CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_pk_fkey FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
-   CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_c_fkey FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
-   FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
-)
+  pk INT8 NOT NULL,
+  ref_t_pk INT8 NOT NULL,
+  ref_t_c INT8 NOT NULL,
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_pkey PRIMARY KEY (pk ASC),
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_pk_fkey FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_c_fkey FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
+  FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
+);
 
 
 query T
@@ -516,6 +518,7 @@ CREATE TABLE public.t (
   PARTITION two VALUES IN ((2))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM t]
@@ -616,6 +619,7 @@ CREATE TABLE public.t (
   PARTITION two VALUES IN ((2))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 query TTB colnames
@@ -719,6 +723,7 @@ CREATE TABLE public.t (
   PARTITION two VALUES FROM (2) TO (MAXVALUE)
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 statement error changing partition of table with PARTITION ALL BY not yet implemented
 ALTER TABLE t PARTITION BY NOTHING

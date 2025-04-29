@@ -61,7 +61,7 @@ CREATE TABLE public.geo_table (
   FAMILY fam_0_geog (geog),
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
-)
+);
 
 let $create_table
 SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
@@ -89,4 +89,4 @@ CREATE TABLE public.geo_table (
   FAMILY fam_0_geog (geog),
   FAMILY fam_1_geom (geom),
   FAMILY fam_2_id (id)
-)
+);

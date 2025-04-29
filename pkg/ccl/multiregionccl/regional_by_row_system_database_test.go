@@ -66,7 +66,7 @@ UNION ALL SELECT create_statement FROM [SHOW CREATE TABLE system.namespace]
 	INDEX "web_sessions_lastUsedAt_idx" ("lastUsedAt" ASC),
 	FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo", user_id),
 	FAMILY fam_10_crdb_region (crdb_region)
-) LOCALITY REGIONAL BY ROW`},
+) LOCALITY REGIONAL BY ROW;`},
 		{`CREATE TABLE public.namespace (
 	"parentID" INT8 NOT NULL,
 	"parentSchemaID" INT8 NOT NULL,
@@ -75,6 +75,6 @@ UNION ALL SELECT create_statement FROM [SHOW CREATE TABLE system.namespace]
 	CONSTRAINT "primary" PRIMARY KEY ("parentID" ASC, "parentSchemaID" ASC, name ASC),
 	FAMILY "primary" ("parentID", "parentSchemaID", name),
 	FAMILY fam_4_id (id)
-) LOCALITY GLOBAL`},
+) LOCALITY GLOBAL;`},
 	})
 }

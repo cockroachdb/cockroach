@@ -57,7 +57,7 @@ CREATE TABLE sc1.t1 (
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
 	CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
-)
+);
 
 # Make sure that the CHECK constraint still applies correctly
 query-sql
@@ -142,7 +142,7 @@ CREATE TABLE sc1.t1 (
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
 	CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
-)
+);
 
 # Make sure that CHECK constraint still applies correctly
 query-sql
@@ -231,7 +231,7 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-)
+);
 
 exec-sql
 USE db1
@@ -272,4 +272,4 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-)
+);
