@@ -318,12 +318,12 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 	}{
 		{
 			desc:             "schema change too recent to start TTL job",
-			expectedTTLError: "found a recent schema change on the table at .*, aborting",
+			expectedTTLError: "found a recent schema change on the table at .*, job will run at the next scheduled time",
 			aostDuration:     -48 * time.Hour,
 		},
 		{
 			desc:             "schema change during job",
-			expectedTTLError: "error during row deletion: table has had a schema change since the job has started at .*, aborting",
+			expectedTTLError: "error during row deletion: table has had a schema change since the job has started at .*, job will run at the next scheduled time",
 			aostDuration:     zeroDuration,
 			// We cannot use a schema change to change the version in this test as
 			// we overtook the job adoption method, which means schema changes get
