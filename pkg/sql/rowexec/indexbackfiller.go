@@ -206,8 +206,24 @@ func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 	tmpEntry.Value.RawBytes = append(tmpEntry.Value.RawBytes[:0], indexEntry.Value.RawBytes...)
 	tmpEntry.Family = indexEntry.Family
 
+	firstAttempt := true
 	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		entry, err := vih.ReEncodeVector(ctx, txn.KV(), *tmpEntry, indexEntry)
+		// If the first attempt failed, we need to provide a new buffer to KV for
+		// subsequent attempts because KV might still be using the previous buffer.
+		var entryBuffer *rowenc.IndexEntry
+		if firstAttempt {
+			entryBuffer = indexEntry
+			firstAttempt = false
+		} else {
+			entryBuffer = &rowenc.IndexEntry{
+				Key: make(roachpb.Key, len(tmpEntry.Key)),
+				Value: roachpb.Value{
+					RawBytes: make([]byte, len(tmpEntry.Value.RawBytes)),
+				},
+				Family: tmpEntry.Family,
+			}
+		}
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), *tmpEntry, entryBuffer)
 		if err != nil {
 			return err
 		}
