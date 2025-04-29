@@ -547,6 +547,7 @@ func (fw *SSTWriter) Close() {
 	// method just makes for messy defers.
 	_ = fw.fw.Close()
 	fw.fw = nil
+	*fw.Meta = sstable.WriterMetadata{}
 }
 
 // ShouldWriteLocalTimestamps implements the Writer interface.
