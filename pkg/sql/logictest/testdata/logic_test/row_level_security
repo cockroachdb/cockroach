@@ -45,7 +45,7 @@ sanity1  CREATE TABLE public.sanity1 (
            CONSTRAINT sanity1_pkey PRIMARY KEY (rowid ASC)
          );
          CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
-         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
+         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
 
 statement notice NOTICE: relation "nonexist" does not exist, skipping
 DROP POLICY IF EXISTS notthere on nonexist;
@@ -161,7 +161,7 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy5 ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
                 CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
 
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy
@@ -312,7 +312,7 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
                 CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
 
 statement ok
 DROP POLICY "policy9" ON multi_pol_tab2
@@ -427,7 +427,7 @@ target  CREATE TABLE public.target (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT target_pkey PRIMARY KEY (rowid ASC)
         );
-        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser
+        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser;
 
 user root
 
@@ -671,7 +671,7 @@ flying_roaches  CREATE TABLE public.flying_roaches (
                   CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
                   CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
                 );
-                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
+                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);
 
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
@@ -685,7 +685,7 @@ CREATE TABLE public.flying_roaches (
 query T
 select rls_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
-{"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
+{"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);"}
 
 query T
 select fk_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
@@ -773,7 +773,7 @@ roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          );
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY;
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
@@ -808,7 +808,7 @@ roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          );
-         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY
+         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY;
 
 statement ok
 ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
@@ -838,7 +838,7 @@ roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
          );
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
 query TBB
 select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
@@ -856,10 +856,10 @@ CREATE TABLE public.roaches (
 query TTT
 select rls_statements, fk_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
 ----
-{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}  {}  CREATE TABLE public.roaches (
-                                                                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                                                          CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-                                                                                        )
+{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;"}  {}  CREATE TABLE public.roaches (
+                                                                                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+                                                                                         )
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
@@ -1139,7 +1139,7 @@ bbteams  CREATE TABLE public.bbteams (
          CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
          CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck WITH CHECK (false);
          CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8))
+         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
 
 statement ok
 set role root
@@ -1450,7 +1450,7 @@ alter_policy_table  CREATE TABLE public.alter_policy_table (
                     );
                     ALTER TABLE public.alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
                     CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
-                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8)
+                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8);
 
 query TTTTTT colnames
 SELECT name,cmd,type,roles,using_expr,with_check_expr
@@ -2161,7 +2161,7 @@ trunc  CREATE TABLE public.trunc (
        ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
        CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
 
 
 # Truncate should be allowed, despite the policy to prevent deletes.
@@ -2186,7 +2186,7 @@ trunc  CREATE TABLE public.trunc (
        ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
        CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
 
 # Ensure the policies are still enforced.
 statement ok
@@ -2635,7 +2635,7 @@ rlsinsert  CREATE TABLE public.rlsinsert (
            );
            ALTER TABLE public.rlsinsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
            CREATE POLICY p_insert ON public.rlsinsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 NOT BETWEEN '2012-01-01':::DATE AND '2012-12-31':::DATE);
-           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true)
+           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true);
 
 statement ok
 DROP POLICY p_insert on rlsInsert;
@@ -2838,7 +2838,7 @@ multip  CREATE TABLE public.multip (
         );
         ALTER TABLE public.multip ENABLE ROW LEVEL SECURITY;
         CREATE POLICY and1 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%sensitive%':::STRING);
-        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING)
+        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING);
 
 query IT
 select * from multip ORDER BY key, value;
@@ -4358,7 +4358,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                              CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
                              FAMILY fam_0_c1_c2 (c1, c2)
                            ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
 
 statement ok
 ALTER POLICY p_sel ON alter_policy_table_locked WITH CHECK (FALSE);
@@ -4372,7 +4372,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                              CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
                              FAMILY fam_0_c1_c2 (c1, c2)
                            ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false)
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false);
 
 subtest bug_fix_policy_respects_inheritance_#144780
 
