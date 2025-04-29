@@ -86,7 +86,7 @@ SELECT '0G'::pg_lsn
 statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"ab\"
 SELECT 'ab'::PG_LSN;
 
-statement error pgcode 22P02 pq: pg_lsn\(\): invalid input syntax for type pg_lsn: \"ab\"
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"ab\"
 SELECT pg_lsn('ab');
 
 statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"1\"

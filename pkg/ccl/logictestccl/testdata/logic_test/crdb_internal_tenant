@@ -278,7 +278,7 @@ select crdb_internal.force_retry(interval '0s')
 ----
 0
 
-query error pq: crdb_internal.set_vmodule\(\): syntax error: expect comma-separated list of filename=N
+query error pq: syntax error: expect comma-separated list of filename=N
 select crdb_internal.set_vmodule('not anything reasonable')
 
 query I

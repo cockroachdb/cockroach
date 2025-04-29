@@ -688,13 +688,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
  
  SELECT EXTRACT(TIMEZONE      FROM DATE '2020-08-11');
 -ERROR:  unit "timezone" not supported for type date
-+ERROR:  extract(): unsupported timespan: timezone
++ERROR:  unsupported timespan: timezone
  SELECT EXTRACT(TIMEZONE_M    FROM DATE '2020-08-11');
 -ERROR:  unit "timezone_m" not supported for type date
-+ERROR:  extract(): unsupported timespan: timezone_m
++ERROR:  unsupported timespan: timezone_m
  SELECT EXTRACT(TIMEZONE_H    FROM DATE '2020-08-11');
 -ERROR:  unit "timezone_h" not supported for type date
-+ERROR:  extract(): unsupported timespan: timezone_h
++ERROR:  unsupported timespan: timezone_h
  SELECT EXTRACT(EPOCH         FROM DATE '2020-08-11');
 -  extract   
 -------------
@@ -829,14 +829,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(DAY FROM DATE '-infinity');     -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): -infinity out of range for timestamp
++ERROR:  -infinity out of range for timestamp
  -- all supported fields
  SELECT EXTRACT(DAY           FROM DATE 'infinity');    -- NULL
 - extract 
@@ -844,49 +844,49 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(MONTH         FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(QUARTER       FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(WEEK          FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(DOW           FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(ISODOW        FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(DOY           FROM DATE 'infinity');    -- NULL
 - extract 
 ----------
 -        
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  --
  -- monotonic fields from non-finite date:
  --
@@ -896,14 +896,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(EPOCH FROM DATE '-infinity');        -- -Infinity
 -  extract  
 ------------
 - -Infinity
 -(1 row)
 -
-+ERROR:  extract(): -infinity out of range for timestamp
++ERROR:  -infinity out of range for timestamp
  -- all supported fields
  SELECT EXTRACT(YEAR       FROM DATE 'infinity');    --  Infinity
 - extract  
@@ -911,55 +911,55 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(DECADE     FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(CENTURY    FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(MILLENNIUM FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(JULIAN     FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(ISOYEAR    FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  SELECT EXTRACT(EPOCH      FROM DATE 'infinity');    --  Infinity
 - extract  
 -----------
 - Infinity
 -(1 row)
 -
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  --
  -- wrong fields from non-finite date:
  --
  SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- error
 -ERROR:  unit "microsec" not recognized for type date
-+ERROR:  extract(): infinity out of range for timestamp
++ERROR:  infinity out of range for timestamp
  -- test constructors
  select make_date(2013, 7, 15);
   make_date  
@@ -985,7 +985,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=
  -- should fail
  select make_date(0, 7, 15);
 -ERROR:  date field value out of range: 0-07-15
-+ERROR:  make_date(): year value of 0 is not valid
++ERROR:  year value of 0 is not valid
  select make_date(2013, 2, 30);
 -ERROR:  date field value out of range: 2013-02-30
 + make_date  
