@@ -199,11 +199,11 @@ func (is Server) SetCompactionConcurrency(
 	resp := &CompactionConcurrencyResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			prevConcurrency := s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
+			s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
 
 			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
 			<-ctx.Done()
-			s.TODOEngine().SetCompactionConcurrency(prevConcurrency)
+			s.TODOEngine().SetCompactionConcurrency(0)
 			return nil
 		})
 	return resp, err
