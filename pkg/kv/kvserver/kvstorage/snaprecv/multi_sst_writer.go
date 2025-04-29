@@ -3,14 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package snaprecv
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -24,7 +23,7 @@ import (
 // that handles chunking SSTs and persisting them to disk.
 type MultiSSTWriter struct {
 	st      *cluster.Settings
-	scratch *snaprecv.SSTSnapshotStorageScratch
+	scratch *SSTSnapshotStorageScratch
 	currSST storage.SSTWriter
 	// localKeySpans are key spans that are considered unsplittable across sstables, and
 	// represent the range's range local key spans. In contrast, mvccKeySpan can be split
@@ -73,7 +72,7 @@ type MultiSSTWriterOptions struct {
 func NewMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
-	scratch *snaprecv.SSTSnapshotStorageScratch,
+	scratch *SSTSnapshotStorageScratch,
 	localKeySpans []roachpb.Span,
 	mvccKeySpan roachpb.Span,
 	opts MultiSSTWriterOptions,

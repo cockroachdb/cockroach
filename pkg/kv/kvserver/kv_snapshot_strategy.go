@@ -119,7 +119,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := NewMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, MultiSSTWriterOptions{
+	msstw, err := snaprecv.NewMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, snaprecv.MultiSSTWriterOptions{
 		SSTChunkSize: kvSS.sstChunkSize,
 		MaxSSTSize:   MaxSnapshotSSTableSize.Get(&kvSS.st.SV),
 	})
