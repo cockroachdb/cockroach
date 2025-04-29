@@ -10,11 +10,14 @@ SELECT '$.a'::JSONPATH
 ----
 $."a"
 
-statement error pq: value type jsonpath cannot be used for table columns
+statement error pq: unimplemented: jsonpath unsupported as column type
 CREATE TABLE a (j JSONPATH)
 
-statement error pq: value type jsonpath cannot be used for table columns
+statement error pq: unimplemented: arrays of jsonpath unsupported as column type
 CREATE TABLE a (j JSONPATH[])
+
+statement error pq: unimplemented: jsonpath cannot be used in a composite type
+CREATE TYPE typ AS (j JSONPATH);
 
 query T
 SELECT '$'::JSONPATH

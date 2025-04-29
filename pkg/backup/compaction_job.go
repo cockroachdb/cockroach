@@ -534,7 +534,7 @@ func (c compactionChain) createCompactionManifest(
 	// range keys.
 	lastBackup := c.lastBackup()
 	if len(lastBackup.Tenants) != 0 {
-		return nil, errors.New("backup compactions does not yet support range keys")
+		return nil, errors.New("backup compactions does not support range keys")
 	}
 	if err := checkCoverage(ctx, c.lastBackup().Spans, c.backupChain); err != nil {
 		return nil, err
