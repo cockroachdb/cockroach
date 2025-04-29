@@ -1102,13 +1102,9 @@ type Engine interface {
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error
 
-	// SetCompactionConcurrency is used to set the engine's compaction
-	// concurrency. It returns the previous compaction concurrency.
-	SetCompactionConcurrency(n uint64) uint64
-
-	// AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
-	// the passed delta, down to a minimum of 1.
-	AdjustCompactionConcurrency(delta int64) uint64
+	// SetCompactionConcurrency is used to override the engine's max compaction
+	// concurrency. A value of 0 removes any existing override.
+	SetCompactionConcurrency(n uint64)
 
 	// SetStoreID informs the engine of the store ID, once it is known.
 	// Used to show the store ID in logs and to initialize the shared object
