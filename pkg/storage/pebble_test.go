@@ -1675,9 +1675,11 @@ func TestPebbleSetCompactionConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	defer p.Close()
 
-	require.Equal(t, 4, p.cfg.opts.MaxConcurrentCompactions())
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
 	p.SetCompactionConcurrency(10)
-	require.Equal(t, 10, p.cfg.opts.MaxConcurrentCompactions())
+	require.Equal(t, "10 10", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
 	p.SetCompactionConcurrency(0)
-	require.Equal(t, 4, p.cfg.opts.MaxConcurrentCompactions())
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
 }
