@@ -185,16 +185,25 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/case.out --label=
  (4 rows)
  
  --
-@@ -343,6 +303,7 @@
+@@ -343,6 +303,8 @@
  BEGIN;
  CREATE FUNCTION vol(text) returns text as
    'begin return $1; end' language plpgsql volatile;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  no value provided for placeholder: $1
  SELECT CASE
    (CASE vol('bar')
      WHEN 'foo' THEN 'it was foo!'
-@@ -359,48 +320,70 @@
- 
+@@ -352,55 +314,73 @@
+   WHEN 'it was foo!' THEN 'foo recognized'
+   WHEN 'it was bar!' THEN 'bar recognized'
+   ELSE 'unrecognized' END;
+-      case      
+-----------------
+- bar recognized
+-(1 row)
+-
++ERROR:  unknown function: vol()
  -- In this case, we can't inline the SQL function without confusing things.
  CREATE DOMAIN foodomain AS text;
 +ERROR:  at or near "as": syntax error: unimplemented: this syntax
@@ -274,7 +283,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/case.out --label=
  SELECT
    CASE 'foo'::text
      WHEN 'foo' THEN ARRAY['a', 'b', 'c', 'd'] || enum_range(NULL::casetestenum)::text[]
-@@ -412,6 +395,7 @@
+@@ -412,6 +392,7 @@
  (1 row)
  
  ROLLBACK;

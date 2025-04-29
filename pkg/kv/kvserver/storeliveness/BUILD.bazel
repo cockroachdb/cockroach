@@ -44,6 +44,7 @@ go_library(
 
 go_test(
     name = "storeliveness_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "multi_store_test.go",

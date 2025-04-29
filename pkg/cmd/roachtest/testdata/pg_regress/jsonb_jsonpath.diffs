@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out --label=/mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out /mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out /mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out
 --- /mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out
 +++ /mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out
-@@ -1,250 +1,222 @@
+@@ -1,250 +1,219 @@
  select jsonb '{"a": 12}' @? '$';
 - ?column? 
 -----------
@@ -205,43 +205,39 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('[1]', 'strict $[1]');
  ERROR:  jsonpath array subscript is out of bounds
  select jsonb_path_query('[1]', 'strict $[1]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
 +ERROR:  at or near ">": syntax error
 +DETAIL:  source SQL:
 +select jsonb_path_query('[1]', 'strict $[1]', silent => true)
 +                                                      ^
 +HINT:  try \hf jsonb_path_query
-+select jsonb '[1]' @? 'lax $[10000000000000000]';
+ select jsonb '[1]' @? 'lax $[10000000000000000]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
 +ERROR:  at or near "@": syntax error
 +DETAIL:  source SQL:
 +select jsonb '[1]' @? 'lax $[10000000000000000]'
 +                   ^
-+select jsonb '[1]' @? 'strict $[10000000000000000]';
+ select jsonb '[1]' @? 'strict $[10000000000000000]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
 +ERROR:  at or near "@": syntax error
 +DETAIL:  source SQL:
 +select jsonb '[1]' @? 'strict $[10000000000000000]'
 +                   ^
-+select jsonb_path_query('[1]', 'lax $[10000000000000000]');
-  jsonb_path_query 
- ------------------
- (0 rows)
- 
--select jsonb '[1]' @? 'lax $[10000000000000000]';
-- ?column? 
------------
-- 
--(1 row)
--
--select jsonb '[1]' @? 'strict $[10000000000000000]';
-- ?column? 
------------
-- 
--(1 row)
--
--select jsonb_path_query('[1]', 'lax $[10000000000000000]');
--ERROR:  jsonpath array subscript is out of integer range
+ select jsonb_path_query('[1]', 'lax $[10000000000000000]');
+ ERROR:  jsonpath array subscript is out of integer range
  select jsonb_path_query('[1]', 'strict $[10000000000000000]');
--ERROR:  jsonpath array subscript is out of integer range
-+ERROR:  jsonpath array subscript is out of bounds
+ ERROR:  jsonpath array subscript is out of integer range
  select jsonb '[1]' @? '$[0]';
 - ?column? 
 -----------
@@ -425,7 +421,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('1', 'lax $.a');
   jsonb_path_query 
  ------------------
-@@ -255,15 +227,17 @@
+@@ -255,15 +224,17 @@
  select jsonb_path_query('1', 'strict $.*');
  ERROR:  jsonpath wildcard member accessor can only be applied to an object
  select jsonb_path_query('1', 'strict $.a', silent => true);
@@ -451,7 +447,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('[]', 'lax $.a');
   jsonb_path_query 
  ------------------
-@@ -272,10 +246,11 @@
+@@ -272,10 +243,11 @@
  select jsonb_path_query('[]', 'strict $.a');
  ERROR:  jsonpath member accessor can only be applied to an object
  select jsonb_path_query('[]', 'strict $.a', silent => true);
@@ -467,7 +463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('{}', 'lax $.a');
   jsonb_path_query 
  ------------------
-@@ -284,10 +259,11 @@
+@@ -284,10 +256,11 @@
  select jsonb_path_query('{}', 'strict $.a');
  ERROR:  JSON object does not contain key "a"
  select jsonb_path_query('{}', 'strict $.a', silent => true);
@@ -483,7 +479,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('1', 'strict $[1]');
  ERROR:  jsonpath array accessor can only be applied to an array
  select jsonb_path_query('1', 'strict $[*]');
-@@ -297,25 +273,29 @@
+@@ -297,25 +270,29 @@
  select jsonb_path_query('[]', 'strict $["a"]');
  ERROR:  jsonpath array subscript is not a single numeric value
  select jsonb_path_query('1', 'strict $[1]', silent => true);
@@ -529,23 +525,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.a');
   jsonb_path_query 
  ------------------
-@@ -385,13 +365,8 @@
- select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10 / 0].a');
- ERROR:  division by zero
- select jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2.5 - 1 to $.size() - 2]');
-- jsonb_path_query 
--------------------
-- {"a": 13}
-- {"b": 14}
-- "ccc"
--(3 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('1', 'lax $[0]');
-  jsonb_path_query 
- ------------------
-@@ -427,10 +402,11 @@
+@@ -427,10 +404,11 @@
  select jsonb_path_query('[1,2,3]', 'strict $[*].a');
  ERROR:  jsonpath member accessor can only be applied to an object
  select jsonb_path_query('[1,2,3]', 'strict $[*].a', silent => true);
@@ -561,7 +541,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('[]', '$[last]');
   jsonb_path_query 
  ------------------
-@@ -444,10 +420,11 @@
+@@ -444,10 +422,11 @@
  select jsonb_path_query('[]', 'strict $[last]');
  ERROR:  jsonpath array subscript is out of bounds
  select jsonb_path_query('[]', 'strict $[last]', silent => true);
@@ -577,21 +557,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('[1]', '$[last]');
   jsonb_path_query 
  ------------------
-@@ -467,18 +444,17 @@
- (1 row)
- 
- select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
-- jsonb_path_query 
--------------------
-- 3
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -475,10 +454,11 @@
  select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
--ERROR:  jsonpath array subscript is not a single numeric value
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ ERROR:  jsonpath array subscript is not a single numeric value
  select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]', silent => true);
 - jsonb_path_query 
 -------------------
@@ -605,15 +573,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select * from jsonb_path_query('{"a": 10}', '$');
   jsonb_path_query 
  ------------------
-@@ -486,13 +462,14 @@
- (1 row)
- 
- select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
--ERROR:  could not find jsonpath variable "value"
-+ jsonb_path_query 
-+------------------
-+(0 rows)
-+
+@@ -489,10 +469,8 @@
+ ERROR:  could not find jsonpath variable "value"
  select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
  ERROR:  "vars" argument is not an object
 -DETAIL:  Jsonpath parameters should be encoded as key-value pairs of "vars" object.
@@ -623,7 +584,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
   jsonb_path_query 
  ------------------
-@@ -575,216 +552,136 @@
+@@ -575,216 +553,136 @@
  (0 rows)
  
  select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**');
@@ -936,42 +897,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x))');
   jsonb_path_query 
  ------------------
-@@ -816,9 +713,7 @@
- select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
-  jsonb_path_query 
- ------------------
-- {"x": 2}
-- {"y": 3}
--(2 rows)
-+(0 rows)
- 
- select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? (exists (@.x))');
-  jsonb_path_query 
-@@ -829,8 +724,7 @@
- select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
-  jsonb_path_query 
- ------------------
-- {"y": 3}
--(1 row)
-+(0 rows)
- 
- select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? (exists (@[*].x))');
-  jsonb_path_query 
-@@ -838,10 +732,9 @@
- (0 rows)
- 
- select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
--   jsonb_path_query   
------------------------
-- [{"x": 2}, {"y": 3}]
--(1 row)
-+ jsonb_path_query 
-+------------------
-+(0 rows)
- 
- --test ternary logic
- select
-@@ -856,19 +749,7 @@
+@@ -856,19 +754,7 @@
  from
  	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
  	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
@@ -992,7 +918,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  select
  	x, y,
  	jsonb_path_query(
-@@ -881,157 +762,114 @@
+@@ -881,157 +767,114 @@
  from
  	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
  	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
@@ -1235,17 +1161,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  -- arithmetic errors
  select jsonb_path_query('[1,2,0,3]', '$[*] ? (2 / @ > 0)');
   jsonb_path_query 
-@@ -1044,8 +882,7 @@
- select jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
-  jsonb_path_query 
- ------------------
-- 0
--(1 row)
-+(0 rows)
- 
- select jsonb_path_query('0', '1 / $');
- ERROR:  division by zero
-@@ -1062,50 +899,49 @@
+@@ -1062,50 +905,49 @@
  select jsonb_path_query('[1,"2",3]', '+$');
  ERROR:  operand of unary jsonpath operator + is not a numeric value
  select jsonb_path_query('1', '$ + "2"', silent => true);
@@ -1332,7 +1248,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  -- unwrapping of operator arguments in lax mode
  select jsonb_path_query('{"a": [2]}', 'lax $.a * 3');
   jsonb_path_query 
-@@ -1131,10 +967,11 @@
+@@ -1131,10 +973,11 @@
  select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3');
  ERROR:  left operand of jsonpath operator * is not a single numeric value
  select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3', silent => true);
@@ -1348,7 +1264,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  -- extension: boolean expressions
  select jsonb_path_query('2', '$ > 1');
   jsonb_path_query 
-@@ -1155,437 +992,287 @@
+@@ -1155,59 +998,26 @@
  (1 row)
  
  select jsonb '2' @? '$ == "2"';
@@ -1418,23 +1334,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 -
 +ERROR:  unsupported comparison operator: <jsonb> @@ <string>
  select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
-- jsonb_path_match 
--------------------
-- f
--(1 row)
--
-+ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
-- jsonb_path_match 
--------------------
-- t
--(1 row)
--
-+ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
+  jsonb_path_match 
+ ------------------
+@@ -1221,29 +1031,29 @@
+ (1 row)
+ 
  select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => false);
 - jsonb_path_match 
 -------------------
@@ -1480,118 +1384,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                    ^
 +HINT:  try \hf jsonb_path_match
  select jsonb_path_query('[null,1,true,"a",[],{}]', '$.type()');
-- jsonb_path_query 
--------------------
-- "array"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
-- jsonb_path_query 
--------------------
-- "array"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
-- jsonb_path_query 
--------------------
-- "null"
-- "number"
-- "boolean"
-- "string"
-- "array"
-- "object"
--(6 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('null', 'null.type()');
-- jsonb_path_query 
--------------------
-- "null"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('null', 'true.type()');
-- jsonb_path_query 
--------------------
-- "boolean"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('null', '(123).type()');
-- jsonb_path_query 
--------------------
-- "number"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('null', '"123".type()');
-- jsonb_path_query 
--------------------
-- "string"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('{"a": 2}', '($.a - 5).abs() + 10');
-- jsonb_path_query 
--------------------
-- 13
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('{"a": 2.5}', '-($.a * $.a).floor() % 4.3');
-- jsonb_path_query 
--------------------
-- -1.7
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
-- jsonb_path_query 
--------------------
-- true
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[1, 2, 3]', '($[*] > 3).type()');
-- jsonb_path_query 
--------------------
-- "boolean"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+  jsonb_path_query 
+ ------------------
+@@ -1318,7 +1128,7 @@
  select jsonb_path_query('[1, 2, 3]', '($[*].a > 3).type()');
-- jsonb_path_query 
--------------------
+  jsonb_path_query 
+ ------------------
 - "boolean"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ "null"
+ (1 row)
+ 
  select jsonb_path_query('[1, 2, 3]', 'strict ($[*].a > 3).type()');
-- jsonb_path_query 
--------------------
-- "null"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -1330,10 +1140,11 @@
  select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
--ERROR:  jsonpath item method .size() can only be applied to an array
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ ERROR:  jsonpath item method .size() can only be applied to an array
  select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()', silent => true);
 - jsonb_path_query 
 -------------------
@@ -1603,81 +1409,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                                            ^
 +HINT:  try \hf jsonb_path_query
  select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
-- jsonb_path_query 
--------------------
-- 1
-- 1
-- 1
-- 1
-- 0
-- 1
-- 3
-- 1
-- 1
--(9 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].abs()');
-- jsonb_path_query 
--------------------
-- 0
-- 1
-- 2
-- 3.4
-- 5.6
--(5 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].floor()');
-- jsonb_path_query 
--------------------
-- 0
-- 1
-- -2
-- -4
-- 5
--(5 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling()');
-- jsonb_path_query 
--------------------
-- 0
-- 1
-- -2
-- -3
-- 6
--(5 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs()');
-- jsonb_path_query 
--------------------
-- 0
-- 1
-- 2
-- 3
-- 6
--(5 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs().type()');
-- jsonb_path_query 
--------------------
-- "number"
-- "number"
-- "number"
-- "number"
-- "number"
--(5 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+  jsonb_path_query 
+ ------------------
+@@ -1399,124 +1210,117 @@
+ (5 rows)
+ 
  select jsonb_path_query('[{},1]', '$[*].keyvalue()');
 -ERROR:  jsonpath item method .keyvalue() can only be applied to an object
 +ERROR:  unknown signature: jsonb_path_query(string, string)
@@ -1881,17 +1617,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                        ^
 +HINT:  try \hf jsonb_path_query
  select jsonb_path_query('{}', '$.abs()');
--ERROR:  jsonpath item method .abs() can only be applied to a numeric value
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ ERROR:  jsonpath item method .abs() can only be applied to a numeric value
  select jsonb_path_query('true', '$.floor()');
--ERROR:  jsonpath item method .floor() can only be applied to a numeric value
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -1524,20 +1328,23 @@
  select jsonb_path_query('"1.2"', '$.ceiling()');
--ERROR:  jsonpath item method .ceiling() can only be applied to a numeric value
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ ERROR:  jsonpath item method .ceiling() can only be applied to a numeric value
  select jsonb_path_query('{}', '$.abs()', silent => true);
 - jsonb_path_query 
 -------------------
@@ -1923,153 +1653,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                        ^
 +HINT:  try \hf jsonb_path_query
  select jsonb_path_query('["", "a", "abc", "abcabc"]', '$[*] ? (@ starts with "abc")');
-- jsonb_path_query 
--------------------
-- "abc"
-- "abcabc"
--(2 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('["", "a", "abc", "abcabc"]', 'strict $ ? (@[*] starts with "abc")');
--      jsonb_path_query      
------------------------------
-- ["", "a", "abc", "abcabc"]
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('["", "a", "abd", "abdabc"]', 'strict $ ? (@[*] starts with "abc")');
-- jsonb_path_query 
--------------------
--(0 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? (@[*] starts with "abc")');
-- jsonb_path_query 
--------------------
--(0 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? ((@[*] starts with "abc") is unknown)');
--      jsonb_path_query      
------------------------------
-- ["abc", "abcabc", null, 1]
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[[null, 1, "abc", "abcabc"]]', 'lax $ ? (@[*] starts with "abc")');
--      jsonb_path_query      
------------------------------
-- [null, 1, "abc", "abcabc"]
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[[null, 1, "abd", "abdabc"]]', 'lax $ ? ((@[*] starts with "abc") is unknown)');
--      jsonb_path_query      
------------------------------
-- [null, 1, "abd", "abdabc"]
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "abd", "abdabc"]', 'lax $[*] ? ((@ starts with "abc") is unknown)');
-- jsonb_path_query 
--------------------
-- null
-- 1
--(2 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c")');
   jsonb_path_query 
  ------------------
-@@ -1594,625 +1281,376 @@
- (2 rows)
- 
- select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "i")');
-- jsonb_path_query 
--------------------
-- "abc"
-- "aBdC"
-- "abdacb"
--(3 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "m")');
-- jsonb_path_query 
--------------------
-- "abc"
-- "abdacb"
-- "adc\nabc"
--(3 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "s")');
-- jsonb_path_query 
--------------------
-- "abc"
-- "abdacb"
-- "ab\nadc"
--(3 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "q")');
-- jsonb_path_query 
--------------------
-- "a\\b"
-- "^a\\b$"
--(2 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -1627,8 +1434,10 @@
  select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "")');
-- jsonb_path_query 
--------------------
+  jsonb_path_query 
+ ------------------
 - "a\b"
 -(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ "a\u0008"
++ "a\\b"
++ "^a\\b$"
++(3 rows)
+ 
  select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "q")');
-- jsonb_path_query 
--------------------
-- "^a\\b$"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "q")');
-- jsonb_path_query 
--------------------
--(0 rows)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "iq")');
-- jsonb_path_query 
--------------------
-- "^a\\b$"
--(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+  jsonb_path_query 
+@@ -1650,569 +1459,354 @@
  select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "")');
-- jsonb_path_query 
--------------------
+  jsonb_path_query 
+ ------------------
 - "a\b"
 -(1 row)
--
-+ERROR:  unknown signature: jsonb_path_query(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++(0 rows)
+ 
  select jsonb_path_query('null', '$.datetime()');
 -ERROR:  jsonpath item method .datetime() can only be applied to a string
 +ERROR:  unknown signature: jsonb_path_query(string, string)
@@ -2805,48 +2411,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 - true
 -(1 row)
 -
-+ERROR:  jsonb_path_query(): could not parse "$.datetime() > \"2020-01-01 12:00:00\".datetime()" as type jsonpath: at or near "(": syntax error
++ERROR:  jsonb_path_query(): could not parse "$.datetime() > \"2020-01-01 12:00:00\".datetime()" as type jsonpath: at or near ")": syntax error: unimplemented: this syntax: .datetime()
 +DETAIL:  source SQL:
 +$.datetime() > "2020-01-01 12:00:00".datetime()
-+          ^
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  set time zone default;
  -- jsonpath operators
  SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');
-@@ -2236,95 +1674,85 @@
+@@ -2236,7 +1830,7 @@
  (1 row)
  
  SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
 -ERROR:  JSON object does not contain key "a"
-+ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
++ERROR:  jsonb_path_query_array(): JSON object does not contain key "a"
  SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
-- jsonb_path_query_array 
--------------------------
-- [1, 2]
--(1 row)
--
-+ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
-- jsonb_path_query_array 
--------------------------
-- [1]
--(1 row)
--
-+ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
-- jsonb_path_query_array 
--------------------------
-- []
--(1 row)
--
-+ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
+  jsonb_path_query_array 
+ ------------------------
+@@ -2256,25 +1850,25 @@
+ (1 row)
+ 
  SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
 - jsonb_path_query_array 
 -------------------------
@@ -2871,9 +2456,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +HINT:  try \hf jsonb_path_query_array
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
 -ERROR:  JSON object does not contain key "a"
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
++ERROR:  jsonb_path_query_first(): JSON object does not contain key "a"
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true);
 - jsonb_path_query_first 
 -------------------------
@@ -2886,32 +2469,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +                                                                                   ^
 +HINT:  try \hf jsonb_path_query_first
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
-- jsonb_path_query_first 
--------------------------
-- 1
--(1 row)
--
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
-- jsonb_path_query_first 
--------------------------
-- 1
--(1 row)
--
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
-- jsonb_path_query_first 
--------------------------
-- 
--(1 row)
--
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
+  jsonb_path_query_first 
+ ------------------------
+@@ -2294,19 +1888,19 @@
+ (1 row)
+ 
  SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
 - jsonb_path_query_first 
 -------------------------
@@ -2936,18 +2498,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 +HINT:  try \hf jsonb_path_query_first
  SELECT jsonb_path_query_first('[{"a": 1}]', '$undefined_var');
 -ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
++ERROR:  jsonb_path_query_first(): could not find jsonpath variable "undefined_var"
  SELECT jsonb_path_query_first('[{"a": 1}]', 'false');
-- jsonb_path_query_first 
--------------------------
-- false
--(1 row)
--
-+ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
+  jsonb_path_query_first 
+ ------------------------
+@@ -2314,17 +1908,15 @@
+ (1 row)
+ 
  SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)';
 - ?column? 
 -----------
@@ -2971,7 +2528,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
   jsonb_path_exists 
  -------------------
-@@ -2332,19 +1760,19 @@
+@@ -2332,19 +1924,19 @@
  (1 row)
  
  SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
@@ -3002,7 +2559,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
  SELECT jsonb_path_exists('[{"a": 1}]', 'false');
   jsonb_path_exists 
  -------------------
-@@ -2352,75 +1780,93 @@
+@@ -2352,61 +1944,81 @@
  (1 row)
  
  SELECT jsonb_path_match('true', '$', silent => false);
@@ -3124,32 +2681,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.ou
 -
 +ERROR:  unsupported comparison operator: <jsonb> @@ <string>
  SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
-- jsonb_path_match 
--------------------
-- t
--(1 row)
--
-+ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
+  jsonb_path_match 
+ ------------------
+@@ -2414,7 +2026,7 @@
+ (1 row)
+ 
  SELECT jsonb_path_match('[{"a": 1}]', '$undefined_var');
 -ERROR:  could not find jsonpath variable "undefined_var"
-+ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
++ERROR:  jsonb_path_match(): could not find jsonpath variable "undefined_var"
  SELECT jsonb_path_match('[{"a": 1}]', 'false');
-- jsonb_path_match 
--------------------
-- f
--(1 row)
--
-+ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/22513/_version_
- -- test string comparison (Unicode codepoint collation)
- WITH str(j, num) AS
- (
-@@ -2436,151 +1882,15 @@
+  jsonb_path_match 
+ ------------------
+@@ -2436,151 +2048,15 @@
  	jsonb_path_query_first(s1.j, '$.s > $s', vars => s2.j) gt
  FROM str s1, str s2
  ORDER BY s1.num, s2.num;

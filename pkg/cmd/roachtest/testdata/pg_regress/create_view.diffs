@@ -124,7 +124,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +See: https://go.crdb.dev/issue-v/48026/_version_
  CREATE VIEW key_dependent_view_no_cols AS
     SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0;
-+ERROR:  relation "key_dependent_view_no_cols" (327): table must contain at least 1 column
++ERROR:  relation "key_dependent_view_no_cols": table must contain at least 1 column
  --
  -- CREATE OR REPLACE VIEW
  --
@@ -2050,13 +2050,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Check cases involving dropped/altered columns in a function's rowtype result
  --
-@@ -1581,26 +1058,18 @@
+@@ -1581,26 +1058,33 @@
  end;
  $$
  language plpgsql;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    rec1 record;
++begin
++    for rec1 in select * from tt14t
++             ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  create view tt14v as select t.* from tt14f() t;
 +ERROR:  unknown function: tt14f()
 +HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
@@ -2085,7 +2100,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -1614,46 +1083,28 @@
+@@ -1614,46 +1098,28 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2142,7 +2157,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- ... but some bug might let it happen, so check defenses
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -1664,124 +1115,63 @@
+@@ -1664,124 +1130,63 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2299,7 +2314,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i, lateral(values(i.*::int8_tbl)) ss;
          q1        |        q2         |               column1                
  ------------------+-------------------+--------------------------------------
-@@ -1804,14 +1194,8 @@
+@@ -1804,14 +1209,8 @@
  (5 rows)
  
  select pg_get_viewdef('tt17v', true);
@@ -2316,7 +2331,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i where i.* in (values(i.*::int8_tbl));
          q1        |        q2         
  ------------------+-------------------
-@@ -1823,48 +1207,48 @@
+@@ -1823,48 +1222,48 @@
  (5 rows)
  
  create table tt15v_log(o tt15v, n tt15v, incr bool);
@@ -2344,12 +2359,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
-+
+ 
 +\d+ tt15v
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -2397,7 +2412,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of ScalarArrayOp with a sub-select
  select 'foo'::text = any(array['abc','def','foo']::text[]);
   ?column? 
-@@ -1873,10 +1257,7 @@
+@@ -1873,10 +1272,7 @@
  (1 row)
  
  select 'foo'::text = any((select array['abc','def','foo']::text[]));  -- fail
@@ -2409,7 +2424,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select 'foo'::text = any((select array['abc','def','foo']::text[])::text[]);
   ?column? 
  ----------
-@@ -1887,12 +1268,8 @@
+@@ -1887,12 +1283,8 @@
  select 'foo'::text = any(array['abc','def','foo']::text[]) c1,
         'foo'::text = any((select array['abc','def','foo']::text[])::text[]) c2;
  select pg_get_viewdef('tt19v', true);
@@ -2424,7 +2439,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of assorted RTE_FUNCTION expressions
  create view tt20v as
  select * from
-@@ -1902,23 +1279,14 @@
+@@ -1902,23 +1294,14 @@
    localtimestamp(3) as t,
    cast(1+2 as int4) as i4,
    cast(1+2 as int8) as i8;
@@ -2455,7 +2470,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- reverse-listing of various special function syntaxes required by SQL
  create view tt201v as
  select
-@@ -1974,136 +1342,41 @@
+@@ -1974,136 +1357,41 @@
    (select * from SESSION_USER) as seu2,
    SYSTEM_USER as su,
    (select * from SYSTEM_USER) as su2;
@@ -2611,7 +2626,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test extraction of FieldSelect field names (get_name_for_var_field)
  create view tt24v as
  with cte as materialized (select r from (values(1,2),(3,4)) r)
-@@ -2111,66 +1384,29 @@
+@@ -2111,66 +1399,29 @@
    cte join (select rr from (values(1,7),(3,8)) rr limit 2) ss
    on (r).column1 = (rr).column1;
  select pg_get_viewdef('tt24v', true);
@@ -2692,7 +2707,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test pretty-print parenthesization rules, and SubLink deparsing
  create view tt26v as
  select x + y + z as c1,
-@@ -2186,128 +1422,9 @@
+@@ -2186,128 +1437,9 @@
         (x,y) <= ANY (values(1,2),(3,4)) as c11
  from (values(1,2,3)) v(x,y,z);
  select pg_get_viewdef('tt26v', true);

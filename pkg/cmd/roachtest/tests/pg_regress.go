@@ -447,10 +447,16 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		docsURI := regexp.MustCompile(`https://www\.cockroachlabs.com/docs/[^/|^\s]+`)
 		actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
 
-		// Remove table ID from the unimplemented error for dropping the PK
-		// without a replacement (to reduce the diff churn).
-		dropPK := regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`)
-		actualB = dropPK.ReplaceAll(actualB, []byte("$1$2"))
+		// Remove table ID from some errors (to reduce the diff churn).
+		for _, re := range []*regexp.Regexp{
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate constraint name: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate column name: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: conflicting NULL/NOT NULL declarations for column: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: table must contain at least*)`),
+		} {
+			actualB = re.ReplaceAll(actualB, []byte("$1$2"))
+		}
 
 		err = os.WriteFile(diffFilePath, actualB, 0644)
 		if err != nil {
