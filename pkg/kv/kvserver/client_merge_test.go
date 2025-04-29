@@ -3910,7 +3910,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
 			if i < len(keySpans)-1 {
 				// The last span is the MVCC span, and is always cleared via Excise.
-				// See multiSSTWriter.
+				// See MultiSSTWriter.
 				if err := writer.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */); err != nil {
 					return err
 				}
