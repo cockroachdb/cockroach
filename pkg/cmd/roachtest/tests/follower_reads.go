@@ -98,7 +98,7 @@ func registerFollowerReads(r registry.Registry) {
 
 				rng, _ := randutil.NewPseudoRand()
 				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
-				runFollowerReadsTest(ctx, t, t.L(), c, rng, topology, rc, data)
+				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
 			},
 		})
 	}
@@ -206,6 +206,7 @@ func runFollowerReadsTest(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
+	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
@@ -217,9 +218,9 @@ func runFollowerReadsTest(
 	// levels in the mixed-version variant of this test than they are on master.
 	isoLevels := []string{"read committed", "snapshot", "serializable"}
 	require.NoError(t, func() error {
-		db := c.Conn(ctx, l, 1)
-		defer db.Close()
-		err := enableClosedTsAutoTune(ctx, rng, db, t)
+		db := connectFunc(1)
+		systemDB := systemConnectFunc(1)
+		err := enableClosedTsAutoTune(ctx, rng, systemDB, t)
 		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
 			// Versions v25.1 and earlier do not support these cluster settings and
 			// should ignore them. The cluster will continue operating normally, with
@@ -1071,7 +1072,7 @@ func runFollowerReadsMixedVersionTest(
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
-		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
+		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, data)
 		return nil
 	}
 
