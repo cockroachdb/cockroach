@@ -189,7 +189,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 				}
 
-				if err := kvSS.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader, msstw); err != nil {
+				if err := msstw.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
@@ -286,12 +286,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	}
 }
 
-func (kvSS *kvBatchSnapshotStrategy) readOneToBatch(
+func (msstw *multiSSTWriter) readOneToBatch(
 	ctx context.Context,
 	ek storage.EngineKey,
 	shared bool, // may receive shared SSTs
 	batchReader *storage.BatchReader,
-	msstw *multiSSTWriter,
 ) error {
 	switch batchReader.KeyKind() {
 	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
