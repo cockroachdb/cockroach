@@ -191,8 +191,9 @@ func (is Server) ScanStorageInternalKeys(
 // SetCompactionConcurrency implements PerStoreServer. It changes the compaction
 // concurrency of a store. While SetCompactionConcurrency is safe for concurrent
 // use, it adds uncertainty about the compaction concurrency actually set on
-// the store. It also adds uncertainty about the compaction concurrency set on
-// the store once the request is cancelled.
+// the store. We do guarantee that once all SetCompactionConcurrency requests
+// are finished (cancelled), the override is removed and the original
+// concurrency is restored.
 func (is Server) SetCompactionConcurrency(
 	ctx context.Context, req *CompactionConcurrencyRequest,
 ) (*CompactionConcurrencyResponse, error) {
@@ -201,7 +202,8 @@ func (is Server) SetCompactionConcurrency(
 		func(ctx context.Context, s *Store) error {
 			s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
 
-			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
+			// Wait for cancellation, and once cancelled, reset the compaction
+			// concurrency.
 			<-ctx.Done()
 			s.TODOEngine().SetCompactionConcurrency(0)
 			return nil
