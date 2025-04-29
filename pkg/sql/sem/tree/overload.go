@@ -917,6 +917,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	// Process variadic functions with unrestrained wildcards as their variadic
 	// parameter. This special cas short circuits the logic below, most of which
 	// assumes AnyElement behavior for untyped parameters.
+	//
+	// TODO(mw5h): This is an ugly special case. Refactor this to use the logic
+	// below. I'd do it now but it's a bit too high risk this close to 25.2.
 	for i := range s.params {
 		if vt, ok := s.params[i].(VariadicType); ok && vt.VarType == types.Any {
 			if semaCtx.UsePre_25_2VariadicBuiltins {
@@ -926,16 +929,25 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			if numOverloads > 1 {
 				return errors.AssertionFailedf(
 					"only one overload can have VariadicType {types.Any} parameters")
+			} else if !vt.MatchLen(len(s.exprs)) {
+				s.overloadIdxs = s.overloadIdxs[:0]
+				return nil
 			}
+			typeCheckOk := true
 			for j := range s.exprs {
 				typedExpr, err := s.exprs[j].TypeCheck(ctx, semaCtx, vt.GetAt(j))
 				if err != nil {
 					return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 						"error type checking resolved expression:")
+				} else if !vt.MatchAt(typedExpr.ResolvedType(), j) {
+					typeCheckOk = false
 				}
 				s.typedExprs[j] = typedExpr
 			}
-			s.overloadIdxs = append(s.overloadIdxs[:0], uint8(i))
+			s.overloadIdxs = s.overloadIdxs[:0]
+			if typeCheckOk {
+				s.overloadIdxs = append(s.overloadIdxs, uint8(i))
+			}
 			return nil
 		}
 	}
