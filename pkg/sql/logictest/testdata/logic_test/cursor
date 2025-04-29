@@ -920,3 +920,23 @@ statement ok
 CLOSE curs;
 
 subtest end
+
+# Regression test for incorrectly advancing internal position when persisting
+# the WITH HOLD cursor (#145362).
+subtest regression_145362
+
+statement ok
+CREATE TABLE empty (k INT PRIMARY KEY)
+
+statement ok
+BEGIN;
+DECLARE foo CURSOR WITH HOLD FOR SELECT * FROM empty;
+COMMIT;
+
+query empty
+FETCH ABSOLUTE 1 FROM foo;
+
+statement ok
+CLOSE foo;
+
+subtest end

@@ -365,7 +365,7 @@ type sqlCursor struct {
 // Next implements the Rows interface.
 func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
 	more, err := s.Rows.Next(ctx)
-	if err == nil {
+	if more && err == nil {
 		s.curRow++
 	}
 	return more, err
