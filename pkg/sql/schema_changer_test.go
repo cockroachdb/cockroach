@@ -6911,7 +6911,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 			desc:  "error during multiple ALTER TABLE x SET ttl_expire_after x during modify row-level-ttl mutation",
 			setup: createNonTTLTable,
 			schemaChange: `
-ALTER TABLE t.test SET (ttl_cron = '@daily');
+ALTER TABLE t.test SET (ttl_job_cron = '@daily');
 ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 `,
 			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
