@@ -258,7 +258,6 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 			Start: storage.EngineKey{Key: cur.Key},
 			End:   storage.EngineKey{Key: cur.EndKey},
 		}
-
 	}
 
 	// If we're at the last span, call Finish on the fragmenters. If we're not at the
