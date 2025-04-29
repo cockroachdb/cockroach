@@ -434,7 +434,7 @@ ok1  CREATE TABLE public.ok1 (
      -- Warning: Partitioned table with no zone configurations.
      ;
      ALTER TABLE public.ok1 ENABLE ROW LEVEL SECURITY;
-     CREATE POLICY test_policy ON public.ok1 AS PERMISSIVE FOR SELECT TO public USING (true)
+     CREATE POLICY test_policy ON public.ok1 AS PERMISSIVE FOR SELECT TO public USING (true);
 
 # Clean up by dropping the policy and table after testing
 statement ok

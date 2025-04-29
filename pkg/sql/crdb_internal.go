@@ -4084,22 +4084,35 @@ func showRowLevelSecurityStatements(
 	rlsStmts *tree.DArray,
 ) error {
 	// Add the row level security ALTER statements to the rls_statements column.
-	if alterRLSStatements, err := showRLSAlterStatement(tn, table, false); err != nil {
+	alterRLSStatements, err := showRLSAlterStatement(tn, table)
+	if err != nil {
 		return err
-	} else if len(alterRLSStatements) != 0 {
-		if err = rlsStmts.Append(tree.NewDString(alterRLSStatements)); err != nil {
+	}
+
+	semicolon := ""
+	// Add a semicolon to the ALTER RLS statement if it is the last statement.
+	if len(table.GetPolicies()) == 0 {
+		semicolon = ";"
+	}
+
+	if len(alterRLSStatements) != 0 {
+		if err = rlsStmts.Append(tree.NewDString(alterRLSStatements + semicolon)); err != nil {
 			return err
 		}
 	}
 
 	// Add the row level security policy statements to the rls_statements column.
-	for _, policy := range table.GetPolicies() {
-		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy, false); err != nil {
+	for i, policy := range table.GetPolicies() {
+		i++
+		// Add a semicolon to the last policy statement.
+		if i == len(table.GetPolicies()) {
+			semicolon = ";"
+		}
+
+		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy); err != nil {
 			return err
-		} else if len(policyStatement) != 0 {
-			if err := rlsStmts.Append(tree.NewDString(policyStatement)); err != nil {
-				return err
-			}
+		} else if err = rlsStmts.Append(tree.NewDString(policyStatement + semicolon)); err != nil {
+			return err
 		}
 	}
 
