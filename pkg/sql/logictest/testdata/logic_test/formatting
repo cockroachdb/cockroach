@@ -21,7 +21,7 @@ SHOW CREATE test_table_view
 test_table_view  CREATE VIEW public.test_table_view (
                    col1,
                    col2
-                 ) AS SELECT col1, col2 FROM test.public.test_table
+                 ) AS SELECT col1, col2 FROM test.public.test_table;
 
 query TTT
 SELECT * FROM test_table

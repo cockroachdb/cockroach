@@ -487,7 +487,7 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 DROP TABLE a
@@ -547,7 +547,7 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -619,7 +619,7 @@ a  CREATE TABLE public.a (
      b INT2[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement error integer out of range for type int2
 INSERT INTO a VALUES (ARRAY[100000])

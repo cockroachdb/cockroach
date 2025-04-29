@@ -208,9 +208,7 @@ func ShowCreateTable(
 }
 
 // showRLSAlterStatement returns a string of the ALTER TABLE ... ROW LEVEL SECURITY statements
-func showRLSAlterStatement(
-	tn *tree.TableName, table catalog.TableDescriptor, addNewLine bool,
-) (string, error) {
+func showRLSAlterStatement(tn *tree.TableName, table catalog.TableDescriptor) (string, error) {
 	if !table.IsRowLevelSecurityEnabled() && !table.IsRowLevelSecurityForced() {
 		return "", nil
 	}
@@ -233,9 +231,6 @@ func showRLSAlterStatement(
 		cmds = append(cmds, forcedCmd)
 	}
 
-	if addNewLine {
-		f.WriteString(";\n")
-	}
 	f.FormatNode(&tree.AlterTable{
 		Table: un,
 		Cmds:  cmds,
@@ -253,7 +248,6 @@ func showPolicyStatement(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	policy descpb.PolicyDescriptor,
-	addNewLine bool,
 ) (string, error) {
 	un := tn.ToUnresolvedObjectName()
 
@@ -294,9 +288,6 @@ func showPolicyStatement(
 		}
 	}
 
-	if addNewLine {
-		f.WriteString(";\n")
-	}
 	f.FormatNode(&tree.CreatePolicy{
 		PolicyName: tree.Name(policy.Name),
 		TableName:  un,

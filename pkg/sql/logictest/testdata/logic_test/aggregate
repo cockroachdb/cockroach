@@ -3554,7 +3554,7 @@ osagg_view  CREATE VIEW public.osagg_view (
                 percentile_disc(0.50)WITHIN GROUP (ORDER BY f),
                 percentile_cont(0.50)WITHIN GROUP (ORDER BY f DESC)
               FROM
-                test.public.osagg
+                test.public.osagg;
 
 # Test malformed ordered-set aggregation.
 statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column

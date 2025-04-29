@@ -21,7 +21,7 @@ abcd  CREATE TABLE public.abcd (
         CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
         FAMILY f1 (a, b),
         FAMILY fam_1_c_d (c, d)
-      )
+      );
 
 statement ok
 CREATE INDEX d_idx ON abcd(d)
@@ -165,7 +165,7 @@ abcd  CREATE TABLE public.abcd (
         FAMILY fam_2_g (g),
         FAMILY f_h (h, i),
         FAMILY f_j (j)
-      )
+      );
 
 statement ok
 ALTER TABLE abcd DROP c, DROP d, DROP e, DROP h, DROP i, DROP j
@@ -181,7 +181,7 @@ abcd  CREATE TABLE public.abcd (
         CONSTRAINT abcd_pkey PRIMARY KEY (a ASC),
         FAMILY f1 (a, b, f),
         FAMILY fam_2_g (g)
-      )
+      );
 
 statement ok
 CREATE TABLE f1 (
@@ -197,7 +197,7 @@ f1  CREATE TABLE public.f1 (
       b STRING NULL,
       c STRING NULL,
       CONSTRAINT f1_pkey PRIMARY KEY (a ASC)
-    )
+    );
 
 statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)
@@ -213,7 +213,7 @@ assign_at_create  CREATE TABLE public.assign_at_create (
                     FAMILY pri (a),
                     FAMILY foo (b),
                     FAMILY fam_2_c (c)
-                  )
+                  );
 
 # Check the the diff-column-id storage
 statement ok
@@ -250,7 +250,7 @@ rename_col  CREATE TABLE public.rename_col (
               CONSTRAINT rename_col_pkey PRIMARY KEY (a ASC),
               FAMILY fam_0_a_b (a, d),
               FAMILY fam_1_c (e)
-            )
+            );
 
 # Regression tests for https://github.com/cockroachdb/cockroach/issues/41007.
 statement ok

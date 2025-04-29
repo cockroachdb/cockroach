@@ -191,7 +191,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
                                  INDEX create_index_concurrently_idx (a ASC)
-                               )
+                               );
 
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
@@ -220,7 +220,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  a INT8 NULL,
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
-                               )
+                               );
 
 statement ok
 DROP TABLE create_index_concurrently_tbl
@@ -418,7 +418,7 @@ CREATE TABLE public.t_hash (
   INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
   FAMILY fam_0_pk_a_b (pk, a, b)
-)
+);
 
 statement ok
 CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
@@ -633,6 +633,6 @@ tbl_with_collate  CREATE TABLE public.tbl_with_collate (
                     UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
                     UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
                     UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
-                  )
+                  );
 
 subtest end

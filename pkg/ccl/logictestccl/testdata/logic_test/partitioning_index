@@ -14,15 +14,16 @@ query TT
 SHOW CREATE TABLE ok1
 ----
 ok1  CREATE TABLE public.ok1 (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     CONSTRAINT ok1_pkey PRIMARY KEY (a ASC),
-     INDEX ok1_b_idx (b ASC) PARTITION BY LIST (b) (
-       PARTITION p1 VALUES IN ((1)),
-       PARTITION pu VALUES IN ((NULL))
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       CONSTRAINT ok1_pkey PRIMARY KEY (a ASC),
+       INDEX ok1_b_idx (b ASC) PARTITION BY LIST (b) (
+         PARTITION p1 VALUES IN ((1)),
+         PARTITION pu VALUES IN ((NULL))
+       )
      )
-)
--- Warning: Partitioned table with no zone configurations.
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 # Verify that secondary indexes with a partition for NULLs can actually store
 # NULLs.
@@ -42,14 +43,15 @@ query TT
 SHOW CREATE TABLE ok2
 ----
 ok2  CREATE TABLE public.ok2 (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     CONSTRAINT ok2_pkey PRIMARY KEY (a ASC),
-     UNIQUE INDEX ok2_b_key (b ASC) PARTITION BY LIST (b) (
-       PARTITION p1 VALUES IN ((1))
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       CONSTRAINT ok2_pkey PRIMARY KEY (a ASC),
+       UNIQUE INDEX ok2_b_key (b ASC) PARTITION BY LIST (b) (
+         PARTITION p1 VALUES IN ((1))
+       )
      )
-)
--- Warning: Partitioned table with no zone configurations.
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 statement ok
 CREATE TABLE ok3 (
@@ -72,17 +74,18 @@ query TT
 SHOW CREATE TABLE ok3
 ----
 ok3  CREATE TABLE public.ok3 (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     CONSTRAINT ok3_pkey PRIMARY KEY (a ASC),
-     UNIQUE INDEX ok3_b_key (b ASC) PARTITION BY LIST (b) (
-       PARTITION p1 VALUES IN ((1))
-     ),
-     UNIQUE INDEX ok3_b_key2 (b ASC) PARTITION BY LIST (b) (
-       PARTITION p2 VALUES IN ((1))
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       CONSTRAINT ok3_pkey PRIMARY KEY (a ASC),
+       UNIQUE INDEX ok3_b_key (b ASC) PARTITION BY LIST (b) (
+         PARTITION p1 VALUES IN ((1))
+       ),
+       UNIQUE INDEX ok3_b_key2 (b ASC) PARTITION BY LIST (b) (
+         PARTITION p2 VALUES IN ((1))
+       )
      )
-)
--- Warning: Partitioned table with no zone configurations.
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 statement ok
 CREATE TABLE indexes (a INT PRIMARY KEY, b INT, FAMILY "primary" (a, b))
@@ -126,26 +129,27 @@ query TT
 SHOW CREATE TABLE indexes
 ----
 indexes  CREATE TABLE public.indexes (
-         a INT8 NOT NULL,
-         b INT8 NULL,
-         CONSTRAINT indexes_pkey PRIMARY KEY (a ASC),
-         INDEX i1 (b ASC) PARTITION BY LIST (b) (
-           PARTITION p1 VALUES IN ((1))
-         ),
-         UNIQUE INDEX i2 (b ASC) PARTITION BY LIST (b) (
-           PARTITION p2 VALUES IN ((1))
-         ),
-         INDEX i3 (b ASC) PARTITION BY LIST (b) (
-           PARTITION p3 VALUES IN ((1))
-         ),
-         UNIQUE INDEX i4 (b ASC) PARTITION BY LIST (b) (
-           PARTITION p4 VALUES IN ((1))
-         ),
-         INDEX i5 (b ASC) PARTITION BY LIST (b) (
-           PARTITION p1 VALUES IN ((1))
+           a INT8 NOT NULL,
+           b INT8 NULL,
+           CONSTRAINT indexes_pkey PRIMARY KEY (a ASC),
+           INDEX i1 (b ASC) PARTITION BY LIST (b) (
+             PARTITION p1 VALUES IN ((1))
+           ),
+           UNIQUE INDEX i2 (b ASC) PARTITION BY LIST (b) (
+             PARTITION p2 VALUES IN ((1))
+           ),
+           INDEX i3 (b ASC) PARTITION BY LIST (b) (
+             PARTITION p3 VALUES IN ((1))
+           ),
+           UNIQUE INDEX i4 (b ASC) PARTITION BY LIST (b) (
+             PARTITION p4 VALUES IN ((1))
+           ),
+           INDEX i5 (b ASC) PARTITION BY LIST (b) (
+             PARTITION p1 VALUES IN ((1))
+           )
          )
-)
--- Warning: Partitioned table with no zone configurations.
+         -- Warning: Partitioned table with no zone configurations.
+         ;
 
 statement ok
 CREATE TABLE inverted (
@@ -166,19 +170,20 @@ query TT
 SHOW CREATE TABLE inverted
 ----
 inverted  CREATE TABLE public.inverted (
-          a INT8 NOT NULL,
-          b INT8 NULL,
-          j JSONB NULL,
-          CONSTRAINT inverted_pkey PRIMARY KEY (a ASC),
-          INVERTED INDEX inverted_b_j_idx (b ASC, j) PARTITION BY LIST (b) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION pu VALUES IN ((NULL))
-          ),
-          INVERTED INDEX inv_idx (b ASC, j) PARTITION BY LIST (b) (
-            PARTITION p1 VALUES IN ((1))
+            a INT8 NOT NULL,
+            b INT8 NULL,
+            j JSONB NULL,
+            CONSTRAINT inverted_pkey PRIMARY KEY (a ASC),
+            INVERTED INDEX inverted_b_j_idx (b ASC, j) PARTITION BY LIST (b) (
+              PARTITION p1 VALUES IN ((1)),
+              PARTITION pu VALUES IN ((NULL))
+            ),
+            INVERTED INDEX inv_idx (b ASC, j) PARTITION BY LIST (b) (
+              PARTITION p1 VALUES IN ((1))
+            )
           )
-)
--- Warning: Partitioned table with no zone configurations.
+          -- Warning: Partitioned table with no zone configurations.
+          ;
 
 # TODO(andyk): Add more partitioning tests once insertion is supported.
 subtest vector
@@ -215,6 +220,7 @@ SHOW CREATE TABLE vector
             )
           )
           -- Warning: Partitioned table with no zone configurations.
+          ;
 
 # Partitioning by vector column is not supported b/c the data type does not have
 # a linear ordering.
@@ -250,6 +256,7 @@ CREATE TABLE public.t60019 (
   FAMILY fam_0_pk_a_b (pk, a, b)
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 # Regression test for #63733. Scanning a partitioned index should produce rows
 # where the first index column is NULL.

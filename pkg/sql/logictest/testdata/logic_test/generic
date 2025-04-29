@@ -416,7 +416,7 @@ EXECUTE p
 CREATE TABLE public.a (
   a INT8 NOT NULL,
   CONSTRAINT a_pkey PRIMARY KEY (a ASC)
-)
+);
 
 statement ok
 ALTER TABLE a RENAME TO b
