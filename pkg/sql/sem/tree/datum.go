@@ -5460,7 +5460,7 @@ func (d *DEnum) ResolvedType() *types.T {
 	return d.EnumTyp
 }
 
-// PlanCistFromCtx returns the plan gist if it is stored in the context. It is
+// PlanGistFromCtx returns the plan gist if it is stored in the context. It is
 // injected from the sql package to avoid import cycle.
 var PlanGistFromCtx func(context.Context) string
 
@@ -5487,11 +5487,11 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 			// safe string.
 			gist = redact.SafeString(PlanGistFromCtx(ctx))
 		}
-		panic(errors.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"comparison of two different versions of enum %s oid %d: versions %d and %d, gist %q",
 			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()), d.EnumTyp.TypeMeta.Version,
 			v.EnumTyp.TypeMeta.Version, gist,
-		))
+		)
 	}
 
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
