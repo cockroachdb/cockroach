@@ -501,13 +501,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  CREATE FUNCTION tp_chk_data(OUT pktb regclass, OUT pkval int, OUT fktb regclass, OUT fkval int)
    RETURNS SETOF record LANGUAGE plpgsql AS $$
    BEGIN
-@@ -481,114 +456,160 @@
+@@ -481,114 +456,158 @@
      ORDER BY 2, 4;
    END
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++ERROR:  relation "NULL" does not exist
  CREATE TABLE truncprim (a int PRIMARY KEY);
  CREATE TABLE truncpart (a int REFERENCES truncprim)
    PARTITION BY RANGE (a);

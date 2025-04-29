@@ -1,17 +1,32 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --label=/mnt/data1/postgres/src/test/regress/results/explain.out /mnt/data1/postgres/src/test/regress/expected/explain.out /mnt/data1/postgres/src/test/regress/results/explain.out
 --- /mnt/data1/postgres/src/test/regress/expected/explain.out
 +++ /mnt/data1/postgres/src/test/regress/results/explain.out
-@@ -30,6 +30,9 @@
+@@ -30,6 +30,24 @@
      end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    ln text;
++begin
++    for ln in execute $1
++           ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  -- To produce valid JSON output, replace numbers with "0" or "0.0" not "N"
  create function explain_filter_to_json(text) returns jsonb
  language plpgsql as
-@@ -47,247 +50,91 @@
+@@ -47,247 +65,91 @@
      return data::jsonb;
  end;
  $$;
@@ -324,7 +339,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  -- SETTINGS option
  -- We have to ignore other settings that might be imposed by the environment,
  -- so printing the whole Settings field unfortunately won't do.
-@@ -296,32 +143,16 @@
+@@ -296,32 +158,16 @@
  select true as "OK"
    from explain_filter('explain (settings) select * from int8_tbl i8') ln
    where ln ~ '^ *Settings: .*plan_cache_mode = ''force_generic_plan''';
@@ -361,7 +376,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  -- Test EXPLAIN (GENERIC_PLAN) with partition pruning
  -- partitions should be pruned at plan time, based on constants,
  -- but there should be no pruning based on parameter placeholders
-@@ -329,27 +160,52 @@
+@@ -329,27 +175,52 @@
    key1 integer not null,
    key2 integer not null
  ) partition by list (key1);
@@ -423,7 +438,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  --
  -- Test production of per-worker data
  --
-@@ -360,9 +216,24 @@
+@@ -360,9 +231,24 @@
  begin;
  -- encourage use of parallel plans
  set parallel_setup_cost=0;
@@ -448,7 +463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  select jsonb_pretty(
    explain_filter_to_json('explain (analyze, verbose, buffers, format json)
                           select * from tenk1 order by tenthous')
-@@ -374,188 +245,19 @@
+@@ -374,188 +260,17 @@
    #- '{0,Plan,Plans,0,Sort Method}'
    #- '{0,Plan,Plans,0,Sort Space Type}'
  );
@@ -620,9 +635,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/explain.out --lab
  create temp table t1(f1 float8);
  create function pg_temp.mysin(float8) returns float8 language plpgsql
  as 'begin return sin($1); end';
-+ERROR:  unimplemented: cannot create UDFs under a temporary schema
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/104687/_version_
++ERROR:  sin(): no value provided for placeholder: $1
  select explain_filter('explain (verbose) select * from t1 where pg_temp.mysin(f1) < 0.5');
 -                       explain_filter                       
 -------------------------------------------------------------

@@ -65,7 +65,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/identity.out --la
  ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- ok
  ALTER TABLE itest4 ALTER COLUMN a DROP NOT NULL;  -- error, disallowed
 -ERROR:  column "a" of relation "itest4" is an identity column
-+ERROR:  relation "itest4" (1033): conflicting NULL/NOT NULL declarations for column "a"
++ERROR:  relation "itest4": conflicting NULL/NOT NULL declarations for column "a"
  ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error, already set
  ERROR:  column "a" of relation "itest4" is already an identity column
  ALTER TABLE itest4 ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY;  -- error, wrong data type
