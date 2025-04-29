@@ -370,7 +370,7 @@ type CreateType struct {
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
 	EnumLabels EnumValueList
-	// CompositeTypeList is set when this repesnets a CREATE TYPE ... AS ( )
+	// CompositeTypeList is set when this represents a CREATE TYPE ... AS ( )
 	// statement.
 	CompositeTypeList []CompositeTypeElem
 	// IfNotExists is true if IF NOT EXISTS was requested.

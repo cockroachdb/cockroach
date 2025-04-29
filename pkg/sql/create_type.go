@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -400,6 +401,10 @@ func CreateEnumTypeDesc(
 	}).BuildCreatedMutableType(), nil
 }
 
+var jsonpathInCompositeErr = unimplemented.NewWithIssueDetailf(
+	144910, "", "jsonpath cannot be used in a composite type",
+)
+
 // createCompositeTypeDesc creates a new composite type descriptor.
 func createCompositeTypeDesc(
 	params runParams,
@@ -425,6 +430,10 @@ func createCompositeTypeDesc(
 		}
 		if typ.Identical(types.Trigger) {
 			return nil, tree.CannotAcceptTriggerErr
+		}
+		if typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath {
+			// TODO(#144910): this is unsupported for now, out of caution.
+			return nil, jsonpathInCompositeErr
 		}
 		if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ); err != nil {
 			return nil, err
