@@ -94,7 +94,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		if modificationTime.After(aost) {
 			return pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
-				"found a recent schema change on the table at %s, aborting",
+				"found a recent schema change on the table at %s, aborting and waiting for the next scheduled job",
 				modificationTime.Format(time.RFC3339),
 			)
 		}
