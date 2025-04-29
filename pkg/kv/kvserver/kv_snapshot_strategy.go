@@ -105,21 +105,21 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
 
-	// We rely on the last keyRange passed into multiSSTWriter being the user key
+	// We rely on the last keyRange passed into MultiSSTWriter being the user key
 	// span. If the sender signals that it can no longer do shared replication
 	// (with a TransitionFromSharedToRegularReplicate = true), we will have to
-	// switch to adding a rangedel for that span. Since multiSSTWriter acts on an
+	// switch to adding a rangedel for that span. Since MultiSSTWriter acts on an
 	// opaque slice of keyRanges, we just tell it to add a rangedel for the last
 	// span. To avoid bugs, assert on the last span in keyRanges actually being
 	// equal to the user key span.
 	if !keyRanges[len(keyRanges)-1].Equal(header.State.Desc.KeySpan().AsRawSpanWithNoLocals()) {
-		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
+		return noSnap, errors.AssertionFailedf("last span in MultiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
 
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, multiSSTWriterOptions{
+	msstw, err := NewMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, MultiSSTWriterOptions{
 		SSTChunkSize: kvSS.sstChunkSize,
 		MaxSSTSize:   MaxSnapshotSSTableSize.Get(&kvSS.st.SV),
 	})
@@ -174,7 +174,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
 
-				bytesEstimate := msstw.estimatedDataSize()
+				bytesEstimate := msstw.EstimatedDataSize()
 				delta := bytesEstimate - prevBytesEstimate
 				// Calling nil pacer is a noop.
 				if err := pacer.Pace(ctx, delta, false /* final */); err != nil {
@@ -193,7 +193,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 				}
 
-				if err := msstw.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader); err != nil {
+				if err := msstw.ReadOne(ctx, ek, header.SharedReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
