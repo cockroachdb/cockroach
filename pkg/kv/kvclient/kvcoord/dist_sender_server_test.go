@@ -4676,7 +4676,6 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
-	keyC := roachpb.Key("c")
 
 	var targetTxnIDString atomic.Value
 	targetTxnIDString.Store("")
@@ -4763,52 +4762,49 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 
 		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			retryNum.Add(1)
-
 			if targetTxnIDString.Load() == "" {
 				// Store the txnID for the testing knobs.
 				targetTxnIDString.Store(txn.ID().String())
 				t.Logf("txn1 ID is: %s", txn.ID())
 			}
 
-			err := txn.Put(ctx, keyA, "value")
-			require.NoError(t, err)
-			res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
-			require.NoError(t, err)
-			require.Equal(t, res.ValueBytes(), []byte("valueB"))
-			res, err = txn.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
-			require.NoError(t, err)
-			require.Equal(t, res.ValueBytes(), []byte("valueB"))
-
 			switch retryNum.Load() {
 			case 1:
+				err := txn.Put(ctx, keyA, "value")
+				require.NoError(t, err)
+				res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
+				require.NoError(t, err)
+				require.Equal(t, res.ValueBytes(), []byte("valueB"))
+				res, err = txn.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
+				require.NoError(t, err)
+				require.Equal(t, res.ValueBytes(), []byte("valueB"))
 				err = txn.Commit(ctx)
 				require.Error(t, err)
-				//require.ErrorContains(t, err, "IntentMissingError")
+				// require.ErrorContains(t, err, "IntentMissingError")
 				// Transfer the lease to n3.
 				transferLease(2)
 				close(startTxn2)
 				// Block until Txn2 recovers us.
 				<-blockCh
+				return err
 			case 2:
-				// Attempt a parallel commit.
-				b := txn.NewBatch()
-				b.Put(keyC, "valueC")
-				err = txn.CommitInBatch(ctx, b)
+				// My our second retry, txrecovery should have correctly aborted this
+				// transaction, which we'll discover here.
+				err := txn.Put(ctx, keyA, "value")
 				require.Error(t, err)
-				// NB: This should be a TransactionAbortedError instead, as txn2 should
-				// recover us and mark us as aborted. We expect to learn this when
-				// trying to create our TxnRecord on the second commit attempt.
-				require.ErrorContains(t, err, "already committed")
-				return errors.New("stop") // return a terminal error to get exit the retryable
+				require.ErrorContains(t, err, "ABORT_REASON_ABORT_SPAN")
+				return err
+			case 3:
+				// Since txn recovery correctly aborts us, we get retried again. This
+				// time we just return. Writing nothing.
+				return nil
 			default:
 				t.Errorf("unexpected retry number: %d", retryNum.Load())
 			}
 			return nil
 		})
-		require.Error(t, err)
-		require.ErrorContains(t, err, "stop")
+		require.NoError(t, err)
 	}()
-
 	<-startTxn2
 
 	txn2 := db.NewTxn(ctx, "txn2")
@@ -4816,7 +4812,7 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	require.NoError(t, err)
 	// NB: Nothing should exist on keyA, because txn1 didn't commit at epoch 1 (or
 	// any epoch, for that matter).
-	require.True(t, res.Exists())
+	require.False(t, res.Exists())
 
 	close(blockCh)
 	wg.Wait()
