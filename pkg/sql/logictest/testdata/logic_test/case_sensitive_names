@@ -201,7 +201,7 @@ SHOW CREATE VIEW xv
 xv  CREATE VIEW public.xv (
       x,
       "Y"
-    ) AS SELECT x, "Y" FROM test.public.foo
+    ) AS SELECT x, "Y" FROM test.public.foo;
 
 query error pgcode 42P01 relation "XV" does not exist
 SHOW CREATE VIEW "XV"
@@ -215,7 +215,7 @@ SHOW CREATE VIEW "YV"
 "YV"  CREATE VIEW public."YV" (
         x,
         "Y"
-      ) AS SELECT x, "Y" FROM test.public.foo
+      ) AS SELECT x, "Y" FROM test.public.foo;
 
 query error pgcode 42P01 relation "yv" does not exist
 SHOW CREATE VIEW YV

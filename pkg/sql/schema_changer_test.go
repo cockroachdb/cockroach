@@ -3361,7 +3361,7 @@ ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 	length INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX v_idx (v ASC)
-)`
+);`
 	if create != expect {
 		t.Fatalf("got: %s\nexpected: %s", create, expect)
 	}

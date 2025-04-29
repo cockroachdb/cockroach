@@ -323,7 +323,7 @@ CREATE TABLE public.t1_with_b_2_ref (
   j INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 onlyif config local-legacy-schema-changer
 statement ok

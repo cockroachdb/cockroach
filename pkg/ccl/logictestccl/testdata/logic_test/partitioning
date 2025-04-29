@@ -387,15 +387,16 @@ query TT
 SHOW CREATE TABLE ok1
 ----
 ok1  CREATE TABLE public.ok1 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a) (
-  PARTITION p1 VALUES IN ((1)),
-  PARTITION p2 VALUES IN ((2))
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((1)),
+       PARTITION p2 VALUES IN ((2))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query TT
 SHOW CREATE TABLE ok1 WITH REDACT
@@ -410,6 +411,7 @@ ok1  CREATE TABLE public.ok1 (
        PARTITION p2 VALUES IN ((‹×›))
      )
      -- Warning: Partitioned table with no zone configurations.
+     ;
 
 subtest partition_with_rls
 
@@ -434,7 +436,7 @@ ok1  CREATE TABLE public.ok1 (
      -- Warning: Partitioned table with no zone configurations.
      ;
      ALTER TABLE public.ok1 ENABLE ROW LEVEL SECURITY;
-     CREATE POLICY test_policy ON public.ok1 AS PERMISSIVE FOR SELECT TO public USING (true)
+     CREATE POLICY test_policy ON public.ok1 AS PERMISSIVE FOR SELECT TO public USING (true);
 
 # Clean up by dropping the policy and table after testing
 statement ok
@@ -489,15 +491,16 @@ query TT
 SHOW CREATE TABLE ok2
 ----
 ok2  CREATE TABLE public.ok2 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok2_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a) (
-  PARTITION p1 VALUES IN ((1)),
-  PARTITION p2 VALUES IN ((2))
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok2_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((1)),
+       PARTITION p2 VALUES IN ((2))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok2
@@ -538,15 +541,16 @@ query TT
 SHOW CREATE TABLE ok3
 ----
 ok3  CREATE TABLE public.ok3 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok3_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a) (
-  PARTITION p1 VALUES IN ((1)),
-  PARTITION p2 VALUES IN ((DEFAULT))
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok3_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((1)),
+       PARTITION p2 VALUES IN ((DEFAULT))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query TT
 SHOW CREATE TABLE ok3 WITH REDACT
@@ -561,6 +565,7 @@ ok3  CREATE TABLE public.ok3 (
        PARTITION p2 VALUES IN ((DEFAULT))
      )
      -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok3
@@ -603,17 +608,18 @@ query TT
 SHOW CREATE TABLE ok4
 ----
 ok4  CREATE TABLE public.ok4 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok4_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a, b) (
-  PARTITION p1 VALUES IN ((1, 1)),
-  PARTITION p2 VALUES IN ((1, DEFAULT)),
-  PARTITION p3 VALUES IN ((2, 3)),
-  PARTITION p4 VALUES IN ((DEFAULT, DEFAULT))
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok4_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a, b) (
+       PARTITION p1 VALUES IN ((1, 1)),
+       PARTITION p2 VALUES IN ((1, DEFAULT)),
+       PARTITION p3 VALUES IN ((2, 3)),
+       PARTITION p4 VALUES IN ((DEFAULT, DEFAULT))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok4
@@ -696,21 +702,22 @@ query TT
 SHOW CREATE TABLE ok5
 ----
 ok5  CREATE TABLE public.ok5 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok5_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a) (
-  PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
-    PARTITION p1_1 VALUES IN ((1)),
-    PARTITION p1_2 VALUES IN ((DEFAULT))
-  ),
-  PARTITION p2 VALUES IN ((2)) PARTITION BY LIST (b) (
-    PARTITION p2_1 VALUES IN ((3))
-  ),
-  PARTITION p3 VALUES IN ((DEFAULT))
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok5_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
+         PARTITION p1_1 VALUES IN ((1)),
+         PARTITION p1_2 VALUES IN ((DEFAULT))
+       ),
+       PARTITION p2 VALUES IN ((2)) PARTITION BY LIST (b) (
+         PARTITION p2_1 VALUES IN ((3))
+       ),
+       PARTITION p3 VALUES IN ((DEFAULT))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 statement ok
 CREATE TABLE ok6 (
@@ -728,15 +735,16 @@ query TT
 SHOW CREATE TABLE ok6
 ----
 ok6  CREATE TABLE public.ok6 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok6_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY RANGE (a) (
-  PARTITION p1 VALUES FROM (0) TO (1),
-  PARTITION p2 VALUES FROM (1) TO (2)
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok6_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY RANGE (a) (
+       PARTITION p1 VALUES FROM (0) TO (1),
+       PARTITION p2 VALUES FROM (1) TO (2)
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok6
@@ -767,14 +775,15 @@ query TT
 SHOW CREATE TABLE ok7
 ----
 ok7  CREATE TABLE public.ok7 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok7_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY RANGE (a) (
-  PARTITION p1 VALUES FROM (0) TO (1)
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok7_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY RANGE (a) (
+       PARTITION p1 VALUES FROM (0) TO (1)
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok7
@@ -809,16 +818,17 @@ query TT
 SHOW CREATE TABLE ok8
 ----
 ok8  CREATE TABLE public.ok8 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok8_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY RANGE (a) (
-  PARTITION p1 VALUES FROM (MINVALUE) TO (1),
-  PARTITION p2 VALUES FROM (1) TO (2),
-  PARTITION p3 VALUES FROM (2) TO (MAXVALUE)
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok8_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY RANGE (a) (
+       PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+       PARTITION p2 VALUES FROM (1) TO (2),
+       PARTITION p3 VALUES FROM (2) TO (MAXVALUE)
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query TT
 SHOW CREATE TABLE ok8 WITH REDACT
@@ -834,6 +844,7 @@ ok8  CREATE TABLE public.ok8 (
        PARTITION p3 VALUES FROM (‹×›) TO (MAXVALUE)
      )
      -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok8
@@ -869,17 +880,18 @@ query TT
 SHOW CREATE TABLE ok9
 ----
 ok9  CREATE TABLE public.ok9 (
-     a INT8 NOT NULL,
-     b INT8 NOT NULL,
-     c INT8 NULL,
-     CONSTRAINT ok9_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY RANGE (a, b) (
-  PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
-  PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
-  PARTITION p3 VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
-  PARTITION p4 VALUES FROM (3, MAXVALUE) TO (MAXVALUE, MAXVALUE)
-)
--- Warning: Partitioned table with no zone configurations.
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok9_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY RANGE (a, b) (
+       PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
+       PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
+       PARTITION p3 VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
+       PARTITION p4 VALUES FROM (3, MAXVALUE) TO (MAXVALUE, MAXVALUE)
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok9
@@ -916,18 +928,19 @@ query TT
 SHOW CREATE TABLE ok10
 ----
 ok10  CREATE TABLE public.ok10 (
-      a INT8 NOT NULL,
-      b INT8 NOT NULL,
-      c INT8 NULL,
-      CONSTRAINT ok10_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY RANGE (a, b) (
-  PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
-  PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
-  PARTITION p3 VALUES FROM (1, MAXVALUE) TO (2, MAXVALUE),
-  PARTITION p4 VALUES FROM (2, MAXVALUE) TO (3, 4),
-  PARTITION p5 VALUES FROM (3, 4) TO (MAXVALUE, MAXVALUE)
-)
--- Warning: Partitioned table with no zone configurations.
+        a INT8 NOT NULL,
+        b INT8 NOT NULL,
+        c INT8 NULL,
+        CONSTRAINT ok10_pkey PRIMARY KEY (a ASC, b ASC)
+      ) PARTITION BY RANGE (a, b) (
+        PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
+        PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
+        PARTITION p3 VALUES FROM (1, MAXVALUE) TO (2, MAXVALUE),
+        PARTITION p4 VALUES FROM (2, MAXVALUE) TO (3, 4),
+        PARTITION p5 VALUES FROM (3, 4) TO (MAXVALUE, MAXVALUE)
+      )
+      -- Warning: Partitioned table with no zone configurations.
+      ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok10
@@ -969,22 +982,23 @@ query TT
 SHOW CREATE TABLE ok11
 ----
 ok11  CREATE TABLE public.ok11 (
-      a INT8 NOT NULL,
-      b INT8 NOT NULL,
-      c INT8 NOT NULL,
-      CONSTRAINT ok11_pkey PRIMARY KEY (a ASC, b ASC, c ASC)
-) PARTITION BY LIST (a) (
-  PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
-    PARTITION p1_1 VALUES IN ((3)) PARTITION BY LIST (c) (
-      PARTITION p1_1_1 VALUES IN ((8))
-    ),
-    PARTITION p1_2 VALUES IN ((4))
-  ),
-  PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (b) (
-    PARTITION p2_1 VALUES FROM (7) TO (8)
-  )
-)
--- Warning: Partitioned table with no zone configurations.
+        a INT8 NOT NULL,
+        b INT8 NOT NULL,
+        c INT8 NOT NULL,
+        CONSTRAINT ok11_pkey PRIMARY KEY (a ASC, b ASC, c ASC)
+      ) PARTITION BY LIST (a) (
+        PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
+          PARTITION p1_1 VALUES IN ((3)) PARTITION BY LIST (c) (
+            PARTITION p1_1_1 VALUES IN ((8))
+          ),
+          PARTITION p1_2 VALUES IN ((4))
+        ),
+        PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (b) (
+          PARTITION p2_1 VALUES FROM (7) TO (8)
+        )
+      )
+      -- Warning: Partitioned table with no zone configurations.
+      ;
 
 query TT
 SHOW CREATE TABLE ok11 WITH REDACT
@@ -1006,6 +1020,7 @@ ok11  CREATE TABLE public.ok11 (
         )
       )
       -- Warning: Partitioned table with no zone configurations.
+      ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok11
@@ -1048,16 +1063,17 @@ query TT
 SHOW CREATE TABLE ok12
 ----
 ok12  CREATE TABLE public.ok12 (
-      a INT8 NOT NULL,
-      b INT8 NOT NULL,
-      c INT8 NULL,
-      CONSTRAINT ok12_pkey PRIMARY KEY (a ASC, b ASC)
-) PARTITION BY LIST (a) (
-  PARTITION pu VALUES IN ((NULL)),
-  PARTITION p1 VALUES IN ((1)),
-  PARTITION p2 VALUES IN ((2))
-)
--- Warning: Partitioned table with no zone configurations.
+        a INT8 NOT NULL,
+        b INT8 NOT NULL,
+        c INT8 NULL,
+        CONSTRAINT ok12_pkey PRIMARY KEY (a ASC, b ASC)
+      ) PARTITION BY LIST (a) (
+        PARTITION pu VALUES IN ((NULL)),
+        PARTITION p1 VALUES IN ((1)),
+        PARTITION p2 VALUES IN ((2))
+      )
+      -- Warning: Partitioned table with no zone configurations.
+      ;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * from ok12
@@ -1297,14 +1313,14 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE partition_by_nothing]
 ----
 CREATE TABLE public.partition_by_nothing (
-   pk INT8 NOT NULL,
-   a INT8 NULL,
-   b INT8 NULL,
-   CONSTRAINT partition_by_nothing_pkey PRIMARY KEY (pk ASC),
-   UNIQUE INDEX partition_by_nothing_b_key (b ASC),
-   INDEX partition_by_nothing_b_idx (b ASC),
-   FAMILY fam_0_pk_a_b (pk, a, b)
-)
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT partition_by_nothing_pkey PRIMARY KEY (pk ASC),
+  UNIQUE INDEX partition_by_nothing_b_key (b ASC),
+  INDEX partition_by_nothing_b_idx (b ASC),
+  FAMILY fam_0_pk_a_b (pk, a, b)
+);
 
 # Verify that it's not possible to partition tables by array columns (#91766).
 
@@ -1369,6 +1385,7 @@ SHOW CREATE TABLE "a.b"
          PARTITION "e.f" VALUES IN ((0))
        )
        -- Warning: Partitioned table with no zone configurations.
+       ;
 
 query TT
 SHOW CREATE TABLE "g.h"
@@ -1380,6 +1397,7 @@ SHOW CREATE TABLE "g.h"
          PARTITION "k.l" VALUES FROM (0) TO (1)
        )
        -- Warning: Partitioned table with no zone configurations.
+       ;
 
 # Regression test for #104434
 statement ok
@@ -1496,7 +1514,7 @@ bar  CREATE TABLE public.bar (
      ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
        gc.ttlseconds = 100;
      ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
-       gc.ttlseconds = 150
+       gc.ttlseconds = 150;
 
 
 statement ok
@@ -1515,7 +1533,7 @@ bar  CREATE TABLE public.bar (
      ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
        gc.ttlseconds = 100;
      ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
-       gc.ttlseconds = 150
+       gc.ttlseconds = 150;
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION x OF INDEX test.public.bar@bar_pkey;

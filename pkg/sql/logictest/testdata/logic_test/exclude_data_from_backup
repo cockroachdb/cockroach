@@ -16,7 +16,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
-   ) WITH (exclude_data_from_backup = true)
+   ) WITH (exclude_data_from_backup = true);
 
 statement ok
 ALTER TABLE t SET (exclude_data_from_backup = false);
@@ -27,7 +27,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
-   )
+   );
 
 # Ensure we cannot set schema to a temporary schema.
 statement ok
@@ -58,7 +58,7 @@ t2  CREATE TABLE public.t2 (
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
-    ) WITH (exclude_data_from_backup = true)
+    ) WITH (exclude_data_from_backup = true);
 
 # Check that we can reset exclude_data_from_backup on a table.
 statement ok
@@ -72,4 +72,4 @@ t2  CREATE TABLE public.t2 (
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
       CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
-    )
+    );

@@ -275,7 +275,7 @@ CREATE TABLE public.t86614 (
   CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
   INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
   FAMILY fam_0_a_s_rowid (a, s, rowid)
-)
+);
 
 # Regression test for #88925. Return correct result with a variable on the RHS
 # of LIKE.
@@ -327,12 +327,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_112713];
 ----
 CREATE TABLE public.t_112713 (
-    i INT8 NOT NULL,
-    t STRING NULL,
-    CONSTRAINT t_112713_pkey PRIMARY KEY (i ASC),
-    INVERTED INDEX t_112713_t_idx (t gin_trgm_ops),
-    FAMILY fam_0_i_t (i, t)
-)
+  i INT8 NOT NULL,
+  t STRING NULL,
+  CONSTRAINT t_112713_pkey PRIMARY KEY (i ASC),
+  INVERTED INDEX t_112713_t_idx (t gin_trgm_ops),
+  FAMILY fam_0_i_t (i, t)
+);
 
 subtest end
 
