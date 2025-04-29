@@ -129,7 +129,7 @@ func getDefaultMaxConcurrentCompactions() int {
 
 // l0SubLevelCompactionConcurrency is the sub-level threshold at which to
 // allow an increase in compaction concurrency. The maximum is still
-// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// controlled by pebble.Options.CompactionConcurrencyRange. The default of 2
 // allows an additional compaction (so total 1 + 1 = 2 compactions) when the
 // sub-level count is 2, and increments concurrency by 1 whenever sub-level
 // count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
