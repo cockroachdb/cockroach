@@ -360,14 +360,10 @@ func DefaultPebbleOptions() *pebble.Options {
 		KeySchema:  DefaultKeySchema,
 		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
-		L0CompactionThreshold: 2,
-		L0StopWritesThreshold: 1000,
-		LBaseMaxBytes:         64 << 20, // 64 MB
-		Levels:                make([]pebble.LevelOptions, 7),
-		// NB: Options.MaxConcurrentCompactions may be "wrapped" in NewPebble to
-		// allow overriding the max at runtime through
-		// Engine.SetCompactionConcurrency.
-		MaxConcurrentCompactions:    func() int { return defaultMaxConcurrentCompactions },
+		L0CompactionThreshold:       2,
+		L0StopWritesThreshold:       1000,
+		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels:                      make([]pebble.LevelOptions, 7),
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -676,15 +672,18 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
-
+	// Note: the MaxConcurrentCompactions function will be wrapped below to allow
+	// overriding dynamically via overriding the max at runtime through
+	// Engine.SetCompactionConcurrency.
+	if cfg.opts.CompactionConcurrencyRange == nil {
+		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
+			return 1, defaultMaxConcurrentCompactions
+		}
+	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
-	}
-
-	if cfg.opts.MaxConcurrentCompactions == nil {
-		cfg.opts.MaxConcurrentCompactions = func() int { return defaultMaxConcurrentCompactions }
 	}
 
 	cfg.opts.EnsureDefaults()
@@ -791,11 +790,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
-	// MaxConcurrentCompactions can be set by multiple sources, but all the
-	// sources will eventually call NewPebble. So, we override
-	// cfg.opts.MaxConcurrentCompactions to a closure which allows ovderriding the
-	// value.
-	cfg.opts.MaxConcurrentCompactions = p.cco.Wrap(cfg.opts.MaxConcurrentCompactions)
+	// Wrap the MaxConcurrentCompactions function to allow overriding dynamically via
+	// overriding the max at runtime through Engine.SetCompactionConcurrency.
+	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
@@ -2740,8 +2737,7 @@ func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
 }
 
-// compactionConcurrencyOverride allows overriding the max concurrent
-// compactions.
+// compactionConcurrencyOverride allows overriding the compaction concurrency.
 type compactionConcurrencyOverride struct {
 	override atomic.Uint32
 }
@@ -2751,12 +2747,15 @@ func (cco *compactionConcurrencyOverride) Set(value uint32) {
 	cco.override.Store(value)
 }
 
-// Wrap a MaxConcurrentCompactions function to take into account the override.
-func (cco *compactionConcurrencyOverride) Wrap(maxConcurrentCompactions func() int) func() int {
-	return func() int {
+// Wrap a CompactionConcurrencyRange function to take into account the override.
+func (cco *compactionConcurrencyOverride) Wrap(
+	compactionConcurrencyRange func() (lower, upper int),
+) func() (lower, upper int) {
+	return func() (lower, upper int) {
 		if o := cco.override.Load(); o > 0 {
-			return int(o)
+			// We override both the lower and upper limits.
+			return int(o), int(o)
 		}
-		return maxConcurrentCompactions()
+		return compactionConcurrencyRange()
 	}
 }
