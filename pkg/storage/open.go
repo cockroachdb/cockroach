@@ -202,7 +202,7 @@ func RemoteStorageFactory(accessor *cloud.EarlyBootExternalStorageAccessor) Conf
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {
 	return func(cfg *engineConfig) error {
-		cfg.opts.MaxConcurrentCompactions = func() int { return n }
+		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) { return 1, n }
 		return nil
 	}
 }
