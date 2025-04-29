@@ -25,11 +25,14 @@ That code uses the family ID to check that it doesn't split column families for
 the same row across ranges.
 
 Metadata KV Key:
-  Metadata keys always sort before vector keys, since Family ID 0 always
-  sorts before Level, which is >= 1.
-  ┌────────────┬──────────────┬────────────┬───────────┐
-  │Index Prefix│Prefix Columns│PartitionKey│Family ID 0│
-  └────────────┴──────────────┴────────────┴───────────┘
+  Metadata keys always sort before vector keys, since Level 0 is InvalidLevel,
+  and vector keys always have Level >= 1. Also, using Level=0 prevents the
+  metadata key from ever being a prefix of vector keys. The KV split logic does
+  not support one KV key being a prefix of another KV key (after chopping the
+  family ID, which it also does).
+  ┌────────────┬──────────────┬────────────┬───────┬───────────┐
+  │Index Prefix│Prefix Columns│PartitionKey│Level 0│Family ID 0│
+  └────────────┴──────────────┴────────────┴───────┴───────────┘
 Metadata KV Value:
   ┌─────┬─────┬───────┬───────┬──────┬─────────┬────────┐
   │Level│State│Target1│Target2│Source|Timestamp│Centroid|
@@ -58,40 +61,45 @@ func EncodeMetadataKey(
 	keyBuffer = append(keyBuffer, indexPrefix...)
 	keyBuffer = append(keyBuffer, encodedPrefixCols...)
 	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
+	keyBuffer = EncodePartitionLevel(keyBuffer, cspann.InvalidLevel)
 	return keys.MakeFamilyKey(keyBuffer, 0)
 }
 
 // EncodeStartVectorKey constructs the KV key that precedes all the KV keys for
 // vector data records in the partition.
 func EncodeStartVectorKey(metadataKey roachpb.Key) roachpb.Key {
-	// The last byte of the metadata key is the Family ID field (always 0). Vector
-	// keys have a Level field instead. Since level values are always > 0,
-	// increment the last byte to get the starting value.
-	keyBuffer := slices.Clone(metadataKey)
-	keyBuffer[len(keyBuffer)-1]++
+	// The last two bytes of the metadata key are the Level (always 0) and the
+	// Family ID (always 0). Chop the Family ID value and increment the Level in
+	// order to get the start key.
+	n := len(metadataKey) - 1
+	keyBuffer := make(roachpb.Key, n)
+	copy(keyBuffer, metadataKey[:n])
+	keyBuffer[n-1]++
 	return keyBuffer
 }
 
 // EncodeEndVectorKey constructs the KV key that succeeds all the KV keys for
 // vector data records in the partition.
 func EncodeEndVectorKey(metadataKey roachpb.Key) roachpb.Key {
-	// Chop the last byte, which is the family ID.
-	n := len(metadataKey) - 1
+	// Chop the last two bytes, which are the Level (always 0) and the Family ID
+	// (always 0).
+	n := len(metadataKey) - 2
 	return metadataKey[:n:n].PrefixEnd()
 }
 
 // EncodePrefixVectorKey constructs the prefix that is shared by all KV keys for
 // vector data records in the partition.
 func EncodePrefixVectorKey(metadataKey roachpb.Key, level cspann.Level) roachpb.Key {
-	// Chop the last byte, which is the family ID.
-	n := len(metadataKey) - 1
+	// Chop the last two bytes, which are the Level (always 0) and the Family ID
+	// (always 0).
+	n := len(metadataKey) - 2
 	return EncodePartitionLevel(metadataKey[:n:n], level)
 }
 
 // EncodedPrefixVectorKeyLen returns the number of bytes needed to encode the
 // prefix for vector data records in the partition.
 func EncodedPrefixVectorKeyLen(metadataKey roachpb.Key, level cspann.Level) int {
-	return len(metadataKey) - 1 + EncodedPartitionLevelLen(level)
+	return len(metadataKey) - 2 + EncodedPartitionLevelLen(level)
 }
 
 // DecodedVectorKey is a deconstructed key value, as described above, minus the
