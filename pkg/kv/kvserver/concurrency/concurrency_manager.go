@@ -599,6 +599,15 @@ func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcqui
 	}
 }
 
+// OnLockMissing implements the Lockmanager interface.
+func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
+	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
+		// We don't currently expect any errors other than assertion failures that represent
+		// programming errors from this method.
+		log.Fatalf(ctx, "%v", err)
+	}
+}
+
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
