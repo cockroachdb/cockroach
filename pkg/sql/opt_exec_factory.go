@@ -521,7 +521,9 @@ func canRearrangeRenders(cols []exec.NodeColumnOrdinal, render tree.TypedExprs) 
 func (ef *execFactory) ConstructSerializingProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
-	ef.compilationUnsupported()
+	// TODO(mgartner): This is a temporary workaround for now. We need to figure
+	// out how to support it in a compiled plan or something else...?
+	// ef.compilationUnsupported()
 
 	node := n.(planNode)
 	// If we are just renaming columns, we can do that in place.
