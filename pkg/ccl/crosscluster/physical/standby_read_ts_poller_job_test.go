@@ -43,6 +43,12 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	t.Logf("test setup took %s", timeutil.Since(beginTS))
 
+	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+
+	// Ensures the reader tenant can spin up even if the system tenant overrode
+	// the diagnostics setting, set during a permanent migration.
+	c.DestSysSQL.Exec(t, fmt.Sprintf("ALTER TENANT '%s' SET CLUSTER SETTING diagnostics.reporting.enabled = true", readerTenantName))
+
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
@@ -50,7 +56,6 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	readerTenantID := stats.IngestionDetails.ReadTenantID
 	require.NotNil(t, readerTenantID)
 
-	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
 	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName)
 
 	defaultDBQuery := `
