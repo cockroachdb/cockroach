@@ -239,7 +239,15 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// (Replica), so this comment might need to move.
 	stats.PebbleBegin = crtime.NowMono()
 	stats.PebbleBytes = int64(batch.Len())
-	wantsSync := m.MustSync()
+	// We want a timely sync in two cases:
+	//	1. There are raft messages (e.g. MsgVoteResp and MsgAppResp) conditional
+	//	on this write being durable. Sending these messages is on the critical path
+	//	for writes/consensus.
+	//	2. The log append overwrites some entries. Since there can be sideloaded
+	//	entries to be removed, we must sync before doing so. This is an internal
+	//	detail here: we could instead do a non-blocking sync and remove sideloaded
+	//	entries asynchronously. See #136416.
+	wantsSync := m.MustSync() || overwriting
 	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
@@ -248,7 +256,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// and we are not overwriting any previous log entries. If we are
 		// overwriting, we may need to purge the sideloaded SSTables associated with
 		// overwritten entries. This must be performed after the corresponding
-		// entries are durably replaced and it's easier to do ensure proper ordering
+		// entries are durably replaced and it's easier to ensure proper ordering
 		// using a blocking log sync. This is a rare case, so it's not worth
 		// optimizing for.
 		!overwriting &&
