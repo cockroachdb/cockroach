@@ -1886,7 +1886,7 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 					// If the range feed recovers after a failure, re-read all
 					// descriptors.
 					if refreshAllDescriptors {
-						m.refreshSomeLeases(ctx, true /*refreshAll*/)
+						m.refreshSomeLeases(ctx, true /*refreshAndPurgeAllDescriptors*/)
 					}
 				}
 				rangeFeedProgressWatchDogTimeout,
@@ -1895,7 +1895,7 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 			case err := <-m.rangefeedErrCh:
 				log.Warningf(ctx, "lease rangefeed failed with error: %s", err.Error())
 				m.handleRangeFeedError(ctx)
-				m.refreshSomeLeases(ctx, true /*refreshAll*/)
+				m.refreshSomeLeases(ctx, true /*refreshAndPurgeAllDescriptors*/)
 			case <-refreshTimer.C:
 				refreshTimer.Reset(getRefreshTimerDuration() / 2)
 
@@ -1999,8 +1999,9 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 	}
 }
 
-// Refresh some of the current leases.
-func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
+// Refresh some of the current leases. If refreshAndPurgeAllDescriptors is set,
+// then all descriptors are refreshed, and old versions are purged.
+func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescriptors bool) {
 	limit := leaseRefreshLimit.Get(&m.storage.settings.SV)
 	if limit <= 0 {
 		return
@@ -2013,7 +2014,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 		ids := make([]descpb.ID, 0, len(m.mu.descriptors))
 		var i int64
 		for k, desc := range m.mu.descriptors {
-			if i++; i > limit && !includeAll {
+			if i++; i > limit && !refreshAndPurgeAllDescriptors {
 				break
 			}
 			takenOffline := func() bool {
@@ -2048,7 +2049,6 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 						return
 					}
 				}
-
 				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
 					log.Errorf(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
@@ -2057,7 +2057,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 						if err := purgeOldVersions(
 							ctx, m.storage.db.KV(), id, true /* dropped */, 0 /* minVersion */, m,
 						); err != nil {
-							log.Warningf(ctx, "error purging leases for descriptor %d: %s",
+							log.Warningf(ctx, "error purging leases for descriptor %d: %v",
 								id, err)
 						}
 						func() {
@@ -2065,6 +2065,15 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 							defer m.mu.Unlock()
 							delete(m.mu.descriptors, id)
 						}()
+					}
+				}
+				if refreshAndPurgeAllDescriptors {
+					// If we are refreshing all descriptors, then we want to purge older versions as
+					// we are doing this operation.
+					err := purgeOldVersions(ctx, m.storage.db.KV(), id, false /* dropped */, 0 /* minVersion */, m)
+					if err != nil {
+						log.Warningf(ctx, "error purging leases for descriptor %d: %v",
+							id, err)
 					}
 				}
 			}); err != nil {
