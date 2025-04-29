@@ -1,13 +1,28 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --label=/mnt/data1/postgres/src/test/regress/results/memoize.out /mnt/data1/postgres/src/test/regress/expected/memoize.out /mnt/data1/postgres/src/test/regress/results/memoize.out
 --- /mnt/data1/postgres/src/test/regress/expected/memoize.out
 +++ /mnt/data1/postgres/src/test/regress/results/memoize.out
-@@ -28,36 +28,48 @@
+@@ -28,36 +28,63 @@
      end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    ln text;
++begin
++    for ln in
++           ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  -- Ensure we get a memoize node on the inner side of the nested loop
  SET enable_hashjoin TO off;
 +ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
@@ -69,7 +84,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --lab
  (1 row)
  
  -- Try with LATERAL joins
-@@ -66,36 +78,46 @@
+@@ -66,36 +93,46 @@
  LATERAL (SELECT t2.unique1 FROM tenk1 t2
           WHERE t1.twenty = t2.unique1 OFFSET 0) t2
  WHERE t1.unique1 < 1000;', false);
@@ -135,7 +150,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --lab
  -- Ensure we get some evictions.  We're unable to validate the hits and misses
  -- here as the number of entries that fit in the cache at once will vary
  -- between different machines.
-@@ -103,61 +125,21 @@
+@@ -103,61 +140,21 @@
  SELECT COUNT(*),AVG(t1.unique1) FROM tenk1 t1
  INNER JOIN tenk1 t2 ON t1.unique1 = t2.thousand
  WHERE t2.unique1 < 1200;', true);
@@ -201,7 +216,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --lab
  DROP TABLE flt;
  -- Exercise Memoize in binary mode with a large fixed width type and a
  -- varlena type.
-@@ -165,103 +147,65 @@
+@@ -165,103 +162,65 @@
  CREATE INDEX strtest_n_idx ON strtest (n);
  CREATE INDEX strtest_t_idx ON strtest (t);
  INSERT INTO strtest VALUES('one','one'),('two','two'),('three',repeat(fipshash('three'),100));
@@ -334,7 +349,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --lab
  -- Exercise Memoize code that flushes the cache when a parameter changes which
  -- is not part of the cache key.
  -- Ensure we get a Memoize plan
-@@ -272,23 +216,11 @@
+@@ -272,23 +231,11 @@
  	SELECT 1 FROM tenk1 t1
  	INNER JOIN tenk1 t2 ON t1.unique1 = t2.hundred
  	WHERE t0.ten = t1.twenty AND t0.two <> t2.four OFFSET 0);
@@ -363,7 +378,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/memoize.out --lab
  -- Ensure the above query returns the correct result
  SELECT unique1 FROM tenk1 t0
  WHERE unique1 < 3
-@@ -302,49 +234,182 @@
+@@ -302,49 +249,182 @@
  (1 row)
  
  RESET enable_seqscan;

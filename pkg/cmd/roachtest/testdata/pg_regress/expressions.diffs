@@ -188,17 +188,124 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
  --
  -- Tests for ScalarArrayOpExpr with a hashfn
  --
-@@ -230,6 +191,7 @@
+@@ -230,119 +191,105 @@
  	return $1;
  end;
  $$ language plpgsql stable;
 +NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  no value provided for placeholder: $1
  create function return_text_input(text) returns text as $$
  begin
  	return $1;
-@@ -327,22 +289,65 @@
- (1 row)
- 
+ end;
+ $$ language plpgsql stable;
++ERROR:  no value provided for placeholder: $1
+ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) in (null, null, null, null, null, null, null, null, null, null, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1, null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(null::int) in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_text_input('a') in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j');
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: return_text_input()
+ -- NOT IN
+ select return_int_input(1) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, 0);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, 2, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1, null);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(1) not in (null, null, null, null, null, null, null, null, null, null, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(null::int) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, 1);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_int_input(null::int) not in (10, 9, 2, 8, 3, 7, 4, 6, 5, null);
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unknown function: return_int_input()
+ select return_text_input('a') not in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j');
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: return_text_input()
  rollback;
 +WARNING:  there is no transaction in progress
  -- Test with non-strict equality function.
@@ -265,7 +372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
  create function myinteq(myint, myint) returns bool as $$
  begin
    if $1 is null and $2 is null then
-@@ -352,11 +357,13 @@
+@@ -352,11 +299,13 @@
    end if;
  end;
  $$ language plpgsql immutable;
@@ -279,7 +386,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
  create operator = (
    leftarg    = myint,
    rightarg   = myint,
-@@ -367,6 +374,12 @@
+@@ -367,6 +316,12 @@
    join       = eqjoinsel,
    merges
  );
@@ -292,7 +399,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
  create operator <> (
    leftarg    = myint,
    rightarg   = myint,
-@@ -377,47 +390,39 @@
+@@ -377,47 +332,39 @@
    join       = eqjoinsel,
    merges
  );

@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out --label=/mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
 --- /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out
 +++ /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
-@@ -7,5 +7,1026 @@
+@@ -7,5 +7,1027 @@
         (SELECT count(*) FROM pg_collation WHERE collname IN ('de_DE', 'en_US', 'sv_SE', 'tr_TR') AND collencoding = pg_char_to_encoding('UTF8')) <> 4 OR
         version() !~ 'linux-gnu'
         AS skip_test \gset
@@ -350,10 +350,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf
 +ERROR:  lower(): unsupported binary operator: <collatedstring{en_US}> || <collatedstring{en_US}> (returning <string>)
 +SELECT table_name, view_definition FROM information_schema.views
 +  WHERE table_name LIKE 'collview%' ORDER BY 1;
-+ table_name |                                             view_definition                                              
-+------------+----------------------------------------------------------------------------------------------------------
-+ collview1  | SELECT collate_test1.a, collate_test1.b FROM root.collate_tests.collate_test1 WHERE b COLLATE c >= 'bbc'
-+ collview2  | SELECT a, b FROM root.collate_tests.collate_test1 ORDER BY b COLLATE c
++ table_name |                                              view_definition                                               
++------------+------------------------------------------------------------------------------------------------------------
++ collview1  | SELECT collate_test1.a, collate_test1.b FROM root.collate_tests.collate_test1 WHERE b COLLATE "C" >= 'bbc'
++ collview2  | SELECT a, b FROM root.collate_tests.collate_test1 ORDER BY b COLLATE "C"
 +(2 rows)
 +
 +-- collation propagation in various expression types
@@ -573,6 +573,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf
 +    AS $$ select $1 < $2 limit 1 $$;
 +CREATE FUNCTION mylt_plpgsql (text, text) RETURNS boolean LANGUAGE plpgsql
 +    AS $$ begin return $1 < $2; end $$;
++ERROR:  no value provided for placeholder: $1
 +SELECT a.b AS a, b.b AS b, a.b < b.b AS lt,
 +       mylt(a.b, b.b), mylt_noninline(a.b, b.b), mylt_plpgsql(a.b, b.b)
 +FROM collate_test1 a, collate_test1 b

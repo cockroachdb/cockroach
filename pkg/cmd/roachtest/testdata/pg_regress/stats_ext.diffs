@@ -1,13 +1,30 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --label=/mnt/data1/postgres/src/test/regress/results/stats_ext.out /mnt/data1/postgres/src/test/regress/expected/stats_ext.out /mnt/data1/postgres/src/test/regress/results/stats_ext.out
 --- /mnt/data1/postgres/src/test/regress/expected/stats_ext.out
 +++ /mnt/data1/postgres/src/test/regress/results/stats_ext.out
-@@ -24,95 +24,171 @@
+@@ -24,95 +24,188 @@
      end loop;
  end;
  $$;
-+ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++    ln text;
++    tmp text[];
++    first_row bool := true;
++begin
++    for ln in
++           ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/105240/_version_
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  -- Verify failures
  CREATE TABLE ext_stats_test (x text, y int, z int);
  CREATE STATISTICS tst;
@@ -215,7 +232,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  
  DROP TABLE ab1;
  SELECT stxname FROM pg_statistic_ext WHERE stxname LIKE 'ab1%';
-@@ -123,177 +199,244 @@
+@@ -123,177 +216,244 @@
  -- Ensure things work sanely with SET STATISTICS 0
  CREATE TABLE ab1 (a INTEGER, b INTEGER);
  ALTER TABLE ab1 ALTER a SET STATISTICS 0;
@@ -542,7 +559,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE ab1;
  -- Verify supported object types for extended statistics
  CREATE schema tststats;
-@@ -304,27 +447,119 @@
+@@ -304,27 +464,119 @@
  CREATE MATERIALIZED VIEW tststats.mv AS SELECT * FROM tststats.t;
  CREATE TYPE tststats.ty AS (a int, b int, c text);
  CREATE FOREIGN DATA WRAPPER extstats_dummy_fdw;
@@ -670,7 +687,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DO $$
  DECLARE
  	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
-@@ -334,18 +569,33 @@
+@@ -334,18 +586,33 @@
  	RAISE NOTICE 'stats on toast table not created';
  END;
  $$;
@@ -714,7 +731,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- n-distinct tests
  CREATE TABLE ndistinct (
      filler1 TEXT,
-@@ -357,66 +607,38 @@
+@@ -357,66 +624,38 @@
      d INT
  )
  WITH (autovacuum_enabled = off);
@@ -798,7 +815,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- correct command
  CREATE STATISTICS s10 ON a, b, c FROM ndistinct;
  ANALYZE ndistinct;
-@@ -424,149 +646,84 @@
+@@ -424,149 +663,84 @@
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
     AND d.stxoid = s.oid;
@@ -986,7 +1003,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  SELECT s.stxkind, d.stxdndistinct
    FROM pg_statistic_ext s, pg_statistic_ext_data d
   WHERE s.stxrelid = 'ndistinct'::regclass
-@@ -577,157 +734,91 @@
+@@ -577,157 +751,91 @@
  
  -- dropping the statistics results in under-estimates
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
@@ -1191,7 +1208,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- combination of multiple ndistinct statistics, with/without expressions
  TRUNCATE ndistinct;
  -- two mostly independent groups of columns
-@@ -736,283 +827,185 @@
+@@ -736,283 +844,185 @@
         FROM generate_series(1,1000) s(i);
  ANALYZE ndistinct;
  SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
@@ -1587,7 +1604,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- functional dependencies tests
  CREATE TABLE functional_dependencies (
      filler1 TEXT,
-@@ -1024,6 +1017,7 @@
+@@ -1024,6 +1034,7 @@
      d TEXT
  )
  WITH (autovacuum_enabled = off);
@@ -1595,7 +1612,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  CREATE INDEX fdeps_ab_idx ON functional_dependencies (a, b);
  CREATE INDEX fdeps_abc_idx ON functional_dependencies (a, b, c);
  -- random data (no functional dependencies)
-@@ -1031,737 +1025,335 @@
+@@ -1031,737 +1042,335 @@
       SELECT mod(i, 5), mod(i, 7), mod(i, 11), i FROM generate_series(1,1000) s(i);
  ANALYZE functional_dependencies;
  SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1''');
@@ -2489,7 +2506,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- check the ability to use multiple functional dependencies
  CREATE TABLE functional_dependencies_multi (
  	a INTEGER,
-@@ -1770,6 +1362,7 @@
+@@ -1770,6 +1379,7 @@
  	d INTEGER
  )
  WITH (autovacuum_enabled = off);
@@ -2497,7 +2514,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  INSERT INTO functional_dependencies_multi (a, b, c, d)
      SELECT
           mod(i,7),
-@@ -1780,69 +1373,39 @@
+@@ -1780,69 +1390,39 @@
  ANALYZE functional_dependencies_multi;
  -- estimates without any functional dependencies
  SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE a = 0 AND b = 0');
@@ -2587,7 +2604,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE functional_dependencies_multi;
  -- MCV lists
  CREATE TABLE mcv_lists (
-@@ -1856,374 +1419,172 @@
+@@ -1856,374 +1436,172 @@
      ia INT[]
  )
  WITH (autovacuum_enabled = off);
@@ -3045,7 +3062,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- check change of unrelated column type does not reset the MCV statistics
  ALTER TABLE mcv_lists ALTER COLUMN d TYPE VARCHAR(64);
  SELECT d.stxdmcv IS NOT NULL
-@@ -2232,233 +1593,145 @@
+@@ -2232,233 +1610,145 @@
     AND d.stxoid = s.oid;
   ?column? 
  ----------
@@ -3358,7 +3375,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  INSERT INTO mcv_lists (a, b, c, filler1)
       SELECT
           (CASE WHEN mod(i,100) = 1 THEN NULL ELSE mod(i,100) END),
-@@ -2468,68 +1741,33 @@
+@@ -2468,68 +1758,33 @@
       FROM generate_series(1,5000) s(i);
  ANALYZE mcv_lists;
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NULL');
@@ -3442,7 +3459,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- test pg_mcv_list_items with a very simple (single item) MCV list
  TRUNCATE mcv_lists;
  INSERT INTO mcv_lists (a, b, c) SELECT 1, 2, 3 FROM generate_series(1,1000) s(i);
-@@ -2539,14 +1777,15 @@
+@@ -2539,14 +1794,15 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -3463,7 +3480,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  INSERT INTO mcv_lists (a, b, c, d)
       SELECT
           NULL, -- always NULL
-@@ -2556,25 +1795,18 @@
+@@ -2556,25 +1812,18 @@
       FROM generate_series(1,5000) s(i);
  ANALYZE mcv_lists;
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
@@ -3497,7 +3514,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  ANALYZE mcv_lists;
  -- test pg_mcv_list_items with MCV list containing variable-length data and NULLs
  SELECT m.*
-@@ -2582,30 +1814,13 @@
+@@ -2582,30 +1831,13 @@
         pg_mcv_list_items(d.stxdmcv) m
   WHERE s.stxname = 'mcv_lists_stats'
     AND d.stxoid = s.oid;
@@ -3532,7 +3549,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- mcv with pass-by-ref fixlen types, e.g. uuid
  CREATE TABLE mcv_lists_uuid (
      a UUID,
-@@ -2613,40 +1828,31 @@
+@@ -2613,40 +1845,31 @@
      c UUID
  )
  WITH (autovacuum_enabled = off);
@@ -3584,7 +3601,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE mcv_lists_uuid;
  -- mcv with arrays
  CREATE TABLE mcv_lists_arrays (
-@@ -2655,14 +1861,21 @@
+@@ -2655,14 +1878,21 @@
      c INT[]
  )
  WITH (autovacuum_enabled = off);
@@ -3606,7 +3623,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  ANALYZE mcv_lists_arrays;
  -- mcv with bool
  CREATE TABLE mcv_lists_bool (
-@@ -2671,62 +1884,36 @@
+@@ -2671,62 +1901,36 @@
      c BOOL
  )
  WITH (autovacuum_enabled = off);
@@ -3683,7 +3700,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  -- mcv covering just a small fraction of data
  CREATE TABLE mcv_lists_partial (
      a INT,
-@@ -2756,104 +1943,45 @@
+@@ -2756,104 +1960,45 @@
       FROM generate_series(0,3999) s(i);
  ANALYZE mcv_lists_partial;
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 AND b = 0 AND c = 0');
@@ -3809,7 +3826,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE mcv_lists_partial;
  -- check the ability to use multiple MCV lists
  CREATE TABLE mcv_lists_multi (
-@@ -2863,6 +1991,7 @@
+@@ -2863,6 +2008,7 @@
  	d INTEGER
  )
  WITH (autovacuum_enabled = off);
@@ -3817,7 +3834,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  INSERT INTO mcv_lists_multi (a, b, c, d)
      SELECT
           mod(i,5),
-@@ -2873,187 +2002,114 @@
+@@ -2873,187 +2019,114 @@
  ANALYZE mcv_lists_multi;
  -- estimates without any mcv statistics
  SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 AND b = 0');
@@ -4062,7 +4079,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE expr_stats;
  -- test handling of a mix of compatible and incompatible expressions
  CREATE TABLE expr_stats_incompatible_test (
-@@ -3069,10 +2125,7 @@
+@@ -3069,10 +2142,7 @@
    AND
    (c0 IN (0, 1) OR c1)
  );
@@ -4074,7 +4091,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE expr_stats_incompatible_test;
  -- Permission tests. Users should not be able to see specific data values in
  -- the extended statistics, if they lack permission to see those values in
-@@ -3088,205 +2141,508 @@
+@@ -3088,205 +2158,508 @@
       SELECT mod(i,5), mod(i,10) FROM generate_series(1,100) s(i);
  CREATE STATISTICS tststats.priv_test_stats (mcv) ON a, b
    FROM tststats.priv_test_tbl;

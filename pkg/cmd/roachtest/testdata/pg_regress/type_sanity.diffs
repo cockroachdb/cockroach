@@ -40,7 +40,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +   2278 | void
 +   2950 | uuid
 +  90004 | box2d
-+ 100185 | two_ints
++ 100184 | two_ints
 +(9 rows)
  
  -- Look for "toastable" types that aren't varlena.
@@ -74,23 +74,23 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +     100116 | tenk2
 +     100137 | bit_defaults
 +     100140 | float4_tbl
-+     100162 | num_data
-+     100163 | num_exp_add
-+     100164 | num_exp_sub
-+     100165 | num_exp_div
-+     100166 | num_exp_mul
-+     100167 | num_exp_sqrt
-+     100168 | num_exp_ln
-+     100169 | num_exp_log10
-+     100170 | num_exp_power_10_ln
-+     100171 | num_result
-+     100175 | num_input_test
-+     100191 | timetz_tbl
-+     100197 | time_tbl
-+     100198 | date_tbl
-+     100199 | interval_tbl
-+     100214 | timestamp_tbl
-+     100215 | timestamptz_tbl
++     100161 | num_data
++     100162 | num_exp_add
++     100163 | num_exp_sub
++     100164 | num_exp_div
++     100165 | num_exp_mul
++     100166 | num_exp_sqrt
++     100167 | num_exp_ln
++     100168 | num_exp_log10
++     100169 | num_exp_power_10_ln
++     100170 | num_result
++     100174 | num_input_test
++     100190 | timetz_tbl
++     100196 | time_tbl
++     100197 | date_tbl
++     100198 | interval_tbl
++     100213 | timestamp_tbl
++     100214 | timestamptz_tbl
 + 4294966962 | spatial_ref_sys
 + 4294966963 | geometry_columns
 + 4294966964 | geography_columns
@@ -445,8 +445,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 -(0 rows)
 + oid  | typname 
 +------+---------
-+ 2279 | trigger
 + 2276 | any
++ 2279 | trigger
 +(2 rows)
  
  -- Check for bogus typinput routines

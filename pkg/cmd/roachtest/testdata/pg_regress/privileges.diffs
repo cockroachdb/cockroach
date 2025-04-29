@@ -3075,9 +3075,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT brin_desummarize_range('sro_brin', 0);
 +ERROR:  unknown function: brin_desummarize_range()
 +SELECT brin_summarize_range('sro_brin', 0);
@@ -4018,7 +4018,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  DROP OWNED BY regress_priv_user2, regress_priv_user2;
-@@ -2368,46 +3737,76 @@
+@@ -2368,46 +3737,61 @@
  (1 row)
  
  ROLLBACK;
@@ -4070,21 +4070,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public;
-+ERROR:  at or near "to": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+ALTER DEFAULT PRIVILEGES IN SCHEMA testns GRANT EXECUTE ON ROUTINES to public
-+                                                                    ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
  DROP FUNCTION testns.foo();
  CREATE FUNCTION testns.foo() RETURNS int AS 'select 1' LANGUAGE sql;
  DROP AGGREGATE testns.agg1(int);
@@ -4104,7 +4089,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP PROCEDURE testns.bar();
  CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user2', 'testns.foo()', 'EXECUTE'); -- yes
-@@ -2417,11 +3816,7 @@
+@@ -2417,11 +3801,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user2', 'testns.agg1(int)', 'EXECUTE'); -- yes
@@ -4117,7 +4102,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- yes (counts as function here)
   has_function_privilege 
  ------------------------
-@@ -2430,36 +3825,57 @@
+@@ -2430,25 +3810,47 @@
  
  DROP FUNCTION testns.foo();
  DROP AGGREGATE testns.agg1(int);
@@ -4175,11 +4160,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  RESET ROLE;
  SELECT count(*)
    FROM pg_default_acl d LEFT JOIN pg_namespace n ON defaclnamespace = n.oid
-   WHERE nspname = 'testns';
-  count 
- -------
--     3
-+     2
+@@ -2459,7 +3861,6 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4187,7 +4168,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP SCHEMA testns2 CASCADE;
  DROP SCHEMA testns3 CASCADE;
  DROP SCHEMA testns4 CASCADE;
-@@ -2510,6 +3926,12 @@
+@@ -2510,6 +3911,12 @@
  
  CREATE FUNCTION testns.priv_testfunc(int) RETURNS int AS 'select 3 * $1;' LANGUAGE sql;
  CREATE AGGREGATE testns.priv_testagg(int) (sfunc = int4pl, stype = int4);
@@ -4200,7 +4181,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE PROCEDURE testns.priv_testproc(int) AS 'select 3' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
-@@ -2518,11 +3940,7 @@
+@@ -2518,11 +3925,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true by default
@@ -4213,7 +4194,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
  ------------------------
-@@ -2533,15 +3951,11 @@
+@@ -2533,15 +3936,11 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- false
   has_function_privilege 
  ------------------------
@@ -4231,7 +4212,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- still true, not a function
   has_function_privilege 
  ------------------------
-@@ -2552,10 +3966,15 @@
+@@ -2552,7 +3951,7 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- now false
   has_function_privilege 
  ------------------------
@@ -4240,15 +4221,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC;
-+ERROR:  at or near "routines": syntax error
-+DETAIL:  source SQL:
-+GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC
-+                 ^
-+HINT:  try \h GRANT
- SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true
-  has_function_privilege 
- ------------------------
-@@ -2563,11 +3982,7 @@
+@@ -2563,11 +3962,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true
@@ -4261,7 +4234,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true
   has_function_privilege 
  ------------------------
-@@ -2575,38 +3990,52 @@
+@@ -2575,38 +3970,52 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4326,7 +4299,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- test that dependent privileges are revoked (or not) properly
  \c -
  set session role regress_priv_user1;
-@@ -2620,59 +4049,179 @@
+@@ -2620,59 +4029,179 @@
  set session role regress_priv_user4;
  grant select on dep_priv_test to regress_priv_user5;
  \dp dep_priv_test
@@ -4537,7 +4510,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP TABLE atest1;
  DROP TABLE atest2;
  DROP TABLE atest3;
-@@ -2680,108 +4229,214 @@
+@@ -2680,108 +4209,214 @@
  DROP TABLE atest5;
  DROP TABLE atest6;
  DROP TABLE atestc;
@@ -4765,7 +4738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- clean up
  DROP TABLE lock_table;
  DROP USER regress_locktable_user;
-@@ -2791,24 +4446,17 @@
+@@ -2791,24 +4426,17 @@
  \c -
  CREATE ROLE regress_readallstats;
  SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- no
@@ -4794,7 +4767,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- yes
   has_table_privilege 
  ---------------------
-@@ -2818,11 +4466,7 @@
+@@ -2818,11 +4446,7 @@
  -- run query to ensure that functions within views can be executed
  SET ROLE regress_readallstats;
  SELECT COUNT(*) >= 0 AS ok FROM pg_backend_memory_contexts;
@@ -4807,7 +4780,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT COUNT(*) >= 0 AS ok FROM pg_shmem_allocations;
   ok 
  ----
-@@ -2838,28 +4482,48 @@
+@@ -2838,28 +4462,48 @@
  CREATE ROLE regress_group_indirect_manager;
  CREATE ROLE regress_group_member;
  GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE;
@@ -4866,7 +4839,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP ROLE regress_group;
  DROP ROLE regress_group_direct_manager;
  DROP ROLE regress_group_indirect_manager;
-@@ -2871,22 +4535,59 @@
+@@ -2871,22 +4515,59 @@
  CREATE SCHEMA regress_roleoption;
  GRANT CREATE, USAGE ON SCHEMA regress_roleoption TO PUBLIC;
  GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE;

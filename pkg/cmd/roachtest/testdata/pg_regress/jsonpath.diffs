@@ -14,7 +14,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  select '$'::jsonpath;
   jsonpath 
  ----------
-@@ -88,101 +89,91 @@
+@@ -88,69 +89,77 @@
  (1 row)
  
  select '$.a.**.b'::jsonpath;
@@ -23,80 +23,96 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - $."a".**."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**.b" as type jsonpath: at or near ".": syntax error
++ERROR:  could not parse "$.a.**.b" as type jsonpath: at or near ".": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**.b
 +      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{2}.b'::jsonpath;
 -    jsonpath     
 ------------------
 - $."a".**{2}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{2}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{2}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{2}.b
-+      ^
++        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{2 to 2}.b'::jsonpath;
 -    jsonpath     
 ------------------
 - $."a".**{2}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{2 to 2}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{2 to 2}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{2 to 2}.b
-+      ^
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{2 to 5}.b'::jsonpath;
 -       jsonpath       
 -----------------------
 - $."a".**{2 to 5}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{2 to 5}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{2 to 5}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{2 to 5}.b
-+      ^
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{0 to 5}.b'::jsonpath;
 -       jsonpath       
 -----------------------
 - $."a".**{0 to 5}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{0 to 5}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{0 to 5}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{0 to 5}.b
-+      ^
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{5 to last}.b'::jsonpath;
 -        jsonpath         
 --------------------------
 - $."a".**{5 to last}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{5 to last}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{5 to last}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{5 to last}.b
-+      ^
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{last}.b'::jsonpath;
 -      jsonpath      
 ---------------------
 - $."a".**{last}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{last}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{last}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{last}.b
-+      ^
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.a.**{last to 5}.b'::jsonpath;
 -        jsonpath         
 --------------------------
 - $."a".**{last to 5}."b"
 -(1 row)
 -
-+ERROR:  could not parse "$.a.**{last to 5}.b" as type jsonpath: at or near "{": syntax error
++ERROR:  could not parse "$.a.**{last to 5}.b" as type jsonpath: at or near "}": syntax error: unimplemented: this syntax: .**
 +DETAIL:  source SQL:
 +$.a.**{last to 5}.b
-+      ^
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$+1'::jsonpath;
 - jsonpath 
 -----------
@@ -116,28 +132,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  (1 row)
  
  select '$--+1'::jsonpath;
-  jsonpath 
- ----------
+- jsonpath 
+-----------
 - ($ - -1)
-+ $""
++  jsonpath  
++------------
++ ($"" - -1)
  (1 row)
  
  select '$.a/+-1'::jsonpath;
--   jsonpath   
----------------
-- ($."a" / -1)
-+     jsonpath      
-+-------------------
-+ ($."a" / (+(-1)))
- (1 row)
- 
- select '1 * 2 + 4 % -3 != false'::jsonpath;
--         jsonpath          
-----------------------------
-- (1 * 2 + 4 % -3 != false)
-+             jsonpath              
-+-----------------------------------
-+ (((1 * 2) + (4 % (-3))) != false)
+@@ -166,23 +175,21 @@
  (1 row)
  
  select '"\b\f\r\n\t\v\"\''\\"'::jsonpath;
@@ -172,214 +176,31 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  select '"\z"'::jsonpath;  -- unrecognized escape is just the literal char
   jsonpath 
  ----------
-@@ -190,63 +181,63 @@
+@@ -316,9 +323,7 @@
  (1 row)
  
- select '$.g ? ($.a == 1)'::jsonpath;
--      jsonpath      
----------------------
-- $."g"?($."a" == 1)
-+       jsonpath       
-+----------------------
-+ $."g"?(($."a" == 1))
- (1 row)
- 
- select '$.g ? (@ == 1)'::jsonpath;
--    jsonpath    
------------------
-- $."g"?(@ == 1)
-+     jsonpath     
-+------------------
-+ $."g"?((@ == 1))
- (1 row)
- 
- select '$.g ? (@.a == 1)'::jsonpath;
--      jsonpath      
----------------------
-- $."g"?(@."a" == 1)
-+       jsonpath       
-+----------------------
-+ $."g"?((@."a" == 1))
- (1 row)
- 
- select '$.g ? (@.a == 1 || @.a == 4)'::jsonpath;
--             jsonpath             
------------------------------------
-- $."g"?(@."a" == 1 || @."a" == 4)
-+                jsonpath                
-+----------------------------------------
-+ $."g"?(((@."a" == 1) || (@."a" == 4)))
- (1 row)
- 
- select '$.g ? (@.a == 1 && @.a == 4)'::jsonpath;
--             jsonpath             
------------------------------------
-- $."g"?(@."a" == 1 && @."a" == 4)
-+                jsonpath                
-+----------------------------------------
-+ $."g"?(((@."a" == 1) && (@."a" == 4)))
- (1 row)
- 
- select '$.g ? (@.a == 1 || @.a == 4 && @.b == 7)'::jsonpath;
--                    jsonpath                    
--------------------------------------------------
-- $."g"?(@."a" == 1 || @."a" == 4 && @."b" == 7)
-+                         jsonpath                         
-+----------------------------------------------------------
-+ $."g"?(((@."a" == 1) || ((@."a" == 4) && (@."b" == 7))))
- (1 row)
- 
- select '$.g ? (@.a == 1 || !(@.a == 4) && @.b == 7)'::jsonpath;
--                     jsonpath                      
-----------------------------------------------------
-- $."g"?(@."a" == 1 || !(@."a" == 4) && @."b" == 7)
-+                          jsonpath                           
-+-------------------------------------------------------------
-+ $."g"?(((@."a" == 1) || (!((@."a" == 4)) && (@."b" == 7))))
- (1 row)
- 
- select '$.g ? (@.a == 1 || !(@.x >= 123 || @.a == 4) && @.b == 7)'::jsonpath;
--                             jsonpath                              
---------------------------------------------------------------------
-- $."g"?(@."a" == 1 || !(@."x" >= 123 || @."a" == 4) && @."b" == 7)
-+                                    jsonpath                                     
-+---------------------------------------------------------------------------------
-+ $."g"?(((@."a" == 1) || (!(((@."x" >= 123) || (@."a" == 4))) && (@."b" == 7))))
- (1 row)
- 
- select '$.g ? (@.x >= @[*]?(@.a > "abc"))'::jsonpath;
--               jsonpath                
-----------------------------------------
-- $."g"?(@."x" >= @[*]?(@."a" > "abc"))
-+                 jsonpath                  
-+-------------------------------------------
-+ $."g"?((@."x" >= @[*]?((@."a" > "abc"))))
- (1 row)
- 
- select '$.g ? ((@.x >= 123 || @.a == 4) is unknown)'::jsonpath;
--                    jsonpath                     
---------------------------------------------------
-- $."g"?((@."x" >= 123 || @."a" == 4) is unknown)
-+                       jsonpath                        
-+-------------------------------------------------------
-+ $."g"?((((@."x" >= 123) || (@."a" == 4))) is unknown)
- (1 row)
- 
- select '$.g ? (exists (@.x))'::jsonpath;
-@@ -256,21 +247,21 @@
- (1 row)
- 
- select '$.g ? (exists (@.x ? (@ == 14)))'::jsonpath;
--             jsonpath             
------------------------------------
-- $."g"?(exists (@."x"?(@ == 14)))
-+              jsonpath              
-+------------------------------------
-+ $."g"?(exists (@."x"?((@ == 14))))
- (1 row)
- 
- select '$.g ? ((@.x >= 123 || @.a == 4) && exists (@.x ? (@ == 14)))'::jsonpath;
--                             jsonpath                             
--------------------------------------------------------------------
-- $."g"?((@."x" >= 123 || @."a" == 4) && exists (@."x"?(@ == 14)))
-+                                 jsonpath                                 
-+--------------------------------------------------------------------------
-+ $."g"?((((@."x" >= 123) || (@."a" == 4)) && exists (@."x"?((@ == 14)))))
- (1 row)
- 
- select '$.g ? (+@.x >= +-(+@.a + 2))'::jsonpath;
--              jsonpath              
--------------------------------------
-- $."g"?(+@."x" >= +(-(+@."a" + 2)))
-+                  jsonpath                  
-+--------------------------------------------
-+ $."g"?(((+@."x") >= (+(-((+@."a") + 2)))))
- (1 row)
- 
- select '$a'::jsonpath;
-@@ -292,9 +283,9 @@
- (1 row)
- 
- select '$.g ? (@.zip == $zip)'::jsonpath;
--         jsonpath          
-----------------------------
-- $."g"?(@."zip" == $"zip")
-+          jsonpath           
-+-----------------------------
-+ $."g"?((@."zip" == $"zip"))
- (1 row)
- 
- select '$.a[1,2, 3 to 16]'::jsonpath;
-@@ -304,21 +295,22 @@
- (1 row)
- 
- select '$.a[$a + 1, ($b[*]) to -($[0] * 2)]'::jsonpath;
--                jsonpath                
------------------------------------------
-- $."a"[$"a" + 1,$"b"[*] to -($[0] * 2)]
-+                  jsonpath                  
-+--------------------------------------------
-+ $."a"[($"a" + 1),$"b"[*] to (-($[0] * 2))]
- (1 row)
- 
- select '$.a[$.a.size() - 3]'::jsonpath;
--        jsonpath         
---------------------------
-- $."a"[$."a".size() - 3]
-+ERROR:  could not parse "$.a[$.a.size() - 3]" as type jsonpath: at or near "(": syntax error
-+DETAIL:  source SQL:
-+$.a[$.a.size() - 3]
-+            ^
-+select 'last'::jsonpath;
-+ jsonpath 
-+----------
-+ last
- (1 row)
- 
--select 'last'::jsonpath;
+ select 'last'::jsonpath;
 -ERROR:  LAST is allowed only in array subscripts
 -LINE 1: select 'last'::jsonpath;
 -               ^
++ERROR:  could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
  select '"last"'::jsonpath;
   jsonpath 
  ----------
-@@ -332,9 +324,11 @@
+@@ -332,9 +337,7 @@
  (1 row)
  
  select '$ ? (last > 0)'::jsonpath;
 -ERROR:  LAST is allowed only in array subscripts
 -LINE 1: select '$ ? (last > 0)'::jsonpath;
 -               ^
-+    jsonpath    
-+----------------
-+ $?((last > 0))
-+(1 row)
-+
++ERROR:  could not parse "$ ? (last > 0)" as type jsonpath: LAST is allowed only in array subscripts
  select '$[last]'::jsonpath;
   jsonpath 
  ----------
-@@ -342,142 +336,226 @@
+@@ -354,19 +357,20 @@
  (1 row)
  
- select '$[$[0] ? (last > 0)]'::jsonpath;
--      jsonpath      
----------------------
-- $[$[0]?(last > 0)]
-+       jsonpath       
-+----------------------
-+ $[$[0]?((last > 0))]
- (1 row)
- 
- select 'null.type()'::jsonpath;
--  jsonpath   
---------------
-- null.type()
--(1 row)
--
-+ERROR:  could not parse "null.type()" as type jsonpath: at or near "(": syntax error
-+DETAIL:  source SQL:
-+null.type()
-+         ^
  select '1.type()'::jsonpath;
 -ERROR:  trailing junk after numeric literal at or near "1.t" of jsonpath input
 -LINE 1: select '1.type()'::jsonpath;
@@ -392,102 +213,78 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -  jsonpath  
 -------------
 - (1).type()
--(1 row)
--
-+ERROR:  could not parse "(1).type()" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(1).type()
-+   ^
++ jsonpath 
++----------
++ 1.type()
+ (1 row)
+ 
  select '1.2.type()'::jsonpath;
 -   jsonpath   
 ---------------
 - (1.2).type()
--(1 row)
--
-+ERROR:  could not parse "1.2.type()" as type jsonpath: at or near "(": syntax error
-+DETAIL:  source SQL:
-+1.2.type()
-+        ^
++  jsonpath  
++------------
++ 1.2.type()
+ (1 row)
+ 
  select '"aaa".type()'::jsonpath;
--   jsonpath   
----------------
-- "aaa".type()
--(1 row)
--
-+ERROR:  could not parse "\"aaa\".type()" as type jsonpath: at or near "(": syntax error
-+DETAIL:  source SQL:
-+"aaa".type()
-+          ^
- select 'true.type()'::jsonpath;
--  jsonpath   
---------------
-- true.type()
--(1 row)
--
-+ERROR:  could not parse "true.type()" as type jsonpath: at or near "(": syntax error
-+DETAIL:  source SQL:
-+true.type()
-+         ^
+@@ -382,29 +386,33 @@
+ (1 row)
+ 
  select '$.double().floor().ceiling().abs()'::jsonpath;
 -              jsonpath              
 -------------------------------------
 - $.double().floor().ceiling().abs()
 -(1 row)
 -
-+ERROR:  could not parse "$.double().floor().ceiling().abs()" as type jsonpath: at or near "(": syntax error
++ERROR:  could not parse "$.double().floor().ceiling().abs()" as type jsonpath: at or near "(": syntax error: unimplemented: this syntax: .double()
 +DETAIL:  source SQL:
 +$.double().floor().ceiling().abs()
 +        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.keyvalue().key'::jsonpath;
 -      jsonpath      
 ---------------------
 - $.keyvalue()."key"
 -(1 row)
 -
-+ERROR:  could not parse "$.keyvalue().key" as type jsonpath: at or near "(": syntax error
++ERROR:  could not parse "$.keyvalue().key" as type jsonpath: at or near "(": syntax error: unimplemented: this syntax: .keyvalue()
 +DETAIL:  source SQL:
 +$.keyvalue().key
 +          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.datetime()'::jsonpath;
 -   jsonpath   
 ---------------
 - $.datetime()
 -(1 row)
 -
-+ERROR:  could not parse "$.datetime()" as type jsonpath: at or near "(": syntax error
++ERROR:  could not parse "$.datetime()" as type jsonpath: at or near ")": syntax error: unimplemented: this syntax: .datetime()
 +DETAIL:  source SQL:
 +$.datetime()
-+          ^
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$.datetime("datetime template")'::jsonpath;
 -            jsonpath             
 ----------------------------------
 - $.datetime("datetime template")
 -(1 row)
 -
-+ERROR:  could not parse "$.datetime(\"datetime template\")" as type jsonpath: at or near "(": syntax error
++ERROR:  could not parse "$.datetime(\"datetime template\")" as type jsonpath: at or near ")": syntax error: unimplemented: this syntax: .datetime()
 +DETAIL:  source SQL:
 +$.datetime("datetime template")
-+          ^
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
  select '$ ? (@ starts with "abc")'::jsonpath;
--        jsonpath         
---------------------------
-- $?(@ starts with "abc")
--(1 row)
--
-+ERROR:  could not parse "$ ? (@ starts with \"abc\")" as type jsonpath: at or near "starts": syntax error
-+DETAIL:  source SQL:
-+$ ? (@ starts with "abc")
-+       ^
- select '$ ? (@ starts with $var)'::jsonpath;
--         jsonpath         
----------------------------
-- $?(@ starts with $"var")
--(1 row)
--
-+ERROR:  could not parse "$ ? (@ starts with $var)" as type jsonpath: at or near "starts": syntax error
-+DETAIL:  source SQL:
-+$ ? (@ starts with $var)
-+       ^
+         jsonpath         
+ -------------------------
+@@ -418,9 +426,10 @@
+ (1 row)
+ 
  select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
 -ERROR:  invalid regular expression: parentheses () not balanced
 -LINE 1: select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
@@ -497,317 +294,72 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 +$ ? (@ like_regex "(invalid pattern")
 +                                    ^
  select '$ ? (@ like_regex "pattern")'::jsonpath;
--          jsonpath          
------------------------------
-- $?(@ like_regex "pattern")
-+           jsonpath           
-+------------------------------
-+ $?((@ like_regex "pattern"))
+           jsonpath          
+ ----------------------------
+@@ -452,9 +461,10 @@
  (1 row)
- 
- select '$ ? (@ like_regex "pattern" flag "")'::jsonpath;
--          jsonpath          
------------------------------
-- $?(@ like_regex "pattern")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"\")" as type jsonpath: at or near "": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
- 
- select '$ ? (@ like_regex "pattern" flag "i")'::jsonpath;
--              jsonpath               
---------------------------------------
-- $?(@ like_regex "pattern" flag "i")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"i\")" as type jsonpath: at or near "i": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "i")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
- 
- select '$ ? (@ like_regex "pattern" flag "is")'::jsonpath;
--               jsonpath               
----------------------------------------
-- $?(@ like_regex "pattern" flag "is")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"is\")" as type jsonpath: at or near "is": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "is")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
- 
- select '$ ? (@ like_regex "pattern" flag "isim")'::jsonpath;
--               jsonpath                
-----------------------------------------
-- $?(@ like_regex "pattern" flag "ism")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"isim\")" as type jsonpath: at or near "isim": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "isim")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
  
  select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
 -ERROR:  XQuery "x" flag (expanded regular expressions) is not implemented
 -LINE 1: select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
 -               ^
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"xsms\")" as type jsonpath: at or near "xsms": syntax error: unimplemented: this syntax
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"xsms\")" as type jsonpath: at or near "xsms": syntax error: XQuery "x" flag (expanded regular expressions) is not implemented
 +DETAIL:  source SQL:
 +$ ? (@ like_regex "pattern" flag "xsms")
 +                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
  select '$ ? (@ like_regex "pattern" flag "q")'::jsonpath;
--              jsonpath               
---------------------------------------
-- $?(@ like_regex "pattern" flag "q")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"q\")" as type jsonpath: at or near "q": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "q")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
- 
- select '$ ? (@ like_regex "pattern" flag "iq")'::jsonpath;
--               jsonpath               
----------------------------------------
-- $?(@ like_regex "pattern" flag "iq")
--(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"iq\")" as type jsonpath: at or near "iq": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+$ ? (@ like_regex "pattern" flag "iq")
-+                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
+               jsonpath               
+ -------------------------------------
+@@ -468,16 +478,15 @@
+ (1 row)
  
  select '$ ? (@ like_regex "pattern" flag "smixq")'::jsonpath;
 -                jsonpath                 
 ------------------------------------------
 - $?(@ like_regex "pattern" flag "ismxq")
 -(1 row)
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"smixq\")" as type jsonpath: at or near "smixq": syntax error: unimplemented: this syntax
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"smixq\")" as type jsonpath: at or near "smixq": syntax error: XQuery "x" flag (expanded regular expressions) is not implemented
 +DETAIL:  source SQL:
 +$ ? (@ like_regex "pattern" flag "smixq")
 +                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
- 
  select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
 -ERROR:  invalid input syntax for type jsonpath
 -LINE 1: select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
 -               ^
 -DETAIL:  Unrecognized flag character "a" in LIKE_REGEX predicate.
-+ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"a\")" as type jsonpath: at or near "a": syntax error: unimplemented: this syntax
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"a\")" as type jsonpath: at or near "a": syntax error: unrecognized flag character 'a' in LIKE_REGEX predicate
 +DETAIL:  source SQL:
 +$ ? (@ like_regex "pattern" flag "a")
 +                                 ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
-+
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
  select '$ < 1'::jsonpath;
   jsonpath 
  ----------
-@@ -485,51 +563,47 @@
- (1 row)
- 
- select '($ < 1) || $.a.b <= $x'::jsonpath;
--           jsonpath           
--------------------------------
-- ($ < 1 || $."a"."b" <= $"x")
-+             jsonpath             
-+----------------------------------
-+ (($ < 1) || ($."a"."b" <= $"x"))
+@@ -491,9 +500,7 @@
  (1 row)
  
  select '@ + 1'::jsonpath;
 -ERROR:  @ is not allowed in root expressions
 -LINE 1: select '@ + 1'::jsonpath;
 -               ^
--select '($).a.b'::jsonpath;
-- jsonpath  
-------------
-- $."a"."b"
-+ jsonpath 
-+----------
-+ (@ + 1)
- (1 row)
- 
-+select '($).a.b'::jsonpath;
-+ERROR:  could not parse "($).a.b" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+($).a.b
-+   ^
- select '($.a.b).c.d'::jsonpath;
--     jsonpath      
---------------------
-- $."a"."b"."c"."d"
--(1 row)
--
-+ERROR:  could not parse "($.a.b).c.d" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+($.a.b).c.d
-+       ^
- select '($.a.b + -$.x.y).c.d'::jsonpath;
--             jsonpath             
------------------------------------
-- ($."a"."b" + -$."x"."y")."c"."d"
--(1 row)
--
-+ERROR:  could not parse "($.a.b + -$.x.y).c.d" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+($.a.b + -$.x.y).c.d
-+                ^
- select '(-+$.a.b).c.d'::jsonpath;
--        jsonpath         
---------------------------
-- (-(+$."a"."b"))."c"."d"
--(1 row)
--
-+ERROR:  could not parse "(-+$.a.b).c.d" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(-+$.a.b).c.d
-+         ^
- select '1 + ($.a.b + 2).c.d'::jsonpath;
--           jsonpath            
---------------------------------
-- (1 + ($."a"."b" + 2)."c"."d")
--(1 row)
--
-+ERROR:  could not parse "1 + ($.a.b + 2).c.d" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+1 + ($.a.b + 2).c.d
-+               ^
- select '1 + ($.a.b > 2).c.d'::jsonpath;
--           jsonpath            
---------------------------------
-- (1 + ($."a"."b" > 2)."c"."d")
--(1 row)
--
-+ERROR:  could not parse "1 + ($.a.b > 2).c.d" as type jsonpath: at or near ">": syntax error
-+DETAIL:  source SQL:
-+1 + ($.a.b > 2).c.d
-+           ^
- select '($)'::jsonpath;
-  jsonpath 
- ----------
-@@ -543,297 +617,284 @@
++ERROR:  could not parse "@ + 1" as type jsonpath: @ is not allowed in root expressions
+ select '($).a.b'::jsonpath;
+  jsonpath  
+ -----------
+@@ -543,9 +550,9 @@
  (1 row)
  
  select '((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))'::jsonpath;
 -                     jsonpath                      
 ----------------------------------------------------
 - (($ + 1)."a" + (2)."b"?(@ > 1 || exists (@."c")))
--(1 row)
--
-+ERROR:  could not parse "((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))
-+          ^
++                    jsonpath                     
++-------------------------------------------------
++ (($ + 1)."a" + 2."b"?(@ > 1 || exists (@."c")))
+ (1 row)
+ 
  select '$ ? (@.a < 1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+    jsonpath     
-+-----------------
-+ $?((@."a" < 1))
- (1 row)
- 
- select '$ ? (@.a < -1)'::jsonpath;
--    jsonpath    
------------------
-- $?(@."a" < -1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (-1)))
- (1 row)
- 
- select '$ ? (@.a < +1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (+1)))
+@@ -567,23 +574,20 @@
  (1 row)
  
  select '$ ? (@.a < .1)'::jsonpath;
@@ -841,84 +393,36 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 +$ ? (@.a < +.1)
 +            ^
  select '$ ? (@.a < 0.1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 0.1)
-+     jsonpath      
-+-------------------
-+ $?((@."a" < 0.1))
- (1 row)
- 
- select '$ ? (@.a < -0.1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < -0.1)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (-0.1)))
- (1 row)
- 
- select '$ ? (@.a < +0.1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 0.1)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (+0.1)))
- (1 row)
- 
- select '$ ? (@.a < 10.1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 10.1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < 10.1))
- (1 row)
- 
- select '$ ? (@.a < -10.1)'::jsonpath;
--     jsonpath      
---------------------
-- $?(@."a" < -10.1)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (-10.1)))
- (1 row)
- 
- select '$ ? (@.a < +10.1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 10.1)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (+10.1)))
+     jsonpath     
+ -----------------
+@@ -621,41 +625,38 @@
  (1 row)
  
  select '$ ? (@.a < 1e1)'::jsonpath;
 -    jsonpath    
 -----------------
 - $?(@."a" < 10)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < 1E+1))
++     jsonpath     
++------------------
++ $?(@."a" < 1E+1)
  (1 row)
  
  select '$ ? (@.a < -1e1)'::jsonpath;
 -    jsonpath     
 ------------------
 - $?(@."a" < -10)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (-1E+1)))
++     jsonpath      
++-------------------
++ $?(@."a" < -1E+1)
  (1 row)
  
  select '$ ? (@.a < +1e1)'::jsonpath;
 -    jsonpath    
 -----------------
 - $?(@."a" < 10)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (+1E+1)))
++     jsonpath     
++------------------
++ $?(@."a" < 1E+1)
  (1 row)
  
  select '$ ? (@.a < .1e1)'::jsonpath;
@@ -952,84 +456,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 +$ ? (@.a < +.1e1)
 +            ^
  select '$ ? (@.a < 0.1e1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+    jsonpath     
-+-----------------
-+ $?((@."a" < 1))
- (1 row)
- 
- select '$ ? (@.a < -0.1e1)'::jsonpath;
--    jsonpath    
------------------
-- $?(@."a" < -1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (-1)))
- (1 row)
- 
- select '$ ? (@.a < +0.1e1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (+1)))
- (1 row)
- 
- select '$ ? (@.a < 10.1e1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 101)
-+     jsonpath      
-+-------------------
-+ $?((@."a" < 101))
- (1 row)
- 
- select '$ ? (@.a < -10.1e1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < -101)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (-101)))
- (1 row)
- 
- select '$ ? (@.a < +10.1e1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 101)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (+101)))
- (1 row)
- 
- select '$ ? (@.a < 1e-1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 0.1)
-+     jsonpath      
-+-------------------
-+ $?((@."a" < 0.1))
- (1 row)
- 
- select '$ ? (@.a < -1e-1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < -0.1)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (-0.1)))
- (1 row)
- 
- select '$ ? (@.a < +1e-1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 0.1)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (+0.1)))
+    jsonpath    
+ ---------------
+@@ -711,23 +712,20 @@
  (1 row)
  
  select '$ ? (@.a < .1e-1)'::jsonpath;
@@ -1063,84 +492,36 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 +$ ? (@.a < +.1e-1)
 +            ^
  select '$ ? (@.a < 0.1e-1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 0.01)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < 0.01))
- (1 row)
- 
- select '$ ? (@.a < -0.1e-1)'::jsonpath;
--     jsonpath      
---------------------
-- $?(@."a" < -0.01)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (-0.01)))
- (1 row)
- 
- select '$ ? (@.a < +0.1e-1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 0.01)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (+0.01)))
- (1 row)
- 
- select '$ ? (@.a < 10.1e-1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 1.01)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < 1.01))
- (1 row)
- 
- select '$ ? (@.a < -10.1e-1)'::jsonpath;
--     jsonpath      
---------------------
-- $?(@."a" < -1.01)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (-1.01)))
- (1 row)
- 
- select '$ ? (@.a < +10.1e-1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < 1.01)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (+1.01)))
+      jsonpath     
+ ------------------
+@@ -765,41 +763,38 @@
  (1 row)
  
  select '$ ? (@.a < 1e+1)'::jsonpath;
 -    jsonpath    
 -----------------
 - $?(@."a" < 10)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < 1E+1))
++     jsonpath     
++------------------
++ $?(@."a" < 1E+1)
  (1 row)
  
  select '$ ? (@.a < -1e+1)'::jsonpath;
 -    jsonpath     
 ------------------
 - $?(@."a" < -10)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (-1E+1)))
++     jsonpath      
++-------------------
++ $?(@."a" < -1E+1)
  (1 row)
  
  select '$ ? (@.a < +1e+1)'::jsonpath;
 -    jsonpath    
 -----------------
 - $?(@."a" < 10)
-+       jsonpath        
-+-----------------------
-+ $?((@."a" < (+1E+1)))
++     jsonpath     
++------------------
++ $?(@."a" < 1E+1)
  (1 row)
  
  select '$ ? (@.a < .1e+1)'::jsonpath;
@@ -1174,61 +555,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 +$ ? (@.a < +.1e+1)
 +            ^
  select '$ ? (@.a < 0.1e+1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+    jsonpath     
-+-----------------
-+ $?((@."a" < 1))
- (1 row)
- 
- select '$ ? (@.a < -0.1e+1)'::jsonpath;
--    jsonpath    
------------------
-- $?(@."a" < -1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (-1)))
- (1 row)
- 
- select '$ ? (@.a < +0.1e+1)'::jsonpath;
--   jsonpath    
-----------------
-- $?(@."a" < 1)
-+      jsonpath      
-+--------------------
-+ $?((@."a" < (+1)))
- (1 row)
- 
- select '$ ? (@.a < 10.1e+1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 101)
-+     jsonpath      
-+-------------------
-+ $?((@."a" < 101))
- (1 row)
- 
- select '$ ? (@.a < -10.1e+1)'::jsonpath;
--     jsonpath     
--------------------
-- $?(@."a" < -101)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (-101)))
- (1 row)
- 
- select '$ ? (@.a < +10.1e+1)'::jsonpath;
--    jsonpath     
-------------------
-- $?(@."a" < 101)
-+       jsonpath       
-+----------------------
-+ $?((@."a" < (+101)))
- (1 row)
- 
- -- numeric literals
-@@ -844,35 +905,39 @@
+    jsonpath    
+ ---------------
+@@ -844,35 +839,39 @@
  (1 row)
  
  select '00'::jsonpath;
@@ -1278,7 +607,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  (1 row)
  
  select '0.000e3'::jsonpath;
-@@ -884,39 +949,37 @@
+@@ -884,39 +883,37 @@
  select '0.0010'::jsonpath;
   jsonpath 
  ----------
@@ -1330,7 +659,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  select '1.'::jsonpath;
   jsonpath 
  ----------
-@@ -926,130 +989,128 @@
+@@ -926,130 +923,132 @@
  select '1.e1'::jsonpath;
   jsonpath 
  ----------
@@ -1391,12 +720,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - jsonpath  
 ------------
 - (1.2)."e"
--(1 row)
--
-+ERROR:  could not parse "(1.2).e" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(1.2).e
-+     ^
++ jsonpath 
++----------
++ 1.2."e"
+ (1 row)
+ 
  select '1e3'::jsonpath;
   jsonpath 
  ----------
@@ -1463,51 +791,45 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 + 1.2."e3"
  (1 row)
  
+-select '1..e3'::jsonpath;
 +select '(1.2).e3'::jsonpath;
-+ERROR:  could not parse "(1.2).e3" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(1.2).e3
-+     ^
+  jsonpath 
+ ----------
+- (1)."e3"
++ 1.2."e3"
+ (1 row)
+ 
 +select '1..e'::jsonpath;
 +ERROR:  could not parse "1..e" as type jsonpath: at or near ".": syntax error
 +DETAIL:  source SQL:
 +1..e
 +  ^
- select '1..e3'::jsonpath;
-- jsonpath 
------------
-- (1)."e3"
--(1 row)
--
++select '1..e3'::jsonpath;
 +ERROR:  could not parse "1..e3" as type jsonpath: at or near ".": syntax error
 +DETAIL:  source SQL:
 +1..e3
 +  ^
  select '(1.).e'::jsonpath;
-- jsonpath 
------------
+  jsonpath 
+ ----------
 - (1)."e"
--(1 row)
--
-+ERROR:  could not parse "(1.).e" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(1.).e
-+    ^
++ 1."e"
+ (1 row)
+ 
  select '(1.).e3'::jsonpath;
-- jsonpath 
------------
+  jsonpath 
+ ----------
 - (1)."e3"
--(1 row)
--
-+ERROR:  could not parse "(1.).e3" as type jsonpath: at or near ".": syntax error
-+DETAIL:  source SQL:
-+(1.).e3
-+    ^
++ 1."e3"
+ (1 row)
+ 
  select '1?(2>3)'::jsonpath;
-   jsonpath   
- -------------
+-  jsonpath   
+--------------
 - (1)?(2 > 3)
-+ 1?((2 > 3))
++ jsonpath  
++-----------
++ 1?(2 > 3)
  (1 row)
  
  -- nondecimal
@@ -1534,7 +856,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  select '0x42F'::jsonpath;
   jsonpath 
  ----------
-@@ -1058,142 +1119,153 @@
+@@ -1058,142 +1057,153 @@
  
  -- error cases
  select '0b'::jsonpath;
@@ -1793,7 +1115,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
  -- test non-error-throwing API
  SELECT str as jsonpath,
         pg_input_is_valid(str,'jsonpath') as ok,
-@@ -1207,12 +1279,4 @@
+@@ -1207,12 +1217,4 @@
                    '00',
                    '1a']) str,
       LATERAL pg_input_error_info(str, 'jsonpath') as errinfo;
