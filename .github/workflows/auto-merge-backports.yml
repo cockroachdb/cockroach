@@ -3,8 +3,6 @@ name: Auto-Merge Test Backport PRs
 on:
   schedule:
     - cron: "0 * * * *"  # Every hour
-  workflow_dispatch:
-  push:
 
 jobs:
   auto-merge:
