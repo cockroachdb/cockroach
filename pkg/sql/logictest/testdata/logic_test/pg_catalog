@@ -314,7 +314,7 @@ pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
                            nspowner OID NULL,
                            nspacl STRING[] NULL,
                            INDEX pg_namespace_oid_idx (oid ASC) STORING (nspname, nspowner, nspacl)
-                         )
+                         );
 
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM pg_catalog.pg_namespace

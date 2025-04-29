@@ -97,7 +97,8 @@ SELECT
             WHEN array_length(rls_statements, 1) > 0 THEN
                 concat(e';\n', array_to_string(rls_statements, e';\n'))
             ELSE NULL
-        END
+        END,
+        e';'
     ) AS create_statement
 FROM
     %[4]s.crdb_internal.create_statements

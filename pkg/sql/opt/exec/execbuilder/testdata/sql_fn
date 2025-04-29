@@ -42,10 +42,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query T
 SELECT AddGeometryColumn ('public','my_spatial_table','geom2',4326,'POLYGON',2)
@@ -56,11 +56,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query T
 SELECT AddGeometryColumn ('my_spatial_table','geom3',4326,'MULTIPOLYGON',2)
@@ -71,12 +71,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query T
 SELECT AddGeometryColumn ('test','public','my_spatial_table','geom4',4326,'LINESTRING',2,true)
@@ -87,13 +87,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   geom4 GEOMETRY(LINESTRING,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query T
 SELECT AddGeometryColumn ('public','my_spatial_table','geom5',4326,'MULTIPOINT',2,true)
@@ -104,14 +104,14 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   geom4 GEOMETRY(LINESTRING,4326) NULL,
-   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query T
 SELECT AddGeometryColumn ('my_spatial_table','geom6',4326,'MULTILINESTRING',2,true)
@@ -122,15 +122,15 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   geom4 GEOMETRY(LINESTRING,4326) NULL,
-   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 query error relation "missing_table" does not exist
 SELECT AddGeometryColumn ('missing_table','geom',4326,'POINT',2)
@@ -222,17 +222,17 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   geom4 GEOMETRY(LINESTRING,4326) NULL,
-   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
-   geom7 GEOMETRY(POINT,4326) NULL,
-   geom8 GEOMETRY(POINT,4326) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+  geom7 GEOMETRY(POINT,4326) NULL,
+  geom8 GEOMETRY(POINT,4326) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 # In a WHERE clause.
 query I rowsort
@@ -251,19 +251,19 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE my_spatial_table]
 ----
 CREATE TABLE public.my_spatial_table (
-   k INT8 NOT NULL,
-   geom1 GEOMETRY(POINT,4326) NULL,
-   geom2 GEOMETRY(POLYGON,4326) NULL,
-   geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-   geom4 GEOMETRY(LINESTRING,4326) NULL,
-   geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-   geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
-   geom7 GEOMETRY(POINT,4326) NULL,
-   geom8 GEOMETRY(POINT,4326) NULL,
-   geom9 GEOMETRY(GEOMETRY,4326) NULL,
-   geom10 GEOMETRY(GEOMETRYCOLLECTION) NULL,
-   CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
-)
+  k INT8 NOT NULL,
+  geom1 GEOMETRY(POINT,4326) NULL,
+  geom2 GEOMETRY(POLYGON,4326) NULL,
+  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
+  geom4 GEOMETRY(LINESTRING,4326) NULL,
+  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
+  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
+  geom7 GEOMETRY(POINT,4326) NULL,
+  geom8 GEOMETRY(POINT,4326) NULL,
+  geom9 GEOMETRY(GEOMETRY,4326) NULL,
+  geom10 GEOMETRY(GEOMETRYCOLLECTION) NULL,
+  CONSTRAINT my_spatial_table_pkey PRIMARY KEY (k ASC)
+);
 
 # Regression test for #50296. Using AddGeometryColumn with NULL arguments must
 # not panic.

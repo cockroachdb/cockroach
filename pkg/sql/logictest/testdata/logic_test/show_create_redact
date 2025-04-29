@@ -10,7 +10,7 @@ a  CREATE TABLE public.a (
      a STRING NULL DEFAULT ‹×›:::STRING,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE b (b BOOLEAN DEFAULT false)
@@ -22,7 +22,7 @@ b  CREATE TABLE public.b (
      b BOOL NULL DEFAULT ‹×›,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT b_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE c (c CHAR DEFAULT 'c')
@@ -34,7 +34,7 @@ c  CREATE TABLE public.c (
      c CHAR NULL DEFAULT ‹×›:::STRING,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE d (d DATE DEFAULT '1999-12-31')
@@ -46,7 +46,7 @@ d  CREATE TABLE public.d (
      d DATE NULL DEFAULT ‹×›:::DATE,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT d_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE i (i INT DEFAULT 0)
@@ -58,7 +58,7 @@ i  CREATE TABLE public.i (
      i INT8 NULL DEFAULT ‹×›:::INT8,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT i_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE j (j JSON DEFAULT '{}')
@@ -70,7 +70,7 @@ j  CREATE TABLE public.j (
      j JSONB NULL DEFAULT ‹×›:::JSONB,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT j_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE n (n INT DEFAULT NULL)
@@ -82,7 +82,7 @@ n  CREATE TABLE public.n (
      n INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT n_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 # Test that constants in computed columns are redacted.
 
@@ -97,7 +97,7 @@ ef  CREATE TABLE public.ef (
       f INT8 NULL AS (e + ‹×›:::INT8) VIRTUAL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT ef_pkey PRIMARY KEY (rowid ASC)
-    )
+    );
 
 statement ok
 CREATE TABLE g (g GEOMETRY AS ('POINT (0 0)') VIRTUAL)
@@ -109,7 +109,7 @@ g  CREATE TABLE public.g (
      g GEOMETRY NULL AS (‹×›:::GEOMETRY) VIRTUAL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT g_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE hi (h INTERVAL PRIMARY KEY, i INTERVAL AS (h - '12:00:00') STORED, FAMILY (h, i))
@@ -122,7 +122,7 @@ hi  CREATE TABLE public.hi (
       i INTERVAL NULL AS (h - ‹×›:::INTERVAL) STORED,
       CONSTRAINT hi_pkey PRIMARY KEY (h ASC),
       FAMILY fam_0_h_i (h, i)
-    )
+    );
 
 statement ok
 CREATE TABLE jk (j JSONB, k STRING PRIMARY KEY, jk JSONB AS (j->k->'foo') STORED, INVERTED INDEX (jk), FAMILY (k, j, jk))
@@ -137,7 +137,7 @@ jk  CREATE TABLE public.jk (
       CONSTRAINT jk_pkey PRIMARY KEY (k ASC),
       INVERTED INDEX jk_jk_idx (jk),
       FAMILY fam_0_k_j_jk (k, j, jk)
-    )
+    );
 
 # Test that constants in constraints are redacted.
 
@@ -152,7 +152,7 @@ k  CREATE TABLE public.k (
      CONSTRAINT k_pkey PRIMARY KEY (k ASC),
      CONSTRAINT check_k CHECK (k > ‹×›:::INT8),
      CONSTRAINT "check" CHECK (‹×›)
-   )
+   );
 
 statement ok
 CREATE TABLE dl (d DECIMAL PRIMARY KEY, l DECIMAL, CHECK (d != l + 2.0), FAMILY (d, l))
@@ -166,7 +166,7 @@ dl  CREATE TABLE public.dl (
       CONSTRAINT dl_pkey PRIMARY KEY (d ASC),
       FAMILY fam_0_d_l (d, l),
       CONSTRAINT check_d_l CHECK (d != (l + ‹×›:::DECIMAL))
-    )
+    );
 
 # Test that constants in expression indexes are redacted.
 
@@ -181,7 +181,7 @@ m  CREATE TABLE public.m (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT m_pkey PRIMARY KEY (rowid ASC),
      INDEX m_expr_idx (array_cat(m, ARRAY[‹×›:::STRING, ‹×›, ‹×›:::STRING]:::STRING[]) ASC)
-   )
+   );
 
 statement ok
 CREATE TABLE no (n NUMERIC PRIMARY KEY, o FLOAT, UNIQUE INDEX ((o / 1.1e7)), FAMILY (n, o))
@@ -195,7 +195,7 @@ no  CREATE TABLE public.no (
       CONSTRAINT no_pkey PRIMARY KEY (n ASC),
       UNIQUE INDEX no_expr_key ((o / ‹×›:::FLOAT8) ASC),
       FAMILY fam_0_n_o (n, o)
-    )
+    );
 
 # Test that constants in partial indexes are redacted.
 
@@ -209,7 +209,7 @@ p  CREATE TABLE public.p (
      p UUID NOT NULL,
      CONSTRAINT p_pkey PRIMARY KEY (p ASC),
      INDEX p_p_idx (p ASC) WHERE p != ‹×›:::UUID
-   )
+   );
 
 # Test that constants in views are redacted.
 
@@ -221,7 +221,7 @@ SHOW CREATE VIEW q WITH REDACT
 ----
 q  CREATE VIEW public.q (
      q
-   ) AS SELECT ‹×›
+   ) AS SELECT ‹×›;
 
 statement ok
 CREATE VIEW r (r) AS SELECT TIMESTAMP '1999-12-31 23:59:59' + i FROM hi WHERE h != '00:00:01'
@@ -231,7 +231,7 @@ SHOW CREATE VIEW r WITH REDACT
 ----
 r  CREATE VIEW public.r (
      r
-   ) AS SELECT TIMESTAMP ‹×› + i FROM test.public.hi WHERE h != ‹×›
+   ) AS SELECT TIMESTAMP ‹×› + i FROM test.public.hi WHERE h != ‹×›;
 
 statement ok
 CREATE VIEW s (s) AS SELECT IF(b, 'abc', 'def') FROM b ORDER BY b AND NOT false LIMIT 10
@@ -248,7 +248,7 @@ s  CREATE VIEW public.s (
      ORDER BY
        b AND (NOT ‹×›)
      LIMIT
-       ‹×›
+       ‹×›;
 
 statement ok
 CREATE VIEW t (t, u) AS SELECT jk || '[null]', j->a FROM a JOIN jk ON a = k || 'u' ORDER BY concat(a, 'ut')
@@ -264,4 +264,4 @@ t  CREATE VIEW public.t (
      FROM
        test.public.a JOIN test.public.jk ON a = (k || ‹×›)
      ORDER BY
-       concat(a, ‹×›)
+       concat(a, ‹×›);

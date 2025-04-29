@@ -44,7 +44,7 @@ data.public.reg CREATE TABLE public.reg (
 	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT reg_pkey PRIMARY KEY (i ASC)
-)
+);
 
 query-sql
 SHOW CREATE TABLE data.stats
@@ -53,7 +53,7 @@ data.public.stats CREATE TABLE public.stats (
 	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT stats_pkey PRIMARY KEY (i ASC)
-) WITH (sql_stats_automatic_collection_enabled = true)
+) WITH (sql_stats_automatic_collection_enabled = true);
 
 query-sql
 SHOW CREATE TABLE data.nostats
@@ -62,4 +62,4 @@ data.public.nostats CREATE TABLE public.nostats (
 	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT nostats_pkey PRIMARY KEY (i ASC)
-) WITH (sql_stats_automatic_collection_enabled = false)
+) WITH (sql_stats_automatic_collection_enabled = false);

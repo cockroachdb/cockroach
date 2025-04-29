@@ -1074,7 +1074,7 @@ END;
 				`,
 			query: map[string][][]string{
 				`SELECT nextval('i_seq')`:    {{"11"}},
-				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE public.i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1"}},
+				`SHOW CREATE SEQUENCE i_seq`: {{"i_seq", "CREATE SEQUENCE public.i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;"}},
 			},
 		},
 		{
@@ -1112,7 +1112,7 @@ END;
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
 	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
-)`,
+);`,
 					},
 				},
 			},
@@ -1134,7 +1134,7 @@ END;
 	b INT8 NOT VISIBLE NULL,
 	c INT8 NULL,
 	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
-)`,
+);`,
 					},
 				},
 			},
@@ -1154,7 +1154,7 @@ END;
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT 8:::INT8,
 	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
-)`,
+);`,
 					},
 				},
 			},
@@ -5807,7 +5807,7 @@ func TestImportPgDump(t *testing.T) {
 	CONSTRAINT simple_pkey PRIMARY KEY (i ASC),
 	UNIQUE INDEX simple_b_s_idx (b ASC, s ASC),
 	INDEX simple_s_idx (s ASC)
-)`,
+);`,
 				}})
 
 				rows := sqlDB.QueryStr(t, "SELECT * FROM simple ORDER BY i")
@@ -5845,7 +5845,7 @@ func TestImportPgDump(t *testing.T) {
 	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT second_pkey PRIMARY KEY (i ASC)
-)`,
+);`,
 				}})
 				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
 				if expected, actual := secondTableRowCount, len(res); expected != actual {
@@ -5871,10 +5871,10 @@ func TestImportPgDump(t *testing.T) {
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC)
-)`,
+);`,
 				}})
 				sqlDB.CheckQueryResults(t, `SHOW CREATE SEQUENCE a_seq`, [][]string{{
-					"a_seq", `CREATE SEQUENCE public.a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+					"a_seq", `CREATE SEQUENCE public.a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;`,
 				}})
 				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"7"}})
 				sqlDB.CheckQueryResults(t,
@@ -6545,14 +6545,14 @@ func TestImportCockroachDump(t *testing.T) {
 	t STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	INDEX t_t_idx (t ASC)
-)`},
+);`},
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE a", [][]string{
 		{"a", `CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID
-)`},
+);`},
 	})
 }
 

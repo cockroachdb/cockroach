@@ -18,7 +18,7 @@ serial  CREATE TABLE public.serial (
           c INT8 NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
-        )
+        );
 
 statement ok
 INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -55,7 +55,7 @@ smallbig  CREATE TABLE public.smallbig (
             c INT8 NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
-          )
+          );
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -78,7 +78,7 @@ serials  CREATE TABLE public.serials (
            d INT8 NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
-         )
+         );
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)
@@ -119,12 +119,12 @@ serial  CREATE TABLE public.serial (
           c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
-        )
+        );
 
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
 ----
-serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL;
 
 statement ok
 INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -161,7 +161,7 @@ smallbig  CREATE TABLE public.smallbig (
             c INT8 NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
-          )
+          );
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -184,7 +184,7 @@ serials  CREATE TABLE public.serials (
            d INT8 NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
-         )
+         );
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)
@@ -221,12 +221,12 @@ serial  CREATE TABLE public.serial (
           c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
           CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
           UNIQUE INDEX serial_c_key (c ASC)
-        )
+        );
 
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
 ----
-serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 
 query TT
 SELECT pg_get_serial_sequence('serial', 'a'), pg_get_serial_sequence('serial', 'b')
@@ -287,7 +287,7 @@ SHOW CREATE TABLE "serial_MixedCase"
                       c INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_c_seq"'::REGCLASS),
                       CONSTRAINT "serial_MixedCase_pkey" PRIMARY KEY (a ASC),
                       UNIQUE INDEX "serial_MixedCase_c_key" (c ASC)
-                    )
+                    );
 
 statement error multiple default values specified for column "a" of table "s1"
 CREATE TABLE s1 (a SERIAL DEFAULT 7)
@@ -313,7 +313,7 @@ smallbig  CREATE TABLE public.smallbig (
             c INT8 NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
             CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
-          )
+          );
 
 query III
 SELECT count(DISTINCT a), count(DISTINCT b), count(DISTINCT c) FROM smallbig
@@ -336,7 +336,7 @@ serials  CREATE TABLE public.serials (
            d INT8 NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
-         )
+         );
 
 statement ok
 INSERT INTO serials (d) VALUES (9), (9)

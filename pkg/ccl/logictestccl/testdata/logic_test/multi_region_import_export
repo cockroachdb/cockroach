@@ -96,10 +96,10 @@ id  name        likes                           dislikes
 query TT
 SHOW CREATE TABLE team
 ----
-team                                            CREATE TABLE public.team (
-                                                id INT8 NOT NULL,
-                                                name STRING NULL,
-                                                likes STRING[] NULL,
-                                                dislikes STRING[] NULL,
-                                                CONSTRAINT team_pkey PRIMARY KEY (id ASC)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+team  CREATE TABLE public.team (
+        id INT8 NOT NULL,
+        name STRING NULL,
+        likes STRING[] NULL,
+        dislikes STRING[] NULL,
+        CONSTRAINT team_pkey PRIMARY KEY (id ASC)
+      ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;

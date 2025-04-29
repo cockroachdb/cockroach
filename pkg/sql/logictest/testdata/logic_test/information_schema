@@ -331,7 +331,7 @@ information_schema.tables  CREATE TABLE information_schema.tables (
                              table_type STRING NOT NULL,
                              is_insertable_into STRING NOT NULL,
                              version INT8 NULL
-                           )
+                           );
 
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.tables

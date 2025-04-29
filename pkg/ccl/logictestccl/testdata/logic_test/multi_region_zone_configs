@@ -805,7 +805,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
-                    ) LOCALITY REGIONAL BY ROW
+                    ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]

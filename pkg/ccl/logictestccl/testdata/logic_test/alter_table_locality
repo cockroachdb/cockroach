@@ -37,7 +37,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW
+                 ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -82,7 +82,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr
+                    ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -118,12 +118,12 @@ CREATE TABLE regional_by_table_in_primary_region (
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -159,12 +159,12 @@ CREATE TABLE regional_by_table_no_region (
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
-regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                               pk INT8 NOT NULL,
+                               i INT8 NULL,
+                               CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
+                               FAMILY fam_0_pk_i (pk, i)
+                             ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -200,12 +200,12 @@ CREATE TABLE regional_by_table_in_us_east (
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east                 CREATE TABLE public.regional_by_table_in_us_east (
-                                             pk INT8 NOT NULL,
-                                             i INT8 NULL,
-                                             CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
-                                             FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                                pk INT8 NOT NULL,
+                                i INT8 NULL,
+                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
+                                FAMILY fam_0_pk_i (pk, i)
+                              ) LOCALITY REGIONAL BY TABLE IN "us-east-1";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -238,11 +238,11 @@ query TT
 SHOW CREATE TABLE created_as_global
 ----
 created_as_global  CREATE TABLE public.created_as_global (
-                   pk INT8 NOT NULL,
-                   i INT8 NULL,
-                   CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
-                   FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -276,12 +276,12 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global                               CREATE TABLE public.created_as_global (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+created_as_global  CREATE TABLE public.created_as_global (
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -317,12 +317,12 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global                                 CREATE TABLE public.created_as_global (
-                                                  pk INT8 NOT NULL,
-                                                  i INT8 NULL,
-                                                  CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
-                                                  FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+created_as_global  CREATE TABLE public.created_as_global (
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -358,12 +358,12 @@ ALTER TABLE created_as_global SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 query TT
 SHOW CREATE TABLE created_as_global
 ----
-created_as_global                               CREATE TABLE public.created_as_global (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+created_as_global  CREATE TABLE public.created_as_global (
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -400,11 +400,11 @@ query TT
 SHOW CREATE TABLE created_as_global
 ----
 created_as_global  CREATE TABLE public.created_as_global (
-                   pk INT8 NOT NULL,
-                   i INT8 NULL,
-                   CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
-                   FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT created_as_global_pkey PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY GLOBAL;
 
 # Drop the table and recreate it with columns and indexes appropriate
 # for REGIONAL BY ROW transformations.
@@ -481,7 +481,7 @@ created_as_global  CREATE TABLE public.created_as_global (
                      INDEX created_as_global_b_idx (b ASC),
                      UNIQUE INDEX created_as_global_i_key (i ASC),
                      FAMILY fam_0_pk_i_b (pk, i, b, crdb_region)
-                   ) LOCALITY REGIONAL BY ROW
+                   ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -576,7 +576,7 @@ created_as_global  CREATE TABLE public.created_as_global (
                      INDEX created_as_global_b_idx (b ASC),
                      UNIQUE INDEX created_as_global_i_key (i ASC),
                      FAMILY fam_0_pk_i_b_crdb_region (pk, i, b, crdb_region)
-                   ) LOCALITY REGIONAL BY ROW
+                   ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -614,7 +614,7 @@ created_as_global  CREATE TABLE public.created_as_global (
                      INDEX created_as_global_b_idx (b ASC),
                      UNIQUE INDEX created_as_global_i_key (i ASC),
                      FAMILY fam_0_pk_i_b_crdb_region (pk, i, b, crdb_region)
-                   ) LOCALITY REGIONAL BY ROW
+                   ) LOCALITY REGIONAL BY ROW;
 
 # Test altering to REGIONAL BY ROW AS <col>.
 statement ok
@@ -668,7 +668,7 @@ created_as_global  CREATE TABLE public.created_as_global (
                      INDEX created_as_global_b_idx (b ASC),
                      UNIQUE INDEX created_as_global_i_key (i ASC),
                      FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
-                   ) LOCALITY REGIONAL BY ROW AS cr
+                   ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -705,12 +705,12 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE i
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region               CREATE TABLE public.regional_by_table_in_primary_region (
-                                                  pk INT8 NOT NULL,
-                                                  i INT8 NULL,
-                                                  CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                  FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -743,12 +743,12 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE I
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -781,12 +781,12 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE I
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -818,12 +818,12 @@ ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
-regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -856,11 +856,11 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_primary_region
 ----
 regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
-                                     pk INT8 NOT NULL,
-                                     i INT8 NULL,
-                                     CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
-                                     FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT regional_by_table_in_primary_region_pkey PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -907,12 +907,12 @@ ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
-regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                               pk INT8 NOT NULL,
+                               i INT8 NULL,
+                               CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
+                               FAMILY fam_0_pk_i (pk, i)
+                             ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -955,12 +955,12 @@ ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE in "ap-so
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
-regional_by_table_no_region                       CREATE TABLE public.regional_by_table_no_region (
-                                                  pk INT8 NOT NULL,
-                                                  i INT8 NULL,
-                                                  CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
-                                                  FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                               pk INT8 NOT NULL,
+                               i INT8 NULL,
+                               CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (pk ASC),
+                               FAMILY fam_0_pk_i (pk, i)
+                             ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -999,11 +999,11 @@ ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE IN PRIMAR
 query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
-regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
-                                                i INT8 NULL,
-                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                               i INT8 NULL,
+                               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                               CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
+                             ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1036,10 +1036,10 @@ query TT
 SHOW CREATE TABLE regional_by_table_no_region
 ----
 regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
-                             i INT8 NULL,
-                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                             CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY GLOBAL
+                               i INT8 NULL,
+                               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                               CONSTRAINT regional_by_table_no_region_pkey PRIMARY KEY (rowid ASC)
+                             ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1099,7 +1099,7 @@ regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
                                INDEX regional_by_table_no_region_b_idx (b ASC),
                                UNIQUE INDEX regional_by_table_no_region_i_key (i ASC),
                                FAMILY fam_0_pk_i_b (pk, i, b, crdb_region)
-                             ) LOCALITY REGIONAL BY ROW
+                             ) LOCALITY REGIONAL BY ROW;
 
 statement ok
 DROP TABLE regional_by_table_no_region;
@@ -1176,7 +1176,7 @@ regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
                                INDEX regional_by_table_no_region_b_idx (b ASC),
                                UNIQUE INDEX regional_by_table_no_region_i_key (i ASC),
                                FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
-                             ) LOCALITY REGIONAL BY ROW AS cr
+                             ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1210,12 +1210,12 @@ ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east                    CREATE TABLE public.regional_by_table_in_us_east (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                                pk INT8 NOT NULL,
+                                i INT8 NULL,
+                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
+                                FAMILY fam_0_pk_i (pk, i)
+                              ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1250,12 +1250,12 @@ ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in "ap-s
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east                      CREATE TABLE public.regional_by_table_in_us_east (
-                                                  pk INT8 NOT NULL,
-                                                  i INT8 NULL,
-                                                  CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
-                                                  FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                                pk INT8 NOT NULL,
+                                i INT8 NULL,
+                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
+                                FAMILY fam_0_pk_i (pk, i)
+                              ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1290,12 +1290,12 @@ ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE IN PRIMA
 query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
-regional_by_table_in_us_east                    CREATE TABLE public.regional_by_table_in_us_east (
-                                                pk INT8 NOT NULL,
-                                                i INT8 NULL,
-                                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
-                                                FAMILY fam_0_pk_i (pk, i)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                                pk INT8 NOT NULL,
+                                i INT8 NULL,
+                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
+                                FAMILY fam_0_pk_i (pk, i)
+                              ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1328,11 +1328,11 @@ query TT
 SHOW CREATE TABLE regional_by_table_in_us_east
 ----
 regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
-                              pk INT8 NOT NULL,
-                              i INT8 NULL,
-                              CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
-                              FAMILY fam_0_pk_i (pk, i)
-) LOCALITY GLOBAL
+                                pk INT8 NOT NULL,
+                                i INT8 NULL,
+                                CONSTRAINT regional_by_table_in_us_east_pkey PRIMARY KEY (pk ASC),
+                                FAMILY fam_0_pk_i (pk, i)
+                              ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1392,7 +1392,7 @@ regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
                                 INDEX regional_by_table_in_us_east_b_idx (b ASC),
                                 UNIQUE INDEX regional_by_table_in_us_east_i_key (i ASC),
                                 FAMILY fam_0_pk_i_b (pk, i, b, crdb_region)
-                              ) LOCALITY REGIONAL BY ROW
+                              ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1452,7 +1452,7 @@ regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
                                 INDEX regional_by_table_in_us_east_b_idx (b ASC),
                                 UNIQUE INDEX regional_by_table_in_us_east_i_key (i ASC),
                                 FAMILY fam_0_pk_i_b_cr (pk, i, b, cr)
-                              ) LOCALITY REGIONAL BY ROW AS cr
+                              ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1494,7 +1494,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+                 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1541,7 +1541,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+                 ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1588,7 +1588,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+                 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1635,7 +1635,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY GLOBAL
+                 ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1683,7 +1683,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW
+                 ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1722,7 +1722,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW AS crdb_region
+                 ) LOCALITY REGIONAL BY ROW AS crdb_region;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1762,7 +1762,7 @@ regional_by_row  CREATE TABLE public.regional_by_row (
                    CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                    INDEX regional_by_row_i_idx (i ASC),
                    FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
-                 ) LOCALITY REGIONAL BY ROW
+                 ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1814,7 +1814,7 @@ regional_by_row_to_regional_by_row_as  CREATE TABLE public.regional_by_row_to_re
                                          CONSTRAINT regional_by_row_to_regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                          INDEX regional_by_row_to_regional_by_row_as_i_idx (i ASC),
                                          FAMILY fam_0_pk_i_cr_crdb_region (pk, i, cr, crdb_region)
-                                       ) LOCALITY REGIONAL BY ROW AS cr
+                                       ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1856,7 +1856,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+                    ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1910,7 +1910,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+                    ) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -1964,7 +1964,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+                    ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -2018,7 +2018,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY GLOBAL
+                    ) LOCALITY GLOBAL;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -2069,7 +2069,7 @@ regional_by_row_as_to_regional_by_row  CREATE TABLE public.regional_by_row_as_to
                                          CONSTRAINT regional_by_row_as_to_regional_by_row_pkey PRIMARY KEY (pk ASC),
                                          INDEX regional_by_row_as_to_regional_by_row_i_idx (i ASC),
                                          FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
-                                       ) LOCALITY REGIONAL BY ROW
+                                       ) LOCALITY REGIONAL BY ROW;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
@@ -2119,7 +2119,7 @@ regional_by_row_as  CREATE TABLE public.regional_by_row_as (
                       CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                       INDEX regional_by_row_as_i_idx (i ASC),
                       FAMILY fam_0_cr_pk_i (cr, pk, i)
-                    ) LOCALITY REGIONAL BY ROW AS cr
+                    ) LOCALITY REGIONAL BY ROW AS cr;
 
 query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]

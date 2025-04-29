@@ -143,7 +143,7 @@ query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
 table_name        create_statement
-show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 
 # DML ERRORS
 
@@ -994,7 +994,7 @@ CREATE SEQUENCE sv VIRTUAL
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
 ----
-CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL;
 
 statement ok
 CREATE TABLE svals(x INT)
@@ -1524,7 +1524,7 @@ CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 query TT
 SHOW CREATE SEQUENCE cache_test
 ----
-cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10;
 
 # Verify cache invalidation with schema changes.
 
@@ -1982,7 +1982,7 @@ query TT colnames
 SHOW CREATE SEQUENCE seqas_3
 ----
 table_name  create_statement
-seqas_3     CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+seqas_3     CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4;
 
 statement ok
 CREATE SEQUENCE seqas_4 AS integer
@@ -1991,7 +1991,7 @@ query TT colnames
 SHOW CREATE SEQUENCE seqas_4
 ----
 table_name  create_statement
-seqas_4     CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+seqas_4     CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 
 statement ok
 CREATE SEQUENCE seqas_5 AS int8
@@ -2015,7 +2015,7 @@ query TT colnames
 SHOW CREATE SEQUENCE seqas_9
 ----
 table_name  create_statement
-seqas_9     CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1;
 
 statement ok
 ALTER SEQUENCE seqas_9 AS smallint
@@ -2024,7 +2024,7 @@ query TT colnames
 SHOW CREATE SEQUENCE seqas_9
 ----
 table_name  create_statement
-seqas_9     CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1;
 
 statement ok
 CREATE SEQUENCE seqas_10
@@ -2038,7 +2038,7 @@ query TT colnames
 SHOW CREATE SEQUENCE seqas_10
 ----
 table_name  create_statement
-seqas_10    CREATE SEQUENCE public.seqas_10 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+seqas_10    CREATE SEQUENCE public.seqas_10 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1;
 
 statement ok
 CREATE SEQUENCE seqas_11 AS integer
@@ -2051,7 +2051,7 @@ CREATE SEQUENCE seqas_11 AS integer
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_11]
 ----
-CREATE SEQUENCE public.seqas_11 AS INT4 MINVALUE 0 MAXVALUE 234567 INCREMENT 1 START 2
+CREATE SEQUENCE public.seqas_11 AS INT4 MINVALUE 0 MAXVALUE 234567 INCREMENT 1 START 2;
 
 statement ok
 CREATE SEQUENCE seqas_12 AS smallint
@@ -2061,7 +2061,7 @@ CREATE SEQUENCE seqas_12 AS smallint
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_12]
 ----
-CREATE SEQUENCE public.seqas_12 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+CREATE SEQUENCE public.seqas_12 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4;
 
 statement ok
 CREATE SEQUENCE seqas_13
@@ -2074,7 +2074,7 @@ CREATE SEQUENCE seqas_13
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_13]
 ----
-CREATE SEQUENCE public.seqas_13 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+CREATE SEQUENCE public.seqas_13 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1;
 
 statement error START value \(45678\) cannot be greater than MAXVALUE \(32767\)
 CREATE SEQUENCE seq_error AS smallint
@@ -2448,9 +2448,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t72820]
 ----
 CREATE TABLE public.t72820 (
-   i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
-   CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
-)
+  i INT8 NOT NULL DEFAULT nextval('public.t72820_i_seq1'::REGCLASS),
+  CONSTRAINT t72820_pkey PRIMARY KEY (i ASC)
+);
 
 # Also make sure that creating a sequence directly handles the name conflict.
 skipif config local-legacy-schema-changer

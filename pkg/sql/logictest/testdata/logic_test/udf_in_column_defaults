@@ -88,7 +88,7 @@ CREATE TABLE public.t1 (
   c INT8 NULL,
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c)
-)
+);
 
 # Make sure that back references are tracked properly.
 let $fn_id
@@ -126,7 +126,7 @@ CREATE TABLE public.t1 (
   c INT8 NULL DEFAULT public.f1(),
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b, c)
-)
+);
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -489,7 +489,7 @@ CREATE TABLE public.t1 (
   b INT8 NULL DEFAULT public.f1_new(),
   CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
   FAMILY fam_0 (a, b)
-)
+);
 
 statement ok
 INSERT INTO t1 VALUES (3)

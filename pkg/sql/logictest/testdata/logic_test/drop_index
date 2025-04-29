@@ -334,7 +334,7 @@ fk1  CREATE TABLE public.fk1 (
        CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
        CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
        INDEX i2 (x ASC)
-     )
+     );
 
 # test that notices are generated on index drops
 subtest notice_on_drop_index
@@ -575,7 +575,7 @@ CREATE TABLE public.tab_145100 (
   j INT8 NOT NULL,
   CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0_id_i_j (id, i, j)
-)
+);
 
 # DROP INDEX ... CASCADE should have caused the procedure to be dropped.
 statement error procedure proc_select_145100 does not exist
