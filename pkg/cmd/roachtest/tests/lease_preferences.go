@@ -179,12 +179,6 @@ func runLeasePreferences(
 		allNodes = append(allNodes, i)
 	}
 
-	// TODO(kvoli): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings := install.MakeClusterSettings()
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
-	settings.ClusterSettings["kv.enqueue_in_replicate_queue_on_span_config_update.enabled"] = "true"
-
 	startNodes := func(nodes ...int) {
 		for _, node := range nodes {
 			// Don't start a backup schedule because this test is timing sensitive.
@@ -198,7 +192,7 @@ func runLeasePreferences(
 				// dc=N: n2N-1 n2N
 				fmt.Sprintf("--locality=region=fake-region,zone=fake-zone,dc=%d", (node-1)/2+1),
 				"--vmodule=replica_proposal=2,lease_queue=3,lease=3")
-			c.Start(ctx, t.L(), opts, settings, c.Node(node))
+			c.Start(ctx, t.L(), opts, install.MakeClusterSettings(), c.Node(node))
 
 		}
 	}
