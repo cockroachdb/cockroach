@@ -100,6 +100,78 @@ func newMultiSSTWriter(
 	return msstw, nil
 }
 
+func (msstw *multiSSTWriter) readOneToBatch(
+	ctx context.Context,
+	ek storage.EngineKey,
+	shared bool, // may receive shared SSTs
+	batchReader *storage.BatchReader,
+) error {
+	switch batchReader.KeyKind() {
+	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
+		if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindRangeDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+
+	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.RawRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	case pebble.InternalKeyKindRangeKeySet:
+		start := ek
+		end, err := batchReader.EngineEndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.EngineRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	default:
+		return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+	}
+	return nil
+}
+
 // estimatedDataSize returns the approximation of the written bytes to SSTs
 // (including currSST).
 func (msstw *multiSSTWriter) estimatedDataSize() int64 {
