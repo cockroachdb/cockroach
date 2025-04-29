@@ -104,7 +104,6 @@ require (
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
-	github.com/RaduBerinde/btree v1.0.2-0.20250415192849-8beea01764ce
 	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alessio/shellescape v1.4.1
