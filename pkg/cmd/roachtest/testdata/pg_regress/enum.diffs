@@ -350,15 +350,37 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
  --
  -- Concrete function should override generic one
  --
-@@ -555,6 +563,7 @@
+@@ -544,24 +552,19 @@
+ RETURN $1::text || 'wtf';
+ END
+ $$ LANGUAGE plpgsql;
++ERROR:  no value provided for placeholder: $1
+ SELECT echo_me('red'::rainbow);
+- echo_me 
+----------
+- redwtf
+-(1 row)
+-
++ERROR:  unknown function: echo_me()
+ --
+ -- If we drop the original generic one, we don't have to qualify the type
  -- anymore, since there's only one match
  --
  DROP FUNCTION echo_me(anyenum);
-+ERROR:  type "anyenum" does not exist
++ERROR:  unknown function: echo_me()
  SELECT echo_me('red');
-  echo_me 
- ---------
-@@ -570,18 +579,17 @@
+- echo_me 
+----------
+- redwtf
+-(1 row)
+-
++ERROR:  unknown function: echo_me()
+ DROP FUNCTION echo_me(rainbow);
++ERROR:  unknown function: echo_me()
+ --
+ -- RI triggers on enum types
+ --
+@@ -570,18 +573,17 @@
  INSERT INTO enumtest_parent VALUES ('red');
  INSERT INTO enumtest_child VALUES ('red');
  INSERT INTO enumtest_child VALUES ('blue');  -- fail
@@ -382,7 +404,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
  DROP TYPE bogus;
  -- check renaming a value
  ALTER TYPE rainbow RENAME VALUE 'red' TO 'crimson';
-@@ -591,20 +599,20 @@
+@@ -591,20 +593,20 @@
  ORDER BY 2;
   enumlabel | enumsortorder 
  -----------+---------------
@@ -411,7 +433,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
  --
  -- check transactional behaviour of ALTER TYPE ... ADD VALUE
  --
-@@ -613,13 +621,17 @@
+@@ -613,13 +615,17 @@
  -- but we can't use them
  BEGIN;
  ALTER TYPE bogus ADD VALUE 'new';
@@ -433,7 +455,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
  SELECT enum_first(null::bogus);  -- safe
   enum_first 
  ------------
-@@ -627,14 +639,23 @@
+@@ -627,14 +633,23 @@
  (1 row)
  
  SELECT enum_last(null::bogus);  -- unsafe
@@ -461,7 +483,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/enum.out --label=
  SELECT 'new'::bogus;  -- now safe
   bogus 
  -------
-@@ -647,54 +668,68 @@
+@@ -647,54 +662,68 @@
  ORDER BY 2;
   enumlabel | enumsortorder 
  -----------+---------------
