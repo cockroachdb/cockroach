@@ -1191,6 +1191,174 @@ func runCDCInitialScanRollingRestart(
 	}
 }
 
+// runCDCFineGrainedCheckpointingBenchmark runs a changefeed
+// on a 4-node cluster, using node 1 as the coordinator. It will split the
+// table into many ranges and start a sink which will be artificially slower
+// on some of the ranges so that our fine grained checkpoints are exercised.
+// This sink will also occasionally error which should force restarts and
+// restore from these fine-grained checkpoints.
+func runCDCFineGrainedCheckpointingBenchmark(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	numRanges int,
+	transientErrorFrequency time.Duration,
+	rangeDelays []time.Duration,
+	maxVal int,
+	dupeLimit int,
+) {
+	if len(rangeDelays) > numRanges {
+		t.Fatalf("too many range delays provided")
+	}
+
+	ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
+	sinkURL := fmt.Sprintf("https://%s:%d", ips[0], debug.WebhookServerPort)
+	sink := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	m := c.NewMonitor(ctx, c.All())
+
+	db := c.Conn(ctx, t.L(), 1)
+
+	t.L().Printf("setting up test data...")
+	setupStmts := []string{
+		`CREATE TABLE foo (id INT PRIMARY KEY, val INT)`,
+		`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
+		`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+		`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'`,
+		`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
+		// We do not set timestamp quantization here since it is off by default
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+	}
+
+	values := []string{}
+	for i := 0; i < numRanges; i++ {
+		values = append(values, fmt.Sprintf("(%d, 0)", i*10))
+	}
+	setupStmts = append(setupStmts, fmt.Sprintf("INSERT INTO foo VALUES %s", strings.Join(values, ", ")))
+	setupStmts = append(setupStmts, fmt.Sprintf("ALTER TABLE foo SPLIT AT SELECT generate_series(0, %d, 10)", numRanges*10))
+
+	for _, s := range setupStmts {
+		t.L().Printf(s)
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	delayStrings := []string{}
+	for _, delay := range rangeDelays {
+		delayStrings = append(delayStrings, fmt.Sprint(delay.Milliseconds()))
+	}
+
+	// Run the sink server.
+	m.Go(func(ctx context.Context) error {
+		t.L().Printf("starting up sink server at %s...", sinkURL)
+		err := c.RunE(ctx, option.WithNodes(c.Node(1)),
+			fmt.Sprintf("./cockroach workload debug webhook-server-slow %d %s", transientErrorFrequency.Milliseconds(), strings.Join(delayStrings, " ")))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	wait := make(chan struct{})
+
+	// Run the changefeed, then ask the sink how many rows it saw.
+	func() {
+		defer close(wait)
+		defer func() {
+			_, err := sink.Get(sinkURL + "/exit")
+			t.L().Printf("exiting webhook sink status: %v", err)
+		}()
+
+		t.L().Printf("starting changefeed...")
+		var job int
+		if err := db.QueryRow(
+			fmt.Sprintf("CREATE CHANGEFEED FOR TABLE foo INTO 'webhook-%s/?insecure_tls_skip_verify=true' WITH initial_scan='no', updated", sinkURL),
+		).Scan(&job); err != nil {
+			t.Fatal(err)
+		}
+
+		var inserts []string
+		for i := 0; i < numRanges; i++ {
+			for j := 1; j < 10; j++ {
+				inserts = append(inserts, fmt.Sprintf("(%d, 0)", i*10+j))
+			}
+		}
+
+		sql := "INSERT INTO foo (id, val) VALUES " + strings.Join(inserts, ",")
+		if _, err := db.Exec(sql); err != nil {
+			t.Fatal(err)
+		}
+
+		for c := 1; c <= maxVal; c++ {
+			if _, err := db.Exec(fmt.Sprintf(
+				"UPDATE foo SET val = %d", c)); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		t.L().Printf("waiting for changefeed %d...", job)
+
+		get := func(p string) (int, error) {
+			b, err := sink.Get(sinkURL + p)
+			if err != nil {
+				return 0, err
+			}
+			body, err := io.ReadAll(b.Body)
+			if err != nil {
+				return 0, err
+			}
+			i, err := strconv.Atoi(string(body))
+			if err != nil {
+				return 0, err
+			}
+			return i, nil
+		}
+
+		// 10 keys per range are each updated maxVal + 1 times
+		// except for one key per range which is set to 0 before
+		// the changefeed starts and only updated maxVal times.
+		expected := 10*numRanges*(maxVal+1) - numRanges
+		t.L().Printf("expecting %d rows", expected)
+
+		testutils.SucceedsWithin(t, func() error {
+			unique, err := get("/unique")
+			if err != nil {
+				return err
+			}
+			dupes, err := get("/dupes")
+			if err != nil {
+				return err
+			}
+			t.L().Printf("sink got %d unique, %d dupes", unique, dupes)
+
+			if unique != expected {
+				return fmt.Errorf("expected %d, got %d", expected, unique)
+			}
+
+			if dupes > dupeLimit {
+				return fmt.Errorf("expected dupes <= %d, got %d", dupeLimit, dupes)
+			}
+
+			return nil
+		}, 30*time.Minute)
+
+		t.L().Printf("changefeed complete, checking sink...")
+		_, err = sink.Get(sinkURL + "/reset")
+		t.L().Printf("resetting sink %v", err)
+	}()
+
+	<-wait
+	// TODO(#116314)
+	if runtime.GOOS != "darwin" {
+		m.Wait()
+	}
+}
+
 // This test verifies that the changefeed avro + confluent schema registry works
 // end-to-end (including the schema registry default of requiring backward
 // compatibility within a topic).
@@ -1479,6 +1647,29 @@ func registerCDC(r registry.Registry) {
 		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/fine-grained-checkpointing",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          15 * time.Minute,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCFineGrainedCheckpointingBenchmark(ctx, t, c, 1000, 500*time.Millisecond,
+				[]time.Duration{
+					2 * time.Millisecond,
+					4 * time.Millisecond,
+					8 * time.Millisecond,
+					16 * time.Millisecond,
+					32 * time.Millisecond,
+					2 * time.Millisecond,
+					4 * time.Millisecond,
+					8 * time.Millisecond,
+					16 * time.Millisecond,
+					32 * time.Millisecond,
+				}, 100, 50000)
 		},
 	})
 	r.Add(registry.TestSpec{
