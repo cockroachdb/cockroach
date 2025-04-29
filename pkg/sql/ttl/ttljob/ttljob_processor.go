@@ -447,7 +447,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 						}
 						if ttlSpec.PreDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
 							return errors.Newf(
-								"table has had a schema change since the job has started at %s, aborting",
+								"table has had a schema change since the job has started at %s, job will run at the next scheduled time",
 								desc.GetModificationTime().GoTime().Format(time.RFC3339),
 							)
 						}
