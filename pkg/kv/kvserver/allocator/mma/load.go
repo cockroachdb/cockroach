@@ -474,9 +474,9 @@ func loadSummaryForDimension(
 	// consider how far we are from the mean. The mean isn't very useful when
 	// there are heterogeneous nodes/stores.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
-	if fractionAbove > 0.2 {
+	if fractionAbove > 0.1 {
 		loadSummary = overloadSlow
-	} else if fractionAbove < -0.2 {
+	} else if fractionAbove < -0.1 {
 		loadSummary = loadLow
 	} else if fractionAbove >= 0.05 {
 		loadSummary = loadNoChange
