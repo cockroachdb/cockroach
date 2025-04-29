@@ -171,6 +171,9 @@ func runLeasePreferences(
 	// waitForLessPreferred=false). This duration is used to ensure the lease
 	// preference satisfaction is reasonably permanent.
 	const stableDuration = 30 * time.Second
+	// initialWaitDuration is how long the test will wait for initial lease
+	// preference conformance. This duration is approx. a replica scanner cycle.
+	const initialWaitDuration = 10 * time.Minute
 
 	numNodes := c.Spec().NodeCount
 	allNodes := make([]int, 0, numNodes)
@@ -208,9 +211,13 @@ func runLeasePreferences(
 	conn := c.Conn(ctx, t.L(), numNodes)
 	defer conn.Close()
 
-	checkLeasePreferenceConformance := func(ctx context.Context) {
+	checkLeasePreferenceConformance := func(ctx context.Context, initial bool) {
+		duration := spec.postEventWaitDuration
+		if initial {
+			duration = initialWaitDuration
+		}
 		result, err := waitForLeasePreferences(
-			ctx, t, c, spec.checkNodes, spec.waitForLessPreferred, stableDuration, spec.postEventWaitDuration)
+			ctx, t, c, spec.checkNodes, spec.waitForLessPreferred, stableDuration, duration)
 		require.NoError(t, err, result)
 		require.Truef(t, !result.violating(), "violating lease preferences %s", result)
 		if spec.waitForLessPreferred {
@@ -253,7 +260,7 @@ func runLeasePreferences(
 		leasePreference: spec.preferences,
 	})
 	t.L().Printf("waiting for initial lease preference conformance")
-	checkLeasePreferenceConformance(ctx)
+	checkLeasePreferenceConformance(ctx, true /* initial */)
 
 	// Run the spec event function. The event function will move leases to
 	// non-conforming localities.
@@ -266,7 +273,7 @@ func runLeasePreferences(
 	// Wait for the preference conformance with some leases in non-conforming
 	// localities.
 	t.L().Printf("waiting for post-event lease preference conformance")
-	checkLeasePreferenceConformance(ctx)
+	checkLeasePreferenceConformance(ctx, false /* initial */)
 }
 
 type leasePreferencesResult struct {
