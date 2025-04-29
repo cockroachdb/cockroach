@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -272,7 +273,7 @@ func (s *OutgoingSnapshot) Close() {
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The storage interface for the underlying SSTs.
-	SSTStorageScratch *SSTSnapshotStorageScratch
+	SSTStorageScratch *snaprecv.SSTSnapshotStorageScratch
 	FromReplica       roachpb.ReplicaDescriptor
 	// The descriptor in the snapshot, never nil.
 	Desc *roachpb.RangeDescriptor

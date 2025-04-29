@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "snaprecv",
+    srcs = ["replica_sst_snapshot_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//objstorage",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@org_golang_x_time//rate",
+    ],
+)

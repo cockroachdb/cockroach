@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ type kvBatchSnapshotStrategy struct {
 	// before flushing to disk. Only used on the receiver side.
 	sstChunkSize int64
 	// Only used on the receiver side.
-	scratch   *SSTSnapshotStorageScratch
+	scratch   *snaprecv.SSTSnapshotStorageScratch
 	st        *cluster.Settings
 	clusterID uuid.UUID
 }
