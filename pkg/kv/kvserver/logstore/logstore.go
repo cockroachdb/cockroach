@@ -352,6 +352,7 @@ func (cb *nonBlockingSyncWaiterCallback) run() {
 		CommitDur:        cb.logCommitBegin.Elapsed(),
 		BatchCommitStats: cb.batch.CommitStats(),
 	})
+	cb.batch.Close()
 	cb.release()
 }
 
