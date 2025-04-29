@@ -282,6 +282,22 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+var compactionConcurrencyLower = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.compaction_concurrency",
+	"the baseline number of concurrent compactions",
+	1,
+	settings.IntWithMinimum(1),
+)
+
+var compactionConcurrencyUpper = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_compaction_concurrency",
+	"the maximum number of concurrent compactions (0 = default)",
+	0,
+	settings.NonNegativeInt,
+)
+
 // TODO(ssd): This could be SystemOnly but we currently init pebble
 // engines for temporary storage. Temporary engines shouldn't really
 // care about download compactions, but they do currently simply
@@ -672,12 +688,17 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
-	// Note: the MaxConcurrentCompactions function will be wrapped below to allow
-	// overriding dynamically via overriding the max at runtime through
+	// Note: the CompactionConcurrencyRange function will be wrapped below to
+	// allow overriding the lower and upper values at runtime through
 	// Engine.SetCompactionConcurrency.
 	if cfg.opts.CompactionConcurrencyRange == nil {
 		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
-			return 1, defaultMaxConcurrentCompactions
+			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
+			upper = int(compactionConcurrencyUpper.Get(&cfg.settings.SV))
+			if upper == 0 {
+				upper = defaultMaxConcurrentCompactions
+			}
+			return lower, max(lower, upper)
 		}
 	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
@@ -790,8 +811,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
-	// Wrap the MaxConcurrentCompactions function to allow overriding dynamically via
-	// overriding the max at runtime through Engine.SetCompactionConcurrency.
+	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
+	// and upper values at runtime through and the max at runtime through
+	// Engine.SetCompactionConcurrency.
 	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
 	// NB: The ordering of the event listeners passed to TeeEventListener is
