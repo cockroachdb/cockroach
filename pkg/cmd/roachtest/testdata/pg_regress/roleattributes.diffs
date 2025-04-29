@@ -274,7 +274,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
  (1 row)
  
  -- default for bypassrls is false
-@@ -206,35 +230,39 @@
+@@ -206,35 +230,37 @@
  SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit, rolpassword, rolvaliduntil FROM pg_authid WHERE rolname = 'regress_test_def_bypassrls';
            rolname           | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ----------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
@@ -283,39 +283,28 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
  (1 row)
  
  CREATE ROLE regress_test_bypassrls WITH BYPASSRLS;
-+ERROR:  unimplemented: the BYPASSRLS and NOBYPASSRLS options for roles are not currently supported
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136910/_version_
  SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit, rolpassword, rolvaliduntil FROM pg_authid WHERE rolname = 'regress_test_bypassrls';
--        rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
--------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
+         rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
+ ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 |             | 
--(1 row)
-+ rolname | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
-+---------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
-+(0 rows)
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
+ (1 row)
  
  ALTER ROLE regress_test_bypassrls WITH NOBYPASSRLS;
-+ERROR:  role/user "regress_test_bypassrls" does not exist
  SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit, rolpassword, rolvaliduntil FROM pg_authid WHERE rolname = 'regress_test_bypassrls';
--        rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
--------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
+         rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
+ ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
--(1 row)
-+ rolname | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
-+---------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
-+(0 rows)
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
+ (1 row)
  
  ALTER ROLE regress_test_bypassrls WITH BYPASSRLS;
-+ERROR:  role/user "regress_test_bypassrls" does not exist
  SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit, rolpassword, rolvaliduntil FROM pg_authid WHERE rolname = 'regress_test_bypassrls';
--        rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
--------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
+         rolname         | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
+ ------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_bypassrls | f        | t          | f             | f           | f           | f              | t            |           -1 |             | 
--(1 row)
-+ rolname | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
-+---------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
-+(0 rows)
++ regress_test_bypassrls | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
+ (1 row)
  
  -- clean up roles
  DROP ROLE regress_test_def_superuser;
@@ -327,8 +316,3 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
  DROP ROLE regress_test_def_createrole;
  DROP ROLE regress_test_createrole;
  DROP ROLE regress_test_def_createdb;
-@@ -247,3 +275,4 @@
- DROP ROLE regress_test_replication;
- DROP ROLE regress_test_def_bypassrls;
- DROP ROLE regress_test_bypassrls;
-+ERROR:  role/user "regress_test_bypassrls" does not exist

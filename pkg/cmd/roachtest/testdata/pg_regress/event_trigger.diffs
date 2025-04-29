@@ -455,8 +455,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE TABLE schema_one.table_one(a int);
  CREATE TABLE schema_one."table two"(a int);
  CREATE TABLE schema_one.table_three(a int);
-@@ -219,7 +400,18 @@
+@@ -217,9 +398,21 @@
+ CREATE OR REPLACE FUNCTION schema_two.add(int, int) RETURNS int LANGUAGE plpgsql
+   CALLED ON NULL INPUT
    AS $$ BEGIN RETURN coalesce($1,0) + coalesce($2,0); END; $$;
++ERROR:  incompatible COALESCE expressions: no value provided for placeholder: $1
  CREATE AGGREGATE schema_two.newton
    (BASETYPE = int, SFUNC = schema_two.add, STYPE = int);
 +ERROR:  at or near "schema_two": syntax error: unimplemented: this syntax
@@ -474,7 +477,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE TABLE undroppable_objs (
  	object_type text,
  	object_identity text
-@@ -253,8 +445,14 @@
+@@ -253,8 +446,14 @@
  	END LOOP;
  END;
  $$;
@@ -489,7 +492,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE OR REPLACE FUNCTION test_evtrig_dropped_objects() RETURNS event_trigger
  LANGUAGE plpgsql AS $$
  DECLARE
-@@ -273,99 +471,55 @@
+@@ -273,99 +472,55 @@
      END LOOP;
  END
  $$;
@@ -620,7 +623,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  -- Event triggers on relations.
  CREATE OR REPLACE FUNCTION event_trigger_report_dropped()
   RETURNS event_trigger
-@@ -383,8 +537,14 @@
+@@ -383,8 +538,14 @@
          r.object_identity, r.address_names, r.address_args;
      END LOOP;
  END; $$;
@@ -635,7 +638,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE OR REPLACE FUNCTION event_trigger_report_end()
   RETURNS event_trigger
   LANGUAGE plpgsql
-@@ -397,95 +557,105 @@
+@@ -397,95 +558,105 @@
              r.command_tag, r.object_type, r.object_identity;
      END LOOP;
  END; $$;
@@ -794,7 +797,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  -- test Table Rewrite Event Trigger
  CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
  LANGUAGE plpgsql AS $$
-@@ -493,14 +663,19 @@
+@@ -493,14 +664,19 @@
    RAISE EXCEPTION 'rewrites not allowed';
  END;
  $$;
@@ -816,7 +819,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  alter table rewriteme add column baz int default 0;
  -- test with more than one reason to rewrite a single table
  CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
-@@ -511,27 +686,38 @@
+@@ -511,27 +687,38 @@
                 pg_event_trigger_table_rewrite_reason();
  END;
  $$;
@@ -858,7 +861,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  -- typed tables are rewritten when their type changes.  Don't emit table
  -- name, because firing order is not stable.
  CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
-@@ -541,21 +727,52 @@
+@@ -541,21 +728,52 @@
                 pg_event_trigger_table_rewrite_reason();
  END;
  $$;
@@ -914,7 +917,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE TABLE event_trigger_test (a integer, b text);
  CREATE OR REPLACE FUNCTION start_command()
  RETURNS event_trigger AS $$
-@@ -563,37 +780,46 @@
+@@ -563,37 +781,46 @@
  RAISE NOTICE '% - ddl_command_start', tg_tag;
  END;
  $$ LANGUAGE plpgsql;
@@ -970,7 +973,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  -- Check the object addresses of all the event triggers.
  SELECT
      e.evtname,
-@@ -604,13 +830,22 @@
+@@ -604,13 +831,22 @@
      LATERAL pg_identify_object_as_address('pg_event_trigger'::regclass, e.oid, 0) as b,
      LATERAL pg_get_object_address(b.type, b.object_names, b.object_args) as a
    ORDER BY e.evtname;

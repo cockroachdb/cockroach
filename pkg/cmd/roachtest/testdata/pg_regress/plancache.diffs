@@ -73,7 +73,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plancache.out --l
  begin
  	return f1 from v1;
  end$$ language plpgsql;
-+ERROR:  at or near ";": at or near "from": syntax error
++ERROR:  at or near "v1": at or near "from": syntax error
 +DETAIL:  source SQL:
 +SET ROW (f1 from v1)
 +            ^
@@ -81,7 +81,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plancache.out --l
 +source SQL:
 +begin
 +	return f1 from v1;
-+                  ^
++                ^
 +HINT:  try \h SET SESSION
  select cache_test_2();
 - cache_test_2 
