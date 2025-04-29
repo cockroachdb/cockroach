@@ -242,8 +242,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			timingTag.start("sst")
-			dataSize, err := msstw.Finish(ctx)
-			sstSize := msstw.sstSize
+			dataSize, sstSize, err := msstw.Finish(ctx)
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}

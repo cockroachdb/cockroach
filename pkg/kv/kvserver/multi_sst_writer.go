@@ -499,21 +499,21 @@ func (msstw *MultiSSTWriter) PutRangeKey(
 	)
 }
 
-func (msstw *MultiSSTWriter) Finish(ctx context.Context) (int64, error) {
+func (msstw *MultiSSTWriter) Finish(ctx context.Context) (_dataSize, sstSize int64, _ error) {
 	if msstw.currSpan < (len(msstw.localKeySpans) + len(msstw.mvccSSTSpans)) {
 		for {
 			if err := msstw.finalizeSST(ctx, nil /* nextKey */); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 			if msstw.currSpan >= (len(msstw.localKeySpans) + len(msstw.mvccSSTSpans)) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 		}
 	}
-	return msstw.dataSize, nil
+	return msstw.dataSize, msstw.sstSize, nil
 }
 
 func (msstw *MultiSSTWriter) Close() {
