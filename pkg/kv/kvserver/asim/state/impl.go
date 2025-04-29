@@ -1062,7 +1062,7 @@ func (s *state) Clock() timeutil.TimeSource {
 // UpdateStorePool modifies the state of the StorePool for the Store with
 // ID StoreID.
 func (s *state) UpdateStorePool(
-	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
+	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetailMu,
 ) {
 	var storeIDs roachpb.StoreIDSlice
 	for storeIDA := range storeDescriptors {
@@ -1071,10 +1071,8 @@ func (s *state) UpdateStorePool(
 	sort.Sort(storeIDs)
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
-		copiedDetail := *detail
-		copiedDesc := *detail.Desc
-		copiedDetail.Desc = &copiedDesc
-		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+		copiedDetail := detail.Copy()
+		s.stores[storeID].storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
 	}
 }
 
