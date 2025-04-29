@@ -282,6 +282,22 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+var compactionConcurrencyLower = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.compaction_concurrency",
+	"the baseline number of concurrent compactions",
+	1,
+	settings.IntWithMinimum(1),
+)
+
+var compactionConcurrencyUpper = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_compaction_concurrency",
+	"the maximum number of concurrent compactions (0 = default)",
+	0,
+	settings.NonNegativeInt,
+)
+
 // TODO(ssd): This could be SystemOnly but we currently init pebble
 // engines for temporary storage. Temporary engines shouldn't really
 // care about download compactions, but they do currently simply
@@ -677,7 +693,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// Engine.SetCompactionConcurrency.
 	if cfg.opts.CompactionConcurrencyRange == nil {
 		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
-			return 1, defaultMaxConcurrentCompactions
+			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
+			upper = int(compactionConcurrencyUpper.Get(&cfg.settings.SV))
+			if upper == 0 {
+				upper = defaultMaxConcurrentCompactions
+			}
+			return lower, max(lower, upper)
 		}
 	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
