@@ -218,6 +218,8 @@ func (p *planner) prepareUsingOptimizer(
 		return 0, err
 	}
 
+	// a := opc.p.SessionData().ApplicationName == "marcus"
+	// _ = a
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
@@ -914,8 +916,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		prep := opc.p.stmt.Prepared
-		a := opc.p.SessionData().ApplicationName == "marcus"
-		_ = a
+		// a := opc.p.SessionData().ApplicationName == "marcus"
+		// _ = a
 		isGeneric := prep != nil && prep.GenericMemo == mem
 		if isGeneric && prep.CompiledPlan != nil {
 			// plan, err := prep.CompiledPlan(
@@ -927,7 +929,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 			// result = plan.(*planComponents)
 			opc.p.compiledPlan = prep.CompiledPlan.(planNode)
 		} else {
-			compile := isGeneric && !opc.p.SessionData().Internal
+			compile := isGeneric && !prep.FailedCompilation && !opc.p.SessionData().Internal
 			if compile {
 				f.EnableCompilation()
 			}
@@ -948,6 +950,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 					p := plan.(planNode)
 					prep.CompiledPlan = p
 					opc.p.compiledPlan = p
+				} else {
+					prep.FailedCompilation = true
 				}
 				f.DisableCompilation()
 			}

@@ -68,16 +68,24 @@
 # the same cost as the lookup join, but like a little bit less?
 # TODO: Check for empty on filters here?
 [ConvertParameterizedJoinToPlaceholderScan, Explore]
-(LookupJoin
-    $values:(Values [ (Tuple $row:[ ... ]) ]) &
-        (Let
-            ($span $private $ok):(PlaceholderScanSpanAndPrivate
-                (Root)
-                $values
-                $row
+(Project
+    $lookup:(LookupJoin
+        $values:(Values [ (Tuple $row:[ ... ]) ]) &
+            (Let
+                (
+                    $span
+                    $private
+                    $ok
+                ):(PlaceholderScanSpanAndPrivate
+                    $lookup
+                    $values
+                    $row
+                )
+                $ok
             )
-            $ok
-        )
+    )
+    []
+    *
 )
 =>
 (PlaceholderScan $span $private)
