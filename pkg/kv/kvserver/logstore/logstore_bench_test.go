@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -48,8 +47,6 @@ func BenchmarkLogStore_StoreEntries(b *testing.B) {
 
 func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 	ctx := context.Background()
-	const tenMB = 10 * 1 << 20
-	ec := raftentry.NewCache(tenMB)
 	const rangeID = 1
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
@@ -59,7 +56,6 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		RangeID:     rangeID,
 		Engine:      eng,
 		StateLoader: NewStateLoader(rangeID),
-		EntryCache:  ec,
 		Settings:    st,
 	}
 
