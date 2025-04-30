@@ -617,11 +617,7 @@ func LoadEntries(
 		return nil, 0, 0, raft.ErrCompacted
 	}
 
-	n := hi - lo
-	if n > 100 {
-		n = 100
-	}
-	ents := make([]raftpb.Entry, 0, n)
+	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
 	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
 	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
