@@ -361,7 +361,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	}
 
 	_, _ = fmt.Fprintln(&buf, ">> finishing msstw")
-	_, err = msstw.Finish(ctx)
+	_, _, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	logSize(&buf)
@@ -451,7 +451,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		}
 		require.NoError(t, referenceMsstw.Put(ctx, engineKey, []byte("foobarbaz")))
 	}
-	_, err = referenceMsstw.Finish(ctx)
+	_, _, err = referenceMsstw.Finish(ctx)
 	require.NoError(t, err)
 
 	refIter, err := buildIterForScratch(t, keySpans, ref)
@@ -482,7 +482,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		require.NoError(t, multiSSTWriter.Put(ctx, engineKey, []byte("foobarbaz")))
 	}
 
-	_, err = multiSSTWriter.Finish(ctx)
+	_, _, err = multiSSTWriter.Finish(ctx)
 	require.NoError(t, err)
 	require.Greater(t, len(scratch.SSTs()), len(ref.SSTs()))
 
@@ -547,7 +547,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
 	require.NoError(t, msstw.Put(ctx, testEngineKey, []byte("foo")))
-	_, err = msstw.Finish(ctx)
+	_, _, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
