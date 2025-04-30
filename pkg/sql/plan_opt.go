@@ -427,9 +427,12 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 
 func (opc *optPlanningCtx) log(ctx context.Context, msg redact.SafeString) {
 	if log.VDepth(1, 1) {
+		// Shadow msg to avoid a heap allocation for boxing msg if the else path
+		// is taken.
+		msg := msg
 		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.p.stmt)
 	} else {
-		log.Eventf(ctx, "%s", string(msg))
+		log.Event(ctx, string(msg))
 	}
 }
 
