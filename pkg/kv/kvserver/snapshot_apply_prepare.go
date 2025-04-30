@@ -31,7 +31,7 @@ type prepareSnapshotInput struct {
 	writeSST func(context.Context, []byte) error
 
 	truncState    kvserverpb.RaftTruncatedState
-	hs            raftpb.HardState
+	hardState     raftpb.HardState
 	desc          *roachpb.RangeDescriptor
 	subsumedDescs []*roachpb.RangeDescriptor
 }
@@ -46,7 +46,7 @@ type preparedSnapshot struct {
 func prepareSnapshot(ctx context.Context, input prepareSnapshotInput) (preparedSnapshot, error) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, input.id, input.st, input.truncState, input.hs, input.logSL,
+		ctx, input.id, input.st, input.truncState, input.hardState, input.logSL,
 	)
 	if err != nil {
 		return preparedSnapshot{}, err
