@@ -507,7 +507,7 @@ func (msstw *MultiSSTWriter) putRangeKey(
 	)
 }
 
-func (msstw *MultiSSTWriter) Finish(ctx context.Context) (_dataSize, sstSize int64, _ error) {
+func (msstw *MultiSSTWriter) Finish(ctx context.Context) (dataSize, sstSize int64, _ error) {
 	if msstw.currSpan < (len(msstw.localKeySpans) + len(msstw.mvccSSTSpans)) {
 		for {
 			if err := msstw.finalizeSST(ctx, nil /* nextKey */); err != nil {
