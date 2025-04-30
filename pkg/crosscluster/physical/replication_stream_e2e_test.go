@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1574,6 +1575,50 @@ FROM [SHOW VIRTUAL CLUSTER '%s' WITH REPLICATION STATUS]
 
 	require.Equal(t, expectedReaderTenantName, name)
 	require.Equal(t, "ready", status)
+}
+
+func TestUpgradeFail(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	initSettings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.V25_1.Version(),
+		clusterversion.V25_1.Version(),
+		true /* initializeVersion */)
+
+	args := base.TestServerArgs{
+		Settings:          initSettings,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	}
+
+	srv, sql, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sql)
+	sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", clusterversion.V25_2.Version()))
+
+}
+
+func TestUpgradeWorks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	}
+
+	args.Knobs.Server = &server.TestingKnobs{
+		ClusterVersionOverride:         clusterversion.V25_1.Version(),
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+	}
+
+	srv, sql, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sql)
+	sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", clusterversion.V25_2.Version()))
+
 }
 
 // TestReaderTenantUpgrade ensures the reader tenant cannot upgrade itself or
