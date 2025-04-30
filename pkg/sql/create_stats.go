@@ -156,16 +156,18 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	details := record.Details.(jobspb.CreateStatsDetails)
 
 	jobCheckBefore := automaticJobCheckBeforeCreatingJob.Get(n.p.ExecCfg().SV())
-	if (n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName) && jobCheckBefore {
-		// Don't start the job if there is already a CREATE STATISTICS job running.
-		// (To handle race conditions we check this again after the job starts,
-		// but this check is used to prevent creating a large number of jobs that
-		// immediately fail).
-		if err := checkRunningJobs(
-			ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
-			details.Table.ID,
-		); err != nil {
-			return err
+	if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
+		if jobCheckBefore {
+			// Don't start the job if there is already a CREATE STATISTICS job running.
+			// (To handle race conditions we check this again after the job starts,
+			// but this check is used to prevent creating a large number of jobs that
+			// immediately fail).
+			if err := checkRunningJobs(
+				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
+				details.Table.ID,
+			); err != nil {
+				return err
+			}
 		}
 	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
