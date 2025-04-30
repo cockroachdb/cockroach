@@ -554,7 +554,14 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	clearedSpans = append(clearedSpans, prepResult.clearedSpan)
 	clearedSpans = append(clearedSpans, prepResult.clearedSubsumedSpans...)
 
-	// Update Raft entries.
+	// Drop the entry cache before ingestion, like a real truncation would.
+	//
+	// TODO(sep-raft-log): like a real truncation, we should also bump the
+	// in-memory truncated state to the snapshot index. We should also assert
+	// that this leads to a (logically) empty log (otherwise we wouldn't have
+	// accepted the snapshot).
+	//
+	// See: https://github.com/cockroachdb/cockroach/pull/145328#discussion_r2068209588
 	r.store.raftEntryCache.Drop(r.RangeID)
 
 	stats.subsumedReplicas = timeutil.Now()
