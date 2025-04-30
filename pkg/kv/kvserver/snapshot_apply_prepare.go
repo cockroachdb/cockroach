@@ -39,8 +39,8 @@ type prepareSnapApplyInput struct {
 // preparedSnapApply contains the results of preparing the snapshot for ingestion.
 // TODO: remove
 type preparedSnapApply struct {
-	clearedSpan          roachpb.Span
-	clearedSubsumedSpans []roachpb.Span
+	clearedUnreplicatedSpan roachpb.Span
+	clearedSubsumedSpans    []roachpb.Span
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
@@ -69,8 +69,8 @@ func prepareSnapApply(ctx context.Context, input prepareSnapApplyInput) (prepare
 	}
 
 	return preparedSnapApply{
-		clearedSpan:          clearedSpan,
-		clearedSubsumedSpans: clearedSubsumedSpans,
+		clearedUnreplicatedSpan: clearedSpan,
+		clearedSubsumedSpans:    clearedSubsumedSpans,
 	}, nil
 }
 
