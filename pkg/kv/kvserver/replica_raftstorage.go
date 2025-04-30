@@ -544,7 +544,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
 
 		truncState:    truncState,
-		hs:            hs,
+		hardState:     hs,
 		desc:          desc,
 		subsumedDescs: subsumedDescs,
 	}
