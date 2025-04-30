@@ -147,6 +147,8 @@ func rewriteRaftState(
 // method requires that each of the subsumed replicas raftMu is held, and that
 // the Reader reflects the latest I/O each of the subsumed replicas has done
 // (i.e. Reader was instantiated after all raftMu were acquired).
+//
+// NB: does nothing if subsumedDescs is empty.
 func clearSubsumedReplicaDiskData(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -236,34 +238,55 @@ func clearSubsumedReplicaDiskData(
 				keySpans[i], totalKeySpans[i])
 		}
 
-		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
-			subsumedReplSSTFile := &storage.MemObject{}
-			subsumedReplSST := storage.MakeIngestionSSTWriter(
-				ctx, st, subsumedReplSSTFile,
-			)
-			if err := storage.ClearRangeWithHeuristic(
-				ctx,
-				reader,
-				&subsumedReplSST,
-				keySpans[i].EndKey,
-				totalKeySpans[i].EndKey,
-				kvstorage.ClearRangeThresholdPointKeys,
-				kvstorage.ClearRangeThresholdRangeKeys,
-			); err != nil {
-				subsumedReplSST.Close()
+		// In the comments below, s1, ..., sn are the end keys for the subsumed
+		// replicas (for the current keySpan).
+		// Note that if there aren't any subsumed replicas (the common case), the
+		// next comparison is always zero and this loop is a no-op.
+
+		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) <= 0 {
+			// The subsumed replicas are fully contained in the snapshot:
+			//
+			// [a---s1---...---sn)
+			// [a---------------------b)
+			//
+			// We don't need to clear additional keyspace here, since clearing `[a,b)`
+			// will also clear all subsumed replicas.
+			continue
+		}
+
+		// The subsumed replicas extend past the snapshot:
+		//
+		// [a----------------s1---...---sn)
+		// [a---------------------b)
+		//
+		// We need to additionally clear [b,sn).
+
+		subsumedReplSSTFile := &storage.MemObject{}
+		subsumedReplSST := storage.MakeIngestionSSTWriter(
+			ctx, st, subsumedReplSSTFile,
+		)
+		if err := storage.ClearRangeWithHeuristic(
+			ctx,
+			reader,
+			&subsumedReplSST,
+			keySpans[i].EndKey,
+			totalKeySpans[i].EndKey,
+			kvstorage.ClearRangeThresholdPointKeys,
+			kvstorage.ClearRangeThresholdRangeKeys,
+		); err != nil {
+			subsumedReplSST.Close()
+			return nil, err
+		}
+		clearedSpans = append(clearedSpans,
+			roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
+		if err := subsumedReplSST.Finish(); err != nil {
+			return nil, err
+		}
+		if subsumedReplSST.DataSize > 0 {
+			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
+			// buffering in a MemObject first.
+			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return nil, err
-			}
-			clearedSpans = append(clearedSpans,
-				roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
-			if err := subsumedReplSST.Finish(); err != nil {
-				return nil, err
-			}
-			if subsumedReplSST.DataSize > 0 {
-				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
-				// buffering in a MemObject first.
-				if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
