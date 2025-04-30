@@ -114,14 +114,14 @@ func (msstw *MultiSSTWriter) ReadOne(
 ) error {
 	switch batchReader.KeyKind() {
 	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
-		if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
+		if err := msstw.put(ctx, ek, batchReader.Value()); err != nil {
 			return errors.Wrapf(err, "writing sst for raft snapshot")
 		}
 	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
 		if !shared {
 			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 		}
-		if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
+		if err := msstw.putInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
 			return errors.Wrapf(err, "writing sst for raft snapshot")
 		}
 	case pebble.InternalKeyKindRangeDelete:
@@ -133,7 +133,7 @@ func (msstw *MultiSSTWriter) ReadOne(
 		if err != nil {
 			return err
 		}
-		if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
+		if err := msstw.putInternalRangeDelete(ctx, start, end); err != nil {
 			return errors.Wrapf(err, "writing sst for raft snapshot")
 		}
 
@@ -151,7 +151,7 @@ func (msstw *MultiSSTWriter) ReadOne(
 			return err
 		}
 		for _, rkv := range rangeKeys {
-			err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
+			err := msstw.putInternalRangeKey(ctx, start, end, rkv)
 			if err != nil {
 				return errors.Wrapf(err, "writing sst for raft snapshot")
 			}
@@ -167,7 +167,7 @@ func (msstw *MultiSSTWriter) ReadOne(
 			return err
 		}
 		for _, rkv := range rangeKeys {
-			err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
+			err := msstw.putRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
 			if err != nil {
 				return errors.Wrapf(err, "writing sst for raft snapshot")
 			}
@@ -370,7 +370,7 @@ func (msstw *MultiSSTWriter) rolloverSST(
 	return nil
 }
 
-func (msstw *MultiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
+func (msstw *MultiSSTWriter) put(ctx context.Context, key storage.EngineKey, value []byte) error {
 	if err := msstw.rolloverSST(ctx, key, key); err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func (msstw *MultiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 	return nil
 }
 
-func (msstw *MultiSSTWriter) PutInternalPointKey(
+func (msstw *MultiSSTWriter) putInternalPointKey(
 	ctx context.Context, key []byte, kind pebble.InternalKeyKind, val []byte,
 ) error {
 	decodedKey, ok := storage.DecodeEngineKey(key)
@@ -423,7 +423,7 @@ func decodeRangeStartEnd(
 	return decodedStart, decodedEnd, nil
 }
 
-func (msstw *MultiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, end []byte) error {
+func (msstw *MultiSSTWriter) putInternalRangeDelete(ctx context.Context, start, end []byte) error {
 	decodedStart, decodedEnd, err := decodeRangeStartEnd(start, end)
 	if err != nil {
 		return err
@@ -435,17 +435,19 @@ func (msstw *MultiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 	return nil
 }
 
-func (msstw *MultiSSTWriter) PutInternalRangeKey(
+func (msstw *MultiSSTWriter) putInternalRangeKey(
 	ctx context.Context, start, end []byte, key rangekey.Key,
 ) error {
-	return msstw.putRangeKey(ctx, storage.EngineKeyRange{}, [2][]byte{start, end}, key)
+	return msstw.putRangeKeyWithEnc(ctx, storage.EngineKeyRange{}, [2][]byte{start, end}, key)
 }
 
-func (msstw *MultiSSTWriter) putRangeKey(
+// putRangeKeyWithEnc is the internal implementation of putInternalRangeKey and
+// putRangeKey. We need both the encoded and decoded forms of the key range
+// here. The caller must supply at least one of `dec` or `enc` depending on what
+// they have available.
+func (msstw *MultiSSTWriter) putRangeKeyWithEnc(
 	ctx context.Context, dec storage.EngineKeyRange, enc [2][]byte, key rangekey.Key,
 ) error {
-	// We need both the encoded and decoded forms of the key range here. The caller
-	// may supply either.
 	haveDec, haveEnc := len(dec.End.Key) != 0, len(enc[1]) != 0
 	switch {
 	case !haveDec && !haveEnc:
@@ -480,10 +482,10 @@ func (msstw *MultiSSTWriter) putRangeKey(
 	return nil
 }
 
-func (msstw *MultiSSTWriter) PutRangeKey(
+func (msstw *MultiSSTWriter) putRangeKey(
 	ctx context.Context, start, end roachpb.Key, suffix []byte, value []byte,
 ) error {
-	return msstw.putRangeKey(
+	return msstw.putRangeKeyWithEnc(
 		ctx,
 		storage.EngineKeyRange{
 			Start: storage.EngineKey{Key: start},
