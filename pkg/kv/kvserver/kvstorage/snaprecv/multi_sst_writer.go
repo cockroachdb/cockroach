@@ -41,7 +41,7 @@ type MultiSSTWriter struct {
 	// append(localKeySpans, mvccSSTSpans).
 	currSpan int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
-	// before flushing to disk.
+	// before flushing to disk. Zero disables explicit flushing.
 	sstChunkSize int64
 	// The total size of the key and value pairs (not the total size of the SSTs),
 	// excluding currSST. Updated on SST finalization.
@@ -64,8 +64,15 @@ type MultiSSTWriter struct {
 }
 
 type MultiSSTWriterOptions struct {
+	// SSTChunkSize is the approximate size of the SST chunk buffer before
+	// flushing to disk. If zero, there is no explicit flushing until the
+	// SST is finalized.
 	SSTChunkSize int64
-	MaxSSTSize   int64
+	// MaxSSTSize is the maximum size of an SST containing MVCC/user keys before
+	// we finalize it and start a new SST. If zero, there is no limit.
+	//
+	// This does not affect other SSTs.
+	MaxSSTSize int64
 }
 
 // NewMultiSSTWriter returns an initialized MultiSSTWriter.
