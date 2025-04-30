@@ -86,7 +86,7 @@ func (r *replicaLogStorage) entriesLocked(
 	// can remember the readable bounds, and assert that reads do not cross them.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		r.store.LogEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
 		lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
@@ -137,7 +137,7 @@ func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error
 	}
 
 	entry, err := logstore.LoadEntry(r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, index)
+		r.store.LogEngine(), r.RangeID, index)
 	if err != nil {
 		return 0, err
 	}
@@ -257,7 +257,7 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	}
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		r.store.LogEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
 		lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
