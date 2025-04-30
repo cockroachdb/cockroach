@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -300,6 +301,10 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs := tc.pkColDirs
 			numPKCols := len(pkColDirs)
 			pkColNames := ttlbase.GenPKColNames(numPKCols)
+			pkColTypes := make([]*types.T, numPKCols)
+			for i := range pkColDirs {
+				pkColTypes[i] = types.Int
+			}
 
 			// Run CREATE TABLE statement.
 			createTableStatement := genCreateTableStatement(pkColNames, pkColDirs)
@@ -335,6 +340,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 					RelationName:    relationName,
 					PKColNames:      pkColNames,
 					PKColDirs:       pkColDirs,
+					PKColTypes:      pkColTypes,
 					Bounds:          tc.bounds,
 					AOSTDuration:    0,
 					SelectBatchSize: 2,
