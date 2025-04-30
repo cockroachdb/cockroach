@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package snaprecv
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -299,7 +299,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	// Disabling columnar blocks causes stats changes.
 	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 
-	msstw, err := snaprecv.NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, snaprecv.MultiSSTWriterOptions{})
+	msstw, err := NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 
 	var buf redact.StringBuilder
@@ -428,7 +428,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	mvccSpan := keySpans[len(keySpans)-1]
 
 	// Make a reference msstw with the default size.
-	referenceMsstw, err := snaprecv.NewMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0)
+	referenceMsstw, err := NewMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), referenceMsstw.dataSize)
 	now := timeutil.Now().UnixNano()
@@ -458,9 +458,9 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	require.NoError(t, err)
 	defer refIter.Close()
 
-	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
+	kvserver.MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
 
-	multiSSTWriter, err := snaprecv.NewMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, snaprecv.MultiSSTWriterOptions{})
+	multiSSTWriter, err := NewMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
@@ -542,7 +542,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := snaprecv.NewMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, snaprecv.MultiSSTWriterOptions{})
+	msstw, err := NewMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
