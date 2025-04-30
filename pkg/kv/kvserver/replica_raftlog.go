@@ -62,6 +62,12 @@ func (r *replicaLogStorage) entriesLocked(
 	// TODO(pav-kv): we have a large class of cases when we would rather only hold
 	// raftMu while reading the entries. The r.mu lock should be narrow.
 	r.mu.AssertHeld()
+	// Check whether the first requested entry is already logically truncated. It
+	// may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
+	if lo <= r.shMu.raftTruncState.Index {
+		return nil, raft.ErrCompacted
+	}
 	// Writes to the storage engine and the sideloaded storage are made under
 	// raftMu only. Since we are holding r.mu, but may or may not be holding
 	// raftMu, this read could be racing with a write.
@@ -81,7 +87,7 @@ func (r *replicaLogStorage) entriesLocked(
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
 		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
-		r.shMu.raftTruncState, lo, hi, maxBytes,
+		lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
@@ -242,11 +248,17 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// raftMu only, so we are not racing with new writes. In addition, raft never
 	// tries to read "unstable" entries that correspond to ongoing writes.
 	r.raftMu.AssertHeld()
+	// Check whether the first requested entry is already logically truncated. It
+	// may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
+	if lo <= r.shMu.raftTruncState.Index {
+		return nil, raft.ErrCompacted
+	}
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
 		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
-		r.shMu.raftTruncState, lo, hi, maxBytes,
+		lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
