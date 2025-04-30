@@ -41,16 +41,24 @@ const (
 	// when creating the changefeed
 	resolvedInterval = "5s"
 
+	// minCheckpointFrequency is the value to use for `min_checkpoint_frequency`
+	// when creating changefeeds.
+	minCheckpointFrequency = "1s"
+
 	// kafkaBufferMessageSize is the number of messages from kafka
 	// we allow to be buffered in memory before validating them.
 	kafkaBufferMessageSize = 1 << 16 // 64 KiB
 )
 
-var (
+const (
 	// the CDC target, DB and table. We're running the bank workload in
 	// this test.
-	targetDB    = "bank"
-	targetTable = "bank"
+	// NB: We increase the number of ranges/rows from the defaults to
+	// allow for more interesting DistSQL plans.
+	targetDB          = "bank"
+	targetTable       = "bank"
+	targetTableRanges = 100
+	targetTableRows   = 10_000
 
 	// teamcityAgentZone is the zone used in this test. Since this test
 	// runs a lot of queries from the TeamCity agent to CRDB nodes, we
@@ -72,6 +80,18 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/mixed-version/checkpointing",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Timeout:          3 * time.Hour,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:       true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCMixedVersionCheckpointing(ctx, t, c)
 		},
 	})
 }
@@ -351,8 +371,9 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	l.Printf("starting changefeed on node %d (updating system settings via node %d)", node, systemNode)
 
 	options := map[string]string{
-		"updated":  "",
-		"resolved": fmt.Sprintf("'%s'", resolvedInterval),
+		"updated":                  "",
+		"resolved":                 fmt.Sprintf("'%s'", resolvedInterval),
+		"min_checkpoint_frequency": fmt.Sprintf("'%s'", minCheckpointFrequency),
 	}
 
 	var ff cdcFeatureFlags
@@ -386,6 +407,8 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 // runWorkloadCmd returns the command that runs the workload.
 func (cmvt *cdcMixedVersionTester) runWorkloadCmd(r *rand.Rand) *roachtestutil.Command {
 	return roachtestutil.NewCommand("%s workload run bank", test.DefaultCockroachPath).
+		Flag("ranges", targetTableRanges).
+		Flag("rows", targetTableRows).
 		// Since all rows are placed in a buffer, setting a low rate of 2 operations / sec
 		// helps ensure that we don't exceed the buffer capacity.
 		Flag("max-rate", 2).
@@ -403,6 +426,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 	}
 
 	bankInit := roachtestutil.NewCommand("%s workload init bank", test.DefaultCockroachPath).
+		Flag("ranges", targetTableRanges).
+		Flag("rows", targetTableRows).
 		Flag("seed", r.Int63()).
 		Arg("{pgurl%s}", cmvt.crdbNodes)
 
@@ -559,5 +584,69 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.AfterUpgradeFinalized("use mux", setMuxRangeFeedEnabled)
 	mvt.AfterUpgradeFinalized("use scheduler", setRangeFeedSchedulerEnabled)
 	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
+	mvt.Run()
+}
+
+// runCDCMixedVersionCheckpointing tests that the new span-level checkpoint
+// code added in 25.2 works correctly in mixed-version states.
+//
+// Writing the checkpoint is explicitly forced with cluster settings and
+// restoring the checkpoint implicitly happens following each of the rolling
+// restarts during the mixed-version test run.
+func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster.Cluster) {
+	tester := newCDCMixedVersionTester(ctx, c)
+
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, tester.crdbNodes,
+		// We're only concerned with mixed-version compatibility starting at
+		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
+		// the first version with the new span-level checkpoint format.
+		mixedversion.MinimumSupportedVersion("v24.3.0"),
+	)
+
+	cleanupKafka := tester.StartKafka(t, c)
+	defer cleanupKafka()
+
+	forceCheckpointing := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
+		// NB: We use the 24.3 names for the cluster settings so that the cluster
+		// can understand them at startup time.
+		for _, stmt := range []string{
+			`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
+			`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '1us'`,
+		} {
+			if err := h.Exec(r, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	scatter := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
+		return h.Exec(r, `ALTER TABLE bank.bank SCATTER`)
+	}
+
+	// Test setup.
+	mvt.OnStartup("start changefeed", tester.createChangeFeed)
+	mvt.OnStartup("create validator", tester.setupValidator)
+	mvt.OnStartup("init workload", tester.initWorkload)
+	mvt.OnStartup("set checkpointing settings", forceCheckpointing)
+
+	// Run workload and kafka consumer.
+	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
+	_ = mvt.BackgroundCommand("run workload", tester.workloadNodes, runWorkloadCmd)
+	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
+
+	// Scatter the ranges throughout the test to make it more likely that every
+	// node will participate in the changefeed.
+	mvt.InMixedVersion("scatter ranges", scatter)
+
+	// Validate the changefeed's output both during and after any upgrades.
+	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
+	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
+
 	mvt.Run()
 }
