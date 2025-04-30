@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
@@ -128,8 +129,22 @@ func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error
 	if entry, found := r.store.raftEntryCache.Get(r.RangeID, index); found {
 		return kvpb.RaftTerm(entry.Term), nil
 	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, index)
+
+	entry, err := logstore.LoadEntry(r.AnnotateCtx(context.TODO()),
+		r.store.TODOEngine(), r.RangeID, index)
+	if err != nil {
+		return 0, err
+	}
+	// Cache the entry except if it is sideloaded. We don't load/inline the
+	// sideloaded entries here to keep the term fetching cheap.
+	// TODO(pav-kv): consider not caching here, after measuring if it makes any
+	// difference.
+	if typ, _, err := raftlog.EncodingOf(entry); err != nil {
+		return 0, err
+	} else if !typ.IsSideloaded() {
+		r.store.raftEntryCache.Add(r.RangeID, []raftpb.Entry{entry}, false /* truncate */)
+	}
+	return kvpb.RaftTerm(entry.Term), nil
 }
 
 // GetTerm returns the term of the entry at the given index in the raft log.

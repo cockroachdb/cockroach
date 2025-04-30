@@ -546,20 +546,16 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	return ms.SysBytes + totalSideloaded, nil
 }
 
-// LoadTerm returns the term of the entry at the given index for the specified
-// range. The result is loaded from the storage engine if it's not in the cache.
-// The valid range for index is (Compacted, LastIndex].
+// LoadEntry loads the entry at the given index for the specified range. If the
+// entry is sideloaded, it is not expanded. The valid range for the index is
+// (Compacted, LastIndex].
 //
 // An error returned means that either the entry is not found, or it could not
 // be parsed. The caller is expected to check the log bounds before this call,
 // to exclude the valid "not found" cases.
-func LoadTerm(
-	ctx context.Context,
-	eng storage.Engine,
-	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
-	index kvpb.RaftIndex,
-) (kvpb.RaftTerm, error) {
+func LoadEntry(
+	ctx context.Context, eng storage.Engine, rangeID roachpb.RangeID, index kvpb.RaftIndex,
+) (raftpb.Entry, error) {
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
@@ -571,23 +567,13 @@ func LoadTerm(
 		entry, found = ent, true
 		return nil
 	}); err != nil {
-		return 0, err
+		return raftpb.Entry{}, err
 	} else if !found {
-		return 0, errors.Errorf("entry #%d not found", index)
+		return raftpb.Entry{}, errors.Errorf("entry #%d not found", index)
 	} else if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
-		return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
+		return raftpb.Entry{}, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 	}
-
-	// Cache the entry except if it is sideloaded. We don't load/inline the
-	// sideloaded entries here to keep the term fetching cheap.
-	// TODO(pavelkalinnikov): consider not caching here, after measuring if it
-	// makes any difference.
-	if typ, _, err := raftlog.EncodingOf(entry); err != nil {
-		return 0, err
-	} else if !typ.IsSideloaded() {
-		eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
-	}
-	return kvpb.RaftTerm(entry.Term), nil
+	return entry, nil
 }
 
 // LoadEntries loads a slice of consecutive log entries in [lo, hi), starting
