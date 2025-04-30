@@ -80,8 +80,8 @@ func (r *replicaLogStorage) entriesLocked(
 	// can remember the readable bounds, and assert that reads do not cross them.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		r.shMu.raftTruncState, lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
@@ -245,8 +245,8 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		r.shMu.raftTruncState, lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
