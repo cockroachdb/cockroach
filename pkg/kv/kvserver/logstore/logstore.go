@@ -548,32 +548,18 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 
 // LoadTerm returns the term of the entry at the given index for the specified
 // range. The result is loaded from the storage engine if it's not in the cache.
-// The valid range for index is [Compacted, LastIndex].
+// The valid range for index is (Compacted, LastIndex].
 //
-// There are 3 cases for when the term is not found: (1) the index has been
-// compacted away, (2) index > LastIndex, or (3) there is a gap in the log. In
-// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
-// callers never try to read indices above LastIndex, so an error means (3)
-// which is a serious issue. But if the caller is unsure, they can check the
-// LastIndex to distinguish.
-//
-// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
+// An error returned means that either the entry is not found, or it could not
+// be parsed. The caller is expected to check the log bounds before this call,
+// to exclude the valid "not found" cases.
 func LoadTerm(
 	ctx context.Context,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	trunc kvserverpb.RaftTruncatedState,
 	index kvpb.RaftIndex,
 ) (kvpb.RaftTerm, error) {
-	// Check whether the entry is already logically truncated. It may or may not
-	// be physically truncated, since the RaftTruncatedState is updated before the
-	// truncation is enacted.
-	if index < trunc.Index {
-		return 0, raft.ErrCompacted
-	} else if index == trunc.Index {
-		return trunc.Term, nil
-	}
 	entry, found := eCache.Get(rangeID, index)
 	if found {
 		return kvpb.RaftTerm(entry.Term), nil
@@ -592,10 +578,8 @@ func LoadTerm(
 	}); err != nil {
 		return 0, err
 	}
-
-	// See the function comment for how the not found case is handled.
 	if !found {
-		return 0, raft.ErrUnavailable
+		return 0, errors.Errorf("entry #%d not found", index)
 	} else if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
 		return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 	}

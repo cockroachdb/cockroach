@@ -107,19 +107,25 @@ func (r *replicaLogStorage) Term(index uint64) (uint64, error) {
 
 // raftTermShMuLocked implements the Term() call. Requires that either
 // Replica.mu or Replica.raftMu is held, at least for reads.
+//
+// TODO(pav-kv): figure out a zero-cost-in-prod way to assert that either of two
+// mutexes is held. Can't use the regular AssertHeld() here.
 func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	// TODO(pav-kv): figure out a zero-cost-in-prod way to assert that either of
-	// two mutexes is held. Can't use the regular AssertHeld() here.
-	// TODO(pav-kv): might as well check here whether index <= compacted index or
-	// index > lastIndex, instead of allowing LoadTerm to error. Then any error
-	// from LoadTerm is unexpected / bad.
+	// Check whether the entry is already logically truncated, or is at a bound.
+	// It may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
+	// NB: two common cases are checked first.
 	if r.shMu.lastIndexNotDurable == index {
 		return r.shMu.lastTermNotDurable, nil
+	} else if index == r.shMu.raftTruncState.Index {
+		return r.shMu.raftTruncState.Term, nil
+	} else if index < r.shMu.raftTruncState.Index {
+		return 0, raft.ErrCompacted
+	} else if index > r.shMu.lastIndexNotDurable {
+		return 0, raft.ErrUnavailable
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache,
-		r.shMu.raftTruncState, index,
-	)
+		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, index)
 }
 
 // GetTerm returns the term of the entry at the given index in the raft log.
