@@ -1567,7 +1567,7 @@ func TestCompactionConcurrencyEnvVars(t *testing.T) {
 				} else {
 					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
 				}
-				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+				require.Equal(t, tc.want, getDefaultMaxConcurrentCompactions())
 			})
 	}
 }
@@ -1663,4 +1663,21 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 		slowCount := testFunc(t, "block")
 		require.Less(t, 0, slowCount)
 	})
+}
+
+func TestPebbleSetCompactionConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */), MaxConcurrentCompactions(4))
+	require.NoError(t, err)
+	defer p.Close()
+
+	require.Equal(t, 4, p.cfg.opts.MaxConcurrentCompactions())
+	p.SetCompactionConcurrency(10)
+	require.Equal(t, 10, p.cfg.opts.MaxConcurrentCompactions())
+	p.SetCompactionConcurrency(0)
+	require.Equal(t, 4, p.cfg.opts.MaxConcurrentCompactions())
 }
