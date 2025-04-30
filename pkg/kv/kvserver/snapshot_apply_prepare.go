@@ -23,15 +23,17 @@ import (
 
 // prepareSnapshotInput contains the data needed to prepare the on-disk state for a snapshot.
 type prepareSnapshotInput struct {
-	id            storage.FullReplicaID
-	st            *cluster.Settings
+	id storage.FullReplicaID
+
+	st       *cluster.Settings
+	todoEng  storage.Engine
+	logSL    *logstore.StateLoader
+	writeSST func(context.Context, []byte) error
+
 	truncState    kvserverpb.RaftTruncatedState
 	hs            raftpb.HardState
-	logSL         *logstore.StateLoader
-	writeSST      func(context.Context, []byte) error
 	desc          *roachpb.RangeDescriptor
 	subsumedDescs []*roachpb.RangeDescriptor
-	todoEng       storage.Engine
 }
 
 // preparedSnapshot contains the results of preparing the snapshot on disk.
