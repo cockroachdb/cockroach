@@ -560,25 +560,19 @@ func LoadTerm(
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
 ) (kvpb.RaftTerm, error) {
-	entry, found := eCache.Get(rangeID, index)
-	if found {
-		return kvpb.RaftTerm(entry.Term), nil
-	}
-
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
+	entry, found := raftpb.Entry{}, false
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
 			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
-		found = true
-		entry = ent
+		entry, found = ent, true
 		return nil
 	}); err != nil {
 		return 0, err
-	}
-	if !found {
+	} else if !found {
 		return 0, errors.Errorf("entry #%d not found", index)
 	} else if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
 		return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
