@@ -425,11 +425,18 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 	}
 }
 
-func (opc *optPlanningCtx) log(ctx context.Context, msg redact.SafeString) {
+func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 	if log.VDepth(1, 1) {
-		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.p.stmt)
+		// msg is guaranteed to be a constant string by the fmtsafe linter, so
+		// it is safe to convert to a redact.SafeString.
+		//
+		// Also, note that passing msg directly to log.InfofDepth() would cause
+		// a heap allocation to box it, even if the else path is taken. With the
+		// type conversion, a new implicit variable is created that only causes
+		// a heap allocation if this branch is taken.
+		log.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
 	} else {
-		log.Eventf(ctx, "%s", string(msg))
+		log.Event(ctx, msg)
 	}
 }
 
