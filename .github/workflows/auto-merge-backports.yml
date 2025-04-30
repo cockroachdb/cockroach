@@ -75,15 +75,15 @@ jobs:
               console.log(`Merging PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Labels: ${labels}`);
 
               // Merge the PR
-              // try {
-              //  console.log(`Merging PR #${pr.number}`);
-              //  await github.rest.pulls.merge({
-              //    owner: context.repo.owner,
-              //    repo: context.repo.repo,
-              //    pull_number: pr.number,
-              //    merge_method: "merge",
-              //  });
-              // } catch (err) {
-              //  console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
-              // }
+              try {
+                console.log(`Merging PR #${pr.number}`);
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: "merge",
+                });
+              } catch (err) {
+                console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
+              }
             }
