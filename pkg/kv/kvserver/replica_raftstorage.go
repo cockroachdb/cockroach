@@ -552,12 +552,12 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs: subsumedDescs,
 	}
 
-	prepResult, err := prepareSnapApply(ctx, prepInput)
+	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
 	if err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, prepResult.clearedUnreplicatedSpan)
-	clearedSpans = append(clearedSpans, prepResult.clearedSubsumedSpans...)
+	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
+	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
 	// Drop the entry cache before ingestion, like a real truncation would.
 	//

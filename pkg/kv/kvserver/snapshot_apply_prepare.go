@@ -36,42 +36,33 @@ type prepareSnapApplyInput struct {
 	subsumedDescs []*roachpb.RangeDescriptor
 }
 
-// preparedSnapApply contains the results of preparing the snapshot for ingestion.
-// TODO: remove
-type preparedSnapApply struct {
-	clearedUnreplicatedSpan roachpb.Span
-	clearedSubsumedSpans    []roachpb.Span
-}
-
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
-func prepareSnapApply(ctx context.Context, input prepareSnapApplyInput) (preparedSnapApply, error) {
+func prepareSnapApply(
+	ctx context.Context, input prepareSnapApplyInput,
+) (clearedUnreplicatedSpan roachpb.Span, clearedSubsumedSpans []roachpb.Span, _ error) {
 	// Step 1: Write unreplicated SST
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
+	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
 		ctx, input.id, input.st, input.truncState, input.hardState, input.logSL,
 	)
 	if err != nil {
-		return preparedSnapApply{}, err
+		return roachpb.Span{}, nil, err
 	}
 	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return preparedSnapApply{}, err
+		return roachpb.Span{}, nil, err
 	}
 
-	var clearedSubsumedSpans []roachpb.Span
 	if len(input.subsumedDescs) > 0 {
 		spans, err := clearSubsumedReplicaDiskData(
 			ctx, input.st, input.todoEng, input.writeSST,
 			input.desc, input.subsumedDescs,
 		)
 		if err != nil {
-			return preparedSnapApply{}, err
+			return roachpb.Span{}, nil, err
 		}
 		clearedSubsumedSpans = spans
 	}
 
-	return preparedSnapApply{
-		clearedUnreplicatedSpan: clearedSpan,
-		clearedSubsumedSpans:    clearedSubsumedSpans,
-	}, nil
+	return clearedUnreplicatedSpan, clearedSubsumedSpans, nil
 }
 
 // writeUnreplicatedSST creates an SST for snapshot application that
