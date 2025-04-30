@@ -86,6 +86,8 @@ func colDatumToCSVString(col *coldata.Vec, rowIdx int) string {
 		return *(*string)(unsafe.Pointer(&bytes))
 	case types.TimestampTZFamily:
 		return col.Timestamp()[rowIdx].Format(timestampOutputFormat)
+	case types.DecimalFamily:
+		return col.Decimal()[rowIdx].String()
 	}
 	panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 }

@@ -8,9 +8,9 @@ if [ -z "${CLUSTER}" ]; then
   exit 1
 fi
 
-roachprod ssh "$CLUSTER" -- "sudo apt-get purge -y snapd"
-roachprod ssh "$CLUSTER" -- "sudo umount -f /mnt/data1"
-roachprod ssh "$CLUSTER" -- "sudo dmsetup remove_all"
-roachprod ssh "$CLUSTER" -- "sudo tune2fs -O ^has_journal /dev/nvme0n1"
-roachprod ssh "$CLUSTER" -- 'echo "0 $(sudo blockdev --getsz /dev/nvme0n1) linear /dev/nvme0n1 0" | sudo dmsetup create data1'
-roachprod ssh "$CLUSTER" -- "sudo mount /dev/mapper/data1 /mnt/data1"
+drtprod ssh "$CLUSTER" -- "sudo apt-get purge -y snapd"
+drtprod ssh "$CLUSTER" -- "sudo umount -f /mnt/data1"
+drtprod ssh "$CLUSTER" -- "sudo dmsetup remove_all"
+drtprod ssh "$CLUSTER" -- "sudo tune2fs -O ^has_journal /dev/nvme0n1"
+drtprod ssh "$CLUSTER" -- 'echo "0 $(sudo blockdev --getsz /dev/nvme0n1) linear /dev/nvme0n1 0" | sudo dmsetup create data1'
+drtprod ssh "$CLUSTER" -- "sudo mount /dev/mapper/data1 /mnt/data1"

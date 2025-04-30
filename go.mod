@@ -142,7 +142,7 @@ require (
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
-	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06
+	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
 	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
 	github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2
