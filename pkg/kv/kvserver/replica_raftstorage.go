@@ -536,7 +536,6 @@ func (r *Replica) applySnapshot(
 
 	st := r.ClusterSettings()
 	prepInput := prepareSnapshotInput{
-		ctx:           ctx,
 		id:            r.ID(),
 		st:            st,
 		truncState:    truncState,
@@ -548,7 +547,7 @@ func (r *Replica) applySnapshot(
 		todoEng:       r.store.TODOEngine(),
 	}
 
-	prepResult, err := prepareSnapshot(prepInput)
+	prepResult, err := prepareSnapshot(ctx, prepInput)
 	if err != nil {
 		return err
 	}
