@@ -14,6 +14,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,6 +53,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
 )
+
+// gwMetadataHTTPPath is a field set on the context via the grpc metadata.
+const gwMetadataHTTPPath = "gwHttpPath"
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
@@ -149,6 +154,9 @@ func NewServerEx(
 		unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(o.metricsInterceptor))
 	}
 
+	// Recover from any uncaught panics caused by DB Console requests.
+	unaryInterceptor = append(unaryInterceptor, grpc.UnaryServerInterceptor(gatewayRequestRecoveryInterceptor))
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
@@ -201,6 +209,36 @@ func NewServerEx(
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
 	}, nil
+}
+
+// HTTPPathMetadata returns a grpc metadata object that specifies the HTTP path
+// in the request. This is used by the gRPC gateway that forwards HTTP requests
+// to their respective gRPC handlers. See gatewayRequestRecoveryInterceptor below.
+func HTTPPathMetadata(ctx context.Context, r *http.Request) metadata.MD {
+	return metadata.Pairs(gwMetadataHTTPPath, r.URL.Path)
+}
+
+// gatewayRequestRecoveryInterceptor recovers from panics in gRPC handlers that
+// are invoked due to DB console requests. For these requests, we do not want
+// an uncaught panic to crash the node.
+func gatewayRequestRecoveryInterceptor(
+	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+) (resp interface{}, err error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		paths := md.Get(gwMetadataHTTPPath)
+		if len(paths) > 0 {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+					// The gRPC gateway will put this message in the HTTP response to the client.
+					err = errors.Newf("an unexpected error occurred: %v", p)
+				}
+			}()
+		}
+	}
+	resp, err = handler(ctx, req)
+	return resp, err
 }
 
 // Context is a pool of *grpc.ClientConn that are periodically health-checked,
