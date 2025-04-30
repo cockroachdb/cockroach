@@ -487,7 +487,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		ingestion time.Time
 	}
 	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
-	ingested := true
+	applyAsIngest := true
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)
@@ -503,7 +503,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
 		var appliedAsWriteStr string
-		if !ingested {
+		if !applyAsIngest {
 			appliedAsWriteStr = "as write "
 		}
 		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
@@ -580,12 +580,12 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
 		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
-		ingested = false
+		applyAsIngest = false
 	}
 
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
-	if ingested {
+	if applyAsIngest {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
