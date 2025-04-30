@@ -1,0 +1,45 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+CREATE DATABASE testdb PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2"
+
+statement ok
+USE testdb;
+
+statement ok
+set experimental_enable_temp_tables = on;
+
+# Test adding of a region when a temp table exists.
+subtest add_region
+
+statement ok
+create temporary table tmp_table (id int primary key);
+
+statement ok
+alter database testdb add region "us-east-1";
+
+statement ok
+drop table tmp_table;
+
+# Test ALTER TYPE when a temp table exists.
+subtest alter_type
+
+statement ok
+create type my_enum as enum ('value1', 'value2');
+
+statement ok
+create temporary table tmp_table (id int primary key);
+
+statement ok
+insert into tmp_table values (1), (2), (3);
+
+statement ok
+ALTER TYPE my_enum ADD VALUE 'value3';
+
+statement ok
+DROP TYPE my_enum;
+
+statement ok
+DROP TABLE tmp_table;
+
+subtest end
