@@ -95,24 +95,31 @@ func TestHotRangeLoggerSettings(t *testing.T) {
 	}
 
 	t.Run("the per node restriction limits the number of unique logs", func(t *testing.T) {
-		countSeenRanges := func(logs []testLog) int {
-			counts := make(map[int64]int)
+		getUniqueRanges := func(logs []testLog) []int64 {
+			seen := make(map[int64]struct{})
+			rangeIds := []int64{}
 			for _, l := range logs {
-				counts[l.Stats.RangeID]++
+				if _, ok := seen[l.Stats.RangeID]; ok {
+					continue
+				}
+				seen[l.Stats.RangeID] = struct{}{}
+				rangeIds = append(rangeIds, l.Stats.RangeID)
 			}
-			return len(counts)
+			return rangeIds
 		}
 
 		// without a limit set, we should see many ranges.
 		setupTest(ctx, s.ClusterSettings(), true, lowDelay, lowDelay, lowCPUThreshold, spy)
 		time.Sleep(time.Second)
-		require.Greater(t, countSeenRanges(spy.Logs()), 1)
+		rangeIds := getUniqueRanges(spy.Logs())
+		require.Greater(t, len(rangeIds), 1, "expected many ranges to be found, got %v", rangeIds)
 
 		// with a limit, only one range should show up.
 		structlogging.ReportTopHottestRanges = 1
 		setupTest(ctx, s.ClusterSettings(), true, lowDelay, lowDelay, lowCPUThreshold, spy)
 		time.Sleep(time.Second)
-		require.Equal(t, countSeenRanges(spy.Logs()), 1)
+		rangeIds = getUniqueRanges(spy.Logs())
+		require.Equal(t, len(rangeIds), 1, "expected only one range to be found, got %v", rangeIds)
 	})
 }
 
@@ -273,7 +280,7 @@ func setupTest(
 	structlogging.TelemetryHotRangesStatsCPUThreshold.Override(ctx, &st.SV, logCPUThreshold)
 	structlogging.CheckInterval = tickerInterval
 	// wait for the activity from the previous test to drain.
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(time.Second)
 	structlogging.TestLoopChannel <- struct{}{}
 	spy.Reset()
 }
