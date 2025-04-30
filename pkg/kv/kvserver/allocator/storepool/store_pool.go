@@ -646,7 +646,6 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 ) {
 	fromDetail := sp.GetStoreDetail(from)
 	fromDetail.Lock()
-	defer fromDetail.Unlock()
 	if fromDetail.Desc != nil {
 		fromDetail.Desc.Capacity.LeaseCount--
 		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeUsageInfo.QueriesPerSecond {
@@ -670,10 +669,10 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 
 		sp.Details.StoreDetails.Store(from, fromDetail)
 	}
+	fromDetail.Unlock()
 
 	toDetail := sp.GetStoreDetail(to)
 	toDetail.Lock()
-	defer toDetail.Unlock()
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
 		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
@@ -684,6 +683,7 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 		}
 		sp.Details.StoreDetails.Store(to, toDetail)
 	}
+	toDetail.Unlock()
 }
 
 // newStoreDetail makes a new StoreDetailMu struct.
