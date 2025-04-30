@@ -151,13 +151,15 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	}
 
 	jobCheckBefore := automaticJobCheckBeforeCreatingJob.Get(n.p.ExecCfg().SV())
-	if n.Name == jobspb.AutoStatsName && jobCheckBefore {
-		// Don't start the job if there is already a CREATE STATISTICS job running.
-		// (To handle race conditions we check this again after the job starts,
-		// but this check is used to prevent creating a large number of jobs that
-		// immediately fail).
-		if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
-			return err
+	if n.Name == jobspb.AutoStatsName {
+		if jobCheckBefore {
+			// Don't start the job if there is already a CREATE STATISTICS job running.
+			// (To handle race conditions we check this again after the job starts,
+			// but this check is used to prevent creating a large number of jobs that
+			// immediately fail).
+			if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
+				return err
+			}
 		}
 	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
