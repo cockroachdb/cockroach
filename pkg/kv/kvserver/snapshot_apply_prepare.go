@@ -156,7 +156,7 @@ func clearSubsumedReplicaDiskData(
 	subsumedDescs []*roachpb.RangeDescriptor,
 ) (clearedSpans []roachpb.Span, _ error) {
 	// NB: we don't clear RangeID local key spans here. That happens
-	// via the call to preDestroyRaftMuLocked.
+	// via the call to DestroyReplica.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectOpts{
 			ReplicatedBySpan: d.RSpan(),
