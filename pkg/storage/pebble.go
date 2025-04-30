@@ -849,7 +849,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		L0StopWritesThreshold: 1000,
 		LBaseMaxBytes:         64 << 20, // 64 MB
 		Levels:                make([]pebble.LevelOptions, 7),
-		// NB: Options.MaxConcurrentCompactions may be overidden in NewPebble to
+		// NB: Options.MaxConcurrentCompactions may be "wrapped" in NewPebble to
 		// allow overriding the max at runtime through
 		// Engine.SetCompactionConcurrency.
 		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
@@ -1002,23 +1002,14 @@ type engineConfig struct {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	atomic struct {
-		// compactionConcurrency is the current compaction concurrency set on
-		// the Pebble store. The compactionConcurrency option in the Pebble
-		// Options struct is a closure which will return
-		// Pebble.atomic.compactionConcurrency.
-		//
-		// This mechanism allows us to change the Pebble compactionConcurrency
-		// on the fly without restarting Pebble.
-		compactionConcurrency uint64
-	}
-
 	cfg         engineConfig
 	db          *pebble.DB
 	closed      bool
 	auxDir      string
 	ballastPath string
 	properties  roachpb.StoreProperties
+
+	cco compactionConcurrencyOverride
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
@@ -1075,10 +1066,10 @@ var _ Engine = &Pebble{}
 // WorkloadCollectorEnabled specifies if the workload collector will be enabled
 var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKLOAD_COLLECTOR", false)
 
-// SetCompactionConcurrency will return the previous compaction concurrency.
-func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
-	prevConcurrency := atomic.SwapUint64(&p.atomic.compactionConcurrency, n)
-	return prevConcurrency
+// SetCompactionConcurrency is used to override the engine's max compaction
+// concurrency. A value of 0 removes any existing override.
+func (p *Pebble) SetCompactionConcurrency(n uint64) {
+	p.cco.Set(uint32(n))
 }
 
 // RegisterDiskSlowCallback registers a callback that will be run when a write
@@ -1184,6 +1175,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
 	}
+
+	cfg.opts.MaxConcurrentCompactions = getMaxConcurrentCompactions
 
 	cfg.opts.EnsureDefaults()
 
@@ -1312,15 +1305,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
 	// sources will eventually call NewPebble. So, we override
-	// cfg.opts.MaxConcurrentCompactions to a closure which will return
-	// Pebble.atomic.compactionConcurrency. This will allow us to both honor
-	// the compactions concurrency which has already been set and allow us
-	// to update the compactionConcurrency on the fly by changing the
-	// Pebble.atomic.compactionConcurrency variable.
-	p.atomic.compactionConcurrency = uint64(cfg.opts.MaxConcurrentCompactions())
-	cfg.opts.MaxConcurrentCompactions = func() int {
-		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
-	}
+	// cfg.opts.MaxConcurrentCompactions to a closure which allows ovderriding the
+	// value.
+	cfg.opts.MaxConcurrentCompactions = p.cco.Wrap(cfg.opts.MaxConcurrentCompactions)
 
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
@@ -3281,4 +3268,25 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
+}
+
+// compactionConcurrencyOverride allows overriding the max concurrent
+// compactions.
+type compactionConcurrencyOverride struct {
+	override atomic.Uint32
+}
+
+// Set the override value. If the value is 0, the override is cancelled.
+func (cco *compactionConcurrencyOverride) Set(value uint32) {
+	cco.override.Store(value)
+}
+
+// Wrap a MaxConcurrentCompactions function to take into account the override.
+func (cco *compactionConcurrencyOverride) Wrap(maxConcurrentCompactions func() int) func() int {
+	return func() int {
+		if o := cco.override.Load(); o > 0 {
+			return int(o)
+		}
+		return maxConcurrentCompactions()
+	}
 }
