@@ -449,7 +449,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 		// Delete all of the Replica's data. We're going to delete the hard state too.
 		// We've set the replica's in-mem status to reflect the pending destruction
-		// above, and preDestroyRaftMuLocked will also add a range tombstone to the
+		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
 			ClearReplicatedBySpan:      span,
