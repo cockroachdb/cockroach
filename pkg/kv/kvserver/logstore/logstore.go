@@ -598,17 +598,23 @@ func LoadEntry(
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
 	ctx context.Context,
-	rsl StateLoader,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
+	trunc kvserverpb.RaftTruncatedState,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
+	}
+	// Check whether the first requested entry is already logically truncated. It
+	// may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
+	if lo <= trunc.Index {
+		return nil, 0, 0, raft.ErrCompacted
 	}
 
 	n := hi - lo
@@ -682,15 +688,8 @@ func LoadEntries(
 		return ents, cachedSize, sh.bytes - cachedSize, nil
 	}
 
-	// Something went wrong, and we could not load enough entries.
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return nil, 0, 0, err
-	} else if lo <= ts.Index {
-		// The requested lo index has already been truncated.
-		return nil, 0, 0, raft.ErrCompacted
-	}
-	// We either have a gap in the log, or hi > LastIndex. Let the caller
-	// distinguish if they need to.
+	// Something went wrong, and we could not load enough entries. We either have
+	// a gap in the log, or hi > LastIndex+1. Let the caller distinguish if they
+	// need to.
 	return nil, 0, 0, raft.ErrUnavailable
 }
