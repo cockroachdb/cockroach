@@ -702,6 +702,14 @@ func (rf *Fetcher) StartInconsistentScan(
 			}
 		}
 
+		if rf.args.Spec.MaxKeysPerRow > 1 {
+			// If the table has multiple column families, we need to ensure that
+			// the scan stops at the end of the full SQL row - otherwise, the
+			// row might be deleted between two timestamps leading to incorrect
+			// results (or internal errors).
+			ba.Header.WholeRowsOfSize = int32(rf.args.Spec.MaxKeysPerRow)
+		}
+
 		log.VEventf(ctx, 2, "inconsistent scan: sending a batch with %d requests", len(ba.Requests))
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
