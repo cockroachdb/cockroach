@@ -338,13 +338,9 @@ func isAncestor(ref1, ref2 string) (bool, error) {
 // Returns true if the merge commit introduces changes, false if not, and error if the command fails.
 func mergeCreatesContentChanges(branch, intoBranch string, ignoredPatterns []string) (bool, error) {
 	// Make sure the working directory is clean
-	statusCmd := exec.Command("git", "status", "--porcelain")
-	if out, err := statusCmd.Output(); err != nil {
-		return false, fmt.Errorf("checking git status: %w", err)
-	} else if len(out) > 0 {
-		return false, fmt.Errorf("working directory is not clean")
+	if err := exec.Command("git", "clean", "-fd").Run(); err != nil {
+		return false, fmt.Errorf("cleaning working directory: %w", err)
 	}
-
 	// Get the current branch name before we start
 	currentBranchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranch, err := currentBranchCmd.Output()
@@ -391,10 +387,6 @@ func mergeCreatesContentChanges(branch, intoBranch string, ignoredPatterns []str
 	if err := exec.Command("git", "checkout", originalBranch).Run(); err != nil {
 		return false, fmt.Errorf("running original branch checkout: %w", err)
 	}
-	if err := exec.Command("git", "branch", "-D", tmpIntoBranch).Run(); err != nil {
-		return false, fmt.Errorf("deleting tmp branch: %w", err)
-	}
-
 	// If diff returns no error (exit code 0), there are no changes
 	// If diff returns error with exit code 1, there are changes
 	// Any other error is unexpected
