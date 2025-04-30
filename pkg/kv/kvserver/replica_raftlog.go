@@ -124,6 +124,10 @@ func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error
 	} else if index > r.shMu.lastIndexNotDurable {
 		return 0, raft.ErrUnavailable
 	}
+	// Check if the entry is cached, to avoid storage access.
+	if entry, found := r.store.raftEntryCache.Get(r.RangeID, index); found {
+		return kvpb.RaftTerm(entry.Term), nil
+	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache, index)
 }
