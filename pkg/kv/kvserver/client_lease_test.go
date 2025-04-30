@@ -1646,6 +1646,14 @@ func TestLeaseTransfersUseExpirationLeasesAndPromoteCorrectly(t *testing.T) {
 
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 		manualClock := hlc.NewHybridManualClock()
+		// Disable proactive renewal of expiration based leases. Lease
+		// upgrades happen immediately after applying without needing active
+		// renewal. However, with leader leases, lease promotion won't happen
+		// immediately after applying the lease transfer because the new leaseholder
+		// is unlikely to be the leader.
+		// TODO(ibrahim): add comments about leader lease promotion and how that
+		//  it's not immediate in the normal case of cooperative transfer.
+		disableAutomaticLeaseRenewal := leaseType != roachpb.LeaseLeader
 		tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -1657,10 +1665,11 @@ func TestLeaseTransfersUseExpirationLeasesAndPromoteCorrectly(t *testing.T) {
 						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
-						// Disable proactive renewal of expiration based leases. Lease
-						// upgrades happen immediately after applying without needing active
-						// renewal.
-						DisableAutomaticLeaseRenewal: true,
+						DisableAutomaticLeaseRenewal: disableAutomaticLeaseRenewal,
+						// Make sure that the test doesn't implicitly rely on the
+						// consistency queue to upgrade the lease just before running the
+						// replica through the queue.
+						DisableConsistencyQueue: true,
 						LeaseUpgradeInterceptor: func(rangeID roachpb.RangeID, lease *roachpb.Lease) {
 							mu.Lock()
 							defer mu.Unlock()
