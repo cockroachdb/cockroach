@@ -350,11 +350,11 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 		// in stats when the SST is flushed.
 		k := storage.EngineKey{Key: span.Key}.Encode()
 		ek := storage.EngineKey{Key: span.EndKey}.Encode()
-		require.NoError(t, msstw.PutInternalRangeDelete(ctx, k, ek))
+		require.NoError(t, msstw.putInternalRangeDelete(ctx, k, ek))
 		rk := rangekey.Key{
 			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
 		}
-		require.NoError(t, msstw.PutInternalRangeKey(ctx, k, ek, rk))
+		require.NoError(t, msstw.putInternalRangeKey(ctx, k, ek, rk))
 		_, _ = fmt.Fprintf(&buf, ">> rangekeyset [%s-%s)\n", span.Key, span.EndKey)
 		logSize(&buf)
 	}
@@ -433,7 +433,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	now := timeutil.Now().UnixNano()
 
 	for i := range localSpans {
-		require.NoError(t, referenceMsstw.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+		require.NoError(t, referenceMsstw.put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -445,10 +445,10 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		if i%50 == 0 {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
-			require.NoError(t, referenceMsstw.PutRangeKey(
+			require.NoError(t, referenceMsstw.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, referenceMsstw.Put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, referenceMsstw.put(ctx, engineKey, []byte("foobarbaz")))
 	}
 	_, _, err = referenceMsstw.Finish(ctx)
 	require.NoError(t, err)
@@ -464,7 +464,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
 	for i := range localSpans {
-		require.NoError(t, multiSSTWriter.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+		require.NoError(t, multiSSTWriter.put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -475,10 +475,10 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		if i%50 == 0 {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
-			require.NoError(t, multiSSTWriter.PutRangeKey(
+			require.NoError(t, multiSSTWriter.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, multiSSTWriter.Put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, multiSSTWriter.put(ctx, engineKey, []byte("foobarbaz")))
 	}
 
 	_, _, err = multiSSTWriter.Finish(ctx)
@@ -545,7 +545,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
-	require.NoError(t, msstw.Put(ctx, testEngineKey, []byte("foo")))
+	require.NoError(t, msstw.put(ctx, testEngineKey, []byte("foo")))
 	_, _, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 

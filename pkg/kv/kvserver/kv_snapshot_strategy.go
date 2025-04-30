@@ -172,7 +172,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
-				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
+				// msstw calls (i.e. putInternalPointKey) can use the decoded engine key here as input.
 
 				bytesEstimate := msstw.EstimatedDataSize()
 				delta := bytesEstimate - prevBytesEstimate
