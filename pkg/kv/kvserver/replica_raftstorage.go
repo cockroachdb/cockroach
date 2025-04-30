@@ -536,15 +536,17 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	st := r.ClusterSettings()
 	prepInput := prepareSnapshotInput{
-		id:            r.ID(),
-		st:            st,
+		id: r.ID(),
+
+		st:       st,
+		todoEng:  r.store.TODOEngine(),
+		logSL:    &r.raftMu.stateLoader.StateLoader,
+		writeSST: inSnap.SSTStorageScratch.WriteSST,
+
 		truncState:    truncState,
 		hs:            hs,
-		logSL:         &r.raftMu.stateLoader.StateLoader,
-		writeSST:      inSnap.SSTStorageScratch.WriteSST,
 		desc:          desc,
 		subsumedDescs: subsumedDescs,
-		todoEng:       r.store.TODOEngine(),
 	}
 
 	prepResult, err := prepareSnapshot(ctx, prepInput)
