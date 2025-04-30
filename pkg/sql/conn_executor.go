@@ -3536,6 +3536,11 @@ func (ex *connExecutor) setTransactionModes(
 		if err := ex.state.setIsolationLevel(level); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.ActiveSQLTransaction)
 		}
+		if level != isolation.Serializable {
+			// TODO(#143497): we currently only support buffered writes under
+			// serializable isolation.
+			ex.state.mu.txn.SetBufferedWritesEnabled(false)
+		}
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && asOfTs.IsEmpty() {
