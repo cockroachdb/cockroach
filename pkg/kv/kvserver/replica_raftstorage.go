@@ -287,6 +287,9 @@ type IncomingSnapshot struct {
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
+	//
+	// This contains both the spans that have explicit rangedels, and the
+	// MVCC span (which would be cleared by Excise on Ingest).
 	clearedSpans []roachpb.Span
 }
 
