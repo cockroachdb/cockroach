@@ -118,6 +118,10 @@ const (
 	// we didn't need to tighten the last time we checked.
 	gossipTightenInterval = time.Second
 
+	// infosBatchDelay controls how much time do we wait to batch infos before
+	// sending them.
+	infosBatchDelay = 10 * time.Millisecond
+
 	unknownNodeID roachpb.NodeID = 0
 )
 
@@ -139,6 +143,18 @@ var (
 		Name:        "gossip.connections.refused",
 		Help:        "Number of refused incoming gossip connections",
 		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMessagesSent = metric.Metadata{
+		Name:        "gossip.messages.sent",
+		Help:        "Number of sent gossip messages",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMessagesReceived = metric.Metadata{
+		Name:        "gossip.messages.received",
+		Help:        "Number of received gossip messages",
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaInfosSent = metric.Metadata{
