@@ -1055,17 +1055,6 @@ func (tc *Collection) aggregateAllLayers(
 			return nil
 		})
 	}
-	// Add in-memory temporary schema IDs.
-	if tc.temporarySchemaProvider.HasTemporarySchema() {
-		tempSchemaName := tc.temporarySchemaProvider.GetTemporarySchemaName()
-		descIDs.ForEach(func(maybeDatabaseID descpb.ID) {
-			schemaID := tc.temporarySchemaProvider.GetTemporarySchemaIDForDB(maybeDatabaseID)
-			if schemaID == descpb.InvalidID {
-				return
-			}
-			ret.UpsertDescriptor(schemadesc.NewTemporarySchema(tempSchemaName, schemaID, maybeDatabaseID))
-		})
-	}
 	// Add uncommitted comments and zone configs.
 	if err := tc.uncommittedComments.addAllToCatalog(ret); err != nil {
 		return nstree.MutableCatalog{}, err
