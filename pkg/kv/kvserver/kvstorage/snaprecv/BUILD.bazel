@@ -29,6 +29,7 @@ go_library(
 go_test(
     name = "snaprecv_test",
     srcs = ["replica_sst_snapshot_storage_test.go"],
+    data = glob(["testdata/**"]),
     embed = [":snaprecv"],
     deps = [
         "//pkg/keys",
