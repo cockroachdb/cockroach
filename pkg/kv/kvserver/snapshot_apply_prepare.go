@@ -225,6 +225,17 @@ func clearSubsumedReplicaDiskData(
 	// before it completes. It is reasonable for a snapshot for r1 from S3 to
 	// subsume both r1 and r2 in S1.
 	for i := range keySpans {
+		// The snapshot must never subsume a replica that extends the range of the
+		// replica to the left. This is because splits and merges (the only
+		// operation that change the key bounds) always leave the start key intact.
+		// Extending to the left implies that either we merged "to the left" (we
+		// don't), or that we're applying a snapshot for another range (we don't do
+		// that either). Something is severely wrong for this to happen.
+		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
+			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
+				keySpans[i], totalKeySpans[i])
+		}
+
 		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
 			subsumedReplSSTFile := &storage.MemObject{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
@@ -254,16 +265,6 @@ func clearSubsumedReplicaDiskData(
 					return nil, err
 				}
 			}
-		}
-		// The snapshot must never subsume a replica that extends the range of the
-		// replica to the left. This is because splits and merges (the only
-		// operation that change the key bounds) always leave the start key intact.
-		// Extending to the left implies that either we merged "to the left" (we
-		// don't), or that we're applying a snapshot for another range (we don't do
-		// that either). Something is severely wrong for this to happen.
-		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
-				keySpans[i], totalKeySpans[i])
 		}
 	}
 	return clearedSpans, nil
