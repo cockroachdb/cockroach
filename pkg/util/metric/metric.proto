@@ -62,8 +62,41 @@ message Metadata {
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   repeated LabelPair labels = 6;
 
+  // static_labels is a set of labels defined at compile time that are included
+  // with the metric when exported at the new `/metrics` endpoint. These labels
+  // will only be added if the `labeled_name` below is provided.
+  repeated LabelPair static_labels = 7;
   // if a labeled_name is provided, it will be output in the /metrics endpoint
   // with the corresponding static labels.
   required string labeled_name = 8 [(gogoproto.nullable) = false];
-  repeated LabelPair static_labels = 7;
+
+  enum Category {
+    UNSET = 0;
+    CHANGEFEEDS = 1;
+    CROSS_CLUSTER_REPLICATION = 2;
+    DISTRIBUTED = 3;
+    HARDWARE = 4;
+    LOGICAL_DATA_REPLICATION = 5;
+    NETWORKING = 6;
+    OVERLOAD = 7;
+    OVERVIEW = 8;
+    QUEUES = 9;
+    REPLICATION = 10;
+    REQUESTS = 11;
+    RUNTIME = 12;
+    SQL = 13;
+    STORAGE = 14;
+    TTL = 15;
+  }
+  
+  // if essential is true, the metric is required to be included in
+  // a DB Console dashboard, in our public docs, and in all tsdump
+  // exports.
+  required bool essential = 9 [(gogoproto.nullable) = false];
+  // category is the dashboard category of this metric. This is
+  // required if `essential` is true.
+  required Category category = 11 [(gogoproto.nullable) = false];
+  // how_to_use is an extended description of how to use this metric
+  // with a running cluster. This is required if `essential` is true.
+  required string how_to_use = 12 [(gogoproto.nullable) = false];
 }

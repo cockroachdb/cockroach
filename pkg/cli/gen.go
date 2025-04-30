@@ -33,6 +33,7 @@ import (
 	slugify "github.com/mozillazg/go-slugify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+	"gopkg.in/yaml.v2"
 )
 
 var manPath string
@@ -335,32 +336,119 @@ Output the list of metrics typical for a node.
 			return err
 		}
 
-		// Sort by layer then metric name.
+		// Sort by layer then category name.
 		sort.Slice(sections, func(i, j int) bool {
 			return sections[i].MetricLayer < sections[j].MetricLayer ||
 				(sections[i].MetricLayer == sections[j].MetricLayer &&
 					sections[i].Title < sections[j].Title)
 		})
 
-		// Populate the resulting table.
-		cols := []string{"Layer", "Metric", "Description", "Y-Axis Label", "Type", "Unit", "Aggregation", "Derivative"}
-		var rows [][]string
-		for _, section := range sections {
-			rows = append(rows,
-				[]string{
-					section.MetricLayer.String(),
-					section.Title,
-					section.Charts[0].Metrics[0].Help,
-					section.Charts[0].AxisLabel,
-					section.Charts[0].Metrics[0].MetricType.String(),
-					section.Charts[0].Units.String(),
-					section.Charts[0].Aggregator.String(),
-					section.Charts[0].Derivative.String(),
-				})
+		// Structure for file is:
+		// layers:
+		//  - name: layer_name
+		//    categories:
+		//      - name: category_name
+		//        metrics:
+		//          - name: metric_name
+		//            exported_name: metric_exported_name
+		//            description: metric_description
+		//            y_axis_label: metric_y_axis_label
+		//            etc.
+
+		type MetricInfo struct {
+			Name         string `yaml:"name"`
+			ExportedName string `yaml:"exported_name"`
+			Description  string `yaml:"description"`
+			YAxisLabel   string `yaml:"y_axis_label"`
+			Type         string `yaml:"type"`
+			Unit         string `yaml:"unit"`
+			Aggregation  string `yaml:"aggregation"`
+			Derivative   string `yaml:"derivative"`
+			HowToUse     string `yaml:"how_to_use,omitempty"`
+			Essential    bool   `yaml:"essential,omitempty"`
 		}
-		align := "dddddddd"
-		sliceIter := clisqlexec.NewRowSliceIter(rows, align)
-		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
+
+		type Category struct {
+			Name    string
+			Metrics []MetricInfo
+		}
+
+		type Layer struct {
+			Name       string
+			Categories []Category
+		}
+
+		type YAMLOutput struct {
+			Layers []*Layer
+		}
+
+		layers := make(map[string]*Layer)
+		for _, section := range sections {
+			// Get or create the layer that the current section is in
+			layerName := section.MetricLayer.String()
+			layer, ok := layers[layerName]
+			if !ok {
+				layer = &Layer{
+					Name:       layerName,
+					Categories: []Category{},
+				}
+				layers[layerName] = layer
+			}
+
+			// Every section is a separate category
+			category := Category{
+				Name: section.Title,
+			}
+
+			for _, chart := range section.Charts {
+				// There are many charts, but only 1 metric per chart.
+				metric := MetricInfo{
+					Name:         chart.Metrics[0].Name,
+					ExportedName: chart.Metrics[0].ExportedName,
+					Description:  chart.Metrics[0].Help,
+					YAxisLabel:   chart.AxisLabel,
+					Type:         chart.Metrics[0].MetricType.String(),
+					Unit:         chart.Units.String(),
+					Aggregation:  chart.Aggregator.String(),
+					Derivative:   chart.Derivative.String(),
+					HowToUse:     chart.Metrics[0].HowToUse,
+					Essential:    chart.Metrics[0].Essential,
+				}
+				category.Metrics = append(category.Metrics, metric)
+			}
+
+			layer.Categories = append(layer.Categories, category)
+		}
+
+		// Sort metrics within each layer by name
+		for _, layer := range layers {
+			for _, cat := range layer.Categories {
+				sort.Slice(cat.Metrics, func(i, j int) bool {
+					return cat.Metrics[i].Name < cat.Metrics[j].Name
+				})
+
+			}
+		}
+
+		output := YAMLOutput{}
+
+		var layerNames []string
+		for name := range layers {
+			layerNames = append(layerNames, name)
+		}
+		sort.Strings(layerNames)
+
+		for _, layer := range layerNames {
+			output.Layers = append(output.Layers, layers[layer])
+		}
+
+		// Output YAML
+		yamlData, err := yaml.Marshal(output)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stdout, "%s", yamlData)
+		return nil
 	},
 }
 
@@ -403,6 +491,8 @@ func init() {
 	f.StringSliceVar(&classLabels, "class-labels",
 		[]string{"system-only", "system-visible", "application"},
 		"label to use in the output for the various setting classes")
+
+	genMetricListCmd.Flags().Bool("essential", false, "only emit essential metrics")
 
 	GenCmd.AddCommand(genCmds...)
 }
