@@ -909,7 +909,6 @@ type EarmarkedBoundAccount struct {
 }
 
 // ConcurrentBoundAccount is a thread safe wrapper around BoundAccount.
-// TODO(yuzefovich): add assertions that ConcurrentBoundAccount is non-nil.
 type ConcurrentBoundAccount struct {
 	syncutil.Mutex
 	wrapped BoundAccount
@@ -917,9 +916,6 @@ type ConcurrentBoundAccount struct {
 
 // Used wraps BoundAccount.Used().
 func (c *ConcurrentBoundAccount) Used() int64 {
-	if c == nil {
-		return 0
-	}
 	c.Lock()
 	defer c.Unlock()
 	return c.wrapped.Used()
@@ -927,9 +923,6 @@ func (c *ConcurrentBoundAccount) Used() int64 {
 
 // Close wraps BoundAccount.Close().
 func (c *ConcurrentBoundAccount) Close(ctx context.Context) {
-	if c == nil {
-		return
-	}
 	c.Lock()
 	defer c.Unlock()
 	c.wrapped.Close(ctx)
@@ -937,9 +930,6 @@ func (c *ConcurrentBoundAccount) Close(ctx context.Context) {
 
 // Resize wraps BoundAccount.Resize().
 func (c *ConcurrentBoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
-	if c == nil {
-		return nil
-	}
 	c.Lock()
 	defer c.Unlock()
 	return c.wrapped.Resize(ctx, oldSz, newSz)
@@ -947,9 +937,6 @@ func (c *ConcurrentBoundAccount) Resize(ctx context.Context, oldSz, newSz int64)
 
 // ResizeTo wraps BoundAccount.ResizeTo().
 func (c *ConcurrentBoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
-	if c == nil {
-		return nil
-	}
 	c.Lock()
 	defer c.Unlock()
 	return c.wrapped.ResizeTo(ctx, newSz)
@@ -957,9 +944,6 @@ func (c *ConcurrentBoundAccount) ResizeTo(ctx context.Context, newSz int64) erro
 
 // Grow wraps BoundAccount.Grow().
 func (c *ConcurrentBoundAccount) Grow(ctx context.Context, x int64) error {
-	if c == nil {
-		return nil
-	}
 	c.Lock()
 	defer c.Unlock()
 	return c.wrapped.Grow(ctx, x)
@@ -967,7 +951,7 @@ func (c *ConcurrentBoundAccount) Grow(ctx context.Context, x int64) error {
 
 // Shrink wraps BoundAccount.Shrink().
 func (c *ConcurrentBoundAccount) Shrink(ctx context.Context, delta int64) {
-	if c == nil || delta == 0 {
+	if delta == 0 {
 		return
 	}
 	c.Lock()
@@ -977,9 +961,6 @@ func (c *ConcurrentBoundAccount) Shrink(ctx context.Context, delta int64) {
 
 // Clear wraps BoundAccount.Clear()
 func (c *ConcurrentBoundAccount) Clear(ctx context.Context) {
-	if c == nil {
-		return
-	}
 	c.Lock()
 	defer c.Unlock()
 	c.wrapped.Clear(ctx)
@@ -1041,6 +1022,14 @@ func (mm *BytesMonitor) MakeEarmarkedBoundAccount() EarmarkedBoundAccount {
 // safe wrapper around BoundAccount.
 func (mm *BytesMonitor) MakeConcurrentBoundAccount() *ConcurrentBoundAccount {
 	return &ConcurrentBoundAccount{wrapped: mm.MakeBoundAccount()}
+}
+
+// NewStandaloneUnlimitedConcurrentAccount creates ConcurrentBoundAccount, which
+// is a thread safe wrapper around the standalone-unlimited BoundAccount. Use
+// this only when memory allocations shouldn't be tracked by the memory
+// accounting system.
+func NewStandaloneUnlimitedConcurrentAccount() *ConcurrentBoundAccount {
+	return &ConcurrentBoundAccount{wrapped: BoundAccount{mon: standaloneUnlimited}}
 }
 
 // TransferAccount creates a new account with the budget

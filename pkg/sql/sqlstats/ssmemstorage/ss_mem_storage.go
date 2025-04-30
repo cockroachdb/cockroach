@@ -92,20 +92,22 @@ type Container struct {
 func New(
 	st *cluster.Settings,
 	uniqueServerCount *SQLStatsAtomicCounters,
-	mon *mon.BytesMonitor,
+	monitor *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
 ) *Container {
 	s := &Container{
 		st:                st,
 		appName:           appName,
-		mon:               mon,
+		mon:               monitor,
 		knobs:             knobs,
 		uniqueServerCount: uniqueServerCount,
 	}
 
-	if mon != nil {
-		s.acc = mon.MakeConcurrentBoundAccount()
+	if monitor != nil {
+		s.acc = monitor.MakeConcurrentBoundAccount()
+	} else {
+		s.acc = mon.NewStandaloneUnlimitedConcurrentAccount()
 	}
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
