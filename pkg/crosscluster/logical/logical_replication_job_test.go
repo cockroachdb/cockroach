@@ -180,6 +180,61 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 	}
 }
 
+func TestOptimsitcInsertCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #144645. Running the optimistic insert code
+	// path could corrupt indexes if the insert is not wrapped in a savepoint.
+
+	ctx := context.Background()
+
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbSource.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled = true")
+
+	createTableStmt := `CREATE TABLE indexed (
+		a INT,
+		b INT,
+		c INT,
+		PRIMARY KEY (a, b)
+	)`
+	dbSource.Exec(t, createTableStmt)
+	dbDest.Exec(t, createTableStmt)
+
+	createIdxStmt := `CREATE INDEX c ON indexed (c)`
+	dbSource.Exec(t, createIdxStmt)
+	dbDest.Exec(t, createIdxStmt)
+
+	// Insert initial data into destination that should be overwritten. This
+	// gives more opportunities for corruption.
+	dbDest.Exec(t, "INSERT INTO indexed (a, b, c) VALUES (1, 2, 3), (3, 4, 5)")
+	dbSource.Exec(t, "INSERT INTO indexed (a, b, c) VALUES (1, 2, 6), (3, 4, 7)")
+
+	// Create logical replication stream from source to destination
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE indexed ON $1 INTO TABLE indexed",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbDest, jobID)
+
+	dbSource.CheckQueryResults(t, "SELECT * FROM indexed", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+	dbDest.CheckQueryResults(t, "SELECT * FROM indexed", [][]string{
+		{"1", "2", "6"},
+		{"3", "4", "7"},
+	})
+
+	compareReplicatedTables(t, s, "a", "b", "indexed", dbSource, dbDest)
+}
+
 type fatalDLQ struct{ *testing.T }
 
 func (fatalDLQ) Create(ctx context.Context) error { return nil }
@@ -1403,18 +1458,76 @@ func TestTombstoneUpdate(t *testing.T) {
 
 	// 5. Replicate the delete from 'src-a' -> 'dst'
 	var jobIDSrcA jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcA, start.AsOfSystemTime()).Scan(&jobIDSrcA)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcA)
 
 	// 6. Replicate the update from 'src-b' -> 'dst'
 	var jobIDSrcB jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcB, start.AsOfSystemTime()).Scan(&jobIDSrcB)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcB)
 
 	// Verify that the delete won LWW since it has the highest mvcc value
 	dst.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{})
+}
+
+func TestReplicateComputedColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	// Note: the primary key is basicaly (a, b), but with a computed column that
+	// is d=a+b.
+	createTableStmt := `CREATE TABLE computed_cols (
+		a INT,
+		b INT,
+		c INT,
+		d INT AS (a + b) STORED,
+		cIsOdd BOOLEAN AS (c % 2 = 1) VIRTUAL,
+		PRIMARY KEY (a, d)
+	)`
+	dbSource.Exec(t, createTableStmt)
+	dbDest.Exec(t, createTableStmt)
+
+	var writer string
+	dbSource.QueryRow(t, "SHOW CLUSTER SETTING logical_replication.consumer.immediate_mode_writer").Scan(&writer)
+	if writer != "legacy-kv" {
+		createIdxStmt := `CREATE INDEX c ON computed_cols (c) WHERE cIsOdd`
+		dbSource.Exec(t, createIdxStmt)
+		dbDest.Exec(t, createIdxStmt)
+	}
+
+	// Insert initial data into destination that should be overwritten. This
+	// tests the conflict case which is more error prone.
+	dbDest.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 3), (3, 4, 5)")
+	dbSource.Exec(t, "INSERT INTO computed_cols (a, b, c) VALUES (1, 2, 6), (3, 4, 7)")
+
+	// Create logical replication stream from source to destination
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE computed_cols ON $1 INTO TABLE computed_cols",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbDest, jobID)
+
+	dbSource.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6", "3", "false"},
+		{"3", "4", "7", "7", "true"},
+	})
+	dbDest.CheckQueryResults(t, "SELECT * FROM computed_cols", [][]string{
+		{"1", "2", "6", "3", "false"},
+		{"3", "4", "7", "7", "true"},
+	})
+
+	compareReplicatedTables(t, s, "a", "b", "computed_cols", dbSource, dbDest)
 }
 
 func TestForeignKeyConstraints(t *testing.T) {
