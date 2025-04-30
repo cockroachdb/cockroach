@@ -560,12 +560,20 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 // TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 func LoadTerm(
 	ctx context.Context,
-	rsl StateLoader,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
+	trunc kvserverpb.RaftTruncatedState,
 	index kvpb.RaftIndex,
 ) (kvpb.RaftTerm, error) {
+	// Check whether the entry is already logically truncated. It may or may not
+	// be physically truncated, since the RaftTruncatedState is updated before the
+	// truncation is enacted.
+	if index < trunc.Index {
+		return 0, raft.ErrCompacted
+	} else if index == trunc.Index {
+		return trunc.Term, nil
+	}
 	entry, found := eCache.Get(rangeID, index)
 	if found {
 		return kvpb.RaftTerm(entry.Term), nil
@@ -606,14 +614,6 @@ func LoadTerm(
 
 	// Otherwise, the entry at the given index is not found. See the function
 	// comment for how this case is handled.
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return 0, err
-	} else if index == ts.Index {
-		return ts.Term, nil
-	} else if index < ts.Index {
-		return 0, raft.ErrCompacted
-	}
 	return 0, raft.ErrUnavailable
 }
 
