@@ -173,14 +173,13 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
 
-	trunc := tc.repl.shMu.raftTruncState
-	comp := trunc.Index
+	comp := tc.repl.shMu.raftTruncState.Index
 	last := tc.repl.shMu.lastIndexNotDurable
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, last)
 	ents, cachedBytes, _, err := logstore.LoadEntries(
 		ctx, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
-		tc.repl.raftMu.sideloaded, trunc, comp+1, last+1, math.MaxUint64, nil /* account */)
+		tc.repl.raftMu.sideloaded, comp+1, last+1, math.MaxUint64, nil /* account */)
 	require.NoError(t, err)
 	require.Len(t, ents, int(last-comp))
 	require.Zero(t, cachedBytes)

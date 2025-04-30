@@ -581,19 +581,16 @@ func LoadEntry(
 // entries. The size of the returned entries does not exceed maxSize, unless the
 // first entry exceeds the limit (in which case it is returned regardless).
 //
-// The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1.
+// The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1. The caller
+// should check the bounds before making this call.
 //
-// There are 3 cases for when an entry is not found: (1) the lo index has been
-// compacted away, (2) hi > LastIndex+1, or (3) there is a gap in the log. In
-// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
-// callers never try to read indices above LastIndex, so an error means (3)
-// which is a serious issue. But if the caller is unsure, they can check the
-// LastIndex to distinguish.
+// An error returned means that either an entry in the indices span is not
+// found, or it could not be parsed. Since the caller checks the boundaries, an
+// error is generally unexpected and means something bad.
 //
 // The bytesAccount is used to account for and limit the loaded bytes. It can be
 // nil when the accounting / limiting is not needed.
 //
-// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
@@ -602,19 +599,12 @@ func LoadEntries(
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
-	trunc kvserverpb.RaftTruncatedState,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
 	account *BytesAccount,
 ) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
 	if lo > hi {
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
-	}
-	// Check whether the first requested entry is already logically truncated. It
-	// may or may not be physically truncated, since the RaftTruncatedState is
-	// updated before the truncation is enacted.
-	if lo <= trunc.Index {
-		return nil, 0, 0, raft.ErrCompacted
 	}
 
 	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
