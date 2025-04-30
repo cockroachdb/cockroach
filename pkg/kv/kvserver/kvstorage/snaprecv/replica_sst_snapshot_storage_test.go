@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -458,9 +457,9 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	require.NoError(t, err)
 	defer refIter.Close()
 
-	kvserver.MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
-
-	multiSSTWriter, err := NewMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
+	multiSSTWriter, err := NewMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{
+		MaxSSTSize: 100,
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 

@@ -32,7 +32,6 @@ go_test(
     embed = [":snaprecv"],
     deps = [
         "//pkg/keys",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
