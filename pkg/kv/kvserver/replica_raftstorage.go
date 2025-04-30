@@ -553,7 +553,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	if err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, prepResult.clearedSpan)
+	clearedSpans = append(clearedSpans, prepResult.clearedUnreplicatedSpan)
 	clearedSpans = append(clearedSpans, prepResult.clearedSubsumedSpans...)
 
 	// Drop the entry cache before ingestion, like a real truncation would.
