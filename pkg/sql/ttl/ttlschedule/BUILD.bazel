@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/ttl/ttlbase",
+        "//pkg/sql/ttl/ttljob",
         "//pkg/util/metric",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
