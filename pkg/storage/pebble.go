@@ -282,6 +282,50 @@ var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
+// This cluster setting controls the baseline compaction concurrency (which
+// Pebble can dynamically increase up to the max concurrency; see
+// CompactionConcurrencyRange).
+//
+// When the value of this cluster setting is larger than the max concurrency
+// (see below), this cluster setting takes precedence (i.e. the max concurrency
+// will also equal this value).
+//
+// The baseline compaction concurrency is temporarily overridden while
+// crdb_internal.set_compaction_concurrency is running (which uses
+// SetCompactionConcurrency).
+var compactionConcurrencyLower = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.compaction_concurrency",
+	"the baseline number of concurrent compactions",
+	1,
+	settings.IntWithMinimum(1),
+)
+
+// The maximum concurrency can be configured via an env var (which allows
+// per-node control) and/or this cluster setting (which applies to the entire
+// cluster).
+//
+// The environment variable is COCKROACH_CONCURRENT_COMPACTIONS (we also support
+// a deprecated variable, see getMaxConcurrentCompactionsFromEnv()).
+//
+// In the absence of any configuration, we use min(GOMAXPROCS-1, 3).
+//
+// If both the env variable and cluster setting are set, we take the maximum of
+// the two.
+//
+// In all cases, the maximum concurrency is temporarily overridden while
+// crdb_internal.set_compaction_concurrency is running (which uses
+// SetCompactionConcurrency).
+var compactionConcurrencyUpper = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.max_compaction_concurrency",
+	"the maximum number of concurrent compactions (0 = default); the default value is "+
+		"min(3,numCPUs-1) or what the COCKROACH_CONCURRENT_COMPACTIONS env var specifies; "+
+		"the env var also takes precedence over the cluster setting when the latter is lower",
+	0,
+	settings.NonNegativeInt,
+)
+
 // TODO(ssd): This could be SystemOnly but we currently init pebble
 // engines for temporary storage. Temporary engines shouldn't really
 // care about download compactions, but they do currently simply
@@ -360,14 +404,10 @@ func DefaultPebbleOptions() *pebble.Options {
 		KeySchema:  DefaultKeySchema,
 		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
-		L0CompactionThreshold: 2,
-		L0StopWritesThreshold: 1000,
-		LBaseMaxBytes:         64 << 20, // 64 MB
-		Levels:                make([]pebble.LevelOptions, 7),
-		// NB: Options.MaxConcurrentCompactions may be "wrapped" in NewPebble to
-		// allow overriding the max at runtime through
-		// Engine.SetCompactionConcurrency.
-		MaxConcurrentCompactions:    func() int { return defaultMaxConcurrentCompactions },
+		L0CompactionThreshold:       2,
+		L0StopWritesThreshold:       1000,
+		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels:                      make([]pebble.LevelOptions, 7),
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -676,15 +716,24 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
-
+	// Note: the CompactionConcurrencyRange function will be wrapped below to
+	// allow overriding the lower and upper values at runtime through
+	// Engine.SetCompactionConcurrency.
+	if cfg.opts.CompactionConcurrencyRange == nil {
+		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
+			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
+			upper = determineMaxConcurrentCompactions(
+				defaultMaxConcurrentCompactions,
+				envMaxConcurrentCompactions,
+				int(compactionConcurrencyUpper.Get(&cfg.settings.SV)),
+			)
+			return lower, max(lower, upper)
+		}
+	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
-	}
-
-	if cfg.opts.MaxConcurrentCompactions == nil {
-		cfg.opts.MaxConcurrentCompactions = func() int { return defaultMaxConcurrentCompactions }
 	}
 
 	cfg.opts.EnsureDefaults()
@@ -791,11 +840,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		diskWriteStatsCollector: cfg.DiskWriteStatsCollector,
 	}
 
-	// MaxConcurrentCompactions can be set by multiple sources, but all the
-	// sources will eventually call NewPebble. So, we override
-	// cfg.opts.MaxConcurrentCompactions to a closure which allows ovderriding the
-	// value.
-	cfg.opts.MaxConcurrentCompactions = p.cco.Wrap(cfg.opts.MaxConcurrentCompactions)
+	// Wrap the CompactionConcurrencyRange function to allow overriding the lower
+	// and upper values at runtime through Engine.SetCompactionConcurrency.
+	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
@@ -2740,8 +2787,7 @@ func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
 }
 
-// compactionConcurrencyOverride allows overriding the max concurrent
-// compactions.
+// compactionConcurrencyOverride allows overriding the compaction concurrency.
 type compactionConcurrencyOverride struct {
 	override atomic.Uint32
 }
@@ -2751,12 +2797,15 @@ func (cco *compactionConcurrencyOverride) Set(value uint32) {
 	cco.override.Store(value)
 }
 
-// Wrap a MaxConcurrentCompactions function to take into account the override.
-func (cco *compactionConcurrencyOverride) Wrap(maxConcurrentCompactions func() int) func() int {
-	return func() int {
+// Wrap a CompactionConcurrencyRange function to take into account the override.
+func (cco *compactionConcurrencyOverride) Wrap(
+	compactionConcurrencyRange func() (lower, upper int),
+) func() (lower, upper int) {
+	return func() (lower, upper int) {
 		if o := cco.override.Load(); o > 0 {
-			return int(o)
+			// We override both the lower and upper limits.
+			return int(o), int(o)
 		}
-		return maxConcurrentCompactions()
+		return compactionConcurrencyRange()
 	}
 }

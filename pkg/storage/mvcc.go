@@ -103,7 +103,21 @@ var TargetBytesPerLockConflictError = settings.RegisterIntSetting(
 
 var defaultMaxConcurrentCompactions = getDefaultMaxConcurrentCompactions()
 
+// By default, we use up to min(GOMAXPROCS-1, 3) threads for background
+// compactions per store (reserving the final process for flushes).
 func getDefaultMaxConcurrentCompactions() int {
+	const def = 3
+	if n := runtime.GOMAXPROCS(0); n-1 < def {
+		return max(n-1, 1)
+	}
+	return def
+}
+
+// envMaxConcurrentCompactions is not zero if this node has an env var override
+// for the concurrency.
+var envMaxConcurrentCompactions = getMaxConcurrentCompactionsFromEnv()
+
+func getMaxConcurrentCompactionsFromEnv() int {
 	if v := envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_COMPACTIONS", 0); v > 0 {
 		return v
 	}
@@ -119,19 +133,31 @@ func getDefaultMaxConcurrentCompactions() int {
 	if oldV := envutil.EnvOrDefaultInt("COCKROACH_ROCKSDB_CONCURRENCY", 0); oldV > 0 {
 		return max(oldV-1, 1)
 	}
+	return 0
+}
 
-	// By default use up to min(GOMAXPROCS-1, 3) threads for background
-	// compactions per store (reserving the final process for flushes).
-	const upperLimit = 3
-	if n := runtime.GOMAXPROCS(0); n-1 < upperLimit {
-		return max(n-1, 1)
+// determineMaxConcurrentCompactions determines the upper limit on compaction
+// concurrency.
+//
+// Normally, we use the default limit of min(3, numCPU-1). This limit can be
+// changed via an environment variable or via a cluster setting. If both of
+// those are used, the maximum of them is taken.
+func determineMaxConcurrentCompactions(defaultValue int, envValue int, clusterSetting int) int {
+	if envValue > 0 {
+		if clusterSetting > 0 {
+			return max(envValue, clusterSetting)
+		}
+		return envValue
 	}
-	return upperLimit
+	if clusterSetting > 0 {
+		return clusterSetting
+	}
+	return defaultValue
 }
 
 // l0SubLevelCompactionConcurrency is the sub-level threshold at which to
 // allow an increase in compaction concurrency. The maximum is still
-// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// controlled by pebble.Options.CompactionConcurrencyRange. The default of 2
 // allows an additional compaction (so total 1 + 1 = 2 compactions) when the
 // sub-level count is 2, and increments concurrency by 1 whenever sub-level
 // count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
