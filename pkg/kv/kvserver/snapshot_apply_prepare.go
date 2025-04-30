@@ -39,7 +39,11 @@ type prepareSnapApplyInput struct {
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func prepareSnapApply(
 	ctx context.Context, input prepareSnapApplyInput,
-) (clearedUnreplicatedSpan roachpb.Span, clearedSubsumedSpans []roachpb.Span, _ error) {
+) (
+	roachpb.Span, // clearedUnreplicatedSpan
+	[]roachpb.Span, // clearedSubsumedSpans
+	error,
+) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
 		ctx, input.id, input.st, input.truncState, input.hardState, input.logSL,
@@ -51,15 +55,12 @@ func prepareSnapApply(
 		return roachpb.Span{}, nil, err
 	}
 
-	if len(input.subsumedDescs) > 0 {
-		spans, err := clearSubsumedReplicaDiskData(
-			ctx, input.st, input.todoEng, input.writeSST,
-			input.desc, input.subsumedDescs,
-		)
-		if err != nil {
-			return roachpb.Span{}, nil, err
-		}
-		clearedSubsumedSpans = spans
+	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
+		ctx, input.st, input.todoEng, input.writeSST,
+		input.desc, input.subsumedDescs,
+	)
+	if err != nil {
+		return roachpb.Span{}, nil, err
 	}
 
 	return clearedUnreplicatedSpan, clearedSubsumedSpans, nil
