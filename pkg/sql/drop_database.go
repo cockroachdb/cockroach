@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type dropDatabaseNode struct {
@@ -76,8 +77,15 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	d := newDropCascadeState()
+	// Log the schema names to assist with debugging DROP DATABASE. Schema names
+	// are object identifiers and do not need to be redacted in logs.
+	safeSchemaNames := make([]redact.SafeString, len(schemas))
+	for i, schema := range schemas {
+		safeSchemaNames[i] = redact.SafeString(schema)
+	}
+	log.Infof(ctx, "dropping database %q with schemas %v", redact.SafeString(n.Name), safeSchemaNames)
 
+	d := newDropCascadeState()
 	for _, schema := range schemas {
 		res, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, schema)
 		if err != nil {

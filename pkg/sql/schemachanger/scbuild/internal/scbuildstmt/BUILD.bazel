@@ -111,6 +111,7 @@ go_library(
         "//pkg/sql/vecindex",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
