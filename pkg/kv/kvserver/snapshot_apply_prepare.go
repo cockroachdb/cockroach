@@ -23,7 +23,6 @@ import (
 
 // prepareSnapshotInput contains the data needed to prepare the on-disk state for a snapshot.
 type prepareSnapshotInput struct {
-	ctx           context.Context
 	id            storage.FullReplicaID
 	st            *cluster.Settings
 	truncState    kvserverpb.RaftTruncatedState
@@ -42,22 +41,22 @@ type preparedSnapshot struct {
 }
 
 // prepareSnapshot writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
-func prepareSnapshot(input prepareSnapshotInput) (preparedSnapshot, error) {
+func prepareSnapshot(ctx context.Context, input prepareSnapshotInput) (preparedSnapshot, error) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		input.ctx, input.id, input.st, input.truncState, input.hs, input.logSL,
+		ctx, input.id, input.st, input.truncState, input.hs, input.logSL,
 	)
 	if err != nil {
 		return preparedSnapshot{}, err
 	}
-	if err := input.writeSST(input.ctx, unreplicatedSSTFile.Data()); err != nil {
+	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 		return preparedSnapshot{}, err
 	}
 
 	var clearedSubsumedSpans []roachpb.Span
 	if len(input.subsumedDescs) > 0 {
 		spans, err := clearSubsumedReplicaDiskData(
-			input.ctx, input.st, input.todoEng, input.writeSST,
+			ctx, input.st, input.todoEng, input.writeSST,
 			input.desc, input.subsumedDescs,
 		)
 		if err != nil {
