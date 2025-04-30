@@ -1159,17 +1159,11 @@ var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage)
 // Direct users of NewPebble: cfs.opts.{Logger,LoggerAndTracer} must not be
 // set.
 func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
-	if cfg.opts == nil {
-		cfg.opts = DefaultPebbleOptions()
-	} else {
-		// Open also causes DefaultPebbleOptions before calling NewPebble, so we
-		// are tolerant of Logger being set to pebble.DefaultLogger.
-		if cfg.opts.Logger != nil && cfg.opts.Logger != pebble.DefaultLogger {
-			return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
-		}
-		// Clone the given options so that we are free to modify them.
-		cfg.opts = cfg.opts.Clone()
+	if cfg.opts.Logger != nil {
+		return nil, errors.AssertionFailedf("Options.Logger is set to unexpected value")
 	}
+	// Clone the given options so that we are free to modify them.
+	cfg.opts = cfg.opts.Clone()
 	if cfg.opts.FormatMajorVersion < MinimumSupportedFormatVersion {
 		return nil, errors.AssertionFailedf(
 			"FormatMajorVersion is %d, should be at least %d",
