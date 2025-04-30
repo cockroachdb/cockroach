@@ -125,7 +125,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 				var tableID int64
 				row := runner.QueryRow(t, fmt.Sprintf("SELECT '%s'::REGCLASS::OID;", tableName))
 				row.Scan(&tableID)
-				relationName, _, pkColNames, _, pkColDirs, _, _, err := getTableInfo(
+				relationName, _, pkColNames, pkColTypes, pkColDirs, _, _, err := getTableInfo(
 					ctx, db, descpb.ID(tableID),
 				)
 				require.NoError(t, err)
@@ -137,6 +137,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 							RelationName:    relationName,
 							PKColNames:      pkColNames,
 							PKColDirs:       pkColDirs,
+							PKColTypes:      pkColTypes,
 							Bounds:          selectBounds,
 							SelectBatchSize: ttlbase.DefaultSelectBatchSizeValue,
 							TTLExpr:         catpb.DefaultTTLExpirationExpr,
