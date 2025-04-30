@@ -1420,8 +1420,7 @@ func NewTableDesc(
 	desc := tabledesc.InitTableDescriptor(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
-
-	setter := tablestorageparam.NewSetter(&desc)
+	setter := tablestorageparam.NewSetter(&desc, true /* isNewObject */)
 	if err := storageparam.Set(
 		ctx,
 		semaCtx,
