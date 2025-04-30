@@ -591,3 +591,25 @@ CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS SETOF RECORD LANGUAGE PLpgSQL AS
 $$;
 
 subtest end
+
+# Do not panic when the column definition list for a generator function does
+# not define types for all columns.
+subtest regression_145414
+
+statement ok
+CREATE FUNCTION f145414() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT 1, 2;
+  END
+$$;
+
+statement error pgcode 42601 pq: at or near "int": syntax error
+SELECT * FROM f145414() AS foo(x, y INT);
+
+statement error pgcode 42601 pq: at or near "\)": syntax error
+SELECT * FROM f145414() AS foo(x INT, y);
+
+statement ok
+DROP FUNCTION f145414;
+
+subtest end

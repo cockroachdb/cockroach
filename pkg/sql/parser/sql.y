@@ -1607,7 +1607,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <empty> first_or_next
 
 %type <tree.Statement> insert_rest
-%type <tree.ColumnDefList> opt_col_def_list col_def_list opt_col_def_list_no_types col_def_list_no_types
+%type <tree.ColumnDefList> col_def_list opt_col_def_list_no_types col_def_list_no_types
 %type <tree.ColumnDef> col_def
 %type <*tree.OnConflict> on_conflict
 
@@ -14798,17 +14798,6 @@ col_def_list_no_types:
     $$.val = append($1.colDefList(), tree.ColumnDef{Name: tree.Name($3)})
   }
 
-
-opt_col_def_list:
-  /* EMPTY */
-  {
-    $$.val = tree.ColumnDefList(nil)
-  }
-| '(' col_def_list ')'
-  {
-    $$.val = $2.colDefList()
-  }
-
 col_def_list:
   col_def
   {
@@ -14820,11 +14809,7 @@ col_def_list:
   }
 
 col_def:
-  name
-  {
-    $$.val = tree.ColumnDef{Name: tree.Name($1)}
-  }
-| name typename
+  name typename
   {
     $$.val = tree.ColumnDef{Name: tree.Name($1), Type: $2.typeReference()}
   }
@@ -14912,13 +14897,21 @@ opt_alias_clause:
   }
 
 func_alias_clause:
-  AS table_alias_name opt_col_def_list
+  alias_clause
   {
-    $$.val = tree.AliasClause{Alias: tree.Name($2), Cols: $3.colDefList()}
+    $$.val = $1.aliasClause()
   }
-| table_alias_name opt_col_def_list
+| AS '(' col_def_list ')'
   {
-    $$.val = tree.AliasClause{Alias: tree.Name($1), Cols: $2.colDefList()}
+    $$.val = tree.AliasClause{Cols: $3.colDefList()}
+  }
+| AS table_alias_name '(' col_def_list ')'
+  {
+    $$.val = tree.AliasClause{Alias: tree.Name($2), Cols: $4.colDefList()}
+  }
+| table_alias_name '(' col_def_list ')'
+  {
+    $$.val = tree.AliasClause{Alias: tree.Name($1), Cols: $3.colDefList()}
   }
 
 opt_func_alias_clause:
