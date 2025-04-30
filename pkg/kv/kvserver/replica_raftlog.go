@@ -112,8 +112,8 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache,
+		r.shMu.raftTruncState, i,
 	)
 }
 
@@ -241,14 +241,12 @@ func (r *replicaRaftMuLogSnap) Term(i uint64) (uint64, error) {
 // termRaftMuLocked implements the Term() call.
 func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.raftMu.AssertHeld()
-	// NB: the r.mu fields accessed here are always written under both r.raftMu
-	// and r.mu, and the reads are safe under r.raftMu.
 	if r.shMu.lastIndexNotDurable == i {
 		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache,
+		r.shMu.raftTruncState, i,
 	)
 }
 
