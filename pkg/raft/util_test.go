@@ -55,17 +55,17 @@ func TestLimitSize(t *testing.T) {
 		// Even if maxSize is zero, the first entry should be returned.
 		{0, prefix(1)},
 		// Limit to 2.
-		{uint64(ents[0].Size() + ents[1].Size()), prefix(2)},
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()/2), prefix(2)},
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size() - 1), prefix(2)},
+		{ents[0].SizeEst() + ents[1].SizeEst(), prefix(2)},
+		{ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst()/2, prefix(2)},
+		{ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst() - 1, prefix(2)},
 		// All.
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()), prefix(3)},
+		{ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst(), prefix(3)},
 	} {
 		t.Run("", func(t *testing.T) {
-			got := limitSize(ents, entryEncodingSize(tt.maxSize))
+			got := limitSize(ents, entrySize(tt.maxSize))
 			require.Equal(t, tt.want, got)
 			size := entsSize(got)
-			require.True(t, len(got) == 1 || size <= entryEncodingSize(tt.maxSize))
+			require.True(t, len(got) == 1 || size <= entrySize(tt.maxSize))
 		})
 	}
 }

@@ -451,7 +451,7 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 // the total size not exceeding maxSize. The total size can exceed maxSize if
 // the first entry (at index after+1) is larger than maxSize. Returns nil if
 // there are no entries at indices > after.
-func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l *raftLog) entries(after uint64, maxSize entrySize) ([]pb.Entry, error) {
 	if after >= l.lastIndex() {
 		return nil, nil
 	}
@@ -512,7 +512,7 @@ func (l *raftLog) restore(s snapshot) bool {
 //
 // If the callback returns an error, scan terminates and returns this error
 // immediately. This can be used to stop the scan early ("break" the loop).
-func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.Entry) error) error {
+func (l *raftLog) scan(lo, hi uint64, pageSize entrySize, v func([]pb.Entry) error) error {
 	for lo < hi {
 		ents, err := l.slice(lo, hi, pageSize)
 		if err != nil {
@@ -534,7 +534,7 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 //
 // The returned slice can be appended to, but the entries in it must not be
 // mutated.
-func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l *raftLog) slice(lo, hi uint64, maxSize entrySize) ([]pb.Entry, error) {
 	return l.snap(l.storage).slice(lo, hi, maxSize)
 }
 
@@ -550,7 +550,7 @@ func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error)
 		// can be a custom storage error.
 		return LeadSlice{}, err
 	}
-	ents, err := l.slice(lo, hi, entryEncodingSize(maxSize))
+	ents, err := l.slice(lo, hi, entrySize(maxSize))
 	if err != nil {
 		return LeadSlice{}, err
 	}
@@ -569,10 +569,10 @@ func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error)
 // Returns at least one entry if the interval contains any. The maxSize can only
 // be exceeded if the first entry (span.After+1) is larger.
 func (l LogSnapshot) Slice(span pb.LogSpan, maxSize uint64) ([]pb.Entry, error) {
-	return l.slice(uint64(span.After), uint64(span.Last), entryEncodingSize(maxSize))
+	return l.slice(uint64(span.After), uint64(span.Last), entrySize(maxSize))
 }
 
-func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+func (l LogSnapshot) slice(lo, hi uint64, maxSize entrySize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
 	} else if lo >= hi {
