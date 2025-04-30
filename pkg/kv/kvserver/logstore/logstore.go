@@ -593,28 +593,23 @@ func LoadTerm(
 		return 0, err
 	}
 
-	if found {
-		// Found an entry. Double-check that it has a correct index.
-		if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
-			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
-		}
-		// Cache the entry except if it is sideloaded. We don't load/inline the
-		// sideloaded entries here to keep the term fetching cheap.
-		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
-		// makes any difference.
-		typ, _, err := raftlog.EncodingOf(entry)
-		if err != nil {
-			return 0, err
-		}
-		if !typ.IsSideloaded() {
-			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
-		}
-		return kvpb.RaftTerm(entry.Term), nil
+	// See the function comment for how the not found case is handled.
+	if !found {
+		return 0, raft.ErrUnavailable
+	} else if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
+		return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 	}
 
-	// Otherwise, the entry at the given index is not found. See the function
-	// comment for how this case is handled.
-	return 0, raft.ErrUnavailable
+	// Cache the entry except if it is sideloaded. We don't load/inline the
+	// sideloaded entries here to keep the term fetching cheap.
+	// TODO(pavelkalinnikov): consider not caching here, after measuring if it
+	// makes any difference.
+	if typ, _, err := raftlog.EncodingOf(entry); err != nil {
+		return 0, err
+	} else if !typ.IsSideloaded() {
+		eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
+	}
+	return kvpb.RaftTerm(entry.Term), nil
 }
 
 // LoadEntries loads a slice of consecutive log entries in [lo, hi), starting
