@@ -722,7 +722,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The term of the last truncated entry is still available.
 		tc.repl.mu.Lock()
-		term, err := tc.repl.raftTermLocked(indexes[4])
+		term, err := tc.repl.raftTermShMuLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -733,7 +733,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The terms of older entries are gone.
 		tc.repl.mu.Lock()
-		_, err = tc.repl.raftTermLocked(indexes[3])
+		_, err = tc.repl.raftTermShMuLocked(indexes[3])
 		tc.repl.mu.Unlock()
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
@@ -755,7 +755,7 @@ func TestTruncateLog(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		// The term of the last truncated entry is still available.
-		term, err = tc.repl.raftTermLocked(indexes[4])
+		term, err = tc.repl.raftTermShMuLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)

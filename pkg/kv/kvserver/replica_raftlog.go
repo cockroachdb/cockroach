@@ -96,38 +96,38 @@ func (r *Replica) raftEntriesLocked(
 
 // Term implements the raft.LogStorage interface.
 // Requires that r.mu is held for writing.
-func (r *replicaLogStorage) Term(i uint64) (uint64, error) {
-	term, err := r.termLocked(kvpb.RaftIndex(i))
+func (r *replicaLogStorage) Term(index uint64) (uint64, error) {
+	r.mu.AssertHeld()
+	term, err := (*Replica)(r).raftTermShMuLocked(kvpb.RaftIndex(index))
 	if err != nil {
 		r.reportRaftStorageError(err)
 	}
 	return uint64(term), err
 }
 
-// termLocked implements the Term() call.
-func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	// TODO(pav-kv): make it possible to read with only raftMu held.
-	r.mu.AssertHeld()
-	if r.shMu.lastIndexNotDurable == i {
+// raftTermShMuLocked implements the Term() call. Requires that either
+// Replica.mu or Replica.raftMu is held, at least for reads.
+func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+	// TODO(pav-kv): figure out a zero-cost-in-prod way to assert that either of
+	// two mutexes is held. Can't use the regular AssertHeld() here.
+	// TODO(pav-kv): might as well check here whether index <= compacted index or
+	// index > lastIndex, instead of allowing LoadTerm to error. Then any error
+	// from LoadTerm is unexpected / bad.
+	if r.shMu.lastIndexNotDurable == index {
 		return r.shMu.lastTermNotDurable, nil
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache,
-		r.shMu.raftTruncState, i,
+		r.shMu.raftTruncState, index,
 	)
-}
-
-// raftTermLocked implements the Term() call.
-func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return r.asLogStorage().termLocked(i)
 }
 
 // GetTerm returns the term of the entry at the given index in the raft log.
 // Requires that r.mu is not held.
-func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (r *Replica) GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.raftTermLocked(i)
+	return r.raftTermShMuLocked(index)
 }
 
 // LastIndex implements the raft.LogStorage interface.
@@ -230,24 +230,13 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 
 // Term implements the raft.LogStorageSnapshot interface.
 // Requires that r.raftMu is held.
-func (r *replicaRaftMuLogSnap) Term(i uint64) (uint64, error) {
-	term, err := r.termRaftMuLocked(kvpb.RaftIndex(i))
+func (r *replicaRaftMuLogSnap) Term(index uint64) (uint64, error) {
+	r.raftMu.AssertHeld()
+	term, err := (*Replica)(r).raftTermShMuLocked(kvpb.RaftIndex(index))
 	if err != nil {
 		(*replicaLogStorage)(r).reportRaftStorageError(err)
 	}
 	return uint64(term), err
-}
-
-// termRaftMuLocked implements the Term() call.
-func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	r.raftMu.AssertHeld()
-	if r.shMu.lastIndexNotDurable == i {
-		return r.shMu.lastTermNotDurable, nil
-	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.store.TODOEngine(), r.RangeID, r.store.raftEntryCache,
-		r.shMu.raftTruncState, i,
-	)
 }
 
 // LastIndex implements the raft.LogStorageSnapshot interface.
