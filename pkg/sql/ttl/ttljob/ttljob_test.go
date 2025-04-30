@@ -358,7 +358,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 	}
 }
 
-func TestRowLevelTTLAlterType(t *testing.T) {
+func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -376,32 +376,6 @@ func TestRowLevelTTLAlterType(t *testing.T) {
 	defer cleanupFunc()
 	th.sqlDB.Exec(t, `CREATE TYPE typ AS ENUM ('foo', 'bar')`)
 	th.sqlDB.Exec(t, `CREATE TABLE t (
-	id INT PRIMARY KEY,
-  v typ
-) WITH (ttl_expire_after = '10 minutes')`)
-	th.sqlDB.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2)`)
-	th.sqlDB.Exec(t, `INSERT INTO t (id, v, crdb_internal_expiration) VALUES (1, 'foo', now() - '1 month'), (2, 'bar', now() - '1 month')`)
-
-	// Force the schedule to execute.
-	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
-}
-
-func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-		t,
-		&sql.TTLTestingKnobs{
-			AOSTDuration:       &zeroDuration,
-			PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
-		},
-		false, /* testMultiTenant */
-		1,     /* numNodes */
-	)
-	defer cleanupFunc()
-	th.sqlDB.Exec(t, `CREATE TYPE typ AS ENUM ('foo', 'bar')`)
-	th.sqlDB.Exec(t, `CREATE TABLE t (
 	id INT,
   v typ,
   PRIMARY KEY (id, v)
@@ -409,9 +383,9 @@ func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
 	th.sqlDB.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2)`)
 	th.sqlDB.Exec(t, `INSERT INTO t (id, v, crdb_internal_expiration) VALUES (1, 'foo', now() - '1 month'), (2, 'bar', now() - '1 month')`)
 
-	// Since the enum type is used in the primary key and we just modified it,
-	// the job will fail.
-	th.waitForScheduledJob(t, jobs.StateFailed, "comparison of two different versions of enum USER DEFINED ENUM: public.typ oid")
+	// Prior to https://github.com/cockroachdb/cockroach/pull/145374, the job
+	// would fail with a "comparison of two different versions of enum" error.
+	th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
 }
 
 func TestRowLevelTTLJobDisabled(t *testing.T) {

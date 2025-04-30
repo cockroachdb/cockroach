@@ -230,6 +230,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 							RelationName:      relationName,
 							PKColNames:        pkColNames,
 							PKColDirs:         pkColDirs,
+							PKColTypes:        pkColTypes,
 							Bounds:            bounds,
 							AOSTDuration:      ttlSpec.AOSTDuration,
 							SelectBatchSize:   ttlSpec.SelectBatchSize,
