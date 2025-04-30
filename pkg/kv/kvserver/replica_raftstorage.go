@@ -331,7 +331,7 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 	// There is no need in sending TruncatedState because the receiver assigns it
-	// to match snap.RaftSnap.Metadata.{Index,Term}. See (*Replica).applySnapshot.
+	// to match snap.RaftSnap.Metadata.{Index,Term}. See (*Replica).applySnapshotRaftMuLocked.
 	state.TruncatedState = nil
 
 	return OutgoingSnapshot{
@@ -386,13 +386,13 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	return nil
 }
 
-// applySnapshot updates the replica and its store based on the given
+// applySnapshotRaftMuLocked updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
 // taken from a raft.Ready. Any replicas specified in subsumedRepls will be
 // destroyed atomically with the application of the snapshot.
 //
-// If there is a placeholder associated with r, applySnapshot will remove that
+// If there is a placeholder associated with r, applySnapshotRaftMuLocked will remove that
 // placeholder from the store if and only if it does not return an error.
 //
 // This method requires that r.raftMu is held, as well as the raftMus of any
@@ -401,7 +401,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 // TODO(benesch): the way this replica method reaches into its store to update
 // replicasByKey is unfortunate, but the fix requires a substantial refactor to
 // maintain the necessary synchronization.
-func (r *Replica) applySnapshot(
+func (r *Replica) applySnapshotRaftMuLocked(
 	ctx context.Context,
 	inSnap IncomingSnapshot,
 	nonemptySnap raftpb.Snapshot,
