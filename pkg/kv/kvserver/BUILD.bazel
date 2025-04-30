@@ -360,7 +360,6 @@ go_test(
         "replica_rankings_test.go",
         "replica_sideload_test.go",
         "replica_split_load_test.go",
-        "replica_sst_snapshot_storage_test.go",
         "replica_store_liveness_test.go",
         "replica_test.go",
         "replica_tscache_test.go",
@@ -446,7 +445,6 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
-        "//pkg/kv/kvserver/kvstorage/snaprecv",
         "//pkg/kv/kvserver/leases",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -565,8 +563,6 @@ go_test(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
-        "@com_github_cockroachdb_pebble//rangekey",
-        "@com_github_cockroachdb_pebble//sstable",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
@@ -583,7 +579,6 @@ go_test(
         "@org_golang_google_grpc//metadata",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
-        "@org_golang_x_time//rate",
     ],
 )
 
