@@ -304,6 +304,41 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
 		Skip:                benchSpec.skip,
+		PostProcessPerfMetrics: func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			metrics := roachtestutil.AggregatedPerfMetrics{}
+
+			// Create a map to track sum and count for each unique metric name
+			metricMap := make(map[string]struct {
+				Sum   float64
+				Count int
+			})
+
+			// Process each summary and aggregate by name
+			for _, summary := range histograms.Summaries {
+				// Convert from total elapsed time (in milliseconds) to minutes
+				minutes := float64(summary.TotalElapsed) / float64(time.Minute/time.Millisecond)
+
+				// Add to running total for this metric name
+				entry := metricMap[summary.Name]
+				entry.Sum += minutes
+				entry.Count++
+				metricMap[summary.Name] = entry
+			}
+
+			// Create one aggregated metric for each unique name
+			for name, entry := range metricMap {
+				avgMinutes := entry.Sum / float64(entry.Count)
+
+				metrics = append(metrics, &roachtestutil.AggregatedMetric{
+					Name:           name,
+					Value:          roachtestutil.MetricPoint(avgMinutes),
+					Unit:           "m",
+					IsHigherBetter: false,
+				})
+			}
+
+			return metrics, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if benchSpec.duration > 0 {
 				runDecommissionBenchLong(ctx, t, c, benchSpec, timeout)
@@ -513,13 +548,16 @@ func uploadPerfArtifacts(
 	}
 	destFileName := roachtestutil.GetBenchmarkMetricsFileName(t)
 	dest := filepath.Join(t.PerfArtifactsDir(), destFileName)
-
+	t.L().Printf("uploadPerfArtifacts destFileName: %s", dest)
 	// Get the workload perf artifacts and move them to the pinned node, so that
 	// they can be used to display the workload operation rates during decommission.
 	if !benchSpec.noLoad {
 		workloadStatsSrc := filepath.Join(t.PerfArtifactsDir(), destFileName)
 		localWorkloadStatsPath := filepath.Join(t.ArtifactsDir(), "workload_"+destFileName)
 		workloadStatsDest := filepath.Join(t.PerfArtifactsDir(), "workload_"+destFileName)
+		t.L().Printf("uploadPerfArtifacts workloadStatsSrc: %s", workloadStatsSrc)
+		t.L().Printf("uploadPerfArtifacts localWorkloadStatsPath: %s", localWorkloadStatsPath)
+		t.L().Printf("uploadPerfArtifacts workloadStatsDest: %s", workloadStatsDest)
 		if err := c.Get(
 			ctx, t.L(), workloadStatsSrc, localWorkloadStatsPath, c.Node(workloadNode),
 		); err != nil {

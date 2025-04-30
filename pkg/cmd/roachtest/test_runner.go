@@ -1008,15 +1008,22 @@ func (r *testRunner) runWorker(
 				}
 			}
 		} else {
+			t.L().Printf("Done running test, staring benchmark post-processing")
 			// Upon success fetch the perf artifacts from the remote hosts.
 			if t.spec.Benchmark {
 				dstDirFn := func(nodeIdx int) string {
+					t.L().Printf("Starting post-processing perf metrics")
 					return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
 				}
+				t.L().Printf("Fetching perf artifacts from nodes")
 				getPerfArtifacts(ctx, c, t, dstDirFn)
+				t.L().Printf("Done fetching perf artifacts from nodes")
 				if t.ExportOpenmetrics() {
+					t.L().Printf("Post-processing perf metrics")
 					r.postProcessPerfMetrics(ctx, t, c, dstDirFn)
+					t.L().Printf("Done post-processing perf metrics")
 				}
+				t.L().Printf("Done post-processing perf metrics")
 			}
 			if clustersOpt.debugMode == DebugKeepAlways {
 				// We already marked the cluster as a saved cluster above.
@@ -2067,16 +2074,25 @@ func (r *testRunner) postProcessPerfMetrics(
 func (m *perfMetricsCollector) collectFromNodes(
 	c *clusterImpl, dstDirFn func(nodeIdx int) string, log *logger.Logger,
 ) error {
+	var errs []error
 	for _, node := range getPerfArtifactsNode(c) {
 		files, err := m.findMetricsFiles(dstDirFn(node))
 		if err != nil {
-			log.Printf("failed to find metrics files for node %d will continue: %s", node, err)
+			const failedFmt = "failed to find metrics files for node %d will continue: %s"
+			log.Printf(failedFmt, node, err)
 			continue
 		}
 		m.perfNodes = append(m.perfNodes, node)
+		const foundFmt = "found %d metrics files for node %d: %v"
+		log.Printf(foundFmt, len(files), node, files)
 		if err := m.processFiles(files); err != nil {
-			return errors.Wrapf(err, "error while processing files")
+			const msg = "error while processing files for node %d: %w"
+			errs = append(errs, fmt.Errorf(msg, node, err))
 		}
+	}
+	if len(errs) > 0 {
+		const errFmt = "error occurred while processing metrics files for node(s): %v"
+		return fmt.Errorf(errFmt, errs)
 	}
 	return nil
 }
