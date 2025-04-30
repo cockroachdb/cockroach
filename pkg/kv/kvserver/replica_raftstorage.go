@@ -535,7 +535,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	st := r.ClusterSettings()
-	prepInput := prepareSnapshotInput{
+	prepInput := prepareSnapApplyInput{
 		id: r.ID(),
 
 		st:       st,
@@ -549,7 +549,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs: subsumedDescs,
 	}
 
-	prepResult, err := prepareSnapshot(ctx, prepInput)
+	prepResult, err := prepareSnapApply(ctx, prepInput)
 	if err != nil {
 		return err
 	}

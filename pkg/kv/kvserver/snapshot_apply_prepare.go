@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// prepareSnapshotInput contains the data needed to prepare the on-disk state for a snapshot.
-type prepareSnapshotInput struct {
+// prepareSnapApplyInput contains the data needed to prepare the on-disk state for a snapshot.
+type prepareSnapApplyInput struct {
 	id storage.FullReplicaID
 
 	st       *cluster.Settings
@@ -36,23 +36,24 @@ type prepareSnapshotInput struct {
 	subsumedDescs []*roachpb.RangeDescriptor
 }
 
-// preparedSnapshot contains the results of preparing the snapshot on disk.
-type preparedSnapshot struct {
+// preparedSnapApply contains the results of preparing the snapshot for ingestion.
+// TODO: remove
+type preparedSnapApply struct {
 	clearedSpan          roachpb.Span
 	clearedSubsumedSpans []roachpb.Span
 }
 
-// prepareSnapshot writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
-func prepareSnapshot(ctx context.Context, input prepareSnapshotInput) (preparedSnapshot, error) {
+// prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
+func prepareSnapApply(ctx context.Context, input prepareSnapApplyInput) (preparedSnapApply, error) {
 	// Step 1: Write unreplicated SST
 	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
 		ctx, input.id, input.st, input.truncState, input.hardState, input.logSL,
 	)
 	if err != nil {
-		return preparedSnapshot{}, err
+		return preparedSnapApply{}, err
 	}
 	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
-		return preparedSnapshot{}, err
+		return preparedSnapApply{}, err
 	}
 
 	var clearedSubsumedSpans []roachpb.Span
@@ -62,12 +63,12 @@ func prepareSnapshot(ctx context.Context, input prepareSnapshotInput) (preparedS
 			input.desc, input.subsumedDescs,
 		)
 		if err != nil {
-			return preparedSnapshot{}, err
+			return preparedSnapApply{}, err
 		}
 		clearedSubsumedSpans = spans
 	}
 
-	return preparedSnapshot{
+	return preparedSnapApply{
 		clearedSpan:          clearedSpan,
 		clearedSubsumedSpans: clearedSubsumedSpans,
 	}, nil
