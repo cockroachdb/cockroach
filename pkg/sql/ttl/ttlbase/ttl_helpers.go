@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -169,6 +170,7 @@ func BuildSelectQuery(
 	relationName string,
 	pkColNames []string,
 	pkColDirs []catenumpb.IndexColumn_Direction,
+	pkColTypes []*types.T,
 	aostDuration time.Duration,
 	ttlExpr catpb.Expression,
 	numStartQueryBounds, numEndQueryBounds int,
@@ -217,6 +219,8 @@ func BuildSelectQuery(
 					buf.WriteString(pkColNames[j])
 					buf.WriteString(" = $")
 					buf.WriteString(strconv.Itoa(j + placeholderOffset))
+					buf.WriteString("::")
+					buf.WriteString(pkColTypes[j].SQLStringFullyQualified())
 					buf.WriteString(" AND ")
 				}
 				buf.WriteString(pkColNames[i])
@@ -227,6 +231,8 @@ func BuildSelectQuery(
 				}
 				buf.WriteString(" $")
 				buf.WriteString(strconv.Itoa(i + placeholderOffset))
+				buf.WriteString("::")
+				buf.WriteString(pkColTypes[i].SQLStringFullyQualified())
 				buf.WriteString(")")
 				if !isLast {
 					buf.WriteString(" OR")
