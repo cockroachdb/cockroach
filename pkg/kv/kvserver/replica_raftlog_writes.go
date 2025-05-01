@@ -45,8 +45,8 @@ import (
 // stateRaftMuLocked returns the current raft log storage state.
 func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 	return logstore.RaftState{
-		LastIndex: r.shMu.lastIndexNotDurable,
-		LastTerm:  r.shMu.lastTermNotDurable,
+		LastIndex: r.shMu.last.Index,
+		LastTerm:  r.shMu.last.Term,
 		ByteSize:  r.shMu.raftLogSize,
 	}
 }
@@ -85,8 +85,8 @@ func (r *replicaLogStorage) appendRaftMuLocked(
 // updateStateRaftMuLockedMuLocked updates the in-memory reflection of the raft
 // log storage state.
 func (r *replicaLogStorage) updateStateRaftMuLockedMuLocked(state logstore.RaftState) {
-	r.shMu.lastIndexNotDurable = state.LastIndex
-	r.shMu.lastTermNotDurable = state.LastTerm
+	r.shMu.last.Index = state.LastIndex
+	r.shMu.last.Term = state.LastTerm
 	r.shMu.raftLogSize = state.ByteSize
 }
 

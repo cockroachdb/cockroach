@@ -457,12 +457,11 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 	return ls.shMu.raftLogSize, ls.shMu.raftLogSizeTrusted
 }
 
-// GetCachedLastTerm returns the cached last term value. May return
-// invalidLastTerm if the cache is not set.
+// GetCachedLastTerm returns the term of the last log entry.
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.asLogStorage().shMu.lastTermNotDurable
+	return r.asLogStorage().shMu.last.Term
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
