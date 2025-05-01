@@ -337,7 +337,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	defer r.raftMu.Unlock()
 	ls := r.asLogStorage()
 	raftLogSize := ls.shMu.raftLogSize
-	actualRaftLogSize, err := ls.raftMu.logStorage.ComputeSize(context.Background())
+	actualRaftLogSize, err := ls.ls.ComputeSize(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, actualRaftLogSize, raftLogSize)
 }

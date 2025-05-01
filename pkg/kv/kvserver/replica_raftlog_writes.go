@@ -56,9 +56,9 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 func (r *replicaLogStorage) appendRaftMuLocked(
 	ctx context.Context, app raft.StorageAppend, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
+	r.raftMu.AssertHeld()
 	state := r.stateRaftMuLocked()
-	cb := (*replicaSyncCallback)(r)
-	state, err := r.raftMu.logStorage.StoreEntries(ctx, state, app, cb, stats)
+	state, err := r.ls.StoreEntries(ctx, state, app, r.onSync, stats)
 	if err != nil {
 		return state, err
 	}
@@ -78,7 +78,7 @@ func (r *replicaLogStorage) appendRaftMuLocked(
 	// overwritten; after the write, append new entries to the cache. Currently,
 	// the cache can contain stale entries while storage is already updated, and
 	// the only hope is that nobody tries to read it under Replica.mu only.
-	r.store.raftEntryCache.Add(r.RangeID, app.Entries, true /* truncate */)
+	r.cache.Add(r.ls.RangeID, app.Entries, true /* truncate */)
 	return state, nil
 }
 
@@ -101,7 +101,7 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 
-	size, err := r.raftMu.logStorage.ComputeSize(ctx)
+	size, err := r.ls.ComputeSize(ctx)
 	if err != nil {
 		return 0, err
 	}

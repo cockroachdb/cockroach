@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -495,7 +496,9 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 	acc := NewReplicaAccumulator(load.Queries, load.CPU)
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
-		repl := &Replica{store: s, RangeID: rangeID}
+		repl := &Replica{store: s, RangeID: rangeID, logStorage: &replicaLogStorage{}}
+		repl.logStorage.mu.RWMutex = (*syncutil.RWMutex)(&repl.mu.ReplicaMutex)
+		repl.logStorage.raftMu.Mutex = &repl.raftMu.Mutex
 		repl.shMu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
 		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {

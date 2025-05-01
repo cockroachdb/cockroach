@@ -207,6 +207,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 
 	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
+
+	// Initialize all the components of the log storage.
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
@@ -214,7 +216,16 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store.limiters.BulkIOWriteRate,
 		store.TODOEngine(),
 	)
-	r.raftMu.logStorage = &logstore.LogStore{
+	r.logStorage = &replicaLogStorage{
+		ctx:                r.raftCtx,
+		raftEntriesMonitor: store.cfg.RaftEntriesMonitor,
+		cache:              store.raftEntryCache,
+		onSync:             (*replicaSyncCallback)(r),
+		metrics:            store.metrics,
+	}
+	r.logStorage.mu.RWMutex = (*syncutil.RWMutex)(&r.mu.ReplicaMutex)
+	r.logStorage.raftMu.Mutex = &r.raftMu.Mutex
+	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     rangeID,
 		Engine:      store.TODOEngine(),
 		Sideload:    r.raftMu.sideloaded,

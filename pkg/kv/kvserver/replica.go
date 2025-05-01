@@ -433,6 +433,15 @@ type Replica struct {
 	// GetEnabledWhenLeader is consistent with raftMu.flowControlLevel.
 	flowControlV2 replica_rac2.Processor
 
+	// logStorage encapsulates and provides access to the raft log storage, which
+	// includes its Pebble representation, the sideloaded storage for AddSSTable
+	// commands, and the raft entries cache.
+	//
+	// logStorage shares mu and raftMu mutexes with this Replica, which allows
+	// updating its state transactionally with other actions that the Replica
+	// needs to perform, such as updating the state machine.
+	logStorage *replicaLogStorage
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -445,24 +454,11 @@ type Replica struct {
 		// on-disk storage for sideloaded SSTables. Always non-nil.
 		// TODO(pav-kv): remove, since this is duplicated in logStorage.
 		sideloaded logstore.SideloadStorage
-		// logStorage provides access to the raft log storage. Set once upon Replica
-		// creation, and is never nil.
-		//
-		// TODO(pav-kv): move log state (such as shMu.lastIndexNotDurable) into the
-		// log storage type. Make the log storage type observe the writes and
-		// maintain this state, as opposed to doing it from a few places in Replica
-		// (like handleRaftReady).
-		logStorage *logstore.LogStore
 
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
-
-		// bytesAccount accounts bytes used by various Raft components, like entries
-		// to be applied. Currently, it only tracks bytes used by committed entries
-		// being applied to the state machine.
-		bytesAccount logstore.BytesAccount
 
 		flowControlLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 
@@ -589,42 +585,6 @@ type Replica struct {
 		// Invariant: state.TruncatedState == nil. The field is being phased out in
 		// favour of raftTruncState below.
 		state kvserverpb.ReplicaState
-		// raftTruncState contains the raft log truncation state, i.e. the ID of the
-		// last entry of the log prefix that has been compacted out from the raft
-		// log storage.
-		raftTruncState kvserverpb.RaftTruncatedState
-		// Last index/term written to the raft log (not necessarily durable locally
-		// or committed by the group). Note that lastTermNotDurable may be 0 (and
-		// thus invalid) even when lastIndexNotDurable is known, in which case the
-		// term will have to be retrieved from the Raft log entry. Use the
-		// invalidLastTerm constant for this case.
-		lastIndexNotDurable kvpb.RaftIndex
-		lastTermNotDurable  kvpb.RaftTerm
-		// raftLogSize is the approximate size in bytes of the persisted raft
-		// log, including sideloaded entries' payloads. The value itself is not
-		// persisted and is computed lazily, paced by the raft log truncation
-		// queue which will recompute the log size when it finds it
-		// uninitialized. This recomputation mechanism isn't relevant for ranges
-		// which see regular write activity (for those the log size will deviate
-		// from zero quickly, and so it won't be recomputed but will undercount
-		// until the first truncation is carried out), but it prevents a large
-		// dormant Raft log from sitting around forever, which has caused problems
-		// in the past.
-		//
-		// Note that both raftLogSize and raftLogSizeTrusted do not include the
-		// effect of pending log truncations (see Replica.pendingLogTruncations).
-		// Hence, they are fine for metrics etc., but not for deciding whether we
-		// should create another pending truncation. For the latter, we compute
-		// the post-pending-truncation size using pendingLogTruncations.
-		raftLogSize int64
-		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
-		// it has been recomputed.
-		raftLogSizeTrusted bool
-		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
-		// log was checked for truncation or at the time of the last Raft log
-		// truncation.
-		raftLogLastCheckSize int64
-
 		// leaderID is the ID of the leader replica within the Raft group.
 		// NB: this is updated in a separate critical section from the Raft group,
 		// and can therefore briefly be out of sync with the Raft status.
@@ -1184,7 +1144,7 @@ func (r *Replica) ID() storage.FullReplicaID {
 // LogStorageRaftMuLocked returns the Replica's log storage.
 // raftMu must be held when using the returned object.
 func (r *Replica) LogStorageRaftMuLocked() *logstore.LogStore {
-	return r.asLogStorage().raftMu.logStorage
+	return r.asLogStorage().ls
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
