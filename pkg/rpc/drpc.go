@@ -110,6 +110,7 @@ func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpoo
 					Stream: drpcstream.Options{
 						MaximumBufferSize: 0, // unlimited
 					},
+					SoftCancel: true, // don't close the transport when stream context is canceled
 				},
 			}
 			var conn *drpcconn.Conn
