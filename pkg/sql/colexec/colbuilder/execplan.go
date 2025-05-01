@@ -310,6 +310,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.StreamIngestionFrontier != nil:
 		return errStreamIngestionWrap
 	case core.HashGroupJoiner != nil:
+	case core.VectorSearch != nil:
+	case core.VectorMutationSearch != nil:
 	default:
 		return errors.AssertionFailedf("unexpected processor core %q", core)
 	}
