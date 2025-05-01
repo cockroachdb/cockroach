@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 	"storj.io/drpc/drpcconn"
+	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
 )
 
@@ -78,4 +79,77 @@ func TestDRPCBatchServer(t *testing.T) {
 		_, err = client.Batch(ctx, ba)
 		require.NoError(t, err)
 	})
+}
+
+func TestStreamContextCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 1
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // Secure connection is not required for this test
+			Settings: cluster.MakeClusterSettings(),
+		},
+	}
+
+	ctx := context.Background()
+	rpc.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
+	c := testcluster.StartTestCluster(t, numNodes, args)
+	defer c.Stopper().Stop(ctx)
+
+	rpcAddr := c.Server(0).RPCAddr()
+
+	// Dial the drpc server with the drpc connection header.
+	rawconn, err := drpcmigrate.DialWithHeader(ctx, "tcp", rpcAddr, drpcmigrate.DRPCHeader)
+	require.NoError(t, err)
+
+	conn := drpcconn.NewWithOptions(rawconn, drpcconn.Options{
+		Manager: drpcmanager.Options{
+			SoftCancel: true, // Don't close the transport when stream context is canceled
+		},
+	})
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
+
+	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
+	client := kvpb.NewDRPCBatchClient(conn)
+
+	singleRequest := func() {
+		streamCtx, streamCtxCancel := context.WithCancel(ctx)
+		defer streamCtxCancel()
+
+		s, err := client.BatchStream(streamCtx)
+		require.NoError(t, err)
+
+		ba := &kvpb.BatchRequest{}
+		ba.RangeID = desc.RangeID
+
+		var ok bool
+		ba.Replica, ok = desc.GetReplicaDescriptor(1)
+		require.True(t, ok)
+
+		req := &kvpb.LeaseInfoRequest{}
+		req.Key = desc.StartKey.AsRawKey()
+		ba.Add(req)
+
+		err = s.Send(ba)
+		require.NoError(t, err)
+
+		_, err = s.Recv()
+		require.NoError(t, err)
+	}
+
+	// Make two consecutive stream requests using the same connection.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-conn.Closed():
+			t.Fatal("connection closed unexpectedly")
+		default:
+		}
+
+		singleRequest()
+	}
 }
