@@ -73,7 +73,7 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 }
 
 func getTableInfo(
-	ctx context.Context, db descs.DB, descsCol *descs.Collection, tableID descpb.ID,
+	ctx context.Context, db descs.DB, tableID descpb.ID,
 ) (
 	relationName string,
 	pkColIDs catalog.TableColMap,
@@ -84,8 +84,8 @@ func getTableInfo(
 	labelMetrics bool,
 	err error,
 ) {
-	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func getTableInfo(
 		rowLevelTTL := desc.GetRowLevelTTL()
 		labelMetrics = rowLevelTTL.LabelMetrics
 
-		tn, err := descs.GetObjectName(ctx, txn.KV(), descsCol, desc)
+		tn, err := descs.GetObjectName(ctx, txn.KV(), txn.Descriptors(), desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
@@ -133,7 +133,6 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
 	db := serverCfg.DB
-	descsCol := flowCtx.Descriptors
 	codec := serverCfg.Codec
 	details := ttlSpec.RowLevelTTLDetails
 	tableID := details.TableID
@@ -161,7 +160,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 
 	relationName, pkColIDs, pkColNames, pkColTypes, pkColDirs, numFamilies, labelMetrics, err := getTableInfo(
-		ctx, db, descsCol, tableID,
+		ctx, db, tableID,
 	)
 	if err != nil {
 		return err
@@ -243,6 +242,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 							RelationName:      relationName,
 							PKColNames:        pkColNames,
 							PKColDirs:         pkColDirs,
+							PKColTypes:        pkColTypes,
 							Bounds:            bounds,
 							AOSTDuration:      ttlSpec.AOSTDuration,
 							SelectBatchSize:   ttlSpec.SelectBatchSize,
@@ -430,7 +430,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 					}
 					deleteBatch := expiredRowsPKs[startRowIdx+processed : until]
 					var batchRowCount int64
-					do := func(ctx context.Context, txn isql.Txn) error {
+					do := func(ctx context.Context, txn descs.Txn) error {
 						txn.KV().SetDebugName("ttljob-delete-batch")
 						// We explicitly specify a low retry limit because this operation is
 						// wrapped with its own retry function that will also take care of
@@ -442,13 +442,13 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 						}
 						// If we detected a schema change here, the DELETE will not succeed
 						// (the SELECT still will because of the AOST). Early exit here.
-						desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
+						desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 						if err != nil {
 							return err
 						}
 						if ttlSpec.PreDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
 							return errors.Newf(
-								"table has had a schema change since the job has started at %s, aborting",
+								"table has had a schema change since the job has started at %s, job will run at the next scheduled time",
 								desc.GetModificationTime().GoTime().Format(time.RFC3339),
 							)
 						}
@@ -458,7 +458,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 						}
 						return nil
 					}
-					if err := serverCfg.DB.Txn(
+					if err := serverCfg.DB.DescsTxn(
 						ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.BulkLowPri),
 					); err != nil {
 						return errors.Wrapf(err, "error during row deletion")
