@@ -144,6 +144,7 @@ go_library(
         "instrumentation.go",
         "internal.go",
         "internal_result_channel.go",
+        "internal_session.go",
         "inverted_filter.go",
         "inverted_join.go",
         "job_exec_context.go",
