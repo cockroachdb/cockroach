@@ -1009,7 +1009,7 @@ func makeSpanGroupFromCheckpoint(
 
 var forceEnrichedEnvelope = metamorphic.ConstantWithTestBool("force-enriched-envelope", false)
 
-// TODO: do this less stupidly
+// TODO: do this a little more sensibly
 var forcedFeeds struct {
 	syncutil.Mutex
 	m map[jobspb.JobID]struct{}
