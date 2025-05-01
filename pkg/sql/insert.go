@@ -374,3 +374,7 @@ func (n *insertNode) enableAutoCommit() {
 func (n *insertNode) rowsWritten() int64 {
 	return n.run.modifiedRowCount()
 }
+
+func (n *insertNode) returnsRowsAffected() bool {
+	return !n.run.rowsNeeded
+}

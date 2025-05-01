@@ -221,6 +221,10 @@ func (n *upsertNode) rowsWritten() int64 {
 	return n.run.tw.modifiedRowCount()
 }
 
+func (n *upsertNode) returnsRowsAffected() bool {
+	return !n.run.tw.rowsNeeded
+}
+
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }
