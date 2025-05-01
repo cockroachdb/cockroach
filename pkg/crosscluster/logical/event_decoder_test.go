@@ -14,14 +14,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -196,4 +199,82 @@ func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
 	require.Equal(t, times[5], events[1].originTimestamp)
 	require.Equal(t, tree.NewDString("inserted"), events[1].row[1])
 	require.Equal(t, tree.DNull, events[1].prevRow[1])
+}
+
+func TestEventDecoder_UserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(jeffswenson): it would be nice if we could implement this test using
+	// the randgen package, but randgen appears to be missing a utililty that
+	// lets us create a random table random dependent UDTs.
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	server := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	for _, db := range []string{"srcdb", "dstdb"} {
+		runner.Exec(t, "CREATE DATABASE "+db)
+		runner.Exec(t, "USE "+db)
+		runner.Exec(t, "CREATE TYPE status_enum AS ENUM ('active', 'inactive')")
+		runner.Exec(t, "CREATE TYPE metadata_type AS (key TEXT, value INT)")
+		runner.Exec(t, `CREATE TABLE user_types (
+			id INT PRIMARY KEY,
+			status status_enum,
+			tags TEXT[],
+			metadata metadata_type
+		)`)
+	}
+
+	srcDesc := cdctest.GetHydratedTableDescriptor(t, server.ExecutorConfig(), "srcdb", "public", "user_types")
+	dstDesc := cdctest.GetHydratedTableDescriptor(t, server.ExecutorConfig(), "dstdb", "public", "user_types")
+
+	decoder, err := newEventDecoder(ctx, server.InternalDB().(descs.DB), server.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+		dstDesc.GetID(): {srcDesc: srcDesc},
+	})
+	require.NoError(t, err)
+
+	eb := newKvEventBuilder(t, srcDesc.TableDesc())
+
+	// Build test row with user-defined types
+	enumType := catalog.FindColumnByName(srcDesc, "status").GetType()
+	arrayType := catalog.FindColumnByName(srcDesc, "tags").GetType()
+	tupleType := catalog.FindColumnByName(srcDesc, "metadata").GetType()
+	testRow := tree.Datums{
+		tree.NewDInt(1),
+		&tree.DEnum{
+			EnumTyp:     enumType,
+			PhysicalRep: enumType.TypeMeta.EnumData.PhysicalRepresentations[0], // Use correct physical rep
+			LogicalRep:  enumType.TypeMeta.EnumData.LogicalRepresentations[0],  // Use correct logical rep
+		},
+		randgen.RandDatum(rng, arrayType, false).(*tree.DArray),
+		randgen.RandDatum(rng, tupleType, false).(*tree.DTuple),
+	}
+
+	insertEvent := eb.insertEvent(server.Clock().Now(), testRow)
+	events, err := decoder.decodeAndCoalesceEvents(ctx, []streampb.StreamEvent_KV{insertEvent}, jobspb.LogicalReplicationDetails_DiscardNothing)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+
+	row := events[0].row
+	require.Len(t, row, 4)
+
+	// Verify enum type mapping
+	enum := row[1].(*tree.DEnum)
+	dstEnumType := catalog.FindColumnByName(dstDesc, "status").GetType()
+	require.Equal(t, dstEnumType, enum.EnumTyp)
+
+	// Verify array type mapping
+	array := row[2].(*tree.DArray)
+	dstArrayType := catalog.FindColumnByName(dstDesc, "tags").GetType()
+	require.Equal(t, dstArrayType, array.ParamTyp)
+
+	// Verify tuple type mapping
+	tuple := row[3].(*tree.DTuple)
+	dstTupleType := catalog.FindColumnByName(dstDesc, "metadata").GetType()
+	require.Equal(t, dstTupleType, tuple.ResolvedType())
 }
