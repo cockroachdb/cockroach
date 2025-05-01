@@ -136,6 +136,14 @@ type tpcc struct {
 	resetTableCancelFn context.CancelFunc
 
 	asOfSystemTime string
+
+	// Set to true if a literal implemenation of the workload is desired. In
+	// this case "literal" means that the New Order and Payments transactions
+	// are implemented statement-by-statement as specified in the specification.
+	// This avoids the use of RETURNING clauses to batch updates together with
+	// selects, and performs each row select/update separately, as opposed to
+	// batching them using an IN list.
+	literalImplementation bool
 }
 
 type waitSetter struct {
@@ -316,6 +324,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
 			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
 				"check. Example values are (\"'-1m'\", \"'-1h'\")")
+		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
 
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)

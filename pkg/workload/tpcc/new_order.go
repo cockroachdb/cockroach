@@ -71,11 +71,13 @@ type newOrder struct {
 	mcp    *workload.MultiConnPool
 	sr     workload.SQLRunner
 
-	selectWarehouseTax workload.StmtHandle
-	updateDistrict     workload.StmtHandle
-	selectCustomerInfo workload.StmtHandle
-	insertOrder        workload.StmtHandle
-	insertNewOrder     workload.StmtHandle
+	selectWarehouseTax      workload.StmtHandle
+	updateDistrictOptimized workload.StmtHandle
+	selectDistrictForUpdate workload.StmtHandle
+	updateDistrictLiteral   workload.StmtHandle
+	selectCustomerInfo      workload.StmtHandle
+	insertOrder             workload.StmtHandle
+	insertNewOrder          workload.StmtHandle
 }
 
 var _ tpccTx = &newOrder{}
@@ -94,11 +96,25 @@ func createNewOrder(
 	)
 
 	// Select the district tax rate and next available order number, bumping it.
-	n.updateDistrict = n.sr.Define(`
+	n.updateDistrictOptimized = n.sr.Define(`
 		UPDATE district
 		SET d_next_o_id = d_next_o_id + 1
 		WHERE d_w_id = $1 AND d_id = $2
 		RETURNING d_tax, d_next_o_id`,
+	)
+
+	n.selectDistrictForUpdate = n.sr.Define(`
+		SELECT d_tax, d_next_o_id
+		FROM district
+		WHERE d_w_id = $1 AND d_id = $2
+		FOR UPDATE`,
+	)
+
+	// Increase the district next available order number.
+	n.updateDistrictLiteral = n.sr.Define(`
+		UPDATE district
+		SET d_next_o_id = d_next_o_id + 1
+		WHERE d_w_id = $1 AND d_id = $2`,
 	)
 
 	// Select the customer's discount, last name and credit.
@@ -229,14 +245,29 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 					return errors.Wrap(err, "select warehouse failed")
 				}
 
-				// Select the district tax rate and next available order number, bumping it.
-				var dNextOID int
-				if err := n.updateDistrict.QueryRowTx(
-					ctx, tx, d.wID, d.dID,
-				).Scan(&d.dTax, &dNextOID); err != nil {
-					return errors.Wrap(err, "update district failed")
+				if !n.config.literalImplementation {
+					// Select the district tax rate and next available order number, bumping it.
+					var dNextOID int
+					if err := n.updateDistrictOptimized.QueryRowTx(
+						ctx, tx, d.wID, d.dID,
+					).Scan(&d.dTax, &dNextOID); err != nil {
+						return errors.Wrap(err, "update district failed")
+					}
+					d.oID = dNextOID - 1
+				} else {
+					// In the literal implementation, we select the district tax rate explicitly
+					// and then update the district's next available order number.
+					if err := n.selectDistrictForUpdate.QueryRowTx(
+						ctx, tx, d.wID, d.dID,
+					).Scan(&d.dTax, &d.oID); err != nil {
+						return errors.Wrap(err, "select district failed")
+					}
+					if _, err := n.updateDistrictLiteral.ExecTx(
+						ctx, tx, d.wID, d.dID,
+					); err != nil {
+						return errors.Wrap(err, "update district failed")
+					}
 				}
-				d.oID = dNextOID - 1
 
 				// Select the customer's discount, last name and credit.
 				if err := n.selectCustomerInfo.QueryRowTx(
@@ -248,194 +279,317 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 				// 2.4.2.2: For each o_ol_cnt item in the order, query the relevant item
 				// row, update the stock row to account for the order, and insert a new
 				// line into the order_line table to reflect the item on the order.
-				itemIDs := make([]string, d.oOlCnt)
-				for i, item := range d.items {
-					itemIDs[i] = fmt.Sprint(item.olIID)
-				}
 				iDatas := make([]string, d.oOlCnt)
-				iIDs := strings.Join(itemIDs, ", ")
-				err := func() error {
-					rows, err := tx.Query(
+				distInfos := make([]string, d.oOlCnt)
+				if !n.config.literalImplementation {
+					// Optimized implementation using IN lists.
+					itemIDs := make([]string, d.oOlCnt)
+					for i, item := range d.items {
+						itemIDs[i] = fmt.Sprint(item.olIID)
+					}
+					iIDs := strings.Join(itemIDs, ", ")
+					err := func() error {
+						rows, err := tx.Query(
+							ctx,
+							fmt.Sprintf(`
+							SELECT i_price, i_name, i_data
+							FROM item
+							WHERE i_id IN (%[1]s)
+							ORDER BY i_id`,
+								iIDs,
+							),
+						)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+
+						for i := range d.items {
+							item := &d.items[i]
+							iData := &iDatas[i]
+
+							if !rows.Next() {
+								if err := rows.Err(); err != nil {
+									return err
+								}
+								if rollback {
+									// 2.4.2.3: roll back when we're expecting a rollback due to
+									// simulated user error (invalid item id) and we actually
+									// can't find the item. The spec requires us to actually go
+									// to the database for this, even though we know earlier
+									// that the item has an invalid number.
+									n.config.auditor.newOrderRollbacks.Add(1)
+									return errSimulated
+								}
+								return errors.New("missing item row")
+							}
+
+							if err := rows.Scan(&item.iPrice, &item.iName, iData); err != nil {
+								return err
+							}
+						}
+						if rows.Next() {
+							return errors.New("extra item row")
+						}
+						return rows.Err()
+					}()
+					if err != nil {
+						return errors.Wrap(err, "select item failed")
+					}
+
+					stockIDs := make([]string, d.oOlCnt)
+					for i, item := range d.items {
+						stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
+					}
+					sQuantityUpdateCases := make([]string, d.oOlCnt)
+					sYtdUpdateCases := make([]string, d.oOlCnt)
+					sOrderCntUpdateCases := make([]string, d.oOlCnt)
+					sRemoteCntUpdateCases := make([]string, d.oOlCnt)
+					if err := func() error {
+						rows, err := tx.Query(
+							ctx,
+							fmt.Sprintf(`
+							SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
+							FROM stock
+							WHERE (s_i_id, s_w_id) IN (%[2]s)
+							ORDER BY s_i_id
+							FOR UPDATE`,
+								d.dID, strings.Join(stockIDs, ", "),
+							),
+						)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+
+						for i := range d.items {
+							item := &d.items[i]
+
+							if !rows.Next() {
+								if err := rows.Err(); err != nil {
+									return err
+								}
+								return errors.New("missing stock row")
+							}
+
+							var sQuantity, sYtd, sOrderCnt, sRemoteCnt int
+							var sData string
+							if err := rows.Scan(&sQuantity, &sYtd, &sOrderCnt, &sRemoteCnt, &sData, &distInfos[i]); err != nil {
+								return err
+							}
+
+							if strings.Contains(sData, originalString) && strings.Contains(iDatas[i], originalString) {
+								item.brandGeneric = "B"
+							} else {
+								item.brandGeneric = "G"
+							}
+
+							newSQuantity := sQuantity - item.olQuantity
+							if sQuantity < item.olQuantity+10 {
+								newSQuantity += 91
+							}
+
+							newSRemoteCnt := sRemoteCnt
+							if item.remoteWarehouse {
+								newSRemoteCnt++
+							}
+
+							sQuantityUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSQuantity)
+							sYtdUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sYtd+item.olQuantity)
+							sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sOrderCnt+1)
+							sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSRemoteCnt)
+						}
+						if rows.Next() {
+							return errors.New("extra stock row")
+						}
+						return rows.Err()
+					}(); err != nil {
+						return errors.Wrap(err, "select stock failed")
+					}
+
+					// Insert row into the orders and new orders table.
+					if _, err := n.insertOrder.ExecTx(
+						ctx, tx,
+						d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
+					); err != nil {
+						return errors.Wrap(err, "insert order failed")
+					}
+					if _, err := n.insertNewOrder.ExecTx(
+						ctx, tx, d.oID, d.dID, d.wID,
+					); err != nil {
+						return errors.Wrap(err, "insert new_order failed")
+					}
+
+					// Update the stock table for each item.
+					if _, err := tx.Exec(
 						ctx,
 						fmt.Sprintf(`
-						SELECT i_price, i_name, i_data
-						FROM item
-						WHERE i_id IN (%[1]s)
-						ORDER BY i_id`,
-							iIDs,
+						UPDATE stock
+						SET
+							s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
+							s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
+							s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
+							s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END
+						WHERE (s_i_id, s_w_id) IN (%[5]s)`,
+							strings.Join(sQuantityUpdateCases, " "),
+							strings.Join(sYtdUpdateCases, " "),
+							strings.Join(sOrderCntUpdateCases, " "),
+							strings.Join(sRemoteCntUpdateCases, " "),
+							strings.Join(stockIDs, ", "),
 						),
-					)
-					if err != nil {
-						return err
+					); err != nil {
+						return errors.Wrap(err, "update stock failed")
 					}
-					defer rows.Close()
 
+					// Insert a new order line for each item in the order.
+					olValsStrings := make([]string, d.oOlCnt)
+					for i := range d.items {
+						item := &d.items[i]
+						item.olAmount = float64(item.olQuantity) * item.iPrice
+						d.totalAmount += item.olAmount
+
+						olValsStrings[i] = fmt.Sprintf("(%d,%d,%d,%d,%d,%d,%d,%f,'%s')",
+							d.oID,            // ol_o_id
+							d.dID,            // ol_d_id
+							d.wID,            // ol_w_id
+							item.olNumber,    // ol_number
+							item.olIID,       // ol_i_id
+							item.olSupplyWID, // ol_supply_w_id
+							item.olQuantity,  // ol_quantity
+							item.olAmount,    // ol_amount
+							distInfos[i],     // ol_dist_info
+						)
+					}
+					if _, err := tx.Exec(
+						ctx,
+						fmt.Sprintf(`
+						INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+						VALUES %s`,
+							strings.Join(olValsStrings, ", "),
+						),
+					); err != nil {
+						return errors.Wrap(err, "insert order_line failed")
+					}
+				} else {
+					// Literal implementation executing selects and updates individually.
+
+					// In the literal implementation, we perform the insert into the order and
+					// new order tables earlier than in the optimized implementation. This is because
+					// it more closely matches the TPC-C specification. We haven't yet tested if
+					// a similar change in the optimized implementation would result in a performance
+					// difference, but we're avoiding making the same change there just in case it
+					// does. In the future we may want to investigate, and if there's no change in
+					// performance in the optimized implementation, we can unify the two
+					// implementations for these two inserts.
+					if _, err := n.insertOrder.ExecTx(
+						ctx, tx,
+						d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
+					); err != nil {
+						return errors.Wrap(err, "insert order failed")
+					}
+					if _, err := n.insertNewOrder.ExecTx(
+						ctx, tx, d.oID, d.dID, d.wID,
+					); err != nil {
+						return errors.Wrap(err, "insert new_order failed")
+					}
+
+					// Process each item one by one.
 					for i := range d.items {
 						item := &d.items[i]
 						iData := &iDatas[i]
 
-						if !rows.Next() {
-							if err := rows.Err(); err != nil {
-								return err
+						// Query item information.
+						err := tx.QueryRow(
+							ctx,
+							`SELECT i_price, i_name, i_data
+							FROM item
+							WHERE i_id = $1`,
+							item.olIID,
+						).Scan(&item.iPrice, &item.iName, iData)
+
+						if err != nil {
+							if errors.Is(err, pgx.ErrNoRows) {
+								if rollback {
+									// 2.4.2.3: roll back when we're expecting a rollback due to
+									// simulated user error (invalid item id) and we actually
+									// can't find the item. The spec requires us to actually go
+									// to the database for this, even though we know earlier
+									// that the item has an invalid number.
+									n.config.auditor.newOrderRollbacks.Add(1)
+									return errSimulated
+								}
+								return errors.New("missing item row")
 							}
-							if rollback {
-								// 2.4.2.3: roll back when we're expecting a rollback due to
-								// simulated user error (invalid item id) and we actually
-								// can't find the item. The spec requires us to actually go
-								// to the database for this, even though we know earlier
-								// that the item has an invalid number.
-								n.config.auditor.newOrderRollbacks.Add(1)
-								return errSimulated
-							}
-							return errors.New("missing item row")
+							return errors.Wrap(err, "select item failed")
 						}
 
-						if err := rows.Scan(&item.iPrice, &item.iName, iData); err != nil {
-							return err
-						}
-					}
-					if rows.Next() {
-						return errors.New("extra item row")
-					}
-					return rows.Err()
-				}()
-				if err != nil {
-					return errors.Wrap(err, "select item failed")
-				}
-
-				stockIDs := make([]string, d.oOlCnt)
-				for i, item := range d.items {
-					stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
-				}
-				distInfos := make([]string, d.oOlCnt)
-				sQuantityUpdateCases := make([]string, d.oOlCnt)
-				sYtdUpdateCases := make([]string, d.oOlCnt)
-				sOrderCntUpdateCases := make([]string, d.oOlCnt)
-				sRemoteCntUpdateCases := make([]string, d.oOlCnt)
-				if err := func() error {
-					rows, err := tx.Query(
-						ctx,
-						fmt.Sprintf(`
-						SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
-						FROM stock
-						WHERE (s_i_id, s_w_id) IN (%[2]s)
-						ORDER BY s_i_id
-						FOR UPDATE`,
-							d.dID, strings.Join(stockIDs, ", "),
-						),
-					)
-					if err != nil {
-						return err
-					}
-					defer rows.Close()
-
-					for i := range d.items {
-						item := &d.items[i]
-
-						if !rows.Next() {
-							if err := rows.Err(); err != nil {
-								return err
-							}
-							return errors.New("missing stock row")
-						}
-
+						// Query stock information.
 						var sQuantity, sYtd, sOrderCnt, sRemoteCnt int
 						var sData string
-						if err := rows.Scan(&sQuantity, &sYtd, &sOrderCnt, &sRemoteCnt, &sData, &distInfos[i]); err != nil {
-							return err
+						distCol := fmt.Sprintf("s_dist_%02d", d.dID)
+						err = tx.QueryRow(
+							ctx,
+							fmt.Sprintf(`
+							SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, %s
+							FROM stock
+							WHERE s_i_id = $1 AND s_w_id = $2
+							FOR UPDATE`, distCol),
+							item.olIID, item.olSupplyWID,
+						).Scan(&sQuantity, &sYtd, &sOrderCnt, &sRemoteCnt, &sData, &distInfos[i])
+
+						if err != nil {
+							if errors.Is(err, pgx.ErrNoRows) {
+								return errors.New("missing stock row")
+							}
+							return errors.Wrap(err, "select stock failed")
 						}
 
-						if strings.Contains(sData, originalString) && strings.Contains(iDatas[i], originalString) {
+						// Process brand/generic flag.
+						if strings.Contains(sData, originalString) && strings.Contains(*iData, originalString) {
 							item.brandGeneric = "B"
 						} else {
 							item.brandGeneric = "G"
 						}
 
+						// Calculate new stock quantity.
 						newSQuantity := sQuantity - item.olQuantity
 						if sQuantity < item.olQuantity+10 {
 							newSQuantity += 91
 						}
 
+						// Calculate new remote count.
 						newSRemoteCnt := sRemoteCnt
 						if item.remoteWarehouse {
 							newSRemoteCnt++
 						}
 
-						sQuantityUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSQuantity)
-						sYtdUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sYtd+item.olQuantity)
-						sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sOrderCnt+1)
-						sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSRemoteCnt)
+						// Update stock.
+						_, err = tx.Exec(
+							ctx,
+							`UPDATE stock
+							SET s_quantity = $1, s_ytd = $2, s_order_cnt = $3, s_remote_cnt = $4
+							WHERE s_i_id = $5 AND s_w_id = $6`,
+							newSQuantity, sYtd+item.olQuantity, sOrderCnt+1, newSRemoteCnt, item.olIID, item.olSupplyWID,
+						)
+						if err != nil {
+							return errors.Wrap(err, "update stock failed")
+						}
+
+						// Calculate order line amount.
+						item.olAmount = float64(item.olQuantity) * item.iPrice
+						d.totalAmount += item.olAmount
+
+						// Insert order line.
+						_, err = tx.Exec(
+							ctx,
+							`INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+							VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+							d.oID, d.dID, d.wID, item.olNumber, item.olIID, item.olSupplyWID, item.olQuantity, item.olAmount, distInfos[i],
+						)
+						if err != nil {
+							return errors.Wrap(err, "insert order_line failed")
+						}
 					}
-					if rows.Next() {
-						return errors.New("extra stock row")
-					}
-					return rows.Err()
-				}(); err != nil {
-					return errors.Wrap(err, "select stock failed")
-				}
-
-				// Insert row into the orders and new orders table.
-				if _, err := n.insertOrder.ExecTx(
-					ctx, tx,
-					d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
-				); err != nil {
-					return errors.Wrap(err, "insert order failed")
-				}
-				if _, err := n.insertNewOrder.ExecTx(
-					ctx, tx, d.oID, d.dID, d.wID,
-				); err != nil {
-					return errors.Wrap(err, "insert new_order failed")
-				}
-
-				// Update the stock table for each item.
-				if _, err := tx.Exec(
-					ctx,
-					fmt.Sprintf(`
-					UPDATE stock
-					SET
-						s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
-						s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
-						s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
-						s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END
-					WHERE (s_i_id, s_w_id) IN (%[5]s)`,
-						strings.Join(sQuantityUpdateCases, " "),
-						strings.Join(sYtdUpdateCases, " "),
-						strings.Join(sOrderCntUpdateCases, " "),
-						strings.Join(sRemoteCntUpdateCases, " "),
-						strings.Join(stockIDs, ", "),
-					),
-				); err != nil {
-					return errors.Wrap(err, "update stock failed")
-				}
-
-				// Insert a new order line for each item in the order.
-				olValsStrings := make([]string, d.oOlCnt)
-				for i := range d.items {
-					item := &d.items[i]
-					item.olAmount = float64(item.olQuantity) * item.iPrice
-					d.totalAmount += item.olAmount
-
-					olValsStrings[i] = fmt.Sprintf("(%d,%d,%d,%d,%d,%d,%d,%f,'%s')",
-						d.oID,            // ol_o_id
-						d.dID,            // ol_d_id
-						d.wID,            // ol_w_id
-						item.olNumber,    // ol_number
-						item.olIID,       // ol_i_id
-						item.olSupplyWID, // ol_supply_w_id
-						item.olQuantity,  // ol_quantity
-						item.olAmount,    // ol_amount
-						distInfos[i],     // ol_dist_info
-					)
-				}
-				if _, err := tx.Exec(
-					ctx,
-					fmt.Sprintf(`
-					INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
-					VALUES %s`,
-						strings.Join(olValsStrings, ", "),
-					),
-				); err != nil {
-					return errors.Wrap(err, "insert order_line failed")
 				}
 
 				// 2.4.2.2: total_amount = sum(OL_AMOUNT) * (1 - C_DISCOUNT) * (1 + W_TAX + D_TAX)
