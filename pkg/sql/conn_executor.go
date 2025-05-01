@@ -1004,6 +1004,24 @@ func (s *Server) GetConnectionCount() int64 {
 	return s.mu.connectionCount
 }
 
+type ConnectionHandlerFactory interface {
+	SetupConn(
+		ctx context.Context,
+		args SessionArgs,
+		stmtBuf *StmtBuf,
+		clientComm ClientComm,
+		memMetrics MemoryMetrics,
+		onDefaultIntSizeChange func(newSize int32),
+		sessionID clusterunique.ID,
+	) (ConnectionHandler, error)
+	ServeConn(
+		ctx context.Context,
+		h ConnectionHandler,
+		reserved *mon.BoundAccount,
+		cancel context.CancelFunc,
+	) error
+}
+
 // ConnectionHandler is the interface between the result of SetupConn
 // and the ServeConn below. It encapsulates the connExecutor and hides
 // it away from other packages.

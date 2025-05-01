@@ -215,6 +215,10 @@ type ServerConfig struct {
 	// for operations on a vector index. It's stored as an `interface{}` due to
 	// package dependency cycles
 	VecIndexManager interface{}
+
+	// ConnectionHandlerFactory is used to create connection handlers for SQL
+	// connections. It's stored as an `interface{}` due to package dependency cycles.
+	ConnectionHandlerFactory interface{}
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

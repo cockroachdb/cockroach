@@ -85,6 +85,7 @@ func newTableHandler(
 	jobID jobspb.JobID,
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
+	session isql.Session,
 ) (*tableHandler, error) {
 	var table catalog.TableDescriptor
 
@@ -105,12 +106,12 @@ func newTableHandler(
 	sessionOverride := ieOverrideBase
 	sessionOverride.ApplicationName = fmt.Sprintf("%s-logical-replication-%d", sd.ApplicationName, jobID)
 
-	reader, err := newSQLRowReader(table, sessionOverride)
+	reader, err := newSQLRowReader(ctx, table, session)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := newSQLRowWriter(table, sessionOverride)
+	writer, err := newSQLRowWriter(ctx, table, session)
 	if err != nil {
 		return nil, err
 	}
@@ -152,27 +153,24 @@ func (t *tableHandler) attemptBatch(
 	ctx context.Context, batch []decodedEvent,
 ) (tableBatchStats, error) {
 	var stats tableBatchStats
-	err := t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+	var hasTombstoneUpdates bool
+	session := t.sqlWriter.session
+	err := session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
 			switch {
 			case event.isDelete && len(event.prevRow) != 0:
 				stats.deletes++
-				err := t.sqlWriter.DeleteRow(ctx, txn, event.originTimestamp, event.prevRow)
+				err := t.sqlWriter.DeleteRow(ctx, event.originTimestamp, event.prevRow)
 				if err != nil {
 					return err
 				}
 			case event.isDelete && len(event.prevRow) == 0:
-				stats.tombstoneUpdates++
-				tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.originTimestamp, event.row)
-				if err != nil {
-					return err
-				}
-				stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
+				hasTombstoneUpdates = true
+				// Skip: handled in its own transaction.
 			case event.prevRow == nil:
 				stats.inserts++
-				err := withSavepoint(ctx, txn.KV(), func() error {
-					return t.sqlWriter.InsertRow(ctx, txn, event.originTimestamp, event.row)
-				})
+				err := t.sqlWriter.InsertRow(ctx, event.originTimestamp, event.row)
 				if isLwwLoser(err) {
 					// Insert may observe a LWW failure if it attempts to write over a tombstone.
 					stats.kvLwwLosers++
@@ -183,7 +181,7 @@ func (t *tableHandler) attemptBatch(
 				}
 			case event.prevRow != nil:
 				stats.updates++
-				err := t.sqlWriter.UpdateRow(ctx, txn, event.originTimestamp, event.prevRow, event.row)
+				err := t.sqlWriter.UpdateRow(ctx, event.originTimestamp, event.prevRow, event.row)
 				if err != nil {
 					return err
 				}
@@ -196,6 +194,26 @@ func (t *tableHandler) attemptBatch(
 	if err != nil {
 		return tableBatchStats{}, err
 	}
+
+	if hasTombstoneUpdates {
+		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, event := range batch {
+				if event.isDelete && len(event.prevRow) == 0 {
+					stats.tombstoneUpdates++
+					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.originTimestamp, event.row)
+					if err != nil {
+						return err
+					}
+					stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return tableBatchStats{}, err
+		}
+	}
+
 	return stats, nil
 }
 
@@ -213,14 +231,7 @@ func (t *tableHandler) refreshPrevRows(
 		rows = append(rows, event.row)
 	}
 
-	var refreshedRows map[int]priorRow
-	err := t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		// TODO(jeffswenson): should we apply the batch in the same transaction
-		// that we perform the read refresh? We could maybe even use locking reads.
-		refreshedRows, err = t.sqlReader.ReadRows(ctx, txn, rows)
-		return err
-	})
+	refreshedRows, err := t.sqlReader.ReadRows(ctx, rows)
 	if err != nil {
 		return nil, tableBatchStats{}, err
 	}
