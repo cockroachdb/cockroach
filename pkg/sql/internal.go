@@ -1252,14 +1252,14 @@ func (ie *InternalExecutor) execInternal(
 		// into a type safe for reporting.
 		if retErr != nil || r == nil {
 			// Both retErr and r can be nil in case of panic.
-			if retErr != nil && !errIsRetryable(retErr) {
+			if retErr != nil && !ErrIsRetryable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 		} else {
 			r.errCallback = func(err error) error {
-				if err != nil && !errIsRetryable(err) {
+				if err != nil && !ErrIsRetryable(err) {
 					err = errors.Wrapf(err, "%s", opName)
 				}
 				return err
@@ -1354,7 +1354,7 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+		if err := stmtBuf.Push(ctx, BindStmt{InternalArgs: datums}); err != nil {
 			return nil, err
 		}
 
@@ -1763,6 +1763,19 @@ type InternalDB struct {
 	monitor    *mon.BytesMonitor
 }
 
+// Session implements isql.DB.
+func (ief *InternalDB) Session(
+	ctx context.Context, name string, options ...isql.ExecutorOption,
+) (isql.Session, error) {
+	var cfg isql.ExecutorConfig
+	cfg.Init(options...)
+	sd := cfg.GetSessionData()
+	if sd == nil {
+		sd = NewInternalSessionData(ctx, ief.server.cfg.Settings, redact.SafeString(name))
+	}
+	return ief.server.NewInternalSession(ctx, name, sd, ief.memMetrics, ief.monitor)
+}
+
 // NewShimInternalDB is used to bootstrap the server which needs access to
 // components which will ultimately have a handle to an InternalDB. Some of
 // those components may attempt to access the *kv.DB before the InternalDB
@@ -2059,7 +2072,7 @@ func (ief *InternalDB) txn(
 				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retryable error")
 			}
 			return commitTxnFn(ctx)
-		}); errIsRetryable(err) {
+		}); ErrIsRetryable(err) {
 			continue
 		} else {
 			if err == nil {
@@ -2135,4 +2148,10 @@ func (db *internalDBWithOverrides) Executor(opts ...isql.ExecutorOption) isql.Ex
 		o(sd)
 	}
 	return db.baseDB.Executor(isql.WithSessionData(sd))
+}
+
+func (db *internalDBWithOverrides) Session(
+	ctx context.Context, name string, opts ...isql.ExecutorOption,
+) (isql.Session, error) {
+	return nil, errors.New("internalDBWithOverrides has not implemented Session()")
 }
