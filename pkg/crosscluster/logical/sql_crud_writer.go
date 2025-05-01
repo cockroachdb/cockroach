@@ -44,13 +44,21 @@ func newCrudSqlWriter(
 	discard jobspb.LogicalReplicationDetails_Discard,
 	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	jobID jobspb.JobID,
-) (BatchHandler, error) {
+) (_ BatchHandler, err error) {
 	decoder, err := newEventDecoder(ctx, cfg.DB, evalCtx.Settings, procConfigByDestID)
 	if err != nil {
 		return nil, err
 	}
 
 	handlers := make(map[descpb.ID]*tableHandler)
+	defer func() {
+		if err != nil {
+			for _, handler := range handlers {
+				handler.Close(ctx)
+			}
+		}
+	}()
+
 	for dstDescID := range procConfigByDestID {
 		handler, err := newTableHandler(
 			ctx,
@@ -126,6 +134,9 @@ func eventsByTable(events []decodedEvent) func(yield func(descpb.ID, []decodedEv
 
 // Close implements BatchHandler.
 func (c *sqlCrudWriter) Close(ctx context.Context) {
+	for _, handler := range c.handlers {
+		handler.Close(ctx)
+	}
 }
 
 // GetLastRow implements BatchHandler.
