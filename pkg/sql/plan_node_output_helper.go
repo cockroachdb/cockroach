@@ -103,6 +103,10 @@ func (h *rowsAffectedOutputHelper) incAffectedRows() {
 	h.rowCount++
 }
 
+func (h *rowsAffectedOutputHelper) addAffectedRows(count int) {
+	h.rowCount += count
+}
+
 // rowsAffected returns the number of rows affected by the mutation operator.
 // This is intended for metadata/metrics, and may be called multiple times.
 func (h *rowsAffectedOutputHelper) rowsAffected() int64 {

@@ -75,8 +75,7 @@ type planNode interface {
 	// of results each time that Next() returns true.
 	//
 	// Available after startPlan(). It is illegal to call Next() after it returns
-	// false. It is legal to call Next() even if the node implements
-	// planNodeFastPath and the FastPathResults() method returns true.
+	// false.
 	Next(params runParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
@@ -154,17 +153,6 @@ type mutationPlanNode interface {
 	// returnsRowsAffected indicates that the planNode returns the number of
 	// rows affected by the mutation, rather than the rows themselves.
 	returnsRowsAffected() bool
-}
-
-// planNodeFastPath is implemented by nodes that can perform all their
-// work during startPlan(), possibly affecting even multiple rows. For
-// example, DELETE can do this.
-type planNodeFastPath interface {
-	// FastPathResults returns the affected row count and true if the
-	// node has no result set and has already executed when startPlan() completes.
-	// Note that Next() must still be valid even if this method returns
-	// true, although it may have nothing left to do.
-	FastPathResults() (int, bool)
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do
@@ -270,9 +258,6 @@ var _ planNode = &vectorSearchNode{}
 var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
-
-var _ planNodeFastPath = &controlJobsNode{}
-var _ planNodeFastPath = &controlSchedulesNode{}
 
 var _ planNodeReadingOwnWrites = &alterIndexNode{}
 var _ planNodeReadingOwnWrites = &alterSchemaNode{}

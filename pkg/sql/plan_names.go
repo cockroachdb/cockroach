@@ -148,6 +148,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&limitNode{}):                               "limit",
 	reflect.TypeOf(&lookupJoinNode{}):                          "lookup join",
 	reflect.TypeOf(&max1RowNode{}):                             "max1row",
+	reflect.TypeOf(&moveNode{}):                                "move",
 	reflect.TypeOf(&ordinalityNode{}):                          "ordinality",
 	reflect.TypeOf(&projectSetNode{}):                          "project set",
 	reflect.TypeOf(&reassignOwnedByNode{}):                     "reassign owned by",
