@@ -127,3 +127,7 @@ func (u *updateSwapNode) Close(ctx context.Context) {
 func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.modifiedRowCount()
 }
+
+func (u *updateSwapNode) returnsRowsAffected() bool {
+	return !u.run.rowsNeeded
+}

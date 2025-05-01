@@ -48,16 +48,15 @@ type deleteRangeNode struct {
 }
 
 var _ planNode = &deleteRangeNode{}
-var _ planNodeFastPath = &deleteRangeNode{}
 var _ mutationPlanNode = &deleteRangeNode{}
-
-// FastPathResults implements the planNodeFastPath interface.
-func (d *deleteRangeNode) FastPathResults() (int, bool) {
-	return d.rowCount, true
-}
 
 func (d *deleteRangeNode) rowsWritten() int64 {
 	return int64(d.rowCount)
+}
+
+func (d *deleteRangeNode) returnsRowsAffected() bool {
+	// DeleteRange always returns the number of rows deleted.
+	return true
 }
 
 // startExec implements the planNode interface.

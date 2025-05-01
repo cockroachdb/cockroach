@@ -540,6 +540,10 @@ func (n *insertFastPathNode) rowsWritten() int64 {
 	return n.run.modifiedRowCount()
 }
 
+func (n *insertFastPathNode) returnsRowsAffected() bool {
+	return !n.run.rowsNeeded
+}
+
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
