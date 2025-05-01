@@ -147,7 +147,7 @@ func (ex *connExecutor) execRelease(
 		}
 		// Committing the transaction failed. We'll go to state RestartWait if
 		// it's a retryable error, or to state RollbackWait otherwise.
-		if errIsRetryable(err) {
+		if ErrIsRetryable(err) {
 			// For certain retryable errors, we should turn them into client visible
 			// errors, since the client needs to retry now.
 			var conversionError error
