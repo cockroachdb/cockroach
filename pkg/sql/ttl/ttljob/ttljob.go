@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -59,8 +58,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
-	db := execCfg.DB
-	descsCol := jobExecCtx.ExtendedEvalContext().Descs
+	db := execCfg.InternalDB
 
 	settingsValues := execCfg.SV()
 	if err := ttlbase.CheckJobEnabled(settingsValues); err != nil {
@@ -84,8 +82,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 	var rowLevelTTL *catpb.RowLevelTTL
 	var relationName string
 	var entirePKSpan roachpb.Span
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, details.TableID)
+	if err := db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 		if err != nil {
 			return err
 		}
@@ -96,7 +94,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		if modificationTime.After(aost) {
 			return pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
-				"found a recent schema change on the table at %s, aborting",
+				"found a recent schema change on the table at %s, job will run at the next scheduled time",
 				modificationTime.Format(time.RFC3339),
 			)
 		}
@@ -111,7 +109,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			return pgerror.Newf(pgcode.OperatorIntervention, "ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
-		tn, err := descs.GetObjectName(ctx, txn, descsCol, desc)
+		tn, err := descs.GetObjectName(ctx, txn.KV(), txn.Descriptors(), desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,6 +50,7 @@ type SelectQueryParams struct {
 	RelationName      string
 	PKColNames        []string
 	PKColDirs         []catenumpb.IndexColumn_Direction
+	PKColTypes        []*types.T
 	Bounds            QueryBounds
 	AOSTDuration      time.Duration
 	SelectBatchSize   int64
@@ -113,6 +115,7 @@ func (b *selectQueryBuilder) BuildQuery() string {
 		b.RelationName,
 		b.PKColNames,
 		b.PKColDirs,
+		b.PKColTypes,
 		b.AOSTDuration,
 		b.TTLExpr,
 		len(b.Bounds.Start),
@@ -145,6 +148,13 @@ func (b *selectQueryBuilder) Run(
 			b.cachedQuery = b.BuildQuery()
 		}
 		query = b.cachedQuery
+	}
+	// Convert any DEnum args to their logical representation to avoid the risk
+	// of using the wrong version of the enum type descriptor.
+	for i, arg := range b.cachedArgs {
+		if enum, ok := arg.(*tree.DEnum); ok {
+			b.cachedArgs[i] = enum.LogicalRep
+		}
 	}
 
 	tokens, err := b.SelectRateLimiter.Acquire(ctx, b.SelectBatchSize)
@@ -266,7 +276,13 @@ func (b *deleteQueryBuilder) Run(
 	deleteArgs := b.cachedArgs[:1]
 	for _, row := range rows {
 		for _, col := range row {
-			deleteArgs = append(deleteArgs, col)
+			// Convert any DEnum args to their logical representation to avoid the risk
+			// of using the wrong version of the enum type descriptor.
+			if enum, ok := col.(*tree.DEnum); ok {
+				deleteArgs = append(deleteArgs, enum.LogicalRep)
+			} else {
+				deleteArgs = append(deleteArgs, col)
+			}
 		}
 	}
 

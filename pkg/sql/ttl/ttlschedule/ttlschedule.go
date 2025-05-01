@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -221,7 +222,7 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 
 func makeTTLJobDescription(
 	tableDesc catalog.TableDescriptor, tn tree.ObjectName, sv *settings.Values,
-) string {
+) (string, error) {
 	relationName := tn.FQString()
 	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
 	pkColNames := make([]string, 0, len(pkIndex.KeyColumnNames))
@@ -232,6 +233,10 @@ func makeTTLJobDescription(
 		buf.Reset()
 	}
 	pkColDirs := pkIndex.KeyColumnDirections
+	pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, pkIndex)
+	if err != nil {
+		return "", err
+	}
 	rowLevelTTL := tableDesc.GetRowLevelTTL()
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
 	numPkCols := len(pkColNames)
@@ -240,6 +245,7 @@ func makeTTLJobDescription(
 		relationName,
 		pkColNames,
 		pkColDirs,
+		pkColTypes,
 		ttlbase.DefaultAOSTDuration,
 		ttlExpirationExpr,
 		numPkCols,
@@ -257,7 +263,7 @@ func makeTTLJobDescription(
 -- for each span, iterate to find rows:
 %s
 -- then delete with:
-%s`, relationName, selectQuery, deleteQuery)
+%s`, relationName, selectQuery, deleteQuery), nil
 }
 
 func createRowLevelTTLJob(
@@ -278,8 +284,12 @@ func createRowLevelTTLJob(
 	if err != nil {
 		return 0, err
 	}
+	description, err := makeTTLJobDescription(tableDesc, tn, sv)
+	if err != nil {
+		return 0, err
+	}
 	record := jobs.Record{
-		Description: makeTTLJobDescription(tableDesc, tn, sv),
+		Description: description,
 		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID:      tableID,
