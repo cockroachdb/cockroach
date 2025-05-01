@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,6 +29,12 @@ func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string)
 	}
 }
 
+func newInternalSession(t *testing.T, s serverutils.ApplicationLayerInterface) isql.Session {
+	session, err := s.InternalDB().(isql.DB).Session(context.Background(), "test_session")
+	require.NoError(t, err)
+	return session
+}
+
 func TestSQLRowWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -38,7 +43,6 @@ func TestSQLRowWriter(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	internalDB := s.InternalDB().(isql.DB)
 
 	// Create a test table
 	sqlDB.Exec(t, `
@@ -49,47 +53,40 @@ func TestSQLRowWriter(t *testing.T) {
 		)
 	`)
 
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+
 	// Create a row writer
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ApplicationLayer().ExecutorConfig(), "test_table")
-	writer, err := newSQLRowWriter(desc, sessiondata.InternalExecutorOverride{})
+	writer, err := newSQLRowWriter(ctx, desc, session)
 	require.NoError(t, err)
 
 	// Test InsertRow
 	insertRow := makeTestRow(t, desc, 1, "test")
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.InsertRow(ctx, txn, s.Clock().Now(), insertRow)
-	}))
+	require.NoError(t, writer.InsertRow(ctx, s.Clock().Now(), insertRow))
 	require.Equal(t,
 		[][]string{{"1", "test", "NULL"}},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow
 	updateRow := makeTestRow(t, desc, 1, "updated")
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.UpdateRow(ctx, txn, s.Clock().Now(), insertRow, updateRow)
-	}))
+	require.NoError(t, writer.UpdateRow(ctx, s.Clock().Now(), insertRow, updateRow))
 	require.Equal(t,
 		[][]string{{"1", "updated", "NULL"}},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow with stale previous value
 	staleRow := makeTestRow(t, desc, 1, "test") // Using old value
-	err = internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.UpdateRow(ctx, txn, s.Clock().Now(), staleRow, updateRow)
-	})
+	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
 	require.ErrorIs(t, err, errStalePreviousValue)
 
 	// Test DeleteRow
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.DeleteRow(ctx, txn, s.Clock().Now(), updateRow)
-	}))
+	require.NoError(t, writer.DeleteRow(ctx, s.Clock().Now(), updateRow))
 	require.Equal(t,
 		[][]string{},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
 
 	// Test DeleteRow with stale value
-	err = internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.DeleteRow(ctx, txn, s.Clock().Now(), staleRow)
-	})
+	err = writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
 	require.ErrorIs(t, err, errStalePreviousValue)
 }

@@ -54,6 +54,22 @@ var (
 		AST: &tree.RollbackTransaction{},
 		SQL: "ROLLBACK",
 	}
+
+	savePointBegin = statements.Statement[tree.Statement]{
+		AST: &tree.Savepoint{
+			Name: tree.Name("internal_session"),
+		},
+	}
+	savePointRelease = statements.Statement[tree.Statement]{
+		AST: &tree.ReleaseSavepoint{
+			Savepoint: tree.Name("internal_session"),
+		},
+	}
+	savePointRollback = statements.Statement[tree.Statement]{
+		AST: &tree.RollbackToSavepoint{
+			Savepoint: tree.Name("internal_session"),
+		},
+	}
 )
 
 var _ isql.Session = &InternalSession{}
@@ -115,6 +131,23 @@ func (i *InternalSession) Txn(ctx context.Context, do func(ctx context.Context) 
 	}
 
 	return err
+}
+
+func (i *InternalSession) Savepoint(ctx context.Context, do func(ctx context.Context) error) error {
+	if err := i.executeStatement(ctx, savePointBegin); err != nil {
+		return errors.Wrap(err, "failed to create savepoint")
+	}
+
+	innerErr := do(ctx)
+	if innerErr != nil {
+		savePointErr := i.executeStatement(ctx, savePointRollback)
+		// We return the save point error as the primary error because we don't
+		// want errors.Is to indicate the error was the inner error if rolling back
+		// the savepoint failed.
+		return errors.CombineErrors(savePointErr, innerErr)
+	}
+
+	return i.executeStatement(ctx, savePointRelease)
 }
 
 func (i *InternalSession) Prepare(
