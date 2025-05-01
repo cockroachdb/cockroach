@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -53,12 +52,16 @@ func TestSQLRowReader(t *testing.T) {
 
 	// Create sqlRowReader for source table
 	srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
-	srcReader, err := newSQLRowReader(srcDesc, sessiondata.InternalExecutorOverride{})
+	srcSession := newInternalSession(t, s)
+	defer srcSession.Close(ctx)
+	srcReader, err := newSQLRowReader(ctx, srcDesc, srcSession)
 	require.NoError(t, err)
 
 	// Create sqlRowReader for destination table
 	dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "b", "tab")
-	dstReader, err := newSQLRowReader(dstDesc, sessiondata.InternalExecutorOverride{})
+	dstSession := newInternalSession(t, server.Server(0))
+	defer dstSession.Close(ctx)
+	dstReader, err := newSQLRowReader(ctx, dstDesc, dstSession)
 	require.NoError(t, err)
 
 	// Create test rows to look up
@@ -69,7 +72,7 @@ func TestSQLRowReader(t *testing.T) {
 	readRows := func(t *testing.T, db isql.DB, rows []tree.Datums, reader *sqlRowReader) map[int]priorRow {
 		var result map[int]priorRow
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			result, err = reader.ReadRows(ctx, txn, rows)
+			result, err = reader.ReadRows(ctx, rows)
 			require.NoError(t, err)
 			return err
 		}))

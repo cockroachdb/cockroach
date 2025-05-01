@@ -4442,6 +4442,22 @@ func (m *sessionDataMutator) SetUseSwapMutations(val bool) {
 	m.data.UseSwapMutations = val
 }
 
+// SetOriginTimestampForLogicalDataReplication sets the origin timestamp for logical data replication.
+func (m *sessionDataMutator) SetOriginTimestampForLogicalDataReplication(val string) error {
+	if val == "" {
+		m.data.OriginTimestampForLogicalDataReplication = hlc.Timestamp{}
+		m.data.OriginIDForLogicalDataReplication = 0
+		return nil
+	}
+	ts, err := hlc.ParseHLC(val)
+	if err != nil {
+		return errors.Wrapf(err, "invalid origin timestamp format: %s", val)
+	}
+	m.data.OriginTimestampForLogicalDataReplication = ts
+	m.data.OriginIDForLogicalDataReplication = 1
+	return nil
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
