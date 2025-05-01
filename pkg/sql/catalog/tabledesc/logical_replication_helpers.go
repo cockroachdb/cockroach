@@ -58,6 +58,17 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
+	// TODO(jeffswenson): extract this into a `checkForbiddenTypes` helper to
+	// match the other functions.
+	for _, col := range dst.Columns {
+		if col.Type.Family() == types.RefCursorFamily {
+			return pgerror.Wrapf(
+				errors.Newf("column %s is a RefCursor", col.Name),
+				pgcode.InvalidTableDefinition,
+				cannotLDRMsg)
+		}
+	}
+
 	return nil
 }
 
