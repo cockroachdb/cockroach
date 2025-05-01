@@ -16,12 +16,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// setEnvIfNotExists sets an environment variable only if it doesn't already exist.
+func setEnvIfNotExists(key, value string) {
+	if _, exists := os.LookupEnv(key); !exists {
+		_ = os.Setenv(key, value)
+	}
+}
+
 func init() {
-	// Set environment variables for the GCE project and DNS configurations.
-	_ = os.Setenv("ROACHPROD_DNS", "drt.crdb.io")
-	_ = os.Setenv("ROACHPROD_GCE_DNS_DOMAIN", "drt.crdb.io")
-	_ = os.Setenv("ROACHPROD_GCE_DNS_ZONE", "drt")
-	_ = os.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
+	// Set environment variables for the GCE project and DNS configurations if not already set.
+	setEnvIfNotExists("ROACHPROD_DNS", "drt.crdb.io")
+	setEnvIfNotExists("ROACHPROD_GCE_DNS_DOMAIN", "drt.crdb.io")
+	setEnvIfNotExists("ROACHPROD_GCE_DNS_ZONE", "drt")
+	setEnvIfNotExists("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
 
 	if _, exists := os.LookupEnv("DD_API_KEY"); !exists {
 		// set the DD_API_KEY if we are able to fetch it from the secrets.
