@@ -21,7 +21,6 @@ import (
 // DB enables clients to create and execute sql transactions from code inside
 // the database. Multi-statement transactions should leverage the Txn method.
 type DB interface {
-
 	// KV returns the underlying *kv.DB.
 	KV() *kv.DB
 
@@ -37,6 +36,18 @@ type DB interface {
 
 	// Executor constructs an internal executor not bound to a transaction.
 	Executor(...ExecutorOption) Executor
+
+	// Session constructs a SQL session that can be used internally. Session is
+	// distinct from Executor because it is internally stateful and allows using
+	// features like prepared statements and the query cache.
+	//
+	// TODO(jeffswenson): implement the isql.Executor interface using
+	// isql.Session. Then metamorphically use isql.Session as sql.InternalExecutor.
+	// The main features isql.Session is missing are:
+	// 1. The ability to be initialized as rw inside a root transaction or ro in a leaf transaction.
+	// 2. The ability to expose the underlying kv.Txn so that raw KV operations
+	//    are interleaved with SQL.
+	Session(ctx context.Context, name string, options ...ExecutorOption) (Session, error)
 }
 
 // Txn is an internal sql transaction.
