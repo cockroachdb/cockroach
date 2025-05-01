@@ -329,8 +329,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// TODO(pav-kv): make a method to initialize the log storage.
 	ls := r.asLogStorage()
 	ls.shMu.raftTruncState = s.TruncState
-	ls.shMu.lastIndexNotDurable = s.LastEntryID.Index
-	ls.shMu.lastTermNotDurable = s.LastEntryID.Term
+	ls.shMu.last = s.LastEntryID
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.

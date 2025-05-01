@@ -1921,7 +1921,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ls := r.asLogStorage()
 	ri.TruncatedState = (protoutil.Clone(&ls.shMu.raftTruncState)).(*kvserverpb.RaftTruncatedState)
 
-	ri.LastIndex = ls.shMu.lastIndexNotDurable
+	ri.LastIndex = ls.shMu.last.Index
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = ls.shMu.raftLogSize
 	ri.RaftLogSizeTrusted = ls.shMu.raftLogSizeTrusted

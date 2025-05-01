@@ -59,13 +59,9 @@ type replicaLogStorage struct {
 		// last entry of the log prefix that has been compacted out from the raft
 		// log storage.
 		raftTruncState kvserverpb.RaftTruncatedState
-		// Last index/term written to the raft log (not necessarily durable locally
-		// or committed by the group). Note that lastTermNotDurable may be 0 (and
-		// thus invalid) even when lastIndexNotDurable is known, in which case the
-		// term will have to be retrieved from the Raft log entry. Use the
-		// invalidLastTerm constant for this case.
-		lastIndexNotDurable kvpb.RaftIndex
-		lastTermNotDurable  kvpb.RaftTerm
+		// last is the index/term of the last entry written to the raft log (not
+		// necessarily durable locally or committed by the group).
+		last logstore.EntryID
 		// raftLogSize is the approximate size in bytes of the persisted raft
 		// log, including sideloaded entries' payloads. The value itself is not
 		// persisted and is computed lazily, paced by the raft log truncation
@@ -213,13 +209,13 @@ func (r *replicaLogStorage) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftT
 	// It may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
 	// NB: two common cases are checked first.
-	if r.shMu.lastIndexNotDurable == index {
-		return r.shMu.lastTermNotDurable, nil
+	if r.shMu.last.Index == index {
+		return r.shMu.last.Term, nil
 	} else if index == r.shMu.raftTruncState.Index {
 		return r.shMu.raftTruncState.Term, nil
 	} else if index < r.shMu.raftTruncState.Index {
 		return 0, raft.ErrCompacted
-	} else if index > r.shMu.lastIndexNotDurable {
+	} else if index > r.shMu.last.Index {
 		return 0, raft.ErrUnavailable
 	}
 	// Check if the entry is cached, to avoid storage access.
@@ -259,7 +255,7 @@ func (r *Replica) GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 // LastIndex implements the raft.LogStorage interface.
 // Requires that r.mu is held for reading.
 func (r *replicaLogStorage) LastIndex() uint64 {
-	return uint64(r.shMu.lastIndexNotDurable)
+	return uint64(r.shMu.last.Index)
 }
 
 // raftLastIndexRLocked implements the LastIndex() call.
@@ -375,7 +371,7 @@ func (r *replicaRaftMuLogSnap) Term(index uint64) (uint64, error) {
 // Requires that r.raftMu is held.
 func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 	r.raftMu.AssertHeld()
-	return uint64(r.shMu.lastIndexNotDurable)
+	return uint64(r.shMu.last.Index)
 }
 
 // Compacted implements the raft.LogStorageSnapshot interface.
