@@ -388,13 +388,13 @@ func (ex *connExecutor) execBind(
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
 	qargs := make(tree.QueryArguments, numQArgs)
-	if bindCmd.internalArgs != nil {
-		if len(bindCmd.internalArgs) != int(numQArgs) {
+	if bindCmd.InternalArgs != nil {
+		if len(bindCmd.InternalArgs) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"expected %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
+					"expected %d arguments, got %d", numQArgs, len(bindCmd.InternalArgs)))
 		}
-		for i, datum := range bindCmd.internalArgs {
+		for i, datum := range bindCmd.InternalArgs {
 			t := ps.InferredTypes[i]
 			if oid := datum.ResolvedType().Oid(); datum != tree.DNull && oid != t {
 				return retErr(
