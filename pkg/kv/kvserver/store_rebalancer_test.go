@@ -495,7 +495,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 	acc := NewReplicaAccumulator(load.Queries, load.CPU)
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
-		repl := &Replica{store: s, RangeID: rangeID}
+		repl := &Replica{store: s, RangeID: rangeID, logStorage: &replicaLogStorage{}}
 		repl.shMu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
 		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
@@ -512,7 +512,7 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 		}
 		// NB: We set the index to 2 corresponding to the match in
 		// TestingRaftStatusFn. Matches that are 0 are considered behind.
-		repl.shMu.raftTruncState = kvserverpb.RaftTruncatedState{Index: 2}
+		repl.asLogStorage().shMu.raftTruncState = kvserverpb.RaftTruncatedState{Index: 2}
 		for _, storeID := range r.nonVoters {
 			repl.shMu.state.Desc.InternalReplicas = append(repl.shMu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),

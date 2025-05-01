@@ -502,21 +502,22 @@ func (r *Replica) handleLeaseResult(
 // updates the log size, and truncates the raft log cache.
 func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
+	ls := r.asLogStorage()
 	// NB: The expected first index can be zero if this proposal is from before
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && ls.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
 
 	r.mu.Lock()
-	r.shMu.raftTruncState = pt.RaftTruncatedState
+	ls.shMu.raftTruncState = pt.RaftTruncatedState
 	// Ensure the raft log size is not negative since it isn't persisted between
 	// server restarts.
 	// TODO(pav-kv): should we distrust the log size if it goes negative?
-	r.shMu.raftLogSize = max(r.shMu.raftLogSize+pt.logDeltaBytes, 0)
-	r.shMu.raftLogLastCheckSize = max(r.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
+	ls.shMu.raftLogSize = max(ls.shMu.raftLogSize+pt.logDeltaBytes, 0)
+	ls.shMu.raftLogLastCheckSize = max(ls.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
 	if !pt.isDeltaTrusted {
-		r.shMu.raftLogSizeTrusted = false
+		ls.shMu.raftLogSizeTrusted = false
 	}
 	r.mu.Unlock()
 
@@ -532,7 +533,7 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 // truncation. It removes the obsolete sideloaded entries if any.
 func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	index := r.shMu.raftTruncState.Index
+	index := r.asLogStorage().shMu.raftTruncState.Index
 	// Truncate the sideloaded storage. This is safe because the new truncated
 	// state is already synced. If it wasn't, a crash right after removing the
 	// sideloaded entries could result in missing entries in the log.

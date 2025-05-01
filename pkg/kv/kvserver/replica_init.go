@@ -207,6 +207,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 
 	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
+
+	// Initialize all the components of the log storage.
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
@@ -214,11 +216,23 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store.limiters.BulkIOWriteRate,
 		store.TODOEngine(),
 	)
-	r.raftMu.logStorage = &logstore.LogStore{
+	r.logStorage = &replicaLogStorage{
+		ctx: r.raftCtx,
+		mux: mutexPair{
+			mu:     (*syncutil.RWMutex)(&r.mu.ReplicaMutex),
+			raftMu: &r.raftMu.Mutex,
+		},
+		raftEntriesMonitor: store.cfg.RaftEntriesMonitor,
+		onSync:             (*replicaSyncCallback)(r),
+		metrics:            store.metrics,
+	}
+	r.logStorage.mu.stateLoader = logstore.NewStateLoader(rangeID)
+	r.logStorage.raftMu.stateLoader = logstore.NewStateLoader(rangeID)
+	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     rangeID,
 		Engine:      store.TODOEngine(),
 		Sideload:    r.raftMu.sideloaded,
-		StateLoader: r.raftMu.stateLoader.StateLoader,
+		StateLoader: r.logStorage.raftMu.stateLoader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
 		// given range ID, to ensure that callbacks are processed in order.
 		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],
@@ -316,9 +330,10 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
 		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
 	}
-	r.shMu.raftTruncState = s.TruncState
-	r.shMu.lastIndexNotDurable = s.LastEntryID.Index
-	r.shMu.lastTermNotDurable = s.LastEntryID.Term
+	logStorage := r.asLogStorage()
+	logStorage.shMu.raftTruncState = s.TruncState
+	logStorage.shMu.lastIndexNotDurable = s.LastEntryID.Index
+	logStorage.shMu.lastTermNotDurable = s.LastEntryID.Term
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
