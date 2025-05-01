@@ -17,6 +17,7 @@ import (
 // are not shared between sessions.
 type PreparedStatement struct {
 	Name string
+	Args []*types.T
 }
 
 type Session interface {
@@ -63,6 +64,8 @@ type Session interface {
 	// 	return err
 	// }
 	Txn(ctx context.Context, do func(context.Context) error) error
+
+	Savepoint(ctx context.Context, do func(context.Context) error) error
 
 	// Close closes the session and cleans up internal resources.
 	Close(ctx context.Context)

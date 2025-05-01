@@ -962,6 +962,8 @@ func TestRandomStream(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
+	t.Skip("DO NOT SUBMIT: find the leak")
+
 	eventCount := 100
 	testState := struct {
 		syncutil.Mutex

@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -50,6 +52,26 @@ func newCrudSqlWriter(
 		return nil, err
 	}
 
+	sd = sd.Clone()
+	sd.PlanCacheMode = sessiondatapb.PlanCacheModeForceGeneric
+	sd.VectorizeMode = sessiondatapb.VectorizeOff
+	sd.UseSwapMutations = true
+	sd.BufferedWritesEnabled = false
+
+	// Create a memory monitor for the session
+	//metrics := sql.MemoryMetrics{}
+	//sessionMon := mon.NewMonitor(mon.Options{
+	//	Name:     mon.MakeName("crud-writer-session"),
+	//	CurCount: metrics.CurBytesCount,
+	//	MaxHist:  metrics.MaxBytesHist,
+	//	Settings: evalCtx.Settings,
+	//})
+	//sessionMon.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
+	session, err := cfg.DB.Session(ctx, "logical-data-replication", isql.WithSessionData(sd))
+	if err != nil {
+		return nil, err
+	}
+
 	handlers := make(map[descpb.ID]*tableHandler)
 	for dstDescID := range procConfigByDestID {
 		handler, err := newTableHandler(
@@ -61,6 +83,7 @@ func newCrudSqlWriter(
 			jobID,
 			cfg.LeaseManager.(*lease.Manager),
 			evalCtx.Settings,
+			session,
 		)
 		if err != nil {
 			return nil, err
@@ -126,6 +149,9 @@ func eventsByTable(events []decodedEvent) func(yield func(descpb.ID, []decodedEv
 
 // Close implements BatchHandler.
 func (c *sqlCrudWriter) Close(ctx context.Context) {
+	for _, handler := range c.handlers {
+		handler.sqlWriter.session.Close(ctx)
+	}
 }
 
 // GetLastRow implements BatchHandler.
