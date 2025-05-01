@@ -193,8 +193,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
-	// NB: state and raftTruncState will be loaded when the replica gets
-	// initialized.
+	// NB: state will be loaded when the replica gets initialized.
 	r.shMu.state = uninitState
 
 	r.rangeStr.store(replicaID, uninitState.Desc)
@@ -208,7 +207,9 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
 
-	// Initialize all the components of the log storage.
+	// Initialize all the components of the log storage. The state of the log
+	// storage, such as RaftTruncatedState and the last entry ID, will be loaded
+	// when the replica is initialized.
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
@@ -328,7 +329,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 	// TODO(pav-kv): make a method to initialize the log storage.
 	ls := r.asLogStorage()
-	ls.shMu.raftTruncState = s.TruncState
+	ls.shMu.trunc = s.TruncState
 	ls.shMu.last = s.LastEntryID
 
 	// Initialize the Raft group. This may replace a Raft group that was installed

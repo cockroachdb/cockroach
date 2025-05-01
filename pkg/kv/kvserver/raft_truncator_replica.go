@@ -26,7 +26,7 @@ func (r *raftTruncatorReplica) getRangeID() roachpb.RangeID {
 func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState {
 	r.mu.Lock() // TODO(pav-kv): not needed if raftMu is held.
 	defer r.mu.Unlock()
-	return (*Replica)(r).asLogStorage().shMu.raftTruncState
+	return (*Replica)(r).asLogStorage().shMu.trunc
 }
 
 func (r *raftTruncatorReplica) stagePendingTruncation(_ context.Context, pt pendingTruncation) {

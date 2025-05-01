@@ -507,13 +507,13 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	pt.isDeltaTrusted = pt.isDeltaTrusted && ls.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && ls.shMu.trunc.Index+1 == pt.expectedFirstIndex
 
 	// TODO(pav-kv): move this logic to replicaLogStorage type.
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		ls.shMu.raftTruncState = pt.RaftTruncatedState
+		ls.shMu.trunc = pt.RaftTruncatedState
 		// Ensure the raft log size is not negative since it isn't persisted between
 		// server restarts.
 		// TODO(pav-kv): should we distrust the log size if it goes negative?
@@ -536,7 +536,7 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 // truncation. It removes the obsolete sideloaded entries if any.
 func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	index := r.asLogStorage().shMu.raftTruncState.Index
+	index := r.asLogStorage().shMu.trunc.Index
 	// Truncate the sideloaded storage. This is safe because the new truncated
 	// state is already synced. If it wasn't, a crash right after removing the
 	// sideloaded entries could result in missing entries in the log.
