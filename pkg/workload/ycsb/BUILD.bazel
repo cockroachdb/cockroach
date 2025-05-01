@@ -7,7 +7,6 @@ go_library(
         "skewed_latest_generator.go",
         "uniform_generator.go",
         "ycsb.go",
-        "zipfgenerator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/ycsb",
     visibility = ["//visibility:public"],
@@ -20,6 +19,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
+        "//pkg/workload/workloadimpl",
         "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgxv5",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//:pgx",
@@ -32,14 +32,6 @@ go_library(
 go_test(
     name = "ycsb_test",
     size = "medium",
-    srcs = [
-        "main_test.go",
-        "zipfgenerator_test.go",
-    ],
-    embed = [":ycsb"],
+    srcs = ["main_test.go"],
     shard_count = 16,
-    deps = [
-        "//pkg/testutils/skip",
-        "//pkg/util/leaktest",
-    ],
 )
