@@ -24,7 +24,7 @@ jobs:
 
             const query = `
               query SearchPRs() {
-                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only", type: ISSUE, first: 100) {
+                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only -author:blathers-crl[bot]", type: ISSUE, first: 100) {
                   nodes {
                     ... on PullRequest {
                       number
