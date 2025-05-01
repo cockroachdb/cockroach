@@ -1059,7 +1059,11 @@ func maybeForceEnrichedEnvelope(t testing.TB, create string, f cdctest.TestFeedF
 	}
 
 	switch f.(type) {
-	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory:
+	// Skip these because:
+	// - sinkless feeds can't be tracked by job id
+	// - sql & pulsar are not supported
+	// - cloudstorage uses parquet sometimes which complicates things
+	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory:
 		return create, false, nil
 	}
 
