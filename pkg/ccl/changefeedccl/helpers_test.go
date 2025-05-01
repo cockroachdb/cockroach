@@ -1024,19 +1024,7 @@ func feed(
 ) cdctest.TestFeed {
 	t.Helper()
 
-	// Don't force enriched envelopes for sinkless feeds since they're harder
-	// to keep track of.
-	if _, isSinkless := f.(*sinklessFeedFactory); isSinkless {
-		feed, err := f.Feed(create, args...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return feed
-	}
-	// TODO: not webhook also since topic is missing in enriched envelope
-	// OR fix this lmao
-
-	create, forced, err := maybeForceEnrichedEnvelope(create)
+	create, forced, err := maybeForceEnrichedEnvelope(t, create, f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1063,12 +1051,19 @@ func feed(
 	return feed
 }
 
-func maybeForceEnrichedEnvelope(create string) (string, bool, error) {
+func maybeForceEnrichedEnvelope(t testing.TB, create string, f cdctest.TestFeedFactory) (string, bool, error) {
 	forceEnrichedEnvelope = true // dbg
 
 	if !forceEnrichedEnvelope {
 		return create, false, nil
 	}
+
+	switch f.(type) {
+	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory:
+		return create, false, nil
+	}
+
+	t.Logf("forcing enriched envelope for %s", create)
 
 	createStmt, err := parser.ParseOne(create)
 	if err != nil {
@@ -1094,7 +1089,7 @@ func maybeForceEnrichedEnvelope(create string) (string, bool, error) {
 			Value: tree.NewDString("enriched"),
 		})
 	}
-	// Include the source so we can use the existing assertions.
+	// Include the source so we can transform the messages back to wrapped properly.
 	opts = append(opts, tree.KVOption{
 		Key:   "enriched_properties",
 		Value: tree.NewDString("source"),
