@@ -49,8 +49,8 @@ var TinyFixture = TpccFixture{
 	ImportWarehouses:       10,
 	WorkloadWarehouses:     10,
 	IncrementalChainLength: 4,
-	CompactionThreshold:    3,
-	CompactionWindow:       2,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "700MiB",
 }
 
@@ -61,8 +61,8 @@ var SmallFixture = TpccFixture{
 	ImportWarehouses:       5000,
 	WorkloadWarehouses:     1000,
 	IncrementalChainLength: 48,
-	CompactionThreshold:    3,
-	CompactionWindow:       2,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "350GiB",
 }
 
@@ -73,8 +73,8 @@ var MediumFixture = TpccFixture{
 	ImportWarehouses:       30000,
 	WorkloadWarehouses:     5000,
 	IncrementalChainLength: 400,
-	CompactionThreshold:    3,
-	CompactionWindow:       2,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "2TiB",
 }
 
@@ -87,8 +87,8 @@ var LargeFixture = TpccFixture{
 	ImportWarehouses:       300000,
 	WorkloadWarehouses:     7500,
 	IncrementalChainLength: 400,
-	CompactionThreshold:    3,
-	CompactionWindow:       2,
+	CompactionThreshold:    4,
+	CompactionWindow:       3,
 	RestoredSizeEstimate:   "20TiB",
 }
 
