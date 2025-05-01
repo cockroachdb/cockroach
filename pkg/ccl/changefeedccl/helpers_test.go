@@ -1063,11 +1063,12 @@ func maybeForceEnrichedEnvelope(t testing.TB, create string, f cdctest.TestFeedF
 	// - sinkless feeds can't be tracked by job id
 	// - sql & pulsar are not supported
 	// - cloudstorage uses parquet sometimes which complicates things
-	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory:
+	// - externalConnectionFeedFactory wraps another feed type but it could be included with a little more work.
+	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory, *externalConnectionFeedFactory:
 		return create, false, nil
 	}
 
-	t.Logf("forcing enriched envelope for %s", create)
+	t.Logf("forcing enriched envelope for %T - %s", f, create)
 
 	createStmt, err := parser.ParseOne(create)
 	if err != nil {
