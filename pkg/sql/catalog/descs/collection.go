@@ -334,8 +334,9 @@ func (tc *Collection) WriteDescToBatch(
 	}
 	desc.MaybeIncrementVersion()
 	// Replicated PCR descriptors cannot be modified unless the collection
-	// is setup for updating them.
-	if !tc.readerCatalogSetup && desc.GetReplicatedPCRVersion() != 0 {
+	// is setup for updating them. If write validation is disabled then, allow
+	// PCR reader catalog descriptors to be modified, otherwise repair is impossible.
+	if !tc.readerCatalogSetup && desc.GetReplicatedPCRVersion() != 0 && !tc.skipValidationOnWrite {
 		return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 			"replicated %s %s (%d) cannot be mutated",
 			desc.GetObjectTypeString(),
