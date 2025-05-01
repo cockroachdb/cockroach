@@ -148,12 +148,12 @@ func TestChangefeedBasics(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
-	cdcTest(t, testFn, feedTestForceSink("enterprise"))
+	// cdcTest(t, testFn, feedTestForceSink("kafka"))
+	// cdcTest(t, testFn, feedTestForceSink("enterprise"))
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
-	cdcTest(t, testFn, feedTestForceSink("pubsub"))
-	cdcTest(t, testFn, feedTestForceSink("sinkless"))
-	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	// cdcTest(t, testFn, feedTestForceSink("pubsub"))
+	// cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	// cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.

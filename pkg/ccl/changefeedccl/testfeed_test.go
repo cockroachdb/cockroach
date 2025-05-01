@@ -2316,12 +2316,21 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 func extractTopicFromJSONValue(
 	envelopeType changefeedbase.EnvelopeType, wrapped []byte,
 ) (topic string, value []byte, err error) {
+	// Enriched envelopes dont have the topic in them per se but they have the table name so use that.
+	if envelopeType == changefeedbase.OptEnvelopeEnriched {
+		var parsed map[string]any
+		if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
+			return "", nil, err
+		}
+		topic = parsed["source"].(map[string]any)["table_name"].(string)
+		return topic, wrapped, nil
+	}
+
 	var topicRaw gojson.RawMessage
 	topicRaw, value, err = extractFieldFromJSONValue("topic", envelopeType, wrapped)
 	if err != nil {
 		return "", nil, err
 	}
-	// TODO: this, or skip this method for enriched
 	if topicRaw == nil {
 		return "", value, nil
 	}
@@ -2387,6 +2396,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
 							return nil, err
 						}
+						// here?
 						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
 							return nil, err
 						}
