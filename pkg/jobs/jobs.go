@@ -942,3 +942,14 @@ func LoadJobProgress(
 	}
 	return progress, nil
 }
+
+// ParseState validates and returns a jobs.State from a string, or an error if invalid.
+func ParseState(s string) (State, error) {
+	switch State(s) {
+	case StatePending, StateRunning, StatePaused, StateFailed, StateReverting,
+		StateSucceeded, StateCanceled, StateCancelRequested, StatePauseRequested, StateRevertFailed:
+		return State(s), nil
+	default:
+		return "", errors.Newf("invalid job status: %q", s)
+	}
+}
