@@ -144,9 +144,10 @@ type logicalReplicationWriterProcessor struct {
 
 	purgatory purgatory
 
-	seenKeys  map[uint64]int64
-	dupeCount int64
-	seenEvery log.EveryN
+	seenKeys   map[uint64]int64
+	dupeCount  int64
+	seenEvery  log.EveryN
+	retryEvery log.EveryN
 }
 
 var (
@@ -224,9 +225,10 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
-		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
-		seenEvery: log.Every(1 * time.Minute),
+		dlqClient:  InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
+		metrics:    flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
+		seenEvery:  log.Every(1 * time.Minute),
+		retryEvery: log.Every(1 * time.Minute),
 	}
 	lrw.purgatory = purgatory{
 		deadline:    func() time.Duration { return retryQueueAgeLimit.Get(&flowCtx.Cfg.Settings.SV) },
@@ -1039,6 +1041,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 							}
 							stats.processed.dlq++
 						} else {
+							if lrw.retryEvery.ShouldLog() {
+								log.Dev.Warningf(ctx, "retrying failed apply: %+v", err)
+							}
 							stats.notProcessed.count++
 							stats.notProcessed.bytes += int64(batch[i].Size())
 						}
