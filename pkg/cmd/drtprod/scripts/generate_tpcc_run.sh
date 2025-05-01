@@ -99,6 +99,7 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
   cat <<EOF >/tmp/tpcc_run_${suffix}.sh
 #!/usr/bin/env bash
 
+export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./drtprod sync
 $([ "$execute_script" = "true" ] && [ "$NODE" -eq 0 ] && echo "${pwd}/tpcc_init_${suffix}.sh")
 PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
