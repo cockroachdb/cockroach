@@ -174,7 +174,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 	group := ctxgroup.WithContext(ctx)
 	processorSpanCount := int64(len(ttlSpec.Spans))
-	processorConcurrency := int64(runtime.GOMAXPROCS(0))
+	processorConcurrency := ttlbase.GetProcessorConcurrency(&flowCtx.Cfg.Settings.SV, int64(runtime.GOMAXPROCS(0)))
 	if processorSpanCount < processorConcurrency {
 		processorConcurrency = processorSpanCount
 	}
