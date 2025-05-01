@@ -4189,6 +4189,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`crdb_internal_origin_timestamp`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ts := evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+			if !ts.IsSet() {
+				return "", nil
+			}
+			return ts.AsOfSystemTime(), nil
+		},
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			// TODO: only allow this to be set by LDR.
+			return m.SetOriginTimestampForLogicalDataReplication(s)
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return ""
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

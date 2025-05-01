@@ -51,7 +51,7 @@ func newSQLRowReader(
 		}
 	}
 
-	selectStatement, err := newBulkSelectStatement(table)
+	selectStatement, _, err := newBulkSelectStatement(table)
 	if err != nil {
 		return nil, err
 	}
