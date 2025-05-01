@@ -47,7 +47,7 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 	return logstore.RaftState{
 		LastIndex: r.shMu.last.Index,
 		LastTerm:  r.shMu.last.Term,
-		ByteSize:  r.shMu.raftLogSize,
+		ByteSize:  r.shMu.size,
 	}
 }
 
@@ -87,7 +87,7 @@ func (r *replicaLogStorage) appendRaftMuLocked(
 func (r *replicaLogStorage) updateStateRaftMuLockedMuLocked(state logstore.RaftState) {
 	r.shMu.last.Index = state.LastIndex
 	r.shMu.last.Term = state.LastTerm
-	r.shMu.raftLogSize = state.ByteSize
+	r.shMu.size = state.ByteSize
 }
 
 // updateLogSize recomputes the raft log size, and updates Replica's in-memory
@@ -107,8 +107,8 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.shMu.raftLogSize = size
-	r.shMu.raftLogLastCheckSize = size
-	r.shMu.raftLogSizeTrusted = true
+	r.shMu.size = size
+	r.shMu.lastCheckSize = size
+	r.shMu.sizeTrusted = true
 	return size, nil
 }
