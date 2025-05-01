@@ -243,6 +243,7 @@ go_library(
         "//pkg/sql/idxusage",
         "//pkg/sql/importer",
         "//pkg/sql/inspect",
+        "//pkg/sql/isession",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/optionalnodeliveness",

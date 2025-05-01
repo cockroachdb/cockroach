@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func assertStmt(t *testing.T, cmd Command, exp string) {
@@ -341,4 +342,53 @@ func TestStmtBufBatching(t *testing.T) {
 	if pos != CmdPos(9) {
 		t.Fatalf("expected pos to be %d, got: %d", 9, pos)
 	}
+}
+
+func TestStmtBufEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("EmptyBuffer", func(t *testing.T) {
+		buf := NewStmtBuf(0)
+		empty, err := buf.Empty()
+		require.NoError(t, err)
+		require.True(t, empty)
+	})
+
+	t.Run("NonEmptyBuffer", func(t *testing.T) {
+		buf := NewStmtBuf(0)
+		s1, err := parser.ParseOne("SELECT 1")
+		require.NoError(t, err)
+		mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+
+		empty, err := buf.Empty()
+		require.NoError(t, err)
+		require.False(t, empty)
+	})
+
+	t.Run("EmptyAfterAdvancing", func(t *testing.T) {
+		buf := NewStmtBuf(0)
+		s1, err := parser.ParseOne("SELECT 1")
+		require.NoError(t, err)
+		mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+
+		empty, err := buf.Empty()
+		require.NoError(t, err)
+		require.False(t, empty)
+
+		buf.AdvanceOne()
+		empty, err = buf.Empty()
+		require.NoError(t, err)
+		require.True(t, empty)
+	})
+
+	t.Run("ClosedBuffer", func(t *testing.T) {
+		buf := NewStmtBuf(0)
+		buf.Close()
+
+		_, err := buf.Empty()
+		require.Equal(t, io.EOF, err)
+	})
 }
