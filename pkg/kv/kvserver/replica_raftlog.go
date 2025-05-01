@@ -55,10 +55,10 @@ type replicaLogStorage struct {
 	// are held for writes. They can be accessed when either of the two mutexes is
 	// held.
 	shMu struct {
-		// raftTruncState contains the raft log truncation state, i.e. the ID of the
-		// last entry of the log prefix that has been compacted out from the raft
-		// log storage.
-		raftTruncState kvserverpb.RaftTruncatedState
+		// trunc contains the raft log truncation state, i.e. the ID of the last
+		// entry of the log prefix that has been compacted out from the raft log
+		// storage.
+		trunc kvserverpb.RaftTruncatedState
 		// last is the index/term of the last entry written to the raft log (not
 		// necessarily durable locally or committed by the group).
 		last logstore.EntryID
@@ -149,7 +149,7 @@ func (r *replicaLogStorage) entriesLocked(
 	// Check whether the first requested entry is already logically truncated. It
 	// may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
-	if lo <= r.shMu.raftTruncState.Index {
+	if lo <= r.shMu.trunc.Index {
 		return nil, raft.ErrCompacted
 	}
 	// Writes to the storage engine and the sideloaded storage are made under
@@ -211,9 +211,9 @@ func (r *replicaLogStorage) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftT
 	// NB: two common cases are checked first.
 	if r.shMu.last.Index == index {
 		return r.shMu.last.Term, nil
-	} else if index == r.shMu.raftTruncState.Index {
-		return r.shMu.raftTruncState.Term, nil
-	} else if index < r.shMu.raftTruncState.Index {
+	} else if index == r.shMu.trunc.Index {
+		return r.shMu.trunc.Term, nil
+	} else if index < r.shMu.trunc.Index {
 		return 0, raft.ErrCompacted
 	} else if index > r.shMu.last.Index {
 		return 0, raft.ErrUnavailable
@@ -275,7 +275,7 @@ func (r *Replica) GetLastIndex() kvpb.RaftIndex {
 // Requires that r.mu is held for reading.
 func (r *replicaLogStorage) Compacted() uint64 {
 	r.mu.AssertRHeld()
-	return uint64(r.shMu.raftTruncState.Index)
+	return uint64(r.shMu.trunc.Index)
 }
 
 // raftCompactedIndexRLocked implements the Compacted() call.
@@ -344,7 +344,7 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
-	if lo <= r.shMu.raftTruncState.Index {
+	if lo <= r.shMu.trunc.Index {
 		return nil, raft.ErrCompacted
 	}
 	entries, _, loadedSize, err := logstore.LoadEntries(
@@ -378,7 +378,7 @@ func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 // Requires that r.raftMu is held.
 func (r *replicaRaftMuLogSnap) Compacted() uint64 {
 	r.raftMu.AssertHeld()
-	return uint64(r.shMu.raftTruncState.Index)
+	return uint64(r.shMu.trunc.Index)
 }
 
 // LogSnapshot implements the raft.LogStorageSnapshot interface.

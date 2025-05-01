@@ -583,7 +583,7 @@ type Replica struct {
 	shMu struct {
 		// The state of the Raft state machine.
 		// Invariant: state.TruncatedState == nil. The field is being phased out in
-		// favour of raftTruncState below.
+		// favour of the one contained in logStorage.
 		state kvserverpb.ReplicaState
 		// leaderID is the ID of the leader replica within the Raft group.
 		// NB: this is updated in a separate critical section from the Raft group,
@@ -1919,7 +1919,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// because the ReplicaState is embedded into RangeInfo, and this confuses the
 	// proto compiler.
 	ls := r.asLogStorage()
-	ri.TruncatedState = (protoutil.Clone(&ls.shMu.raftTruncState)).(*kvserverpb.RaftTruncatedState)
+	ri.TruncatedState = (protoutil.Clone(&ls.shMu.trunc)).(*kvserverpb.RaftTruncatedState)
 
 	ri.LastIndex = ls.shMu.last.Index
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
@@ -1973,7 +1973,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
 	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
 		log.Fatalf(ctx, "%s", err)
-	} else if ts := r.asLogStorage().shMu.raftTruncState; loaded != ts {
+	} else if ts := r.asLogStorage().shMu.trunc; loaded != ts {
 		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}

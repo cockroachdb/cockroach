@@ -720,7 +720,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		ByteSize:  0, // the log is empty now
 	})
 	ls := r.asLogStorage()
-	ls.shMu.raftTruncState = truncState
+	ls.shMu.trunc = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	//
