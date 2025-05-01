@@ -352,14 +352,23 @@ func (mb *mutationBuilder) buildUpdate(
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
+	// Apply SELECT policies if columns are used in SET, WHERE, or RETURNING.
+	// colRefs currently has the set of columns referenced by the SET and WHERE
+	// expressions.
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() {
+		// RETURNING is tricky—we build it last and can’t move it, since it depends on
+		// the final scope. So, we temporarily build scopes just to update colRefs,
+		// then discard them. To avoid extra work, we only do this if select policies
+		// aren't already needed.
+		if returning != nil && colRefs != nil && colRefs.Len() == 0 {
+			_, _ = mb.buildReturningScopes(returning, colRefs)
+		}
+		includeSelectPolicies = colRefs != nil && colRefs.Len() > 0
+	}
+
 	// Add any check constraint boolean columns to the input.
-	// Apply SELECT policies if columns are referenced in the SET, WHERE, or
-	// RETURNING clauses.
-	// TODO(144951): colRefs covers SET and WHERE; RETURNING is assumed to require
-	// SELECT policies for now.
-	mb.addCheckConstraintCols(true, /* isUpdate */
-		policyScopeCmd,
-		returning != nil || (colRefs != nil && colRefs.Len() > 0) /* includeSelectPolicies */)
+	mb.addCheckConstraintCols(true /* isUpdate */, policyScopeCmd, includeSelectPolicies)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during

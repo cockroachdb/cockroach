@@ -192,7 +192,7 @@ build
 UPDATE T1 SET c1 = 2 WHERE true RETURNING 'foo';
 ----
 project
- ├── columns: "?column?":15!null
+ ├── columns: "?column?":16!null
  ├── update t1
  │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
  │    ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
@@ -203,9 +203,9 @@ project
  │    │    ├── c2:8 => c2:2
  │    │    ├── c3:9 => c3:3
  │    │    └── rowid:10 => rowid:4
- │    ├── check columns: rls:14
+ │    ├── check columns: rls:15
  │    └── project
- │         ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+ │         ├── columns: rls:15!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
  │         ├── project
  │         │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         │    ├── select
@@ -222,9 +222,9 @@ project
  │         │    └── projections
  │         │         └── 2 [as=c1_new:13]
  │         └── projections
- │              └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+ │              └── true AND (c1_new:13 < 100) [as=rls:15]
  └── projections
-      └── 'foo' [as="?column?":15]
+      └── 'foo' [as="?column?":16]
 
 build
 UPDATE T1 SET c1 = c1 + 1 WHERE true;
@@ -650,9 +650,11 @@ insert t1
       └── projections
            └── true AND (char_length(c2:8) < 10) [as=rls:14]
 
-# Apply SELECT policies on inserted rows if a RETURNING clause is present.
-# The first case handles inserts without RETURNING; the second handles inserts
-# with RETURNING.
+# Apply SELECT policies on inserted rows if the RETURNING clause exists and
+# references any columns.
+# - Case 1: No RETURNING clause — SELECT policies are not needed.
+# - Case 2: RETURNING clause references columns — SELECT policies are required.
+# - Case 3: RETURNING clause does not reference columns — SELECT policies are not needed.
 
 build
 INSERT INTO t1(c1) VALUES (10);
@@ -710,6 +712,48 @@ project
            │         └── unique_rowid() [as=rowid_default:10]
            └── projections
                 └── (c3_default:9 IN ('2013-06-02', '1988-07-01')) AND (char_length(c2_default:8) < 10) [as=rls:11]
+
+build
+INSERT INTO t1(c1) VALUES (10) RETURNING (select 1);
+----
+project
+ ├── columns: "?column?":15
+ ├── insert t1
+ │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+ │    ├── insert-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── return-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── check columns: rls:13
+ │    └── project
+ │         ├── columns: rls:13 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+ │         ├── project
+ │         │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+ │         │    ├── values
+ │         │    │    ├── columns: column1:7!null
+ │         │    │    └── (10,)
+ │         │    └── projections
+ │         │         ├── NULL::STRING [as=c2_default:8]
+ │         │         ├── NULL::DATE [as=c3_default:9]
+ │         │         └── unique_rowid() [as=rowid_default:10]
+ │         └── projections
+ │              └── true AND (char_length(c2_default:8) < 10) [as=rls:13]
+ └── projections
+      └── subquery [as="?column?":15]
+           └── max1-row
+                ├── columns: "?column?":14!null
+                └── project
+                     ├── columns: "?column?":14!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as="?column?":14]
 
 exec-ddl
 DROP POLICY p_select on t1;

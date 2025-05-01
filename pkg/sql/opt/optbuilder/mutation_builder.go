@@ -1675,6 +1675,18 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 		return
 	}
 
+	inScope, outScope := mb.buildReturningScopes(returning, nil /* colRefs */)
+	mb.b.constructProjectForScope(inScope, outScope)
+	mb.outScope = outScope
+}
+
+func (mb *mutationBuilder) buildReturningScopes(
+	returning *tree.ReturningExprs, colRefs *opt.ColSet,
+) (inScope, outScope *scope) {
+	if returning == nil {
+		panic(errors.AssertionFailedf("buildReturningScopes should only be called if RETURNING clause is present"))
+	}
+
 	// Start out by constructing a scope containing one column for each non-
 	// mutation column in the target table, in the same order, and with the
 	// same names. These columns can be referenced by the RETURNING clause.
@@ -1684,7 +1696,7 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	//   3. Mark hidden columns.
 	//   4. Project columns in same order as defined in table schema.
 	//
-	inScope := mb.outScope.replace()
+	inScope = mb.outScope.replace()
 	inScope.expr = mb.outScope.expr
 	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
@@ -1696,11 +1708,10 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	inScope.appendColumns(mb.extraAccessibleCols)
 
 	// Construct the Project operator that projects the RETURNING expressions.
-	outScope := inScope.replace()
+	outScope = inScope.replace()
 	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
-	mb.b.buildProjectionList(inScope, outScope)
-	mb.b.constructProjectForScope(inScope, outScope)
-	mb.outScope = outScope
+	mb.b.buildProjectionList(inScope, outScope, colRefs)
+	return inScope, outScope
 }
 
 // checkNumCols raises an error if the expected number of columns does not match
