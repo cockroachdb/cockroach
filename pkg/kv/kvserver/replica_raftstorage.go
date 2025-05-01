@@ -727,7 +727,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// TODO(pav-kv): does this assume that snapshots can contain log entries,
 	// which is no longer true? The comment needs an update, and the decision to
 	// set this flag to false revisited.
-	ls.shMu.raftLogSizeTrusted = false
+	ls.shMu.sizeTrusted = false
 
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.shMu.state.Stats)
