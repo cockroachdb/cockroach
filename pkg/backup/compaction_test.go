@@ -450,8 +450,8 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	// impacted by when the test runs.
 	th.env.SetTime(time.Date(2025, 3, 27, 1, 0, 0, 0, time.UTC))
 
-	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
-	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
 	schedules, err := th.createBackupSchedule(
 		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
 	)
@@ -469,21 +469,15 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	var backupPath string
 	th.sqlDB.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
 
-	inc, err = jobs.ScheduledJobDB(th.internalDB()).
-		Load(context.Background(), th.env, inc.ScheduleID())
-	require.NoError(t, err)
+	for range 3 {
+		inc, err = jobs.ScheduledJobDB(th.internalDB()).
+			Load(context.Background(), th.env, inc.ScheduleID())
+		require.NoError(t, err)
 
-	th.env.SetTime(inc.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
-
-	inc, err = jobs.ScheduledJobDB(th.internalDB()).
-		Load(context.Background(), th.env, inc.ScheduleID())
-	require.NoError(t, err)
-
-	th.env.SetTime(inc.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+		th.env.SetTime(inc.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+	}
 
 	if blockCompaction != nil {
 		t.Log("executing second full backup before compaction job resolves destination")
@@ -527,7 +521,7 @@ func TestScheduledBackupCompaction(t *testing.T) {
 		fmt.Sprintf("SELECT count(DISTINCT (start_time, end_time)) FROM "+
 			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup']", backupPath),
 	).Scan(&numBackups)
-	require.Equal(t, 4, numBackups)
+	require.Equal(t, 5, numBackups)
 }
 
 func TestBackupCompactionUnsupportedOptions(t *testing.T) {
