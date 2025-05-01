@@ -52,7 +52,7 @@ var (
 		"the required backup chain length for compaction to be triggered (0 to disable compactions)",
 		0,
 		settings.WithVisibility(settings.Reserved),
-		settings.IntInRangeOrZeroDisable(3, math.MaxInt64),
+		settings.IntInRangeOrZeroDisable(4, math.MaxInt64),
 	)
 )
 
