@@ -117,8 +117,8 @@ func (r *Replica) Metrics(
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.asLogStorage().shMu.raftLogSize,
-		raftLogSizeTrusted:       r.asLogStorage().shMu.raftLogSizeTrusted,
+		raftLogSize:              r.asLogStorage().shMu.size,
+		raftLogSizeTrusted:       r.asLogStorage().shMu.sizeTrusted,
 		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
@@ -397,14 +397,14 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// RaftLogQueueStaleSize. The logic below queues the replica for possible
 	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
 	// have been written to the Raft log. Note that it does not matter if some
-	// of the bytes in raftLogLastCheckSize are already part of pending
+	// of the bytes in lastCheckSize are already part of pending
 	// truncations since this comparison is looking at whether the raft log has
 	// grown sufficiently.
 	ls := r.asLogStorage()
-	checkRaftLog := ls.shMu.raftLogSize-ls.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	checkRaftLog := ls.shMu.size-ls.shMu.lastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.raftMu.AssertHeld()
-		ls.shMu.raftLogLastCheckSize = ls.shMu.raftLogSize
+		ls.shMu.lastCheckSize = ls.shMu.size
 	}
 	return checkRaftLog
 }

@@ -1923,8 +1923,8 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 
 	ri.LastIndex = ls.shMu.last.Index
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
-	ri.RaftLogSize = ls.shMu.raftLogSize
-	ri.RaftLogSizeTrusted = ls.shMu.raftLogSizeTrusted
+	ri.RaftLogSize = ls.shMu.size
+	ri.RaftLogSizeTrusted = ls.shMu.sizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())

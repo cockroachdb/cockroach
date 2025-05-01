@@ -151,7 +151,7 @@ type pendingTruncation struct {
 	//   is adjusted on this replica using SideloadStorage.Stats, but it is
 	//   possible that the truncated state of this replica is already >
 	//   expectedFirstIndex. We don't actually set isDeltaTrusted=false for this
-	//   case since we will change Replica.raftLogSizeTrusted to false after
+	//   case since we will change logStorage.sizeTrustedmu.sizeTrusted to false after
 	//   enacting this truncation.
 	// - We merge pendingTruncation entries in the pendingTruncations struct. We
 	//   are making an effort to have consecutive TruncateLogRequests provide us

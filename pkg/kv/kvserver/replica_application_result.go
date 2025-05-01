@@ -517,10 +517,10 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 		// Ensure the raft log size is not negative since it isn't persisted between
 		// server restarts.
 		// TODO(pav-kv): should we distrust the log size if it goes negative?
-		ls.shMu.raftLogSize = max(ls.shMu.raftLogSize+pt.logDeltaBytes, 0)
-		ls.shMu.raftLogLastCheckSize = max(ls.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
+		ls.shMu.size = max(ls.shMu.size+pt.logDeltaBytes, 0)
+		ls.shMu.lastCheckSize = max(ls.shMu.lastCheckSize+pt.logDeltaBytes, 0)
 		if !pt.isDeltaTrusted {
-			ls.shMu.raftLogSizeTrusted = false
+			ls.shMu.sizeTrusted = false
 		}
 	}()
 

@@ -449,12 +449,12 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 }
 
 // GetRaftLogSize returns the approximate raft log size and whether it is
-// trustworthy.. See r.mu.raftLogSize for details.
+// trustworthy. See logStorage.mu.sizesize for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ls := r.asLogStorage()
-	return ls.shMu.raftLogSize, ls.shMu.raftLogSizeTrusted
+	return ls.shMu.size, ls.shMu.sizeTrusted
 }
 
 // GetCachedLastTerm returns the term of the last log entry.

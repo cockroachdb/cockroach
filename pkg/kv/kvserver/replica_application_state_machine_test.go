@@ -181,10 +181,10 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		ls := r.asLogStorage()
 		raftAppliedIndex := r.shMu.state.RaftAppliedIndex
 		truncatedIndex := ls.shMu.trunc.Index
-		raftLogSize := ls.shMu.raftLogSize
+		raftLogSize := ls.shMu.size
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
-		ls.shMu.raftLogSizeTrusted = true
+		ls.shMu.sizeTrusted = true
 		r.mu.Unlock()
 
 		expectedFirstIndex := truncatedIndex + 1
@@ -247,8 +247,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			if expectedSize < 0 {
 				expectedSize = 0
 			}
-			require.Equal(t, expectedSize, ls.shMu.raftLogSize)
-			require.Equal(t, accurate, ls.shMu.raftLogSizeTrusted)
+			require.Equal(t, expectedSize, ls.shMu.size)
+			require.Equal(t, accurate, ls.shMu.sizeTrusted)
 			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
 			require.NoError(t, err)
 			require.Equal(t, ls.shMu.trunc.Index, truncState.Index)
@@ -302,10 +302,10 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			r.mu.Lock()
 			raftAppliedIndex := r.shMu.state.RaftAppliedIndex
 			truncatedIndex := ls.shMu.trunc.Index
-			raftLogSize := ls.shMu.raftLogSize
+			raftLogSize := ls.shMu.size
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
-			ls.shMu.raftLogSizeTrusted = true
+			ls.shMu.sizeTrusted = true
 			r.mu.Unlock()
 			expectedFirstIndex := truncatedIndex + 1
 			if !accurate {
@@ -361,7 +361,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 				require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
 				// No truncation.
 				require.Equal(t, truncatedIndex, ls.shMu.trunc.Index)
-				require.True(t, ls.shMu.raftLogSizeTrusted)
+				require.True(t, ls.shMu.sizeTrusted)
 			}()
 			require.False(t, r.pendingLogTruncations.isEmptyLocked())
 			trunc := r.pendingLogTruncations.frontLocked()
@@ -388,10 +388,10 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			if ls.shMu.trunc.Index != truncatedIndex+1 {
 				return errors.Errorf("not truncated")
 			}
-			if ls.shMu.raftLogSize != expectedSize {
+			if ls.shMu.size != expectedSize {
 				return errors.Errorf("not truncated")
 			}
-			if accurate != ls.shMu.raftLogSizeTrusted {
+			if accurate != ls.shMu.sizeTrusted {
 				return errors.Errorf("not truncated")
 			}
 			r.pendingLogTruncations.mu.Lock()

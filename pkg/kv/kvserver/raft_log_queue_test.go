@@ -336,7 +336,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	ls := r.asLogStorage()
-	raftLogSize := ls.shMu.raftLogSize
+	raftLogSize := ls.shMu.size
 	actualRaftLogSize, err := ls.ls.ComputeSize(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, actualRaftLogSize, raftLogSize)
@@ -810,8 +810,8 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	verify(false, false, 0)
 }
 
-// TestTruncateLogRecompute checks that if raftLogSize is not trusted, the raft
-// log queue picks up the replica, recomputes the log size, and considers a
+// TestTruncateLogRecompute checks that if sizethe raft log size is not trusted, the
+// raft log queue picks up the replica, recomputes the log size, and considers a
 // truncation.
 func TestTruncateLogRecompute(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -831,7 +831,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	trusted := func() bool {
 		repl.mu.RLock()
 		defer repl.mu.RUnlock()
-		return repl.asLogStorage().shMu.raftLogSizeTrusted
+		return repl.asLogStorage().shMu.sizeTrusted
 	}
 
 	put := func() {
@@ -861,9 +861,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 		defer repl.raftMu.Unlock()
 		defer repl.mu.Unlock()
 		ls := repl.asLogStorage()
-		ls.shMu.raftLogSizeTrusted = false
-		ls.shMu.raftLogSize += 12          // garbage
-		ls.shMu.raftLogLastCheckSize += 12 // garbage
+		ls.shMu.sizeTrusted = false
+		ls.shMu.size += 12          // garbage
+		ls.shMu.lastCheckSize += 12 // garbage
 	}()
 
 	// Force a raft log queue run. The result should be a nonzero Raft log of
