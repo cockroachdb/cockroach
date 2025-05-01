@@ -347,11 +347,31 @@ func openSSTs(
 	entry execinfrapb.RestoreSpanEntry,
 	encryptionOptions *kvpb.FileEncryptionOptions,
 	endTime hlc.Timestamp,
-) (mergedSST, error) {
+) (ssts mergedSST, err error) {
 	var dirs []cloud.ExternalStorage
+	cleanupDirs := func() {
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Warningf(ctx, "close export storage failed: %v", err)
+			}
+		}
+	}
+	// If we bail early due to an error, cleanup any external storage that was
+	// opened. Otherwise, leave it to the caller to perform cleanup.
+	defer func() {
+		if err != nil {
+			cleanupDirs()
+		}
+	}()
+
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
+		if file.HasRangeKeys {
+			// TODO (kev-cao): Come back and update this to range keys when
+			// SSTSinkKeyWriter has been updated to support range keys.
+			return mergedSST{}, errors.New("backup compactions does not support range keys")
+		}
 		dir, err := execCfg.DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
@@ -360,8 +380,6 @@ func openSSTs(
 		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
 	}
 	iterOpts := storage.IterOptions{
-		// TODO (kev-cao): Come back and update this to range keys when
-		// SSTSinkKeyWriter has been updated to support range keys.
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
@@ -380,11 +398,7 @@ func openSSTs(
 		cleanup: func() {
 			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
-			for _, dir := range dirs {
-				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed: %v", err)
-				}
-			}
+			cleanupDirs()
 		},
 		completeUpTo: endTime,
 	}, nil
