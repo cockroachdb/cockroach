@@ -251,6 +251,10 @@ func (d *deleteNode) rowsWritten() int64 {
 	return d.run.modifiedRowCount()
 }
 
+func (d *deleteNode) returnsRowsAffected() bool {
+	return !d.run.rowsNeeded
+}
+
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }

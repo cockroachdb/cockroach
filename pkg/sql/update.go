@@ -297,6 +297,10 @@ func (u *updateNode) rowsWritten() int64 {
 	return u.run.modifiedRowCount()
 }
 
+func (u *updateNode) returnsRowsAffected() bool {
+	return !u.run.rowsNeeded
+}
+
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

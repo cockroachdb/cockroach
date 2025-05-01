@@ -214,3 +214,18 @@ func (c *optColumnsSlot) getColumns(mut bool, cols colinfo.ResultColumns) colinf
 	copy(c.columns, cols)
 	return c.columns
 }
+
+// resultIsRowsAffected returns true if the given plan node returns a single
+// integer value indicating the number of rows affected.
+func resultIsRowsAffected(plan planNode) bool {
+	switch n := plan.(type) {
+	case mutationPlanNode:
+		return n.returnsRowsAffected()
+	case *moveNode, *controlJobsNode, *controlSchedulesNode,
+		*cancelQueriesNode, *cancelSessionsNode, *setZoneConfigNode:
+		// These nodes always return the row count.
+		return true
+	default:
+		return false
+	}
+}

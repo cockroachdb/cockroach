@@ -94,6 +94,10 @@ func (h *rowsAffectedOutputHelper) incAffectedRows() {
 	h.rowCount++
 }
 
+func (h *rowsAffectedOutputHelper) addAffectedRows(count int) {
+	h.rowCount += count
+}
+
 func (h *rowsAffectedOutputHelper) next() bool {
 	if h.done {
 		return false

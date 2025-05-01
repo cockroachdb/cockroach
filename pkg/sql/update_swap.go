@@ -127,6 +127,10 @@ func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.modifiedRowCount()
 }
 
+func (u *updateSwapNode) returnsRowsAffected() bool {
+	return !u.run.rowsNeeded
+}
+
 func (u *updateSwapNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

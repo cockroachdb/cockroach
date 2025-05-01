@@ -127,6 +127,10 @@ func (d *deleteSwapNode) rowsWritten() int64 {
 	return d.run.modifiedRowCount()
 }
 
+func (d *deleteSwapNode) returnsRowsAffected() bool {
+	return !d.run.rowsNeeded
+}
+
 func (d *deleteSwapNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }
