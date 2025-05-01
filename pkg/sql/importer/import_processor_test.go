@@ -329,6 +329,12 @@ func (fakeDB) Executor(option ...isql.ExecutorOption) isql.Executor {
 	panic("unimplemented")
 }
 
+func (fakeDB) Session(
+	ctx context.Context, name string, options ...isql.ExecutorOption,
+) (isql.Session, error) {
+	panic("unimplemented")
+}
+
 func (fakeDB) DescsTxn(
 	ctx context.Context, f func(context.Context, descs.Txn) error, opts ...isql.TxnOption,
 ) error {
