@@ -56,9 +56,9 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 func (r *replicaLogStorage) appendRaftMuLocked(
 	ctx context.Context, app raft.StorageAppend, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
+	r.raftMu.AssertHeld()
 	state := r.stateRaftMuLocked()
-	cb := (*replicaSyncCallback)(r)
-	return r.raftMu.logStorage.StoreEntries(ctx, state, app, cb, stats)
+	return r.ls.StoreEntries(ctx, state, app, r.onSync, stats)
 }
 
 // updateStateRaftMuLockedMuLocked updates the in-memory reflection of the raft
@@ -80,7 +80,7 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 
-	size, err := r.raftMu.logStorage.ComputeSize(ctx)
+	size, err := r.ls.ComputeSize(ctx)
 	if err != nil {
 		return 0, err
 	}

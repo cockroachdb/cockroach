@@ -241,8 +241,9 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
+	logStorage := r.asLogStorage()
 	r.mu.RLock()
-	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.shMu.raftLogSize)
+	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(logStorage.shMu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
 	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
@@ -263,7 +264,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	const anyRecipientStore roachpb.StoreID = 0
 	_, pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore, false /* initialOnly */)
-	lastIndex := r.shMu.lastIndexNotDurable
+	lastIndex := logStorage.shMu.lastIndexNotDurable
 	// NB: raftLogSize above adjusts for pending truncations that have already
 	// been successfully replicated via raft, but logSizeTrusted does not see if
 	// those pending truncations would cause a transition from trusted =>
@@ -272,7 +273,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// soon as those pending truncations are enacted r.mu.raftLogSizeTrusted
 	// will become false and we will recompute the size -- so this cannot cause
 	// an indefinite delay in recomputation.
-	logSizeTrusted := r.shMu.raftLogSizeTrusted
+	logSizeTrusted := logStorage.shMu.raftLogSizeTrusted
 	compIndex := r.raftCompactedIndexRLocked()
 	r.mu.RUnlock()
 	compIndex = r.pendingLogTruncations.nextCompactedIndex(compIndex)

@@ -9,10 +9,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+type mutexPair struct {
+	mu     *syncutil.RWMutex
+	raftMu *syncutil.Mutex
+}
 
 // replicaLogStorage implements the raft.LogStorage interface.
 //
@@ -24,12 +32,97 @@ import (
 // an implementation of an interface from a different package, but in most cases
 // they delegate to a method that does follow the convention.
 //
-// TODO(pav-kv): make it a proper type, and integrate with the logstore package.
-type replicaLogStorage Replica
+// TODO(pav-kv): integrate better with the logstore package.
+type replicaLogStorage struct {
+	// ctx is the log storage context, which includes the log tags from the parent
+	// node, store and replica.
+	ctx context.Context
+
+	// mu contains the fields protected by the "read" mutex. Equivalent to
+	// Replica.mu.
+	mu struct {
+		*syncutil.RWMutex
+		// NB: there are two state loaders, in raftMu and mu, depending on which
+		// lock is being held.
+		stateLoader logstore.StateLoader
+	}
+	// raftMu contains the fields protected by the "write" mutex. Equivalent to
+	// Replica.raftMu.
+	raftMu struct {
+		*syncutil.Mutex
+		// NB: there are two state loaders, in raftMu and mu, depending on which
+		// lock is being held.
+		stateLoader logstore.StateLoader
+		// bytesAccount accounts bytes used by various Raft components, like entries
+		// to be applied. Currently, it only tracks bytes used by committed entries
+		// being applied to the state machine.
+		bytesAccount logstore.BytesAccount
+	}
+	// shMu contains "shared" fields which are mutated while both mu and raftMu
+	// are held for writes. They can be accessed when either of the two mutexes is
+	// held.
+	shMu struct {
+		// raftTruncState contains the raft log truncation state, i.e. the ID of the
+		// last entry of the log prefix that has been compacted out from the raft
+		// log storage.
+		raftTruncState kvserverpb.RaftTruncatedState
+		// Last index/term written to the raft log (not necessarily durable locally
+		// or committed by the group). Note that lastTermNotDurable may be 0 (and
+		// thus invalid) even when lastIndexNotDurable is known, in which case the
+		// term will have to be retrieved from the Raft log entry. Use the
+		// invalidLastTerm constant for this case.
+		lastIndexNotDurable kvpb.RaftIndex
+		lastTermNotDurable  kvpb.RaftTerm
+		// raftLogSize is the approximate size in bytes of the persisted raft
+		// log, including sideloaded entries' payloads. The value itself is not
+		// persisted and is computed lazily, paced by the raft log truncation
+		// queue which will recompute the log size when it finds it
+		// uninitialized. This recomputation mechanism isn't relevant for ranges
+		// which see regular write activity (for those the log size will deviate
+		// from zero quickly, and so it won't be recomputed but will undercount
+		// until the first truncation is carried out), but it prevents a large
+		// dormant Raft log from sitting around forever, which has caused problems
+		// in the past.
+		//
+		// Note that both raftLogSize and raftLogSizeTrusted do not include the
+		// effect of pending log truncations (see Replica.pendingLogTruncations).
+		// Hence, they are fine for metrics etc., but not for deciding whether we
+		// should create another pending truncation. For the latter, we compute
+		// the post-pending-truncation size using pendingLogTruncations.
+		raftLogSize int64
+		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
+		// it has been recomputed.
+		raftLogSizeTrusted bool
+		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
+		// log was checked for truncation or at the time of the last Raft log
+		// truncation.
+		raftLogLastCheckSize int64
+	}
+
+	// raftEntriesMonitor tracks memory used by raft entries.
+	raftEntriesMonitor *logstore.SoftLimit
+	// ls provides access to the raft log storage. Set once, never nil.
+	ls     *logstore.LogStore
+	onSync logstore.SyncCallback
+
+	metrics *StoreMetrics
+}
 
 // asLogStorage returns the raft.LogStorage implementation of this replica.
 func (r *Replica) asLogStorage() *replicaLogStorage {
-	return (*replicaLogStorage)(r)
+	return r.logStorage
+}
+
+func (r *replicaLogStorage) attachRaftEntriesMonitorRaftMuLocked() {
+	r.raftMu.bytesAccount = r.raftEntriesMonitor.NewAccount(r.metrics.RaftLoadedEntriesBytes)
+}
+
+func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
+	// Return all the used bytes back to the limiter.
+	r.raftMu.bytesAccount.Clear()
+	// De-initialize the account so that log storage Entries() calls don't track
+	// the entries anymore.
+	r.raftMu.bytesAccount = logstore.BytesAccount{}
 }
 
 // Entries implements the raft.LogStorage interface.
@@ -78,12 +171,11 @@ func (r *replicaLogStorage) entriesLocked(
 	// TODO(pav-kv): we need better safety guardrails here. The log storage type
 	// can remember the readable bounds, and assert that reads do not cross them.
 	entries, _, loadedSize, err := logstore.LoadEntries(
-		r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.ctx, r.mu.stateLoader, r.ls.Engine, r.ls.RangeID,
+		r.ls.EntryCache, r.ls.Sideload, lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
-	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	r.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
 }
 
@@ -111,9 +203,9 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 	if r.shMu.lastIndexNotDurable == i {
 		return r.shMu.lastTermNotDurable, nil
 	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+	return logstore.LoadTerm(
+		r.ctx, r.mu.stateLoader, r.ls.Engine, r.ls.RangeID,
+		r.ls.EntryCache, i,
 	)
 }
 
@@ -133,12 +225,12 @@ func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 // LastIndex implements the raft.LogStorage interface.
 // Requires that r.mu is held for reading.
 func (r *replicaLogStorage) LastIndex() uint64 {
-	return uint64((*Replica)(r).raftLastIndexRLocked())
+	return uint64(r.shMu.lastIndexNotDurable)
 }
 
 // raftLastIndexRLocked implements the LastIndex() call.
 func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
-	return r.shMu.lastIndexNotDurable
+	return kvpb.RaftIndex(r.asLogStorage().LastIndex())
 }
 
 // GetLastIndex returns the index of the last entry in the raft log.
@@ -152,12 +244,13 @@ func (r *Replica) GetLastIndex() kvpb.RaftIndex {
 // Compacted implements the raft.LogStorage interface.
 // Requires that r.mu is held for reading.
 func (r *replicaLogStorage) Compacted() uint64 {
-	return uint64((*Replica)(r).raftCompactedIndexRLocked())
+	r.mu.AssertRHeld()
+	return uint64(r.shMu.raftTruncState.Index)
 }
 
 // raftCompactedIndexRLocked implements the Compacted() call.
 func (r *Replica) raftCompactedIndexRLocked() kvpb.RaftIndex {
-	return r.shMu.raftTruncState.Index
+	return kvpb.RaftIndex(r.asLogStorage().Compacted())
 }
 
 // GetCompactedIndex returns the compacted index of the raft log.
@@ -219,12 +312,11 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	r.raftMu.AssertHeld()
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
 	entries, _, loadedSize, err := logstore.LoadEntries(
-		r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.ctx, r.raftMu.stateLoader, r.ls.Engine, r.ls.RangeID,
+		r.ls.EntryCache, r.ls.Sideload, lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
-	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
+	r.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
 }
 
@@ -241,23 +333,18 @@ func (r *replicaRaftMuLogSnap) Term(i uint64) (uint64, error) {
 // termRaftMuLocked implements the Term() call.
 func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.raftMu.AssertHeld()
-	// NB: the r.mu fields accessed here are always written under both r.raftMu
-	// and r.mu, and the reads are safe under r.raftMu.
 	if r.shMu.lastIndexNotDurable == i {
 		return r.shMu.lastTermNotDurable, nil
 	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+	return logstore.LoadTerm(
+		r.ctx, r.raftMu.stateLoader, r.ls.Engine, r.ls.RangeID,
+		r.ls.EntryCache, i,
 	)
 }
 
 // LastIndex implements the raft.LogStorageSnapshot interface.
 // Requires that r.raftMu is held.
 func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
-	// NB: lastIndexNotDurable is updated under both r.raftMu and r.mu, so it is
-	// safe to access while holding any of these mutexes. We enforce raftMu
-	// because this is a raftMu-based snapshot.
 	r.raftMu.AssertHeld()
 	return uint64(r.shMu.lastIndexNotDurable)
 }
@@ -272,4 +359,11 @@ func (r *replicaRaftMuLogSnap) Compacted() uint64 {
 // LogSnapshot implements the raft.LogStorageSnapshot interface.
 func (r *replicaRaftMuLogSnap) LogSnapshot() raft.LogStorageSnapshot {
 	return r
+}
+
+func (r *replicaLogStorage) reportRaftStorageError(err error) {
+	if raftStorageErrorLogger.ShouldLog() {
+		log.Errorf(r.ctx, "error in raft.LogStorage %v", err)
+	}
+	r.metrics.RaftStorageError.Inc(1)
 }
