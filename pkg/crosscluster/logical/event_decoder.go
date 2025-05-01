@@ -224,20 +224,19 @@ func appendDatums(datums tree.Datums, row cdcevent.Row, columnNames []string) (t
 		return nil, err
 	}
 
-	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		if dEnum, ok := d.(*tree.DEnum); ok {
-			// Override the type to Unknown to avoid a mismatched type OID error
-			// during execution. Note that Unknown is the type used by default
-			// when a SQL statement is executed without type hints.
-			//
-			// TODO(jeffswenson): this feels like the wrong place to do this,
-			// but its inspired by the implementation in queryBuilder.AddRow.
-			//
-			// Really we should be mapping from the source datum type to the
-			// destination datum type.
-			dEnum.EnumTyp = types.Unknown
+	// TODO(jeffswenson): For UDTs, we really want to convert from the source OID to the destination OID.
+	if err := it.Datum(func(datum tree.Datum, col cdcevent.ResultColumn) error {
+		switch d := datum.(type) {
+		case *tree.DEnum:
+			d.EnumTyp = types.Unknown
+			//case *tree.DInt, *tree.DString, *tree.DCollatedString, *tree.DArray:
+			//	var err error
+			//	datum, err = tree.WrapWithOid(datum, col.Typ.Oid())
+			//	if err != nil {
+			//		return errors.Wrapf(err, "error adjusting value to type %s", col.Typ.String())
+			//	}
 		}
-		datums = append(datums, d)
+		datums = append(datums, datum)
 		return nil
 	}); err != nil {
 		return nil, err
