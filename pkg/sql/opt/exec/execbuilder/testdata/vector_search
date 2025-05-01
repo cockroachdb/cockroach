@@ -24,7 +24,7 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • top-k
 │ order: +column7
@@ -45,7 +45,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (k, v)
@@ -80,7 +80,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 5;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (k, v)
@@ -115,7 +115,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (x, y, a, b, c, v)
@@ -155,7 +155,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t_multi WHERE (a, b) IN ((1, 2), (3, 4), (5, 6)) ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (x, y, a, b, c, v)
@@ -199,7 +199,7 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, '[1, 2, 3]');
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ into: t(k, v)
@@ -217,7 +217,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, '[1, 2, 3]');
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()
@@ -242,7 +242,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t SET v = '[1, 2, 3]' WHERE k = 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()
@@ -289,7 +289,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE k = 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ columns: ()
@@ -318,7 +318,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_multi VALUES (1, 2, 1, 2, 3, '[1, 2, 3]');
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • insert
 │ columns: ()
@@ -348,7 +348,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_multi SET v = '[1, 2, 3]' WHERE a = 1 AND b = 2;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()
@@ -406,7 +406,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_multi SET a = 2 WHERE a = 1;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • update
 │ columns: ()
@@ -464,7 +464,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t_multi WHERE a = 1 AND b = 2;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • delete
 │ columns: ()

@@ -568,7 +568,7 @@ query T
 EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • top-k
 │ order: +column9
