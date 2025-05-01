@@ -35,10 +35,10 @@ exp,benchmark
 14,"Discard/DISCARD_ALL,_1_tables_in_1_db"
 19,"Discard/DISCARD_ALL,_2_tables_in_2_dbs"
 0,"Discard/DISCARD_ALL,_no_tables"
-17,DropDatabase/drop_database_0_tables
-18,DropDatabase/drop_database_1_table
-18,DropDatabase/drop_database_2_tables
-18,DropDatabase/drop_database_3_tables
+15,DropDatabase/drop_database_0_tables
+16,DropDatabase/drop_database_1_table
+16,DropDatabase/drop_database_2_tables
+16,DropDatabase/drop_database_3_tables
 29-30,DropRole/drop_1_role
 37,DropRole/drop_2_roles
 45-49,DropRole/drop_3_roles
