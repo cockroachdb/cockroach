@@ -545,7 +545,7 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	// caller has this information available. Or better delegate deletions to an
 	// asynchronous job, that also makes sure to clean up dangling files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", index)
-	if err := r.raftMu.sideloaded.TruncateTo(ctx, index); err != nil {
+	if err := r.logStorage.ls.Sideload.TruncateTo(ctx, index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
