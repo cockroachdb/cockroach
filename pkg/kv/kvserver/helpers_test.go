@@ -467,7 +467,7 @@ func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
 // to RaftLock() or some other guarantee that r.raftMu is held.
 func (r *Replica) SideloadedRaftMuLocked() logstore.SideloadStorage {
-	return r.raftMu.sideloaded
+	return r.logStorage.ls.Sideload
 }
 
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
