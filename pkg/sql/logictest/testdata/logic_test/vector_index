@@ -404,6 +404,7 @@ INSERT INTO exec_test (a, b, vec1) VALUES
   (6, NULL, '[16, 17, 18]'),
   (7, NULL, '[1, 1, 1]');
 
+# Search index with no prefix.
 query IT rowsort
 SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
@@ -411,22 +412,34 @@ SELECT a, vec1 FROM exec_test@idx1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 1  [1,2,3]
 2  [4,5,6]
 
+# Search index with prefix.
 query IT rowsort
 SELECT a, vec1 FROM exec_test@idx2 WHERE b = 1 ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 1;
 ----
 1  [1,2,3]
 
+# Multiple results.
 query IT rowsort
 SELECT a, vec1 FROM exec_test@idx2 WHERE b = 2 ORDER BY vec1 <-> '[15, 15, 15]' LIMIT 2;
 ----
 5  [13,14,15]
 4  [10,11,12]
 
+# NULL prefix value.
 query IT rowsort
 SELECT a, vec1 FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 ----
 7  [1,1,1]
 6  [16,17,18]
+
+# Multiple prefix values.
+query IIT rowsort
+SELECT a, b, vec1 FROM exec_test WHERE b IN (1, 2) ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 4;
+----
+1  1  [1,2,3]
+2  1  [4,5,6]
+3  2  [7,8,9]
+4  2  [10,11,12]
 
 statement ok
 DROP TABLE exec_test
