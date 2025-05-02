@@ -321,6 +321,8 @@ func (msstw *MultiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	msstw.sstSize += int64(msstw.currSST.Meta.Size)
 	msstw.currSpan++
 	msstw.currSST.Close()
+	// Zero the SSTWriter to avoid double-counting in EstimatedDataSize.
+	msstw.currSST = storage.SSTWriter{}
 	return nil
 }
 
