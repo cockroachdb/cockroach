@@ -1135,6 +1135,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 
 			if ib.rowVals[vectorIndexHelper.vectorOrd] == tree.DNull {
+				ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.DNull
+				ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.DNull
 				continue
 			}
 

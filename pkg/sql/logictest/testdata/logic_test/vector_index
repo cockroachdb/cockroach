@@ -657,3 +657,16 @@ statement ok
 DROP TABLE import_test
 
 subtest end
+
+subtest test_145973
+
+statement ok
+CREATE TABLE test_145973 (a INT PRIMARY KEY, v VECTOR(3))
+
+statement ok
+INSERT INTO test_145973 VALUES (1)
+
+statement ok
+CREATE VECTOR INDEX vec_idx ON test_145973 (v)
+
+subtest end
