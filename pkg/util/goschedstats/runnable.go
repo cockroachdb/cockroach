@@ -74,4 +74,4 @@ var alwaysUseShortSamplePeriodEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"goschedstats.always_use_short_sample_period.enabled",
 	"when set to true, the system always does 1ms sampling of runnable queue lengths",
-	false)
+	true)
