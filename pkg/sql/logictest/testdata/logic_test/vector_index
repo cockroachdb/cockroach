@@ -435,6 +435,15 @@ SELECT a FROM exec_test WHERE b IS NULL ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 3;
 7
 6
 
+# Multiple prefix values.
+query IIT rowsort
+SELECT a, b, vec1 FROM exec_test WHERE b IN (1, 2) ORDER BY vec1 <-> '[1, 1, 2]' LIMIT 4;
+----
+1  1  [1,2,3]
+2  1  [4,5,6]
+3  2  [7,8,9]
+4  2  [10,11,12]
+
 statement ok
 DROP TABLE exec_test
 
