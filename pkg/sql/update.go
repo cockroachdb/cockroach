@@ -39,14 +39,10 @@ var _ mutationPlanNode = &updateNode{}
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
-	tu         tableUpdater
-	rowsNeeded bool
+	mutationOutputHelper
+	tu tableUpdater
 
 	checkOrds checkSet
-
-	// done informs a new call to BatchedNext() that the previous call to
-	// BatchedNext() has completed the work already.
-	done bool
 
 	// resultRowBuffer is used to prepare a result row for accumulation
 	// into the row container above, when rowsNeeded is set.
@@ -84,7 +80,7 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
-	r.tu.rows = rowcontainer.NewRowContainer(
+	r.rows = rowcontainer.NewRowContainer(
 		params.p.Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
@@ -100,32 +96,34 @@ func (u *updateNode) startExec(params runParams) error {
 
 	u.run.init(params, u.columns)
 
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (u *updateNode) BatchedNext(params runParams) (bool, error) {
-	if u.run.done {
-		return false, nil
+	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
 	}
 
-	// Advance one batch. First, clear the last batch.
-	u.run.tu.clearLastBatch(params.ctx)
-
-	// Now consume/accumulate the rows for this batch.
-	lastBatch := false
+	// Run the mutation to completion.
 	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
+		lastBatch, err := u.processBatch(params)
+		if err != nil || lastBatch {
+			return err
+		}
+	}
+}
+
+// Next implements the planNode interface.
+func (u *updateNode) Next(_ runParams) (bool, error) {
+	return u.run.next(), nil
+}
+
+// Values implements the planNode interface.
+func (u *updateNode) Values() tree.Datums {
+	return u.run.values()
+}
+
+func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = params.p.cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
@@ -140,7 +138,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 
 		// Process the update for the current input row, potentially
 		// accumulating the result row for later.
-		if err := u.run.processSourceRow(params, u.input.Values()); err != nil {
+		if err = u.run.processSourceRow(params, u.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -155,7 +153,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err := u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
 				return false, err
 			}
 		}
@@ -163,16 +161,13 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 
 	if lastBatch {
 		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err := u.run.tu.finalize(params.ctx); err != nil {
+		if err = u.run.tu.finalize(params.ctx); err != nil {
 			return false, err
 		}
-		// Remember we're done for the next call to BatchedNext().
-		u.run.done = true
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.tu.rowsWritten))
+		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.modifiedRowCount()))
 	}
-
-	return u.run.tu.lastBatchSize > 0, nil
+	return lastBatch, nil
 }
 
 // processSourceRow processes one row from the source for update and, if
@@ -252,57 +247,54 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 	if err != nil {
 		return err
 	}
+	// NOTE: we intentionally do not increment the modified row count if there
+	// was an error. UpdateSwap can swallow a ConditionFailedError and no-op, in
+	// which case the count should be left at 0.
+	r.onModifiedRow()
 
-	// If result rows need to be accumulated, do it.
-	if r.tu.rows != nil {
-		// The new values can include all columns,  so the values may contain
-		// additional columns for every newly added column not yet visible. We do
-		// not want them to be available for RETURNING.
-		//
-		// MakeUpdater guarantees that the first columns of the new values
-		// are those specified u.columns.
-		largestRetIdx := -1
-		for i := range r.rowIdxToRetIdx {
-			retIdx := r.rowIdxToRetIdx[i]
-			if retIdx >= 0 {
-				if retIdx >= largestRetIdx {
-					largestRetIdx = retIdx
-				}
-				r.resultRowBuffer[retIdx] = newValues[i]
+	if !r.rowsNeeded {
+		return nil
+	}
+
+	// Result rows must be accumulated.
+	//
+	// The new values can include all columns,  so the values may contain
+	// additional columns for every newly added column not yet visible. We do
+	// not want them to be available for RETURNING.
+	//
+	// MakeUpdater guarantees that the first columns of the new values
+	// are those specified u.columns.
+	largestRetIdx := -1
+	for i := range r.rowIdxToRetIdx {
+		retIdx := r.rowIdxToRetIdx[i]
+		if retIdx >= 0 {
+			if retIdx >= largestRetIdx {
+				largestRetIdx = retIdx
 			}
-		}
-
-		// At this point we've extracted all the RETURNING values that are part
-		// of the target table. We must now extract the columns in the RETURNING
-		// clause that refer to other tables (from the FROM clause of the update).
-		for i := 0; i < r.numPassthrough; i++ {
-			largestRetIdx++
-			r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
-		}
-
-		if _, err := r.tu.rows.AddRow(params.ctx, r.resultRowBuffer); err != nil {
-			return err
+			r.resultRowBuffer[retIdx] = newValues[i]
 		}
 	}
 
-	return nil
+	// At this point we've extracted all the RETURNING values that are part
+	// of the target table. We must now extract the columns in the RETURNING
+	// clause that refer to other tables (from the FROM clause of the update).
+	for i := 0; i < r.numPassthrough; i++ {
+		largestRetIdx++
+		r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
+	}
+
+	return r.addRow(params.ctx, r.resultRowBuffer)
 }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedCount() int { return u.run.tu.lastBatchSize }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.tu.rows.At(rowIdx) }
 
 func (u *updateNode) Close(ctx context.Context) {
 	u.input.Close(ctx)
-	u.run.tu.close(ctx)
+	u.run.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
 }
 
 func (u *updateNode) rowsWritten() int64 {
-	return u.run.tu.rowsWritten
+	return u.run.modifiedRowCount()
 }
 
 func (u *updateNode) enableAutoCommit() {
