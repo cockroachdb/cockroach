@@ -214,7 +214,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("loaded") {
 					currDuration = loadedDuration
 				}
-
+				memTableSizeForStopWrites := uint64(256 << 20)
+				if d.HasArg("unflushed-too-large") {
+					metrics.MemTable.Size = memTableSizeForStopWrites + 1
+				}
 				ioll.pebbleMetricsTick(ctx, StoreMetrics{
 					Metrics:         &metrics,
 					WriteStallCount: int64(writeStallCount),
@@ -223,6 +226,7 @@ func TestIOLoadListener(t *testing.T) {
 						BytesWritten:         uint64(bytesWritten),
 						ProvisionedBandwidth: int64(provisionedBandwidth),
 					},
+					MemTableSizeForStopWrites: memTableSizeForStopWrites,
 				})
 				var buf strings.Builder
 				// Do the ticks until just before next adjustment.
@@ -326,7 +330,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 		}
 		res := ioll.adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1}, 0,
-			pebble.ThroughputMetric{}, 100, 10, 0, 0.50)
+			pebble.ThroughputMetric{}, 100, 10, 0, 0.50, 10, 100)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))

@@ -121,6 +121,27 @@ L0-ingest-tokens: int: 0.00x+0 smoothed: 0.84x+1 per-work-accounted: 25165
 ingest-tokens: int: 0.00x+0 smoothed: 1.07x+3 per-work-accounted: 25165
 write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
+# Flushed is tiny compared to write-accounted, but since unflushed-too-large
+# is true, the at-admission-tokens and L0-write-tokens are not updated.
+update flushed=10 ingested=0 admitted=100 write-accounted=100000 ingested-accounted=0 above-raft-count=10 above-raft-write=2000 unflushed-too-large
+----
+interval state: {intWorkCount:100 intL0WriteBytes:10 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:100000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:10 intAdjustedDiskWriteBytes:0}
+at-admission-tokens: 64
+L0-write-tokens: int: 0.00x+0 smoothed: 2.06x+1 per-work-accounted: 72
+L0-ingest-tokens: int: 0.00x+0 smoothed: 0.84x+1 per-work-accounted: 25165
+ingest-tokens: int: 0.00x+0 smoothed: 1.07x+1 per-work-accounted: 25165
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
+
+# Flushed is huge compared to write-accounted, but since unflushed-too-large
+# is true, the at-admission-tokens and L0-write-tokens are not updated.
+update flushed=10000000 ingested=0 admitted=50 write-accounted=100 ingested-accounted=0 above-raft-count=20 above-raft-write=40 unflushed-too-large
+----
+interval state: {intWorkCount:50 intL0WriteBytes:10000000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:100 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:10000000 intAdjustedDiskWriteBytes:0}
+at-admission-tokens: 64
+L0-write-tokens: int: 0.00x+0 smoothed: 2.06x+1 per-work-accounted: 72
+L0-ingest-tokens: int: 0.00x+0 smoothed: 0.84x+1 per-work-accounted: 25165
+ingest-tokens: int: 0.00x+0 smoothed: 1.07x+1 per-work-accounted: 25165
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Test write amp LM
 
