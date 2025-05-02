@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -71,9 +70,6 @@ type tableWriterBase struct {
 	// finalize() before deciding whether it is safe to auto commit (if auto
 	// commit is enabled).
 	rowsWrittenLimit int64
-	// rows contains the accumulated result rows if rowsNeeded is set on the
-	// corresponding tableWriter.
-	rows *rowcontainer.RowContainer
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
@@ -217,20 +213,6 @@ func (tb *tableWriterBase) initNewBatch() {
 			OriginID:        tb.originID,
 			OriginTimestamp: tb.originTimestamp,
 		}
-	}
-}
-
-func (tb *tableWriterBase) clearLastBatch(ctx context.Context) {
-	tb.lastBatchSize = 0
-	if tb.rows != nil {
-		tb.rows.Clear(ctx)
-	}
-}
-
-func (tb *tableWriterBase) close(ctx context.Context) {
-	if tb.rows != nil {
-		tb.rows.Close(ctx)
-		tb.rows = nil
 	}
 }
 

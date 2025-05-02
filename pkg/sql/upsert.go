@@ -43,60 +43,65 @@ type upsertRun struct {
 	// insertCols are the columns being inserted/upserted into.
 	insertCols []catalog.Column
 
-	// done informs a new call to BatchedNext() that the previous call to
-	// BatchedNext() has completed the work already.
-	done bool
-
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+}
+
+func (r *upsertRun) init(params runParams) error {
+	if err := r.tw.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *upsertNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *upsertNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *upsertNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
-	if n.run.done {
-		return false, nil
+	if err := n.run.init(params); err != nil {
+		return err
 	}
 
-	// Advance one batch. First, clear the last batch.
-	n.run.tw.clearLastBatch(params.ctx)
-
-	// Now consume/accumulate the rows for this batch.
-	lastBatch := false
+	// Run the mutation to completion.
 	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
+		lastBatch, err := n.processBatch(params)
+		if err != nil || lastBatch {
+			return err
+		}
+	}
+}
+
+// Next implements the planNode interface.
+func (n *upsertNode) Next(_ runParams) (bool, error) {
+	return n.run.tw.next(), nil
+}
+
+// Values implements the planNode interface.
+func (n *upsertNode) Values() tree.Datums {
+	return n.run.tw.values()
+}
+
+func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = params.p.cancelChecker.Check(); err != nil {
+			return lastBatch, err
 		}
 
 		// Advance one individual row.
 		if next, err := n.input.Next(params); !next {
 			lastBatch = true
 			if err != nil {
-				return false, err
+				return lastBatch, err
 			}
 			break
 		}
 
 		// Process the insertion for the current input row, potentially
 		// accumulating the result row for later.
-		if err := n.run.processSourceRow(params, n.input.Values()); err != nil {
-			return false, err
+		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
+			return lastBatch, err
 		}
 
 		// Are we done yet with the current batch?
@@ -110,25 +115,23 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err := n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
+			if err = n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
+				return lastBatch, err
 			}
 		}
 	}
 
 	if lastBatch {
 		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err := n.run.tw.finalize(params.ctx); err != nil {
-			return false, err
+		if err = n.run.tw.finalize(params.ctx); err != nil {
+			return lastBatch, err
 		}
-		// Remember we're done for the next call to BatchedNext().
-		n.run.done = true
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
 	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.tw.tableDesc(), n.run.tw.lastBatchSize)
 
-	return n.run.tw.lastBatchSize > 0, nil
+	return lastBatch, nil
 }
 
 // processSourceRow processes one row from the source for upsertion.
@@ -207,12 +210,6 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	return r.tw.row(params.ctx, upsertVals, pm, vh, r.traceKV)
 }
 
-// BatchedCount implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedCount() int { return n.run.tw.lastBatchSize }
-
-// BatchedValues implements the batchedPlanNode interface.
-func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.rows.At(rowIdx) }
-
 func (n *upsertNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
 	n.run.tw.close(ctx)
@@ -221,7 +218,7 @@ func (n *upsertNode) Close(ctx context.Context) {
 }
 
 func (n *upsertNode) rowsWritten() int64 {
-	return n.run.tw.rowsWritten
+	return n.run.tw.modifiedRowCount()
 }
 
 func (n *upsertNode) enableAutoCommit() {
