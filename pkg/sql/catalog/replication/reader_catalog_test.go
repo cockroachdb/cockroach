@@ -276,6 +276,8 @@ INSERT INTO t3(n) VALUES (3);
 	// Manipulate the schema first.
 	ddlToExec = []string{
 		"ALTER TABLE t1 ADD COLUMN j int default 32",
+		"CREATE SEQUENCE sq2;",
+		"ALTER TABLE t1 ALTER COLUMN n SET default nextval('sq2')",
 		"INSERT INTO t1(val, j) VALUES('open', 1);",
 		"INSERT INTO t1(val, j) VALUES('closed', 2);",
 		"INSERT INTO t1(val, j) VALUES('inactive', 3);",
@@ -301,6 +303,19 @@ INSERT INTO t3(n) VALUES (3);
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
 
+	// As a final test intentionally drop dependencies between descriptors. If we
+	// don't batch descriptor updates this will cause a validation error, since
+	// the sequence and table depend on each other.
+	ddlToExec = []string{
+		"ALTER TABLE t1 ALTER COLUMN n SET default NULL",
+	}
+	for _, ddl := range ddlToExec {
+		r.srcRunner.Exec(t, ddl)
+	}
+	// Confirm that everything matches at the old timestamp.
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM t2 ORDER BY j")
 }
 
 // TestReaderCatalogTSAdvance tests repeated advances of timestamp
