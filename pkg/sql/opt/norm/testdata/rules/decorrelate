@@ -8134,7 +8134,7 @@ project
 # HoistUnboundFilterFromExistsSubquery
 # --------------------------------------------------
 
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8160,7 +8160,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with a projection.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT true FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8186,7 +8186,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with multiple filters.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy
   WHERE xy.x = a.k
@@ -8227,7 +8227,7 @@ semi-join (hash)
 
 # Case where hoisting the filter "a.k = 1000" allows the optimizer to infer
 # a filter on "uv.u".
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a LEFT JOIN uv ON a.k = uv.u WHERE EXISTS (
   SELECT * FROM xy WHERE xy.y = a.i AND a.k = 1000
 );
@@ -8273,7 +8273,7 @@ left-join (hash)
       └── k:1 = u:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with an ANY filter that gets normalized to EXISTS.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE a.k = ANY (
   SELECT xy.x FROM xy WHERE a.i = 100
 );
@@ -8299,7 +8299,7 @@ semi-join (hash)
       └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Case with an IN filter that gets normalized to EXISTS.
-norm expect=HoistUnboundFilterFromExistsSubquery
+norm expect=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE a.k IN (
   SELECT xy.x FROM xy WHERE a.i = 100
 );
@@ -8324,8 +8324,34 @@ semi-join (hash)
  └── filters
       └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
+# No-op because the rule is disabled.
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=false
+SELECT * FROM a WHERE EXISTS (
+  SELECT * FROM xy WHERE xy.x = a.k AND a.i = 1000
+);
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 = 1000 [outer=(2), constraints=(/2: [/1000 - /1000]; tight), fd=()-->(2)]
+ ├── scan xy
+ │    ├── columns: x:8!null
+ │    └── key: (8)
+ └── filters
+      └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
 # No-op with no filters.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy);
 ----
 select
@@ -8355,7 +8381,7 @@ select
            └── false
 
 # No-op because all filters reference xy.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND xy.y = 1000
 );
@@ -8382,7 +8408,7 @@ semi-join (hash)
       └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # No-op because all filters reference xy.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND xy.y + a.i = 1000
 );
@@ -8405,7 +8431,7 @@ semi-join (hash)
       └── (y:9 + i:2) = 1000 [outer=(2,9), immutable]
 
 # No-op case with NOT EXISTS.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE NOT EXISTS (
   SELECT * FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8426,7 +8452,7 @@ anti-join (hash)
       └── i:2 = 1000 [outer=(2), constraints=(/2: [/1000 - /1000]; tight), fd=()-->(2)]
 
 # No-op because the top expression in the subquery isn't a Select.
-norm expect-not=HoistUnboundFilterFromExistsSubquery
+norm expect-not=HoistUnboundFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT sum(xy.y) OVER () FROM xy WHERE xy.x = a.k AND a.i = 1000
 );
@@ -8460,7 +8486,7 @@ project
 # HoistUnboundJoinFilterFromExistsSubquery
 # --------------------------------------------------
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy INNER JOIN uv ON x = u AND a.i = 100
 );
@@ -8485,7 +8511,7 @@ select
       │    │         │    ├── columns: x:8!null u:12!null
       │    │         │    ├── cardinality: [0 - 1]
       │    │         │    ├── key: ()
-      │    │         │    ├── fd: ()-->(8,12), (8)==(12), (12)==(8)
+      │    │         │    ├── fd: ()-->(8,12), (12)==(8), (8)==(12)
       │    │         │    ├── inner-join (hash)
       │    │         │    │    ├── columns: x:8!null u:12!null
       │    │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -8506,7 +8532,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy INNER JOIN LATERAL (
     WITH foo(u, v) AS MATERIALIZED (SELECT * FROM uv WHERE y > 5) SELECT * FROM foo
@@ -8533,7 +8559,7 @@ select
       │    │         │    ├── columns: x:8!null y:9 u:16!null
       │    │         │    ├── cardinality: [0 - 1]
       │    │         │    ├── key: ()
-      │    │         │    ├── fd: ()-->(8,9,16), (8)==(16), (16)==(8)
+      │    │         │    ├── fd: ()-->(8,9,16), (16)==(8), (8)==(16)
       │    │         │    ├── inner-join-apply
       │    │         │    │    ├── columns: x:8!null y:9 u:16!null
       │    │         │    │    ├── key: (16)
@@ -8572,7 +8598,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE EXISTS (
     SELECT * FROM uv WHERE x = u AND a.i = 100
@@ -8618,7 +8644,7 @@ select
       │    └── false
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
-norm expect=HoistUnboundJoinFilterFromExistsSubquery
+norm expect=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy WHERE EXISTS (
     SELECT * FROM (
@@ -8687,7 +8713,7 @@ select
       └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
 
 # No-op because of the left-join.
-norm expect-not=HoistUnboundJoinFilterFromExistsSubquery
+norm expect-not=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy LEFT JOIN uv ON x = u AND a.i = 100
 );
@@ -8718,7 +8744,7 @@ semi-join-apply
  └── filters (true)
 
 # No-op because of the full-join.
-norm expect-not=HoistUnboundJoinFilterFromExistsSubquery
+norm expect-not=HoistUnboundJoinFilterFromExistsSubquery set=optimizer_use_exists_filter_hoist_rule=true
 SELECT * FROM a WHERE EXISTS (
   SELECT * FROM xy FULL JOIN uv ON x = u AND a.i = 100
 );
