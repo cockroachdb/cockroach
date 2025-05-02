@@ -174,8 +174,8 @@ func (r *Replica) GetCompactedIndex() kvpb.RaftIndex {
 // addition, r.raftMu must be held continuously throughout the lifetime of the
 // returned snapshot.
 func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
-	r.raftMu.AssertHeld()
 	r.mu.AssertRHeld()
+	r.shMu.logSnapEpoch = r.raftMu.AssertHeld()
 	return (*replicaRaftMuLogSnap)(r)
 }
 
@@ -216,7 +216,7 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// NB: writes to the storage engine and the sideloaded storage are made under
 	// raftMu only, so we are not racing with new writes. In addition, raft never
 	// tries to read "unstable" entries that correspond to ongoing writes.
-	r.raftMu.AssertHeld()
+	r.raftMu.AssertHeldEpoch(r.shMu.logSnapEpoch)
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
@@ -240,7 +240,7 @@ func (r *replicaRaftMuLogSnap) Term(i uint64) (uint64, error) {
 
 // termRaftMuLocked implements the Term() call.
 func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	r.raftMu.AssertHeld()
+	r.raftMu.AssertHeldEpoch(r.shMu.logSnapEpoch)
 	// NB: the r.mu fields accessed here are always written under both r.raftMu
 	// and r.mu, and the reads are safe under r.raftMu.
 	if r.shMu.lastIndexNotDurable == i {
@@ -258,18 +258,19 @@ func (r *replicaRaftMuLogSnap) LastIndex() uint64 {
 	// NB: lastIndexNotDurable is updated under both r.raftMu and r.mu, so it is
 	// safe to access while holding any of these mutexes. We enforce raftMu
 	// because this is a raftMu-based snapshot.
-	r.raftMu.AssertHeld()
+	r.raftMu.AssertHeldEpoch(r.shMu.logSnapEpoch)
 	return uint64(r.shMu.lastIndexNotDurable)
 }
 
 // Compacted implements the raft.LogStorageSnapshot interface.
 // Requires that r.raftMu is held.
 func (r *replicaRaftMuLogSnap) Compacted() uint64 {
-	r.raftMu.AssertHeld()
+	r.raftMu.AssertHeldEpoch(r.shMu.logSnapEpoch)
 	return uint64(r.shMu.raftTruncState.Index)
 }
 
 // LogSnapshot implements the raft.LogStorageSnapshot interface.
 func (r *replicaRaftMuLogSnap) LogSnapshot() raft.LogStorageSnapshot {
+	r.raftMu.AssertHeldEpoch(r.shMu.logSnapEpoch)
 	return r
 }

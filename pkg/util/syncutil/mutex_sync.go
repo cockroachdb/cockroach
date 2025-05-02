@@ -25,7 +25,22 @@ type Mutex struct {
 // Note that we do not require the lock to be held by any particular thread,
 // just that some thread holds the lock. This is both more efficient and allows
 // for rare cases where a mutex is locked in one thread and used in another.
-func (m *Mutex) AssertHeld() {
+func (m *Mutex) AssertHeld() int32 {
+	return 1
+}
+
+// LockEpoch is like Lock(), but it also returns the "epoch" of this mutex,
+// which can be used with AssertHeldEpoch().
+func (m *Mutex) LockEpoch() int32 {
+	m.Lock()
+	return 1
+}
+
+// AssertHeldEpoch is like AssertHeld, but it additionally checks that the
+// "epoch" of the locked mutex matches the expected one. Useful for the cases
+// when one needs to ensure that the lock has been held continuously since when
+// it had been locked.
+func (m *Mutex) AssertHeldEpoch(int32) {
 }
 
 // An RWMutex is a reader/writer mutual exclusion lock.
