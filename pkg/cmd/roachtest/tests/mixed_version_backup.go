@@ -1907,7 +1907,8 @@ func (d *BackupRestoreTestDriver) runBackup(
 		backupTime = compactData.endTime
 		if err := db.QueryRowContext(ctx,
 			`SELECT crdb_internal.backup_compaction(
-				$1, 
+				0,
+				$1,
 				$2,
 				$3::DECIMAL, $4::DECIMAL
 			)`, stmt, compactData.fullSubdir, compactData.startTime, compactData.endTime).Scan(&jobID); err != nil {
@@ -2101,7 +2102,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 
 			var fullPath string
 			_, db := d.testUtils.RandomDB(rng, d.roachNodes)
-			row := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT path 
+			row := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT path
         FROM [SHOW BACKUPS IN '%s']
         ORDER BY path DESC
         LIMIT 1`, collection.uri()))
