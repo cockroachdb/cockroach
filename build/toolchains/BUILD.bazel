@@ -413,6 +413,16 @@ config_setting(
     },
 )
 
+config_setting(
+    name = "is_dev_s390x",
+    constraint_values = [
+        "@platforms//cpu:s390x",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
 bool_flag(
     name = "force_build_cdeps_flag",
     build_setting_default = False,
