@@ -111,7 +111,7 @@ SHOW BACKUPS IN 'nodelocal://1/test-root/';
 ----
 
 compact start=start end=end tag=comp_job
-SELECT crdb_internal.backup_compaction('BACKUP INTO LATEST IN ''nodelocal://1/test-root/''', '$backup_path', start, end);
+SELECT crdb_internal.backup_compaction(0, 'BACKUP INTO LATEST IN ''nodelocal://1/test-root/''', '$backup_path', start, end);
 ----
 
 job tag=comp_job wait-for-state=failed

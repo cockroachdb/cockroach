@@ -1887,6 +1887,10 @@ func (b *backupResumer) processScheduledBackupCompletion(
 		env = knobs.JobSchedulerEnv
 	}
 
+	if details.Compact {
+		return b.processCompactionCompletion(ctx, execCtx, env, details)
+	}
+
 	var scheduleID jobspb.ScheduleID
 	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We cannot rely on b.job containing created_by_id because on job
