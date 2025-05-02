@@ -606,11 +606,11 @@ func LoadEntries(
 	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
 	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
-	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
+	// TODO(pav-kv): pass the SizePolicy to eCache.Scan above, to avoid scanning
 	// the same entries twice, and computing their sizes.
-	sh := sizeHelper{maxBytes: maxBytes, account: account}
+	sh := MakeSizePolicy(maxBytes, account)
 	for i, entry := range ents {
-		if sh.done || !sh.add(uint64(entry.Size())) {
+		if sh.Done() || !sh.Add(uint64(entry.Size())) {
 			// Remove the remaining entries, and dereference the memory they hold.
 			ents = slices.Delete(ents, i, len(ents))
 			break
@@ -648,7 +648,7 @@ func LoadEntries(
 			}
 		}
 
-		if sh.add(uint64(ent.Size())) {
+		if sh.Add(uint64(ent.Size())) {
 			ents = append(ents, ent)
 		}
 		if sh.done {
