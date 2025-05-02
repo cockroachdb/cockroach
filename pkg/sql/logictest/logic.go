@@ -2002,6 +2002,9 @@ func (t *logicTest) setup(
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
+		if runtime.GOARCH == "s390x" {
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver is not operational on s390x")
+		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
