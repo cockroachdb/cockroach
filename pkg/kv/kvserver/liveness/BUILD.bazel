@@ -18,7 +18,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/server/telemetry",
         "//pkg/settings",

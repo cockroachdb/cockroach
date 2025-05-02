@@ -178,6 +178,21 @@ func WriteInitialClusterData(
 			); err != nil {
 				return err
 			}
+
+			// Set the last processed timestamp for the consistency checker as "now".
+			// This helps delay running the consistency checker for
+			// 'server.consistency_check.interval'. Note that splitting this range
+			// will copy the last processed timestamp to the right hand side, so newly
+			// split ranges will also delay running the consistency checker. This
+			// should improve the performance in workloads that cause many range
+			// splits by delaying the consistency checker.
+			if err := storage.MVCCPutProto(
+				ctx, batch, keys.QueueLastProcessedKey(desc.StartKey, "consistencyChecker"),
+				hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
+			); err != nil {
+				return err
+			}
+
 			// Range addressing for meta2.
 			meta2Key := keys.RangeMetaKey(endKey)
 			if err := storage.MVCCPutProto(
