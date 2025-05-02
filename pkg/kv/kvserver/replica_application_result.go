@@ -7,10 +7,12 @@ package kvserver
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -505,6 +507,77 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
 }
 
+func (r *replicaLogStorage) stagePendingTruncationSharedRaftMuLockedMuLocked(pt pendingTruncation) {
+	// This code is shared between regular log truncations and snapshot-induced
+	// truncations.
+	r.shMu.trunc = pt.RaftTruncatedState
+	// Ensure the raft log size is not negative since it isn't persisted between
+	// server restarts.
+	// TODO(pav-kv): should we distrust the log size if it goes negative?
+	r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
+	r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
+	if !pt.isDeltaTrusted {
+		r.shMu.sizeTrusted = false
+	}
+}
+
+func (r *replicaLogStorage) stagePendingTruncationOnSnapshotRaftMuLocked(
+	truncState kvserverpb.RaftTruncatedState,
+) {
+	r.raftMu.AssertHeld()
+
+	// A snapshot application implies a log truncation to the snapshot's index,
+	// and we apply the resulting memory state here (before the snapshot takes
+	// effect, i.e. the log entries disappear from storage). This avoids
+	// situations in which entries were already removed, but the in-mem state
+	// indicates that they ought to still exist.
+	//
+	// The truncation finalized below, after the snapshot is visible.
+
+	// TODO(during review): when is it actually safe to clear the cache if we
+	// don't want to do it under both mutexes? The main addition to the cache does
+	// hold raftMu (append) but there are various paths into the cache coming
+	// through LoadEntries and via term loading. It would be easier if we only
+	// added to the cache in the one place that seems to matter - entry append.
+	// Is that a change we should make now, while we're here?
+	r.cache.Clear(r.ls.RangeID, math.MaxUint64)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Raft never accepts a snapshot that does not increase the commit index, and
+	// the commit index always refers to a log entry (unless the log is empty
+	// already). In particular, any entries in the log are guaranteed to be at
+	// indexes that this truncation will remove, and the result is an empty log
+	// (and raft entry cache). This is true even if the RawNode has entries lined
+	// up that it wants to append to the log[1] (on top of the snapshot), as these
+	// entries are not yet stable and thus not in the log/cache yet.
+	//
+	// [1]: this is not properly supported yet and will currently fatal, see:
+	// TODO(during review) I couldn't find the issue, but I'm pretty sure we have one?
+	r.stagePendingTruncationSharedRaftMuLockedMuLocked(pendingTruncation{
+		RaftTruncatedState: truncState,
+		expectedFirstIndex: r.shMu.trunc.Index + 1,
+		logDeltaBytes:      -r.shMu.size, // we're removing everything...
+		isDeltaTrusted:     true,         // ... and we know it
+		hasSideloaded:      true,         // just in case, no point in actually checking
+	})
+	r.shMu.sizeTrusted = true // we know it's zero (see above)
+
+	// We also, in the same mu critical section, update the in-memory metadata
+	// accordingly before the change is visible on the engine. This means that
+	// even if someone used the in-memory state to grab an iterator (all within
+	// the same mu section), they would either see pre-snapshot raft log, or the
+	// post-snapshot (empty) log, but never any in-between state in which the
+	// first and last index are out of sync either with each other or with what's
+	// actually on the log engine.
+	r.updateStateRaftMuLockedMuLocked(logstore.RaftState{
+		LastIndex: truncState.Index,
+		LastTerm:  truncState.Term,
+		ByteSize:  0, // it's already zero, but we have to do it again
+	})
+}
+
 func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index can be zero if this proposal is from before
@@ -513,19 +586,10 @@ func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncat
 	// this doesn't need any special casing.
 	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.trunc.Index+1 == pt.expectedFirstIndex
 
-	// TODO(pav-kv): move this logic to replicaLogStorage type.
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.shMu.trunc = pt.RaftTruncatedState
-		// Ensure the raft log size is not negative since it isn't persisted between
-		// server restarts.
-		// TODO(pav-kv): should we distrust the log size if it goes negative?
-		r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
-		r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
-		if !pt.isDeltaTrusted {
-			r.shMu.sizeTrusted = false
-		}
+		r.stagePendingTruncationSharedRaftMuLockedMuLocked(pt)
 	}()
 
 	// Clear entries in the raft log entry cache for this range up to and

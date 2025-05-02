@@ -162,7 +162,7 @@ type pendingTruncation struct {
 	// ReplicatedEvalResult.RaftLogDelta, this is <= 0.
 	logDeltaBytes  int64
 	isDeltaTrusted bool
-	// hasSideloaded is true if the truncated interval contains at least one
+	// hasSideloaded is true if the truncated interval could contain at least one
 	// sideloaded entry.
 	hasSideloaded bool
 }
