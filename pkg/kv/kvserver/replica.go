@@ -561,6 +561,12 @@ type Replica struct {
 		// truncation.
 		raftLogLastCheckSize int64
 
+		// logSnapEpoch is the raftMu epoch during which the last LogSnapshot of the
+		// raft log has been taken. All methods of the log snapshot assert that this
+		// epoch is not changed, i.e. raftMu has been held continuously since the
+		// snapshot was taken.
+		logSnapEpoch int32
+
 		// leaderID is the ID of the leader replica within the Raft group.
 		// NB: this is updated in a separate critical section from the Raft group,
 		// and can therefore briefly be out of sync with the Raft status.

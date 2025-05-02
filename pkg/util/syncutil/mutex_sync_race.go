@@ -8,6 +8,7 @@
 package syncutil
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -17,14 +18,39 @@ const DeadlockEnabled = false
 
 // A Mutex is a mutual exclusion lock.
 type Mutex struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// wLocked stores the "epoch" of the lock. The lowest bit is 0 when the mutex
+	// is not locked, and 1 when it is locked. This is achieved by incrementing it
+	// both in Lock and Unlock methods.
+	//
+	// NB: it is ok for this int to underflow. It is only important that the
+	// lowest bit is used right. In practice, the chance of getting the same epoch
+	// for different locking "sessions" and a false positive in AssertLockedEpoch
+	// is negligible, since the epoch needs to make a full circle for that.
 	wLocked int32 // updated atomically
 }
 
 // Lock locks m.
 func (m *Mutex) Lock() {
 	m.mu.Lock()
-	atomic.StoreInt32(&m.wLocked, 1)
+	atomic.AddInt32(&m.wLocked, 1)
+}
+
+// LockEpoch is like Lock(), but it also returns the "epoch" of this mutex,
+// which can be used with AssertHeldEpoch().
+func (m *Mutex) LockEpoch() int32 {
+	m.mu.Lock()
+	return atomic.AddInt32(&m.wLocked, 1)
+}
+
+// AssertHeldEpoch is like AssertHeld, but it additionally checks that the
+// "epoch" of the locked mutex matches the expected one. Useful for the cases
+// when one needs to ensure that the lock has been held continuously since when
+// it had been locked.
+func (m *Mutex) AssertHeldEpoch(epoch int32) {
+	if atomic.LoadInt32(&m.wLocked) != epoch {
+		panic(fmt.Sprintf("mutex is not write locked at epoch %d", epoch))
+	}
 }
 
 // TryLock tries to lock m and reports whether it succeeded.
@@ -32,13 +58,13 @@ func (m *Mutex) TryLock() bool {
 	if !m.mu.TryLock() {
 		return false
 	}
-	atomic.StoreInt32(&m.wLocked, 1)
+	atomic.AddInt32(&m.wLocked, 1)
 	return true
 }
 
 // Unlock unlocks m.
 func (m *Mutex) Unlock() {
-	atomic.StoreInt32(&m.wLocked, 0)
+	atomic.AddInt32(&m.wLocked, 1)
 	m.mu.Unlock()
 }
 
@@ -50,10 +76,11 @@ func (m *Mutex) Unlock() {
 // Note that we do not require the lock to be held by any particular thread,
 // just that some thread holds the lock. This is both more efficient and allows
 // for rare cases where a mutex is locked in one thread and used in another.
-func (m *Mutex) AssertHeld() {
-	if atomic.LoadInt32(&m.wLocked) == 0 {
-		panic("mutex is not write locked")
+func (m *Mutex) AssertHeld() int32 {
+	if epoch := atomic.LoadInt32(&m.wLocked); epoch&1 == 1 {
+		return epoch
 	}
+	panic("mutex is not write locked")
 }
 
 // An RWMutex is a reader/writer mutual exclusion lock.
