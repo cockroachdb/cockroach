@@ -78,6 +78,57 @@ $input
 =>
 (Select $input (ConcatFilters $innerFilters $filters))
 
+# HoistUnboundFilterFromExistsSubquery pulls a filter condition out of an
+# Exists subquery if the filter condition only depends on columns from the
+# outer query. This is useful because it allows other optimization rules to
+# apply to the filter which was previously hidden inside the subquery.
+#
+# HoistUnboundFilterFromExistsSubquery is located before the Select push-down
+# rules to ensure that other rules have a chance to act on the filter.
+[HoistUnboundFilterFromExistsSubquery, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Exists
+                (Select
+                    $innerInput:*
+                    $innerFilters:[
+                        ...
+                        $innerItem:(FiltersItem $unboundCond:*) &
+                            (IsBoundBy
+                                $innerItem
+                                $inputCols:(OutputCols $input)
+                            )
+                        ...
+                    ]
+                )
+                $existsPrivate:*
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select
+    $input
+    (AppendFiltersItem
+        (ReplaceFiltersItem
+            $filters
+            $item
+            (Exists
+                (Select
+                    $innerInput
+                    (RemoveFiltersItem $innerFilters $innerItem)
+                )
+                $existsPrivate
+            )
+        )
+        $unboundCond
+    )
+)
+
 # PushSelectIntoProject pushes the Select operator into its Project input. This
 # is typically preferable because it minimizes the number of rows which Project
 # needs to process. This is especially important if Project is adding expensive
