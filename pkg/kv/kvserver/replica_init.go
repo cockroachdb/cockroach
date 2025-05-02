@@ -213,9 +213,11 @@ func newUninitializedReplicaWithoutRaftGroup(
 	sideloaded := logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
-		store.TODOEngine().GetAuxiliaryDir(),
+		// NB: sideloaded log entries are persisted in the state engine so that they
+		// can be ingested to the state machine locally, when being applied.
+		store.StateEngine().GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
-		store.TODOEngine(),
+		store.StateEngine(),
 	)
 	r.logStorage = &replicaLogStorage{
 		ctx:                r.raftCtx,
@@ -228,7 +230,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.logStorage.raftMu.Mutex = &r.raftMu.Mutex
 	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     rangeID,
-		Engine:      store.TODOEngine(),
+		Engine:      store.LogEngine(),
 		Sideload:    sideloaded,
 		StateLoader: r.raftMu.stateLoader.StateLoader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
