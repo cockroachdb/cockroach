@@ -1300,7 +1300,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index replacement
-   SQL commands: CREATE INDEX ON test.public.tt (x) STORING (y); DROP INDEX test.public.tt@a;
+   SQL commands: CREATE INDEX ON test.public.tt (x) STORING (y) /* After successfully creating the replacement index, manually run: `ALTER INDEX test.public.tt@a NOT VISIBLE` and then, after verifying workload performance, manually run: `DROP INDEX test.public.tt@a` */;
 
 statement ok
 CREATE DATABASE another_db;
