@@ -105,10 +105,10 @@ type Config struct {
 	// Only has an effect when Scheduler is used.
 	Priority bool
 
-	// UnregisterFromReplica is a callback provided from the
+	// UnsetFromReplica is a callback provided from the
 	// replica that this processor can call when shutting down to
 	// remove itself from the replica.
-	UnregisterFromReplica func(Processor)
+	UnsetFromReplica func(Processor)
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -165,6 +165,10 @@ type Processor interface {
 	//
 	// It is not valid to restart a processor after it has been stopped.
 	StopWithErr(pErr *kvpb.Error)
+
+	// Stopped returns a channel that is closed during the processor's cleanup
+	// routine.
+	Stopped() <-chan struct{}
 
 	// Lifecycle of registrations.
 

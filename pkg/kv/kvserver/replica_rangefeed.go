@@ -333,15 +333,11 @@ func (r *Replica) RangeFeed(
 		}
 	}
 
-	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
+	_, disconnector, err := r.registerWithRangefeedRaftMuLocked(
 		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
 	)
 	r.raftMu.Unlock()
 
-	// This call is a no-op if we have successfully registered; but in case we
-	// encountered an error after we created processor, disconnect if processor
-	// is empty.
-	defer r.maybeDisconnectEmptyRangefeed(p)
 	return disconnector, err
 }
 
@@ -356,14 +352,14 @@ func (r *Replica) getRangefeedProcessor() rangefeed.Processor {
 	return p
 }
 
-func (r *Replica) setRangefeedProcessor(p rangefeed.Processor) {
-	r.rangefeedMu.Lock()
-	defer r.rangefeedMu.Unlock()
+func (r *Replica) setRangefeedProcessorLocked(p rangefeed.Processor) {
 	r.rangefeedMu.proc = p
 	r.store.addReplicaWithRangefeed(r.RangeID, p.ID())
 }
 
-func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Processor) {
+func (r *Replica) unsetRangefeedProcessor(p rangefeed.Processor) {
+	r.rangefeedMu.Lock()
+	defer r.rangefeedMu.Unlock()
 	if r.rangefeedMu.proc != p {
 		// The processor was already unset.
 		return
@@ -373,28 +369,11 @@ func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Processor) {
 	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
-func (r *Replica) unsetRangefeedProcessor(p rangefeed.Processor) {
-	r.rangefeedMu.Lock()
-	defer r.rangefeedMu.Unlock()
-	r.unsetRangefeedProcessorLocked(p)
-}
-
 func (r *Replica) setRangefeedFilterLocked(f *rangefeed.Filter) {
 	if f == nil {
 		panic("filter nil")
 	}
 	r.rangefeedMu.opFilter = f
-}
-
-func (r *Replica) updateRangefeedFilterLocked() bool {
-	f := r.rangefeedMu.proc.Filter()
-	// Return whether the update to the filter was successful or not. If
-	// the processor was already stopped then we can't update the filter.
-	if f != nil {
-		r.setRangefeedFilterLocked(f)
-		return true
-	}
-	return false
 }
 
 // Rangefeed registration takes place under the raftMu, so log if we ever hold
@@ -446,11 +425,19 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
-	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
-	r.rangefeedMu.Lock()
-	p := r.rangefeedMu.proc
-
-	if p != nil {
+	// of concurrent processor shutdowns.
+	//
+	// Since we are under raftMu, we put a hard cap on how long we will wait for
+	// the stopped processor to be removed.
+	const maxAttempts = 20
+	attempts := 0
+	for {
+		attempts++
+		r.rangefeedMu.Lock()
+		p := r.rangefeedMu.proc
+		if p == nil {
+			break
+		}
 		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			stream)
 		if reg {
@@ -462,11 +449,17 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			catchUpIter = nil
 			return p, disconnector, nil
 		}
-		// If the registration failed, the processor was already being shut
-		// down. Help unset it and then continue on with initializing a new
-		// processor.
-		r.unsetRangefeedProcessorLocked(p)
-		p = nil
+		r.rangefeedMu.Unlock()
+		if attempts >= maxAttempts {
+			return nil, nil, errors.Errorf("rangefeed failed registration %d times, giving up", attempts)
+		}
+		select {
+		case <-p.Stopped():
+		case <-streamCtx.Done():
+			return nil, nil, streamCtx.Err()
+		case <-r.store.stopper.ShouldQuiesce():
+			return nil, nil, &kvpb.NodeUnavailableError{}
+		}
 	}
 	r.rangefeedMu.Unlock()
 
@@ -485,23 +478,23 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
-		AmbientContext:        r.AmbientContext,
-		Clock:                 r.Clock(),
-		Stopper:               r.store.stopper,
-		Settings:              r.store.ClusterSettings(),
-		RangeID:               r.RangeID,
-		Span:                  desc.RSpan(),
-		TxnPusher:             &tp,
-		PushTxnsAge:           r.store.TestingKnobs().RangeFeedPushTxnsAge,
-		EventChanCap:          defaultEventChanCap,
-		EventChanTimeout:      defaultEventChanTimeout,
-		Metrics:               r.store.metrics.RangeFeedMetrics,
-		MemBudget:             feedBudget,
-		Scheduler:             r.store.getRangefeedScheduler(),
-		Priority:              isSystemSpan, // only takes effect when Scheduler != nil
-		UnregisterFromReplica: r.unsetRangefeedProcessor,
+		AmbientContext:   r.AmbientContext,
+		Clock:            r.Clock(),
+		Stopper:          r.store.stopper,
+		Settings:         r.store.ClusterSettings(),
+		RangeID:          r.RangeID,
+		Span:             desc.RSpan(),
+		TxnPusher:        &tp,
+		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
+		EventChanCap:     defaultEventChanCap,
+		EventChanTimeout: defaultEventChanTimeout,
+		Metrics:          r.store.metrics.RangeFeedMetrics,
+		MemBudget:        feedBudget,
+		Scheduler:        r.store.getRangefeedScheduler(),
+		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
+		UnsetFromReplica: r.unsetRangefeedProcessor,
 	}
-	p = rangefeed.NewProcessor(cfg)
+	p := rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := func() rangefeed.IntentScanner {
@@ -546,8 +539,9 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter = nil
 
 	// Set the rangefeed processor and filter reference.
-	r.setRangefeedProcessor(p)
+
 	r.rangefeedMu.Lock()
+	r.setRangefeedProcessorLocked(p)
 	r.setRangefeedFilterLocked(filter)
 	r.rangefeedMu.Unlock()
 
@@ -557,28 +551,10 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	return p, disconnector, nil
 }
 
-// maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
-// still active and if it no longer has any registrations.
-func (r *Replica) maybeDisconnectEmptyRangefeed(p rangefeed.Processor) {
-	r.rangefeedMu.Lock()
-	defer r.rangefeedMu.Unlock()
-	if p == nil || p != r.rangefeedMu.proc {
-		// The processor has already been removed or replaced.
-		return
-	}
-	if p.Len() == 0 || !r.updateRangefeedFilterLocked() {
-		// Stop the rangefeed processor if it has no registrations or if we are
-		// unable to update the operation filter.
-		p.Stop()
-		r.unsetRangefeedProcessorLocked(p)
-	}
-}
-
 // disconnectRangefeedWithErr broadcasts the provided error to all rangefeed
 // registrations and tears down the provided rangefeed Processor.
 func (r *Replica) disconnectRangefeedWithErr(p rangefeed.Processor, pErr *kvpb.Error) {
 	p.StopWithErr(pErr)
-	r.unsetRangefeedProcessor(p)
 }
 
 // disconnectRangefeedSpanWithErr broadcasts the provided error to all rangefeed
@@ -590,7 +566,6 @@ func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *kvpb.E
 		return
 	}
 	p.DisconnectSpanWithErr(span, pErr)
-	r.maybeDisconnectEmptyRangefeed(p)
 }
 
 // disconnectRangefeedWithReason broadcasts the provided rangefeed retry reason
@@ -797,10 +772,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !p.ConsumeLogicalOps(ctx, ops.Ops...) {
-		// Consumption failed and the rangefeed was stopped.
-		r.unsetRangefeedProcessor(p)
-	}
+	p.ConsumeLogicalOps(ctx, ops.Ops...)
 }
 
 // handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
@@ -820,9 +792,7 @@ func (r *Replica) handleSSTableRaftMuLocked(
 	if p == nil {
 		return
 	}
-	if !p.ConsumeSSTable(ctx, sst, sstSpan, writeTS) {
-		r.unsetRangefeedProcessor(p)
-	}
+	p.ConsumeSSTable(ctx, sst, sstSpan, writeTS)
 }
 
 // handleClosedTimestampUpdate takes the a closed timestamp for the replica
@@ -923,10 +893,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	if closedTS.IsEmpty() {
 		return false
 	}
-	if !p.ForwardClosedTS(ctx, closedTS) {
-		// Consumption failed and the rangefeed was stopped.
-		r.unsetRangefeedProcessor(p)
-	}
+	p.ForwardClosedTS(ctx, closedTS)
 
 	return exceedsSlowLagThresh
 }

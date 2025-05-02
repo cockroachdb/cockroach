@@ -255,8 +255,8 @@ func (p *ScheduledProcessor) cleanup() {
 	p.taskCancel()
 	close(p.stoppedC)
 	p.MemBudget.Close(ctx)
-	if p.UnregisterFromReplica != nil {
-		p.UnregisterFromReplica(p)
+	if p.UnsetFromReplica != nil {
+		p.UnsetFromReplica(p)
 	}
 
 }
@@ -276,6 +276,11 @@ func (p *ScheduledProcessor) StopWithErr(pErr *kvpb.Error) {
 	p.syncEventC()
 	// Send the processor a stop signal.
 	p.sendStop(pErr)
+}
+
+// Stopped returns a channel that is closed when the process is being shut down.
+func (p *ScheduledProcessor) Stopped() <-chan struct{} {
+	return p.stoppedC
 }
 
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
