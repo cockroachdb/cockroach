@@ -123,11 +123,14 @@ func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
 //
 // Entries can return log entries that are not yet durable / synced in storage.
 //
-// Requires that r.mu is held for writing.
-// TODO(pav-kv): make it possible to call with only raftMu held.
+// Requires that r.mu is held for reading or writing.
 func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	entries, err := r.entriesLocked(
-		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	// The call is always initiated by RawNode, under r.mu.
+	// TODO(pav-kv): we have a large class of cases when we would rather only hold
+	// raftMu while reading the entries. The r.mu lock should be narrow.
+	r.mu.AssertRHeld()
+	entries, err := r.entriesShMuLocked(
+		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes, nil /* account */)
 	if err != nil {
 		r.reportRaftStorageError(err)
 	}
@@ -135,15 +138,9 @@ func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.En
 }
 
 // entriesLocked implements the Entries() call.
-func (r *replicaLogStorage) entriesLocked(
-	lo, hi kvpb.RaftIndex, maxBytes uint64,
+func (r *replicaLogStorage) entriesShMuLocked(
+	lo, hi kvpb.RaftIndex, maxBytes uint64, account *logstore.BytesAccount,
 ) ([]raftpb.Entry, error) {
-	// The call is always initiated by RawNode, under r.mu. Need it locked for
-	// writes, for r.mu.stateLoader.
-	//
-	// TODO(pav-kv): we have a large class of cases when we would rather only hold
-	// raftMu while reading the entries. The r.mu lock should be narrow.
-	r.mu.AssertHeld()
 	// Check whether the first requested entry is already logically truncated. It
 	// may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
@@ -168,18 +165,17 @@ func (r *replicaLogStorage) entriesLocked(
 	// can remember the readable bounds, and assert that reads do not cross them.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
-		lo, hi, maxBytes,
-		nil, // bytesAccount is not used when reading under Replica.mu
+		lo, hi, maxBytes, account,
 	)
 	r.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
 }
 
-// raftEntriesLocked implements the Entries() call.
+// raftEntriesLocked implements the Entries() call. Only for testing.
 func (r *Replica) raftEntriesLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
-	return r.asLogStorage().entriesLocked(lo, hi, maxBytes)
+	return r.asLogStorage().entriesShMuLocked(lo, hi, maxBytes, nil /* account */)
 }
 
 // Term implements the raft.LogStorage interface.
@@ -322,35 +318,15 @@ type replicaRaftMuLogSnap replicaLogStorage
 // Entries implements the raft.LogStorageSnapshot interface.
 // Requires that r.raftMu is held.
 func (r *replicaRaftMuLogSnap) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	entries, err := r.entriesRaftMuLocked(
-		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
-	if err != nil {
-		(*replicaLogStorage)(r).reportRaftStorageError(err)
-	}
-	return entries, err
-}
-
-// entriesRaftMuLocked implements the Entries() call.
-func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
-	lo, hi kvpb.RaftIndex, maxBytes uint64,
-) ([]raftpb.Entry, error) {
 	// NB: writes to the storage engine and the sideloaded storage are made under
 	// raftMu only, so we are not racing with new writes. In addition, raft never
 	// tries to read "unstable" entries that correspond to ongoing writes.
 	r.raftMu.AssertHeld()
-	// Check whether the first requested entry is already logically truncated. It
-	// may or may not be physically truncated, since the RaftTruncatedState is
-	// updated before the truncation is enacted.
-	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
-	if lo <= r.shMu.trunc.Index {
-		return nil, raft.ErrCompacted
+	entries, err := (*replicaLogStorage)(r).entriesShMuLocked(
+		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes, &r.raftMu.bytesAccount)
+	if err != nil {
+		(*replicaLogStorage)(r).reportRaftStorageError(err)
 	}
-	entries, _, loadedSize, err := logstore.LoadEntries(
-		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
-		lo, hi, maxBytes,
-		&r.raftMu.bytesAccount,
-	)
-	r.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
 }
 
