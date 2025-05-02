@@ -98,51 +98,63 @@ var TargetBytesPerLockConflictError = settings.RegisterIntSetting(
 	settings.WithName("storage.mvcc.target_bytes_per_lock_conflict_error"),
 )
 
-// getMaxConcurrentCompactions wraps the maxConcurrentCompactions env var in a
-// func that may be installed on Options.MaxConcurrentCompactions. It also
-// imposes a floor on the max, so that an engine is always created with at least
-// 1 slot for a compactions.
-//
-// NB: This function inspects the environment every time it's called. This is
-// okay, because Engine construction in NewPebble will invoke it and store the
-// value on the Engine itself.
-func getMaxConcurrentCompactions() int {
-	n := envutil.EnvOrDefaultInt(
-		"COCKROACH_CONCURRENT_COMPACTIONS", func() int {
-			// The old COCKROACH_ROCKSDB_CONCURRENCY environment variable was never
-			// documented, but customers were told about it and use today in
-			// production. We don't want to break them, so if the new env var
-			// is unset but COCKROACH_ROCKSDB_CONCURRENCY is set, use the old env
-			// var's value. This old env var has a wart in that it's expressed as a
-			// number of concurrency slots to make available to both flushes and
-			// compactions (a vestige of the corresponding RocksDB option's
-			// mechanics). We need to adjust it to be in terms of just compaction
-			// concurrency by subtracting the flushing routine's dedicated slot.
-			//
-			// TODO(jackson): Should envutil expose its `getEnv` internal func for
-			// cases like this where we actually want to know whether it's present
-			// or not; not just fallback to a default?
-			if oldV := envutil.EnvOrDefaultInt("COCKROACH_ROCKSDB_CONCURRENCY", 0); oldV > 0 {
-				return oldV - 1
-			}
+var defaultMaxConcurrentCompactions = getDefaultMaxConcurrentCompactions()
 
-			// By default use up to min(numCPU-1, 3) threads for background
-			// compactions per store (reserving the final process for flushes).
-			const max = 3
-			if n := runtime.GOMAXPROCS(0); n-1 < max {
-				return n - 1
-			}
-			return max
-		}())
-	if n < 1 {
-		return 1
+// By default, we use up to min(GOMAXPROCS-1, 3) threads for background
+// compactions per store (reserving the final process for flushes).
+func getDefaultMaxConcurrentCompactions() int {
+	const def = 3
+	if n := runtime.GOMAXPROCS(0); n-1 < def {
+		return max(n-1, 1)
 	}
-	return n
+	return def
+}
+
+// envMaxConcurrentCompactions is not zero if this node has an env var override
+// for the concurrency.
+var envMaxConcurrentCompactions = getMaxConcurrentCompactionsFromEnv()
+
+func getMaxConcurrentCompactionsFromEnv() int {
+	if v := envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_COMPACTIONS", 0); v > 0 {
+		return v
+	}
+	// The old COCKROACH_ROCKSDB_CONCURRENCY environment variable was never
+	// documented, but customers were told about it and use today in
+	// production. We don't want to break them, so if the new env var
+	// is unset but COCKROACH_ROCKSDB_CONCURRENCY is set, use the old env
+	// var's value. This old env var has a wart in that it's expressed as a
+	// number of concurrency slots to make available to both flushes and
+	// compactions (a vestige of the corresponding RocksDB option's
+	// mechanics). We need to adjust it to be in terms of just compaction
+	// concurrency by subtracting the flushing routine's dedicated slot.
+	if oldV := envutil.EnvOrDefaultInt("COCKROACH_ROCKSDB_CONCURRENCY", 0); oldV > 0 {
+		return max(oldV-1, 1)
+	}
+	return 0
+}
+
+// determineMaxConcurrentCompactions determines the upper limit on compaction
+// concurrency.
+//
+// Normally, we use the default limit of min(3, numCPU-1). This limit can be
+// changed via an environment variable or via a cluster setting. If both of
+// those are used, the maximum of them is taken.
+func determineMaxConcurrentCompactions(defaultValue int, envValue int, clusterSetting int) int {
+	if envValue > 0 {
+		if clusterSetting > 0 {
+			return max(envValue, clusterSetting)
+		}
+		return envValue
+	}
+	if clusterSetting > 0 {
+		return clusterSetting
+	}
+	return defaultValue
 }
 
 // l0SubLevelCompactionConcurrency is the sub-level threshold at which to
 // allow an increase in compaction concurrency. The maximum is still
-// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// controlled by pebble.Options.CompactionConcurrencyRange. The default of 2
 // allows an additional compaction (so total 1 + 1 = 2 compactions) when the
 // sub-level count is 2, and increments concurrency by 1 whenever sub-level
 // count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
