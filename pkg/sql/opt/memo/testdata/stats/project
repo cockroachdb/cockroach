@@ -302,7 +302,7 @@ exec-ddl
 CREATE TABLE t124831 (a INT, b INT);
 ----
 
-norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,PushFilterIntoJoinLeft)
+norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,PushFilterIntoJoinLeft,HoistUnboundFilterFromExistsSubquery)
 SELECT a FROM t124831 WHERE NULL::INT IN (SELECT 1 LIMIT b);
 ----
 project
