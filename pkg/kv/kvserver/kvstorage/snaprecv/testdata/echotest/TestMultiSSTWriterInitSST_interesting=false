@@ -3,7 +3,7 @@
 echo
 ----
 >> finishing msstw
->> sstSize=4623 estDataSize=4623
+>> sstSize=4623 estDataSize=126
 >> sst0:
 rangedel: /Local/RangeID/100/{r""-s""}
 rangekeydel: /Local/RangeID/100/{r""-s""}

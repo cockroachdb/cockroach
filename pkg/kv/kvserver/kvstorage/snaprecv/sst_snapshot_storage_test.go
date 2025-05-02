@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package snaprecv
 
 import (
 	"context"
@@ -261,7 +261,7 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-// TestMultiSSTWriterInitSST tests the SSTS that multiSSTWriter generates.
+// TestMultiSSTWriterInitSST tests the SSTS that MultiSSTWriter generates.
 // In particular, certain SST files must contain range key deletes as well
 // as range deletes to make sure that ingesting the SST clears any existing
 // data.
@@ -298,7 +298,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	// Disabling columnar blocks causes stats changes.
 	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 
-	msstw, err := newMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, 0)
+	msstw, err := NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 
 	var buf redact.StringBuilder
@@ -306,7 +306,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 		// sstSize increases on SST flush and is the total size of all finished
 		// SSTs, estDataSize is the exact data size (think: sum of lengths of keys
 		// and values) of all writes to all SSTs, including the pending one.
-		_, _ = fmt.Fprintf(buf, ">> sstSize=%d estDataSize=%d\n", msstw.sstSize, msstw.estimatedDataSize())
+		_, _ = fmt.Fprintf(buf, ">> sstSize=%d estDataSize=%d\n", msstw.sstSize, msstw.EstimatedDataSize())
 	}
 
 	var putSpans []roachpb.Span
@@ -350,17 +350,17 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 		// in stats when the SST is flushed.
 		k := storage.EngineKey{Key: span.Key}.Encode()
 		ek := storage.EngineKey{Key: span.EndKey}.Encode()
-		require.NoError(t, msstw.PutInternalRangeDelete(ctx, k, ek))
+		require.NoError(t, msstw.putInternalRangeDelete(ctx, k, ek))
 		rk := rangekey.Key{
 			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
 		}
-		require.NoError(t, msstw.PutInternalRangeKey(ctx, k, ek, rk))
+		require.NoError(t, msstw.putInternalRangeKey(ctx, k, ek, rk))
 		_, _ = fmt.Fprintf(&buf, ">> rangekeyset [%s-%s)\n", span.Key, span.EndKey)
 		logSize(&buf)
 	}
 
 	_, _ = fmt.Fprintln(&buf, ">> finishing msstw")
-	_, err = msstw.Finish(ctx)
+	_, _, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	logSize(&buf)
@@ -399,7 +399,7 @@ func buildIterForScratch(
 }
 
 // TestMultiSSTWriterSize tests the effect of lowering the max size
-// of sstables in a multiSSTWriter, and ensuring that the produced sstables
+// of sstables in a MultiSSTWriter, and ensuring that the produced sstables
 // are still correct.
 func TestMultiSSTWriterSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -427,13 +427,13 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	mvccSpan := keySpans[len(keySpans)-1]
 
 	// Make a reference msstw with the default size.
-	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0)
+	referenceMsstw, err := NewMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), referenceMsstw.dataSize)
 	now := timeutil.Now().UnixNano()
 
 	for i := range localSpans {
-		require.NoError(t, referenceMsstw.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+		require.NoError(t, referenceMsstw.put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -445,26 +445,26 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		if i%50 == 0 {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
-			require.NoError(t, referenceMsstw.PutRangeKey(
+			require.NoError(t, referenceMsstw.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, referenceMsstw.Put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, referenceMsstw.put(ctx, engineKey, []byte("foobarbaz")))
 	}
-	_, err = referenceMsstw.Finish(ctx)
+	_, _, err = referenceMsstw.Finish(ctx)
 	require.NoError(t, err)
 
 	refIter, err := buildIterForScratch(t, keySpans, ref)
 	require.NoError(t, err)
 	defer refIter.Close()
 
-	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
-
-	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0)
+	multiSSTWriter, err := NewMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{
+		MaxSSTSize: 100,
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
 	for i := range localSpans {
-		require.NoError(t, multiSSTWriter.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+		require.NoError(t, multiSSTWriter.put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -475,13 +475,13 @@ func TestMultiSSTWriterSize(t *testing.T) {
 		if i%50 == 0 {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
-			require.NoError(t, multiSSTWriter.PutRangeKey(
+			require.NoError(t, multiSSTWriter.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, multiSSTWriter.Put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, multiSSTWriter.put(ctx, engineKey, []byte("foobarbaz")))
 	}
 
-	_, err = multiSSTWriter.Finish(ctx)
+	_, _, err = multiSSTWriter.Finish(ctx)
 	require.NoError(t, err)
 	require.Greater(t, len(scratch.SSTs()), len(ref.SSTs()))
 
@@ -514,7 +514,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	require.Equal(t, valid, valid2)
 }
 
-// TestMultiSSTWriterAddLastSpan tests that multiSSTWriter initializes each of
+// TestMultiSSTWriterAddLastSpan tests that MultiSSTWriter initializes each of
 // the SST files associated with the replicated key ranges by writing a range
 // deletion tombstone that spans the entire range of each respectively, except
 // for the last span which only gets a rangedel when explicitly added.
@@ -541,12 +541,12 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0)
+	msstw, err := NewMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
-	require.NoError(t, msstw.Put(ctx, testEngineKey, []byte("foo")))
-	_, err = msstw.Finish(ctx)
+	require.NoError(t, msstw.put(ctx, testEngineKey, []byte("foo")))
+	_, _, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
