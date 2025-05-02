@@ -352,14 +352,36 @@ func (mb *mutationBuilder) buildUpdate(
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
+	// Build scopes for the RETURNING clause early (if present). This is needed for
+	// RLS to determine whether SELECT policies should be applied, based on
+	// whether the clause references columns in the target table.
+	returningInScope, returningOutScope := mb.maybeBuildReturningScopes(returning, colRefs)
+
+	// Apply SELECT policies if any columns are referenced in SET, WHERE, or RETURNING.
+	// At this point, colRefs includes columns referenced by the SET and WHERE clauses.
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() && colRefs != nil {
+		// Check if any referenced columns are read during the initial row fetch.
+		for _, colID := range mb.fetchColIDs {
+			if colID != 0 && colRefs.Contains(colID) {
+				includeSelectPolicies = true
+				break
+			}
+		}
+		// If not already set, check if any referenced columns are part of the update
+		// table’s post-mutation row values, as used by RETURNING clauses.
+		if !includeSelectPolicies && returningInScope != nil {
+			for _, sc := range returningInScope.cols {
+				if sc.table == mb.alias && sc.id != 0 && colRefs.Contains(sc.id) {
+					includeSelectPolicies = true
+					break
+				}
+			}
+		}
+	}
+
 	// Add any check constraint boolean columns to the input.
-	// Apply SELECT policies if columns are referenced in the SET, WHERE, or
-	// RETURNING clauses.
-	// TODO(144951): colRefs covers SET and WHERE; RETURNING is assumed to require
-	// SELECT policies for now.
-	mb.addCheckConstraintCols(true, /* isUpdate */
-		policyScopeCmd,
-		returning != nil || (colRefs != nil && colRefs.Len() > 0) /* includeSelectPolicies */)
+	mb.addCheckConstraintCols(true /* isUpdate */, policyScopeCmd, includeSelectPolicies)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
@@ -387,5 +409,5 @@ func (mb *mutationBuilder) buildUpdate(
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
-	mb.buildReturning(returning)
+	mb.completeBuildReturning(returningInScope, returningOutScope)
 }
