@@ -195,7 +195,7 @@ func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
 //
 // This would require auditing and integrating with the write paths. Today, this
 // type implements only reads, and writes are in various places like the
-// logstore.LogStore type, or applySnapshot.
+// logstore.LogStore type, or applySnapshotRaftMuLocked.
 type replicaRaftMuLogSnap replicaLogStorage
 
 // Entries implements the raft.LogStorageSnapshot interface.
