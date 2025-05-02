@@ -19,6 +19,7 @@ go_library(
         # NB: On Ubuntu, res_nsearch is found in the resolv_wrapper library,
         # found in the libresolv-wrapper package.
         "//build/toolchains:is_dev_linux": ["-ldl -lresolv -lresolv_wrapper"],
+        "//build/toolchains:is_dev_s390x": ["-ldl -lresolv -lresolv_wrapper -lkeyutils"],
         "@io_bazel_rules_go//go/platform:linux": ["-ldl -lresolv"],
         "//conditions:default": [],
     }),
