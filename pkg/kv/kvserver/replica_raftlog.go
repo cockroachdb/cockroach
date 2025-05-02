@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // replicaLogStorage implements the raft.LogStorage interface.
@@ -140,7 +142,10 @@ func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.En
 // entriesLocked implements the Entries() call.
 func (r *replicaLogStorage) entriesShMuLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64, account *logstore.BytesAccount,
-) ([]raftpb.Entry, error) {
+) (ee []raftpb.Entry, rr error) {
+	if lo > hi {
+		return nil, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
+	}
 	// Check whether the first requested entry is already logically truncated. It
 	// may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
@@ -163,12 +168,82 @@ func (r *replicaLogStorage) entriesShMuLocked(
 	//
 	// TODO(pav-kv): we need better safety guardrails here. The log storage type
 	// can remember the readable bounds, and assert that reads do not cross them.
-	entries, _, loadedSize, err := logstore.LoadEntries(
+
+	entries := make([]raftpb.Entry, 0, min(hi-lo, 100))
+	entries, _, nextIndex, _ := r.cache.ScanPartial(
+		entries, r.ls.RangeID, lo, hi, maxBytes)
+	cached := len(entries)
+	// The cache can return entries in the middle of [lo,hi) span. Determine if we
+	// need to load any entries preceding the returned span.
+	needPrefix := false
+	if cached > 0 {
+		first := kvpb.RaftIndex(entries[0].Index)
+		needPrefix = first != lo
+		if first < lo {
+			return nil, errors.AssertionFailedf("first entry from cache is %d, want >= %d", first, lo)
+		}
+	}
+
+	pol := logstore.MakeSizePolicy(maxBytes, account)
+	// If the cached entries are in the middle of the needed interval, load the
+	// missing prefix from storage.
+	if needPrefix {
+		// TODO(pav-kv): share the iterator with the second LoadEntries call below.
+		// This might be unnecessary because typically we only need to load a prefix
+		// or a suffix.
+		loaded, size, err := logstore.LoadEntries(
+			r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
+			lo, kvpb.RaftIndex(entries[0].Index), &pol, entries,
+		)
+		r.metrics.RaftStorageReadBytes.Inc(int64(size))
+		if err != nil {
+			return nil, err
+		}
+		// Check whether the entire prefix is loaded, up to the first cached index.
+		// If not, this is probably due to the size policy.
+		if ln := len(loaded); ln <= cached || loaded[ln-1].Index+1 != loaded[0].Index {
+			// Drop the cached entries, and dereference the memory they hold.
+			// NB: this panics if ln < cached, by design. LoadEntries must not return
+			// a shorter slice.
+			return slices.Delete(loaded, 0, cached), nil
+		}
+		// Prepend the loaded entries to the cache.
+		r.cache.Add(r.ls.RangeID, entries[cached:], false /* truncate */)
+		// Move the loaded entries to the front, to restore the correct order.
+		rotate(loaded, cached)
+		entries = loaded
+	}
+
+	// Run the cached entries through the size policy. Return early if at any
+	// point the limits are exceeded. Note that entries loaded from storage have
+	// been already registered in LoadEntries.
+	// NB: Even though all the cached entries are already in memory, returning all
+	// of them would increase their lifetime, incur size amplification when
+	// processing them, and risk reaching out-of-memory state.
+	// TODO(pav-kv): consider using the SizePolicy with the cache scan above, to
+	// avoid scanning the same entries twice and computing their sizes.
+	for i := range entries[len(entries)-cached:] {
+		if pol.Done() || !pol.Add(uint64(entries[i].Size())) {
+			// Remove the remaining entries, and dereference the memory they hold.
+			return slices.Delete(entries, cached+i, len(entries)), nil
+		}
+	}
+	if nextIndex >= hi { // no more entries to scan
+		return entries, nil
+	}
+
+	// Load the missing suffix of entries and cache it.
+	prefix := len(entries)
+	entries, size, err := logstore.LoadEntries(
 		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
-		lo, hi, maxBytes, account,
+		nextIndex, hi, &pol, entries,
 	)
-	r.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
-	return entries, err
+	r.metrics.RaftStorageReadBytes.Inc(int64(size))
+	if err != nil {
+		return nil, err
+	}
+	r.cache.Add(r.ls.RangeID, entries[prefix:], false /* truncate */)
+	return entries, nil
 }
 
 // raftEntriesLocked implements the Entries() call. Only for testing.
@@ -365,4 +440,12 @@ func (r *replicaLogStorage) reportRaftStorageError(err error) {
 		log.Errorf(r.ctx, "error in raft.LogStorage %v", err)
 	}
 	r.metrics.RaftStorageError.Inc(1)
+}
+
+// rotate does a cyclic shift of the slice, so that the specified prefix becomes
+// a suffix.
+func rotate[S ~[]E, E any](slice S, prefix int) {
+	slices.Reverse(slice[:prefix])
+	slices.Reverse(slice[prefix:])
+	slices.Reverse(slice)
 }

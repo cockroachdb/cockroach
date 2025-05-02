@@ -177,12 +177,9 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	last := tc.repl.asLogStorage().shMu.last.Index
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, last)
-	ents, cachedBytes, _, err := logstore.LoadEntries(
-		ctx, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
-		tc.repl.logStorage.ls.Sideload, comp+1, last+1, math.MaxUint64, nil /* account */)
+	ents, err := tc.repl.raftEntriesLocked(comp+1, last+1, math.MaxUint64)
 	require.NoError(t, err)
 	require.Len(t, ents, int(last-comp))
-	require.Zero(t, cachedBytes)
 
 	// Check that the Raft entry cache was populated.
 	_, okLo := tc.store.raftEntryCache.Get(tc.repl.RangeID, comp+1)
