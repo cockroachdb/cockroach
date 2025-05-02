@@ -38,8 +38,7 @@ type RemoveOptions struct {
 func (s *Store) RemoveReplica(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
-	rep.raftMu.Lock()
-	defer rep.raftMu.Unlock()
+	defer rep.raftMu.UnlockEpoch(rep.raftMu.LockEpoch())
 	if opts.InsertPlaceholder {
 		return errors.Errorf("InsertPlaceholder not supported in RemoveReplica")
 	}

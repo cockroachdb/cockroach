@@ -43,6 +43,14 @@ func (m *Mutex) LockEpoch() int32 {
 	return atomic.AddInt32(&m.wLocked, 1)
 }
 
+// UnlockEpoch is AssertHeldEpoch + Unlock.
+func (m *Mutex) UnlockEpoch(epoch int32) {
+	if atomic.AddInt32(&m.wLocked, 1) != epoch+1 {
+		panic(fmt.Sprintf("mutex is not write locked at epoch %d", epoch))
+	}
+	m.mu.Unlock()
+}
+
 // AssertHeldEpoch is like AssertHeld, but it additionally checks that the
 // "epoch" of the locked mutex matches the expected one. Useful for the cases
 // when one needs to ensure that the lock has been held continuously since when

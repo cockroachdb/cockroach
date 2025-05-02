@@ -75,8 +75,7 @@ func splitPreApply(
 		// it's always present).
 		var hs raftpb.HardState
 		if rightRepl != nil {
-			rightRepl.raftMu.Lock()
-			defer rightRepl.raftMu.Unlock()
+			defer rightRepl.raftMu.UnlockEpoch(rightRepl.raftMu.LockEpoch())
 			// Assert that the rightRepl is not initialized. We're about to clear out
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.

@@ -357,8 +357,7 @@ func (r *Replica) abandon(tok abandonToken) {
 	// passes to the "below Raft" machinery.
 	//
 	// See the comment on ProposalData.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// When the caller abandons the request, it Finishes its trace. By that
@@ -871,8 +870,7 @@ func (r *Replica) handleRaftReady(
 		}, nil
 	}
 
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
@@ -1409,8 +1407,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 func (r *Replica) tick(
 	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (exists bool, err error) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	defer func() {
 		if exists && err == nil {
 			// NB: since we are returning true, there will be a Ready handling
@@ -1537,14 +1534,12 @@ func (r *Replica) tick(
 }
 
 func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
 }
 
 func (r *Replica) processRACv2RangeController(ctx context.Context) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	mode := r.shMu.currentRACv2Mode
 	var logSnapshot raft.LogSnapshot
 	if mode == rac2.MsgAppPull {
@@ -1737,8 +1732,7 @@ func (r *Replica) refreshProposalsLocked(
 }
 
 func (r *Replica) poisonInflightLatches(err error) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, p := range r.mu.proposals {
@@ -2088,8 +2082,7 @@ func (r *Replica) sendRaftMessageRequest(
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 
 	snapStatus := raft.SnapshotFinish
 	if snapErr != nil {
@@ -2897,7 +2890,7 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(
+	rightRepl, _, epoch, err := r.store.getOrCreateReplica(
 		ctx, split.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
 	)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
@@ -2916,7 +2909,7 @@ func (r *Replica) acquireSplitLock(
 		return nil, errors.Errorf("RHS of split %s / %s already initialized before split application",
 			&split.LeftDesc, &split.RightDesc)
 	}
-	return rightRepl.raftMu.Unlock, nil
+	return func() { rightRepl.raftMu.UnlockEpoch(epoch) }, nil
 }
 
 func (r *Replica) acquireMergeLock(
@@ -2932,7 +2925,7 @@ func (r *Replica) acquireMergeLock(
 	// complete, after which the replica will realize it has been destroyed and
 	// reject the snapshot.
 	rightReplDesc, _ := merge.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(
+	rightRepl, _, epoch, err := r.store.getOrCreateReplica(
 		ctx, merge.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
 	)
 	if err != nil {
@@ -2943,7 +2936,7 @@ func (r *Replica) acquireMergeLock(
 		return nil, errors.Errorf("RHS of merge %s <- %s not present on store; found %s in place of the RHS",
 			&merge.LeftDesc, &merge.RightDesc, rightDesc)
 	}
-	return rightRepl.raftMu.Unlock, nil
+	return func() { rightRepl.raftMu.UnlockEpoch(epoch) }, nil
 }
 
 // handleTruncatedStateBelowRaftPreApply is called before applying a Raft

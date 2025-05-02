@@ -421,7 +421,7 @@ func (s *Store) withReplicaForRequest(
 	f func(context.Context, *Replica) *kvpb.Error,
 ) *kvpb.Error {
 	// Lazily create the replica.
-	r, _, err := s.getOrCreateReplica(
+	r, _, epoch, err := s.getOrCreateReplica(
 		ctx,
 		req.RangeID,
 		req.ToReplica.ReplicaID,
@@ -430,7 +430,7 @@ func (s *Store) withReplicaForRequest(
 	if err != nil {
 		return kvpb.NewError(err)
 	}
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(epoch)
 	r.setLastReplicaDescriptors(req)
 	return f(ctx, r)
 }
@@ -614,9 +614,7 @@ func (s *Store) HandleRaftResponse(
 
 				// Grab the raftMu in addition to the replica mu because
 				// cancelFailedProposalsLocked below requires it.
-				repl.raftMu.Lock()
-				defer repl.raftMu.Unlock()
-				repl.mu.Lock()
+				defer repl.raftMu.UnlockEpoch(repl.raftMu.LockEpoch())
 
 				// If the replica ID in the error does not match then we know
 				// that the replica has been removed and re-added quickly. In

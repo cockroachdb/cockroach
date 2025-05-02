@@ -80,8 +80,7 @@ func newInitializedReplica(
 	store *Store, loaded kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
 ) (*Replica, error) {
 	r := newUninitializedReplicaWithoutRaftGroup(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -103,8 +102,7 @@ func newUninitializedReplica(
 	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	r := newUninitializedReplicaWithoutRaftGroup(store, rangeID, replicaID)
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {

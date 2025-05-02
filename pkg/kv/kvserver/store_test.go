@@ -2842,7 +2842,7 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 		wg.Add(1)
 		go func(rid roachpb.ReplicaID) {
 			defer wg.Done()
-			r, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
+			r, _, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
 				NodeID:    2,
 				StoreID:   2,
 				ReplicaID: 2,
@@ -4092,7 +4092,7 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
+	repl, _, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
 		NodeID:    tc.store.NodeID(),
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
@@ -4116,7 +4116,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, created, err := tc.store.getOrCreateReplica(
+	repl, created, epoch, err := tc.store.getOrCreateReplica(
 		ctx, 42, 7, &roachpb.ReplicaDescriptor{
 			NodeID:    tc.store.NodeID(),
 			StoreID:   tc.store.StoreID(),
@@ -4124,6 +4124,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
+	defer repl.raftMu.UnlockEpoch(epoch)
 	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
 	require.NoError(t, err)
 	require.Equal(t, &kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)

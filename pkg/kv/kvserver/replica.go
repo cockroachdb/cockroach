@@ -1703,8 +1703,7 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 // SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
 // not affect the on disk state and is only safe to use for testing purposes.
 func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shMu.state.Stats = stats
@@ -1862,8 +1861,7 @@ func (r *Replica) raftSupportingFortifiedLeaderRLocked() bool {
 // Returns an empty struct if there is no RACv2 range controller, i.e. this
 // replica is not the leader or is not running RACv2.
 func (r *Replica) RACv2Status() serverpb.RACStatus {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	return r.flowControlV2.StatusRaftMuLocked()
 }
 
@@ -2572,7 +2570,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
 				intentRes.Intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
 		}
-		r.raftMu.Lock()
+		epoch := r.raftMu.LockEpoch()
 		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
 		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
@@ -2589,7 +2587,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		close(mergeCompleteCh)
 		r.mu.Unlock()
 		r.readOnlyCmdMu.Unlock()
-		r.raftMu.Unlock()
+		r.raftMu.UnlockEpoch(epoch)
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
 		// We weren't able to launch a goroutine to watch for the merge's completion

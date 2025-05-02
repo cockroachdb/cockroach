@@ -837,8 +837,7 @@ func (r *Replica) handleClosedTimestampUpdate(
 	ctx context.Context, closedTS hlc.Timestamp,
 ) (exceedsSlowLagThresh bool) {
 	ctx = r.AnnotateCtx(ctx)
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 	return r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
 }
 

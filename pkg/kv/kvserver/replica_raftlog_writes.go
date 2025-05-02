@@ -77,8 +77,7 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	// We need to hold raftMu both to access the sideloaded storage and to make
 	// sure concurrent raft activity doesn't foul up our update to the cached
 	// in-memory values.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 
 	size, err := r.raftMu.logStorage.ComputeSize(ctx)
 	if err != nil {

@@ -36,6 +36,11 @@ func (m *Mutex) LockEpoch() int32 {
 	return 1
 }
 
+// UnlockEpoch is AssertHeldEpoch + Unlock.
+func (m *Mutex) UnlockEpoch(int32) {
+	m.Unlock()
+}
+
 // AssertHeldEpoch is like AssertHeld, but it additionally checks that the
 // "epoch" of the locked mutex matches the expected one. Useful for the cases
 // when one needs to ensure that the lock has been held continuously since when

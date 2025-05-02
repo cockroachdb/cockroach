@@ -400,8 +400,7 @@ func (ss *storesForRACv2) LookupInspect(
 			return nil
 		}
 		if r := s.GetReplicaIfExists(rangeID); r != nil {
-			r.raftMu.Lock()
-			defer r.raftMu.Unlock()
+			defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 			handle, found = r.flowControlV2.InspectRaftMuLocked(context.Background())
 		}
 		return nil

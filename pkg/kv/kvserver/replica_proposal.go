@@ -538,8 +538,7 @@ func (r *Replica) leasePostApplyLocked(
 		ctx := r.AnnotateCtx(context.Background())
 		_ = r.store.stopper.RunAsyncTask(ctx, "lease-gossip", func(ctx context.Context) {
 			// Re-acquire the raftMu, as we are now in an async task.
-			r.raftMu.Lock()
-			defer r.raftMu.Unlock()
+			defer r.raftMu.UnlockEpoch(r.raftMu.LockEpoch())
 			if _, err := r.IsDestroyed(); err != nil {
 				// Nothing to do.
 				return
