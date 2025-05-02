@@ -43,7 +43,7 @@ func cumulativeNormalizedRunnableGoroutines() float64 {
 // The use of underloadedRunnablePerProcThreshold does not provide sufficient
 // protection against sluggish response in the admission control system, which
 // uses these samples to adjust concurrency of request processing. So
-// goschedstats.always_use_short_sample_period.enabled can be set to true to
+// goschedstats.always_use_short_sample_period.enabled now defaults to true to
 // force this responsiveness.
 const samplePeriodShort = time.Millisecond
 const samplePeriodLong = 250 * time.Millisecond
