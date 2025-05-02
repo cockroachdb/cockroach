@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package snaprecv
 
 import (
 	"bytes"
@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 )
 
-// multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
+// MultiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
 // that handles chunking SSTs and persisting them to disk.
-type multiSSTWriter struct {
+type MultiSSTWriter struct {
 	st      *cluster.Settings
 	scratch *SSTSnapshotStorageScratch
 	currSST storage.SSTWriter
@@ -41,7 +41,7 @@ type multiSSTWriter struct {
 	// append(localKeySpans, mvccSSTSpans).
 	currSpan int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
-	// before flushing to disk.
+	// before flushing to disk. Zero disables explicit flushing.
 	sstChunkSize int64
 	// The total size of the key and value pairs (not the total size of the SSTs),
 	// excluding currSST. Updated on SST finalization.
@@ -63,15 +63,28 @@ type multiSSTWriter struct {
 	rangeDelFrag rangedel.Fragmenter
 }
 
-func newMultiSSTWriter(
+type MultiSSTWriterOptions struct {
+	// SSTChunkSize is the approximate size of the SST chunk buffer before
+	// flushing to disk. If zero, there is no explicit flushing until the
+	// SST is finalized.
+	SSTChunkSize int64
+	// MaxSSTSize is the maximum size of an SST containing MVCC/user keys before
+	// we finalize it and start a new SST. If zero, there is no limit.
+	//
+	// This does not affect other SSTs.
+	MaxSSTSize int64
+}
+
+// NewMultiSSTWriter returns an initialized MultiSSTWriter.
+func NewMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
 	scratch *SSTSnapshotStorageScratch,
 	localKeySpans []roachpb.Span,
 	mvccKeySpan roachpb.Span,
-	sstChunkSize int64,
-) (*multiSSTWriter, error) {
-	msstw := &multiSSTWriter{
+	opts MultiSSTWriterOptions,
+) (*MultiSSTWriter, error) {
+	msstw := &MultiSSTWriter{
 		st:            st,
 		scratch:       scratch,
 		localKeySpans: localKeySpans,
@@ -80,8 +93,8 @@ func newMultiSSTWriter(
 			Start: storage.EngineKey{Key: mvccKeySpan.Key},
 			End:   storage.EngineKey{Key: mvccKeySpan.EndKey},
 		}},
-		sstChunkSize: sstChunkSize,
-		maxSSTSize:   MaxSnapshotSSTableSize.Get(&st.SV),
+		sstChunkSize: opts.SSTChunkSize,
+		maxSSTSize:   opts.MaxSSTSize,
 	}
 	msstw.rangeKeyFrag = rangekey.Fragmenter{
 		Cmp:    storage.EngineComparer.Compare,
@@ -100,13 +113,88 @@ func newMultiSSTWriter(
 	return msstw, nil
 }
 
-// estimatedDataSize returns the approximation of the written bytes to SSTs
-// (including currSST).
-func (msstw *multiSSTWriter) estimatedDataSize() int64 {
-	return msstw.sstSize + msstw.currSST.DataSize
+func (msstw *MultiSSTWriter) ReadOne(
+	ctx context.Context,
+	ek storage.EngineKey,
+	shared bool, // may receive shared SSTs
+	batchReader *storage.BatchReader,
+) error {
+	switch batchReader.KeyKind() {
+	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
+		if err := msstw.put(ctx, ek, batchReader.Value()); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		if err := msstw.putInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindRangeDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		if err := msstw.putInternalRangeDelete(ctx, start, end); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+
+	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.RawRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.putInternalRangeKey(ctx, start, end, rkv)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	case pebble.InternalKeyKindRangeKeySet:
+		start := ek
+		end, err := batchReader.EngineEndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.EngineRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.putRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	default:
+		return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+	}
+	return nil
 }
 
-func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
+// EstimatedDataSize returns the sum of lengths of keys and values passed
+// to any past or current SST. This is monotonically increasing.
+//
+// Note that this is not the same as the size of the SSTs themselves, as
+// SST files carry additional data but also use compression.
+func (msstw *MultiSSTWriter) EstimatedDataSize() int64 {
+	return msstw.dataSize + msstw.currSST.DataSize
+}
+
+func (msstw *MultiSSTWriter) emitRangeKey(key rangekey.Span) {
 	for i := range key.Keys {
 		if err := msstw.currSST.PutInternalRangeKey(key.Start, key.End, key.Keys[i]); err != nil {
 			panic(fmt.Sprintf("failed to put range key in sst: %s", err))
@@ -114,7 +202,7 @@ func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
 	}
 }
 
-func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
+func (msstw *MultiSSTWriter) emitRangeDel(key rangedel.Span) {
 	if err := msstw.currSST.ClearRawEncodedRange(key.Start, key.End); err != nil {
 		panic(fmt.Sprintf("failed to put range del in sst: %s", err))
 	}
@@ -123,21 +211,21 @@ func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
 // currentSpan returns the current user-provided span that
 // is being written to. Note that this does not account for
 // mvcc keys being split across multiple sstables.
-func (msstw *multiSSTWriter) currentSpan() roachpb.Span {
+func (msstw *MultiSSTWriter) currentSpan() roachpb.Span {
 	if msstw.currSpanIsMVCCSpan() {
 		return msstw.mvccKeySpan
 	}
 	return msstw.localKeySpans[msstw.currSpan]
 }
 
-func (msstw *multiSSTWriter) currSpanIsMVCCSpan() bool {
+func (msstw *MultiSSTWriter) currSpanIsMVCCSpan() bool {
 	if msstw.currSpan >= len(msstw.localKeySpans)+len(msstw.mvccSSTSpans) {
 		panic("current span is out of bounds")
 	}
 	return msstw.currSpan >= len(msstw.localKeySpans)
 }
 
-func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
+func (msstw *MultiSSTWriter) initSST(ctx context.Context) error {
 	newSSTFile, err := msstw.scratch.NewFile(ctx, msstw.sstChunkSize)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
@@ -170,7 +258,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 
 // NB: when nextKey is non-nil, do not do anything in this function to cause
 // nextKey at the caller to escape to the heap.
-func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.EngineKey) error {
+func (msstw *MultiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.EngineKey) error {
 	var currEngineSpan storage.EngineKeyRange
 	if msstw.currSpanIsMVCCSpan() {
 		currEngineSpan = msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)]
@@ -180,7 +268,6 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 			Start: storage.EngineKey{Key: cur.Key},
 			End:   storage.EngineKey{Key: cur.EndKey},
 		}
-
 	}
 
 	// If we're at the last span, call Finish on the fragmenters. If we're not at the
@@ -208,28 +295,28 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 		if meta.HasPointKeys && storage.EngineComparer.Compare(meta.LargestPoint.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestPoint.UserKey)
 			if !ok {
-				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
+				return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
 					meta.LargestPoint.UserKey, nextKeyCopy)
 			}
-			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
+			return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest point key %s > next sstable start key %s",
 				metaEndKey, nextKeyCopy)
 		}
 		if meta.HasRangeDelKeys && storage.EngineComparer.Compare(meta.LargestRangeDel.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestRangeDel.UserKey)
 			if !ok {
-				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
+				return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
 					meta.LargestRangeDel.UserKey, nextKeyCopy)
 			}
-			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
+			return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest range del %s > next sstable start key %s",
 				metaEndKey, nextKeyCopy)
 		}
 		if meta.HasRangeKeys && storage.EngineComparer.Compare(meta.LargestRangeKey.UserKey, encodedNextKey) > 0 {
 			metaEndKey, ok := storage.DecodeEngineKey(meta.LargestRangeKey.UserKey)
 			if !ok {
-				return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
+				return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
 					meta.LargestRangeKey.UserKey, nextKeyCopy)
 			}
-			return errors.Errorf("multiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
+			return errors.Errorf("MultiSSTWriter created overlapping ingestion sstables: sstable largest range key %s > next sstable start key %s",
 				metaEndKey, nextKeyCopy)
 		}
 	}
@@ -237,13 +324,15 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	msstw.sstSize += int64(msstw.currSST.Meta.Size)
 	msstw.currSpan++
 	msstw.currSST.Close()
+	// Zero the SSTWriter to avoid double-counting in EstimatedDataSize.
+	msstw.currSST = storage.SSTWriter{}
 	return nil
 }
 
 // rolloverSST rolls the underlying SST writer over to the appropriate SST
 // writer for writing a point/range key at key. For point keys, endKey and key
 // must equal each other.
-func (msstw *multiSSTWriter) rolloverSST(
+func (msstw *MultiSSTWriter) rolloverSST(
 	ctx context.Context, key storage.EngineKey, endKey storage.EngineKey,
 ) error {
 	for msstw.currentSpan().EndKey.Compare(key.Key) <= 0 {
@@ -281,7 +370,7 @@ func (msstw *multiSSTWriter) rolloverSST(
 		if msstw.currSpan < len(msstw.localKeySpans)+len(msstw.mvccSSTSpans)-2 {
 			// This should never happen; we only split sstables when we're at the end
 			// of mvccSSTSpans.
-			panic("unexpectedly split an earlier mvcc sstable span in multiSSTWriter")
+			panic("unexpectedly split an earlier mvcc sstable span in MultiSSTWriter")
 		}
 		if err := msstw.finalizeSST(ctx, &key); err != nil {
 			return err
@@ -293,7 +382,7 @@ func (msstw *multiSSTWriter) rolloverSST(
 	return nil
 }
 
-func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
+func (msstw *MultiSSTWriter) put(ctx context.Context, key storage.EngineKey, value []byte) error {
 	if err := msstw.rolloverSST(ctx, key, key); err != nil {
 		return err
 	}
@@ -303,7 +392,7 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 	return nil
 }
 
-func (msstw *multiSSTWriter) PutInternalPointKey(
+func (msstw *MultiSSTWriter) putInternalPointKey(
 	ctx context.Context, key []byte, kind pebble.InternalKeyKind, val []byte,
 ) error {
 	decodedKey, ok := storage.DecodeEngineKey(key)
@@ -346,7 +435,7 @@ func decodeRangeStartEnd(
 	return decodedStart, decodedEnd, nil
 }
 
-func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, end []byte) error {
+func (msstw *MultiSSTWriter) putInternalRangeDelete(ctx context.Context, start, end []byte) error {
 	decodedStart, decodedEnd, err := decodeRangeStartEnd(start, end)
 	if err != nil {
 		return err
@@ -358,17 +447,19 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 	return nil
 }
 
-func (msstw *multiSSTWriter) PutInternalRangeKey(
+func (msstw *MultiSSTWriter) putInternalRangeKey(
 	ctx context.Context, start, end []byte, key rangekey.Key,
 ) error {
-	return msstw.putRangeKey(ctx, storage.EngineKeyRange{}, [2][]byte{start, end}, key)
+	return msstw.putRangeKeyWithEnc(ctx, storage.EngineKeyRange{}, [2][]byte{start, end}, key)
 }
 
-func (msstw *multiSSTWriter) putRangeKey(
+// putRangeKeyWithEnc is the internal implementation of putInternalRangeKey and
+// putRangeKey. We need both the encoded and decoded forms of the key range
+// here. The caller must supply at least one of `dec` or `enc` depending on what
+// they have available.
+func (msstw *MultiSSTWriter) putRangeKeyWithEnc(
 	ctx context.Context, dec storage.EngineKeyRange, enc [2][]byte, key rangekey.Key,
 ) error {
-	// We need both the encoded and decoded forms of the key range here. The caller
-	// may supply either.
 	haveDec, haveEnc := len(dec.End.Key) != 0, len(enc[1]) != 0
 	switch {
 	case !haveDec && !haveEnc:
@@ -403,10 +494,10 @@ func (msstw *multiSSTWriter) putRangeKey(
 	return nil
 }
 
-func (msstw *multiSSTWriter) PutRangeKey(
+func (msstw *MultiSSTWriter) putRangeKey(
 	ctx context.Context, start, end roachpb.Key, suffix []byte, value []byte,
 ) error {
-	return msstw.putRangeKey(
+	return msstw.putRangeKeyWithEnc(
 		ctx,
 		storage.EngineKeyRange{
 			Start: storage.EngineKey{Key: start},
@@ -421,23 +512,23 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	)
 }
 
-func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
+func (msstw *MultiSSTWriter) Finish(ctx context.Context) (dataSize, sstSize int64, _ error) {
 	if msstw.currSpan < (len(msstw.localKeySpans) + len(msstw.mvccSSTSpans)) {
 		for {
 			if err := msstw.finalizeSST(ctx, nil /* nextKey */); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 			if msstw.currSpan >= (len(msstw.localKeySpans) + len(msstw.mvccSSTSpans)) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 		}
 	}
-	return msstw.dataSize, nil
+	return msstw.dataSize, msstw.sstSize, nil
 }
 
-func (msstw *multiSSTWriter) Close() {
+func (msstw *MultiSSTWriter) Close() {
 	msstw.currSST.Close()
 }

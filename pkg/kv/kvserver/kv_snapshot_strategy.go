@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +44,7 @@ type kvBatchSnapshotStrategy struct {
 	// before flushing to disk. Only used on the receiver side.
 	sstChunkSize int64
 	// Only used on the receiver side.
-	scratch   *SSTSnapshotStorageScratch
+	scratch   *snaprecv.SSTSnapshotStorageScratch
 	st        *cluster.Settings
 	clusterID uuid.UUID
 }
@@ -104,21 +105,24 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
 
-	// We rely on the last keyRange passed into multiSSTWriter being the user key
+	// We rely on the last keyRange passed into MultiSSTWriter being the user key
 	// span. If the sender signals that it can no longer do shared replication
 	// (with a TransitionFromSharedToRegularReplicate = true), we will have to
-	// switch to adding a rangedel for that span. Since multiSSTWriter acts on an
+	// switch to adding a rangedel for that span. Since MultiSSTWriter acts on an
 	// opaque slice of keyRanges, we just tell it to add a rangedel for the last
 	// span. To avoid bugs, assert on the last span in keyRanges actually being
 	// equal to the user key span.
 	if !keyRanges[len(keyRanges)-1].Equal(header.State.Desc.KeySpan().AsRawSpanWithNoLocals()) {
-		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
+		return noSnap, errors.AssertionFailedf("last span in MultiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
 
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize)
+	msstw, err := snaprecv.NewMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, snaprecv.MultiSSTWriterOptions{
+		SSTChunkSize: kvSS.sstChunkSize,
+		MaxSSTSize:   MaxSnapshotSSTableSize.Get(&kvSS.st.SV),
+	})
 	if err != nil {
 		return noSnap, err
 	}
@@ -168,9 +172,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
-				// msstw calls (i.e. PutInternalPointKey) can use the decoded engine key here as input.
+				// msstw calls (i.e. putInternalPointKey) can use the decoded engine key here as input.
 
-				bytesEstimate := msstw.estimatedDataSize()
+				bytesEstimate := msstw.EstimatedDataSize()
 				delta := bytesEstimate - prevBytesEstimate
 				// Calling nil pacer is a noop.
 				if err := pacer.Pace(ctx, delta, false /* final */); err != nil {
@@ -189,7 +193,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 				}
 
-				if err := kvSS.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader, msstw); err != nil {
+				if err := msstw.ReadOne(ctx, ek, header.SharedReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
@@ -238,8 +242,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
 			timingTag.start("sst")
-			dataSize, err := msstw.Finish(ctx)
-			sstSize := msstw.sstSize
+			dataSize, sstSize, err := msstw.Finish(ctx)
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
@@ -284,79 +287,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return inSnap, nil
 		}
 	}
-}
-
-func (kvSS *kvBatchSnapshotStrategy) readOneToBatch(
-	ctx context.Context,
-	ek storage.EngineKey,
-	shared bool, // may receive shared SSTs
-	batchReader *storage.BatchReader,
-	msstw *multiSSTWriter,
-) error {
-	switch batchReader.KeyKind() {
-	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
-		if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-	case pebble.InternalKeyKindRangeDelete:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		start := batchReader.Key()
-		end, err := batchReader.EndKey()
-		if err != nil {
-			return err
-		}
-		if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
-			return errors.Wrapf(err, "writing sst for raft snapshot")
-		}
-
-	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
-		if !shared {
-			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-		}
-		start := batchReader.Key()
-		end, err := batchReader.EndKey()
-		if err != nil {
-			return err
-		}
-		rangeKeys, err := batchReader.RawRangeKeys()
-		if err != nil {
-			return err
-		}
-		for _, rkv := range rangeKeys {
-			err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
-			if err != nil {
-				return errors.Wrapf(err, "writing sst for raft snapshot")
-			}
-		}
-	case pebble.InternalKeyKindRangeKeySet:
-		start := ek
-		end, err := batchReader.EngineEndKey()
-		if err != nil {
-			return err
-		}
-		rangeKeys, err := batchReader.EngineRangeKeys()
-		if err != nil {
-			return err
-		}
-		for _, rkv := range rangeKeys {
-			err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
-			if err != nil {
-				return errors.Wrapf(err, "writing sst for raft snapshot")
-			}
-		}
-	default:
-		return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-	}
-	return nil
 }
 
 // Send implements the snapshotStrategy interface.
