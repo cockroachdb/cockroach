@@ -55,17 +55,13 @@ var _ mutationPlanNode = &insertNode{}
 
 // insertRun contains the run-time state of insertNode during local execution.
 type insertRun struct {
-	ti         tableInserter
-	rowsNeeded bool
+	mutationOutputHelper
+	ti tableInserter
 
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted into.
 	insertCols []catalog.Column
-
-	// done informs a new call to BatchedNext() that the previous call to
-	// BatchedNext() has completed the work already.
-	done bool
 
 	// resultRowBuffer is used to prepare a result row for accumulation
 	// into the row container above, when rowsNeeded is set.
@@ -167,7 +163,7 @@ func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
-	r.ti.rows = rowcontainer.NewRowContainer(
+	r.rows = rowcontainer.NewRowContainer(
 		params.p.Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
@@ -251,26 +247,23 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
 		return err
 	}
-
-	// If result rows need to be accumulated, do it.
-	if r.ti.rows != nil {
-		for i, val := range insertVals {
-			// The downstream consumer will want the rows in the order of
-			// the table descriptor, not that of insertCols. Reorder them
-			// and ignore non-public columns.
-			if tabIdx := r.rowIdxToTabColIdx[i]; tabIdx >= 0 {
-				if retIdx := r.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
-					r.resultRowBuffer[retIdx] = val
-				}
-			}
-		}
-
-		if _, err := r.ti.rows.AddRow(params.ctx, r.resultRowBuffer); err != nil {
-			return err
-		}
+	r.onModifiedRow()
+	if !r.rowsNeeded {
+		return nil
 	}
 
-	return nil
+	// Result rows must be accumulated.
+	for i, val := range insertVals {
+		// The downstream consumer will want the rows in the order of
+		// the table descriptor, not that of insertCols. Reorder them
+		// and ignore non-public columns.
+		if tabIdx := r.rowIdxToTabColIdx[i]; tabIdx >= 0 {
+			if retIdx := r.tabColIdxToRetIdx[tabIdx]; retIdx >= 0 {
+				r.resultRowBuffer[retIdx] = val
+			}
+		}
+	}
+	return r.addRow(params.ctx, r.resultRowBuffer)
 }
 
 func (n *insertNode) startExec(params runParams) error {
@@ -279,32 +272,34 @@ func (n *insertNode) startExec(params runParams) error {
 
 	n.run.init(params, n.columns)
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *insertNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *insertNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (n *insertNode) BatchedNext(params runParams) (bool, error) {
-	if n.run.done {
-		return false, nil
+	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
 	}
 
-	// Advance one batch. First, clear the last batch.
-	n.run.ti.clearLastBatch(params.ctx)
-
-	// Now consume/accumulate the rows for this batch.
-	lastBatch := false
+	// Run the mutation to completion.
 	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
+		lastBatch, err := n.processBatch(params)
+		if err != nil || lastBatch {
+			return err
+		}
+	}
+}
+
+// Next implements the planNode interface.
+func (n *insertNode) Next(_ runParams) (bool, error) {
+	return n.run.next(), nil
+}
+
+// Values implements the planNode interface.
+func (n *insertNode) Values() tree.Datums {
+	return n.run.values()
+}
+
+func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = params.p.cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
@@ -332,7 +327,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
-		if err := n.run.processSourceRow(params, n.input.Values()); err != nil {
+		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -347,7 +342,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err := n.run.ti.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = n.run.ti.flushAndStartNewBatch(params.ctx); err != nil {
 				return false, err
 			}
 		}
@@ -355,27 +350,18 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 
 	if lastBatch {
 		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err := n.run.ti.finalize(params.ctx); err != nil {
+		if err = n.run.ti.finalize(params.ctx); err != nil {
 			return false, err
 		}
-		// Remember we're done for the next call to BatchedNext().
-		n.run.done = true
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), int(n.run.ti.rowsWritten))
+		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), int(n.run.modifiedRowCount()))
 	}
-
-	return n.run.ti.lastBatchSize > 0, nil
+	return lastBatch, nil
 }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (n *insertNode) BatchedCount() int { return n.run.ti.lastBatchSize }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (n *insertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.ti.rows.At(rowIdx) }
 
 func (n *insertNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
-	n.run.ti.close(ctx)
+	n.run.close(ctx)
 	*n = insertNode{}
 	insertNodePool.Put(n)
 }
@@ -386,5 +372,5 @@ func (n *insertNode) enableAutoCommit() {
 }
 
 func (n *insertNode) rowsWritten() int64 {
-	return n.run.ti.rowsWritten
+	return n.run.modifiedRowCount()
 }

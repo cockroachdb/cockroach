@@ -44,46 +44,47 @@ func (d *deleteSwapNode) startExec(params runParams) error {
 
 	d.run.init(params, d.columns)
 
-	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (d *deleteSwapNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (d *deleteSwapNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (d *deleteSwapNode) BatchedNext(params runParams) (bool, error) {
-	if d.run.done {
-		return false, nil
+	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
 	}
 
+	// Run the mutation to completion. DeleteSwap only processes one row, so no
+	// need to loop.
+	return d.processBatch(params)
+}
+
+// Next implements the planNode interface.
+func (d *deleteSwapNode) Next(_ runParams) (bool, error) {
+	return d.run.next(), nil
+}
+
+// Values implements the planNode interface.
+func (d *deleteSwapNode) Values() tree.Datums {
+	return d.run.values()
+}
+
+func (d *deleteSwapNode) processBatch(params runParams) error {
 	// Delete swap does everything in one batch. There should only be a single row
 	// of input, to ensure the savepoint rollback below has the correct SQL
 	// semantics.
 
 	if err := params.p.cancelChecker.Check(); err != nil {
-		return false, err
+		return err
 	}
 
 	next, err := d.input.Next(params)
 	if next {
 		if err := d.run.processSourceRow(params, d.input.Values()); err != nil {
-			return false, err
+			return err
 		}
 		// Verify that there was only a single row of input.
 		next, err = d.input.Next(params)
 		if next {
-			return false, errors.AssertionFailedf("expected only 1 row as input to delete swap")
+			return errors.AssertionFailedf("expected only 1 row as input to delete swap")
 		}
 	}
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	// Delete swap works by optimistically modifying every index in the same
@@ -92,7 +93,7 @@ func (d *deleteSwapNode) BatchedNext(params runParams) (bool, error) {
 	// might succeed. We use a savepoint here to undo those writes.
 	sp, err := d.run.td.createSavepoint(params.ctx)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
@@ -101,46 +102,29 @@ func (d *deleteSwapNode) BatchedNext(params runParams) (bool, error) {
 		// primary index. We must roll back to the savepoint above to undo writes to
 		// all secondary indexes.
 		if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
-			// Reset the table writer so that it looks like there were no rows to
-			// delete.
-			d.run.td.rowsWritten = 0
-			d.run.td.clearLastBatch(params.ctx)
 			if err := d.run.td.rollbackToSavepoint(params.ctx, sp); err != nil {
-				return false, err
+				return err
 			}
-			return false, nil
+			return nil
 		}
-		return false, err
+		return err
 	}
 
-	// Remember we're done for the next call to BatchedNext().
-	d.run.done = true
-
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), d.run.td.lastBatchSize)
+	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.modifiedRowCount()))
 
-	return d.run.td.lastBatchSize > 0, nil
-}
-
-// BatchedCount implements the batchedPlanNode interface.
-func (d *deleteSwapNode) BatchedCount() int {
-	return d.run.td.lastBatchSize
-}
-
-// BatchedValues implements the batchedPlanNode interface.
-func (d *deleteSwapNode) BatchedValues(rowIdx int) tree.Datums {
-	return d.run.td.rows.At(rowIdx)
+	return nil
 }
 
 func (d *deleteSwapNode) Close(ctx context.Context) {
 	d.input.Close(ctx)
-	d.run.td.close(ctx)
+	d.run.close(ctx)
 	*d = deleteSwapNode{}
 	deleteSwapNodePool.Put(d)
 }
 
 func (d *deleteSwapNode) rowsWritten() int64 {
-	return d.run.td.rowsWritten
+	return d.run.modifiedRowCount()
 }
 
 func (d *deleteSwapNode) enableAutoCommit() {

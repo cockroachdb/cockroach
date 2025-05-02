@@ -3499,9 +3499,6 @@ func (b *Builder) buildWith(with *memo.WithExpr) (_ execPlan, outputCols colOrdM
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	// TODO(justin): if the binding here has a spoolNode at its root, we can
-	// remove it, since subquery execution also guarantees complete execution.
-
 	// Add the buffer as a subquery so it gets executed ahead of time, and is
 	// available to be referenced by other queries. Use SubqueryDiscardAllRows to
 	// avoid buffering the results in the subquery, since the bufferNode will

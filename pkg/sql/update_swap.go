@@ -44,46 +44,47 @@ func (u *updateSwapNode) startExec(params runParams) error {
 
 	u.run.init(params, u.columns)
 
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateSwapNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (u *updateSwapNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (u *updateSwapNode) BatchedNext(params runParams) (bool, error) {
-	if u.run.done {
-		return false, nil
+	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
 	}
 
+	// Run the mutation to completion. UpdateSwap only processes one row, so no
+	// need to loop.
+	return u.processBatch(params)
+}
+
+// Next implements the planNode interface.
+func (u *updateSwapNode) Next(_ runParams) (bool, error) {
+	return u.run.next(), nil
+}
+
+// Values implements the planNode interface.
+func (u *updateSwapNode) Values() tree.Datums {
+	return u.run.values()
+}
+
+func (u *updateSwapNode) processBatch(params runParams) error {
 	// Update-swap does everything in one batch. There should only be a single row
 	// of input, to ensure the savepoint rollback below has the correct SQL
 	// semantics.
 
 	if err := params.p.cancelChecker.Check(); err != nil {
-		return false, err
+		return err
 	}
 
 	next, err := u.input.Next(params)
 	if next {
-		if err := u.run.processSourceRow(params, u.input.Values()); err != nil {
-			return false, err
+		if err = u.run.processSourceRow(params, u.input.Values()); err != nil {
+			return err
 		}
 		// Verify that there was only a single row of input.
 		next, err = u.input.Next(params)
 		if next {
-			return false, errors.AssertionFailedf("expected only 1 row as input to update swap")
+			return errors.AssertionFailedf("expected only 1 row as input to update swap")
 		}
 	}
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	// Update swap works by optimistically modifying every index in the same
@@ -92,55 +93,38 @@ func (u *updateSwapNode) BatchedNext(params runParams) (bool, error) {
 	// might succeed. We use a savepoint here to undo those writes.
 	sp, err := u.run.tu.createSavepoint(params.ctx)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-	if err := u.run.tu.finalize(params.ctx); err != nil {
+	if err = u.run.tu.finalize(params.ctx); err != nil {
 		// If this was a ConditionFailedError, it means the row did not exist in the
 		// primary index. We must roll back to the savepoint above to undo writes to
 		// all secondary indexes.
 		if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
-			// Reset the table writer so that it looks like there were no rows to
-			// update.
-			u.run.tu.rowsWritten = 0
-			u.run.tu.clearLastBatch(params.ctx)
-			if err := u.run.tu.rollbackToSavepoint(params.ctx, sp); err != nil {
-				return false, err
+			if err = u.run.tu.rollbackToSavepoint(params.ctx, sp); err != nil {
+				return err
 			}
-			return false, nil
+			return nil
 		}
-		return false, err
+		return err
 	}
 
-	// Remember we're done for the next call to BatchedNext().
-	u.run.done = true
-
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), u.run.tu.lastBatchSize)
+	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.modifiedRowCount()))
 
-	return u.run.tu.lastBatchSize > 0, nil
-}
-
-// BatchedCount implements the batchedPlanNode interface.
-func (u *updateSwapNode) BatchedCount() int {
-	return u.run.tu.lastBatchSize
-}
-
-// BatchedValues implements the batchedPlanNode interface.
-func (u *updateSwapNode) BatchedValues(rowIdx int) tree.Datums {
-	return u.run.tu.rows.At(rowIdx)
+	return nil
 }
 
 func (u *updateSwapNode) Close(ctx context.Context) {
 	u.input.Close(ctx)
-	u.run.tu.close(ctx)
+	u.run.close(ctx)
 	*u = updateSwapNode{}
 	updateSwapNodePool.Put(u)
 }
 
 func (u *updateSwapNode) rowsWritten() int64 {
-	return u.run.tu.rowsWritten
+	return u.run.modifiedRowCount()
 }
 
 func (u *updateSwapNode) enableAutoCommit() {

@@ -157,10 +157,6 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return getPlanColumns(n.input, mut)
 	case *limitNode:
 		return getPlanColumns(n.input, mut)
-	case *spoolNode:
-		return getPlanColumns(n.input, mut)
-	case *serializeNode:
-		return getPlanColumns(n.source, mut)
 	case *saveTableNode:
 		return getPlanColumns(n.input, mut)
 	case *scanBufferNode:

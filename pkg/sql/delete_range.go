@@ -31,6 +31,7 @@ import (
 // be deleted, it'll enable autoCommit for delete range.
 type deleteRangeNode struct {
 	zeroInputPlanNode
+	rowsAffectedOutputHelper
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
@@ -44,30 +45,11 @@ type deleteRangeNode struct {
 	// operation is low. If this is true, we won't attempt to run the delete in
 	// batches and will just send one big delete with a commit statement attached.
 	autoCommitEnabled bool
-
-	// rowCount will be set to the count of rows deleted.
-	rowCount int
 }
 
 var _ planNode = &deleteRangeNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
-var _ batchedPlanNode = &deleteRangeNode{}
 var _ mutationPlanNode = &deleteRangeNode{}
-
-// BatchedNext implements the batchedPlanNode interface.
-func (d *deleteRangeNode) BatchedNext(params runParams) (bool, error) {
-	return false, nil
-}
-
-// BatchedCount implements the batchedPlanNode interface.
-func (d *deleteRangeNode) BatchedCount() int {
-	return d.rowCount
-}
-
-// BatchedValues implements the batchedPlanNode interface.
-func (d *deleteRangeNode) BatchedValues(rowIdx int) tree.Datums {
-	panic("invalid")
-}
 
 // FastPathResults implements the planNodeFastPath interface.
 func (d *deleteRangeNode) FastPathResults() (int, bool) {
@@ -208,7 +190,7 @@ func (d *deleteRangeNode) processResults(
 			k := keyBytes[:len(keyBytes)-len(after)]
 			if !bytes.Equal(k, prev) {
 				prev = k
-				d.rowCount++
+				d.incAffectedRows()
 			}
 		}
 		if r.ResumeSpan != nil && r.ResumeSpan.Valid() {
@@ -219,15 +201,13 @@ func (d *deleteRangeNode) processResults(
 }
 
 // Next implements the planNode interface.
-func (*deleteRangeNode) Next(params runParams) (bool, error) {
-	// TODO(radu): this shouldn't be used, but it gets called when a cascade uses
-	// delete-range. Investigate this.
-	return false, nil
+func (d *deleteRangeNode) Next(params runParams) (bool, error) {
+	return d.next(), nil
 }
 
 // Values implements the planNode interface.
-func (*deleteRangeNode) Values() tree.Datums {
-	panic("invalid")
+func (d *deleteRangeNode) Values() tree.Datums {
+	return d.values()
 }
 
 // Close implements the planNode interface.
