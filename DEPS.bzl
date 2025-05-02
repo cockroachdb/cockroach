@@ -784,16 +784,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_axiomhq_hyperloglog_000",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/axiomhq/hyperloglog/000",
-        sha256 = "812834322ee2ca50dc36f91f9ac3f2cde4631af2f9c330b1271c78b46024a540",
-        strip_prefix = "github.com/axiomhq/hyperloglog@v0.0.0-20181223111420-4b99d0c2c99e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.0.0-20181223111420-4b99d0c2c99e.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_aymanbagabas_go_osc52",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aymanbagabas/go-osc52",
