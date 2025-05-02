@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
@@ -61,6 +62,12 @@ func (r *replicaLogStorage) entriesLocked(
 	// TODO(pav-kv): we have a large class of cases when we would rather only hold
 	// raftMu while reading the entries. The r.mu lock should be narrow.
 	r.mu.AssertHeld()
+	// Check whether the first requested entry is already logically truncated. It
+	// may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
+	if lo <= r.shMu.raftTruncState.Index {
+		return nil, raft.ErrCompacted
+	}
 	// Writes to the storage engine and the sideloaded storage are made under
 	// raftMu only. Since we are holding r.mu, but may or may not be holding
 	// raftMu, this read could be racing with a write.
@@ -79,8 +86,8 @@ func (r *replicaLogStorage) entriesLocked(
 	// can remember the readable bounds, and assert that reads do not cross them.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.store.LogEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		lo, hi, maxBytes,
 		nil, // bytesAccount is not used when reading under Replica.mu
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
@@ -96,38 +103,62 @@ func (r *Replica) raftEntriesLocked(
 
 // Term implements the raft.LogStorage interface.
 // Requires that r.mu is held for writing.
-func (r *replicaLogStorage) Term(i uint64) (uint64, error) {
-	term, err := r.termLocked(kvpb.RaftIndex(i))
+func (r *replicaLogStorage) Term(index uint64) (uint64, error) {
+	r.mu.AssertHeld()
+	term, err := (*Replica)(r).raftTermShMuLocked(kvpb.RaftIndex(index))
 	if err != nil {
 		r.reportRaftStorageError(err)
 	}
 	return uint64(term), err
 }
 
-// termLocked implements the Term() call.
-func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	// TODO(pav-kv): make it possible to read with only raftMu held.
-	r.mu.AssertHeld()
-	if r.shMu.lastIndexNotDurable == i {
+// raftTermShMuLocked implements the Term() call. Requires that either
+// Replica.mu or Replica.raftMu is held, at least for reads.
+//
+// TODO(pav-kv): figure out a zero-cost-in-prod way to assert that either of two
+// mutexes is held. Can't use the regular AssertHeld() here.
+func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+	// Check whether the entry is already logically truncated, or is at a bound.
+	// It may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
+	// NB: two common cases are checked first.
+	if r.shMu.lastIndexNotDurable == index {
 		return r.shMu.lastTermNotDurable, nil
+	} else if index == r.shMu.raftTruncState.Index {
+		return r.shMu.raftTruncState.Term, nil
+	} else if index < r.shMu.raftTruncState.Index {
+		return 0, raft.ErrCompacted
+	} else if index > r.shMu.lastIndexNotDurable {
+		return 0, raft.ErrUnavailable
 	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
-	)
-}
+	// Check if the entry is cached, to avoid storage access.
+	if entry, found := r.store.raftEntryCache.Get(r.RangeID, index); found {
+		return kvpb.RaftTerm(entry.Term), nil
+	}
 
-// raftTermLocked implements the Term() call.
-func (r *Replica) raftTermLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return r.asLogStorage().termLocked(i)
+	entry, err := logstore.LoadEntry(r.AnnotateCtx(context.TODO()),
+		r.store.LogEngine(), r.RangeID, index)
+	if err != nil {
+		return 0, err
+	}
+	// Cache the entry except if it is sideloaded. We don't load/inline the
+	// sideloaded entries here to keep the term fetching cheap.
+	// TODO(pav-kv): consider not caching here, after measuring if it makes any
+	// difference.
+	if typ, _, err := raftlog.EncodingOf(entry); err != nil {
+		return 0, err
+	} else if !typ.IsSideloaded() {
+		r.store.raftEntryCache.Add(r.RangeID, []raftpb.Entry{entry}, false /* truncate */)
+	}
+	return kvpb.RaftTerm(entry.Term), nil
 }
 
 // GetTerm returns the term of the entry at the given index in the raft log.
 // Requires that r.mu is not held.
-func (r *Replica) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
+func (r *Replica) GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.raftTermLocked(i)
+	return r.raftTermShMuLocked(index)
 }
 
 // LastIndex implements the raft.LogStorage interface.
@@ -217,11 +248,17 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 	// raftMu only, so we are not racing with new writes. In addition, raft never
 	// tries to read "unstable" entries that correspond to ongoing writes.
 	r.raftMu.AssertHeld()
+	// Check whether the first requested entry is already logically truncated. It
+	// may or may not be physically truncated, since the RaftTruncatedState is
+	// updated before the truncation is enacted.
 	// TODO(pav-kv): de-duplicate this code and the one where r.mu must be held.
+	if lo <= r.shMu.raftTruncState.Index {
+		return nil, raft.ErrCompacted
+	}
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
+		r.store.LogEngine(), r.RangeID, r.store.raftEntryCache, r.raftMu.sideloaded,
+		lo, hi, maxBytes,
 		&r.raftMu.bytesAccount,
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
@@ -230,26 +267,13 @@ func (r *replicaRaftMuLogSnap) entriesRaftMuLocked(
 
 // Term implements the raft.LogStorageSnapshot interface.
 // Requires that r.raftMu is held.
-func (r *replicaRaftMuLogSnap) Term(i uint64) (uint64, error) {
-	term, err := r.termRaftMuLocked(kvpb.RaftIndex(i))
+func (r *replicaRaftMuLogSnap) Term(index uint64) (uint64, error) {
+	r.raftMu.AssertHeld()
+	term, err := (*Replica)(r).raftTermShMuLocked(kvpb.RaftIndex(index))
 	if err != nil {
 		(*replicaLogStorage)(r).reportRaftStorageError(err)
 	}
 	return uint64(term), err
-}
-
-// termRaftMuLocked implements the Term() call.
-func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	r.raftMu.AssertHeld()
-	// NB: the r.mu fields accessed here are always written under both r.raftMu
-	// and r.mu, and the reads are safe under r.raftMu.
-	if r.shMu.lastIndexNotDurable == i {
-		return r.shMu.lastTermNotDurable, nil
-	}
-	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
-		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
-	)
 }
 
 // LastIndex implements the raft.LogStorageSnapshot interface.

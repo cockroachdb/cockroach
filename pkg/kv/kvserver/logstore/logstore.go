@@ -556,75 +556,34 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	return ms.SysBytes + totalSideloaded, nil
 }
 
-// LoadTerm returns the term of the entry at the given index for the specified
-// range. The result is loaded from the storage engine if it's not in the cache.
-// The valid range for index is [Compacted, LastIndex].
+// LoadEntry loads the entry at the given index for the specified range. If the
+// entry is sideloaded, it is not expanded. The valid range for the index is
+// (Compacted, LastIndex].
 //
-// There are 3 cases for when the term is not found: (1) the index has been
-// compacted away, (2) index > LastIndex, or (3) there is a gap in the log. In
-// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
-// callers never try to read indices above LastIndex, so an error means (3)
-// which is a serious issue. But if the caller is unsure, they can check the
-// LastIndex to distinguish.
-//
-// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
-func LoadTerm(
-	ctx context.Context,
-	rsl StateLoader,
-	eng storage.Engine,
-	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
-	index kvpb.RaftIndex,
-) (kvpb.RaftTerm, error) {
-	entry, found := eCache.Get(rangeID, index)
-	if found {
-		return kvpb.RaftTerm(entry.Term), nil
-	}
-
+// An error returned means that either the entry is not found, or it could not
+// be parsed. The caller is expected to check the log bounds before this call,
+// to exclude the valid "not found" cases.
+func LoadEntry(
+	ctx context.Context, eng storage.Engine, rangeID roachpb.RangeID, index kvpb.RaftIndex,
+) (raftpb.Entry, error) {
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 
+	entry, found := raftpb.Entry{}, false
 	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
 			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
-		found = true
-		entry = ent
+		entry, found = ent, true
 		return nil
 	}); err != nil {
-		return 0, err
+		return raftpb.Entry{}, err
+	} else if !found {
+		return raftpb.Entry{}, errors.Errorf("entry #%d not found", index)
+	} else if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
+		return raftpb.Entry{}, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
 	}
-
-	if found {
-		// Found an entry. Double-check that it has a correct index.
-		if got, want := kvpb.RaftIndex(entry.Index), index; got != want {
-			return 0, errors.Errorf("there is a gap at index %d, found entry #%d", want, got)
-		}
-		// Cache the entry except if it is sideloaded. We don't load/inline the
-		// sideloaded entries here to keep the term fetching cheap.
-		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
-		// makes any difference.
-		typ, _, err := raftlog.EncodingOf(entry)
-		if err != nil {
-			return 0, err
-		}
-		if !typ.IsSideloaded() {
-			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
-		}
-		return kvpb.RaftTerm(entry.Term), nil
-	}
-
-	// Otherwise, the entry at the given index is not found. See the function
-	// comment for how this case is handled.
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return 0, err
-	} else if index == ts.Index {
-		return ts.Term, nil
-	} else if index < ts.Index {
-		return 0, raft.ErrCompacted
-	}
-	return 0, raft.ErrUnavailable
+	return entry, nil
 }
 
 // LoadEntries loads a slice of consecutive log entries in [lo, hi), starting
@@ -632,24 +591,20 @@ func LoadTerm(
 // entries. The size of the returned entries does not exceed maxSize, unless the
 // first entry exceeds the limit (in which case it is returned regardless).
 //
-// The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1.
+// The valid range for lo/hi is: Compacted < lo <= hi <= LastIndex+1. The caller
+// should check the bounds before making this call.
 //
-// There are 3 cases for when an entry is not found: (1) the lo index has been
-// compacted away, (2) hi > LastIndex+1, or (3) there is a gap in the log. In
-// the first case, we return ErrCompacted, and ErrUnavailable otherwise. Most
-// callers never try to read indices above LastIndex, so an error means (3)
-// which is a serious issue. But if the caller is unsure, they can check the
-// LastIndex to distinguish.
+// An error returned means that either an entry in the indices span is not
+// found, or it could not be parsed. Since the caller checks the boundaries, an
+// error is generally unexpected and means something bad.
 //
 // The bytesAccount is used to account for and limit the loaded bytes. It can be
 // nil when the accounting / limiting is not needed.
 //
-// TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.
 func LoadEntries(
 	ctx context.Context,
-	rsl StateLoader,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
@@ -662,11 +617,7 @@ func LoadEntries(
 		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
 	}
 
-	n := hi - lo
-	if n > 100 {
-		n = 100
-	}
-	ents := make([]raftpb.Entry, 0, n)
+	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
 	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
 
 	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
@@ -733,15 +684,8 @@ func LoadEntries(
 		return ents, cachedSize, sh.bytes - cachedSize, nil
 	}
 
-	// Something went wrong, and we could not load enough entries.
-	ts, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return nil, 0, 0, err
-	} else if lo <= ts.Index {
-		// The requested lo index has already been truncated.
-		return nil, 0, 0, raft.ErrCompacted
-	}
-	// We either have a gap in the log, or hi > LastIndex. Let the caller
-	// distinguish if they need to.
+	// Something went wrong, and we could not load enough entries. We either have
+	// a gap in the log, or hi > LastIndex+1. Let the caller distinguish if they
+	// need to.
 	return nil, 0, 0, raft.ErrUnavailable
 }
