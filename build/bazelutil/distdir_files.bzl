@@ -286,7 +286,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/sts/com_github_aws_aws_sdk_go_v2_service_sts-v1.33.17.zip": "87aca25fafd483a1eac29c5baaab05ad485422a9aa1ccc5db0d39733c2d71cd2",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go/com_github_aws_aws_sdk_go-v1.40.37.zip": "c0c481d28af88f621fb3fdeacc1e5d32f69a1bb83d0ee959f95ce89e4e2d0494",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/smithy-go/com_github_aws_smithy_go-v1.22.3.zip": "572df48de9133d57f45909d3067b2053b97230268c2d28e4e44ea9644009ef11",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.0.0-20181223111420-4b99d0c2c99e.zip": "812834322ee2ca50dc36f91f9ac3f2cde4631af2f9c330b1271c78b46024a540",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.2.5.zip": "6125b12664bb5dd8614e82f0fe7528242dcb11649e1d7e051aabf3da471e14e1",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aymanbagabas/go-osc52/com_github_aymanbagabas_go_osc52-v1.0.3.zip": "138e75a51599c2a8e4afe2bd6acdeaddbb73eb9ec796dfa2f577b16201660d9e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aymerick/douceur/com_github_aymerick_douceur-v0.2.0.zip": "dcbf69760cc1a8b32384495438e1086e4c3d669b2ebc0debd92e1865ffd6be60",
