@@ -205,6 +205,7 @@ type Memo struct {
 	checkInputMinRowCount                      float64
 	useInsertFastPath                          bool
 	internal                                   bool
+	useExistsFilterHoistRule                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -302,6 +303,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		useInsertFastPath:                          evalCtx.SessionData().InsertFastPath,
 		internal:                                   evalCtx.SessionData().Internal,
+		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -476,6 +478,7 @@ func (m *Memo) IsStale(
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
 		m.useInsertFastPath != evalCtx.SessionData().InsertFastPath ||
 		m.internal != evalCtx.SessionData().Internal ||
+		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

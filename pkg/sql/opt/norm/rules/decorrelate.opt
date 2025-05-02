@@ -917,7 +917,7 @@
 # apply to the filter which was previously hidden inside the subquery.
 [HoistUnboundFilterFromExistsSubquery, Normalize]
 (Select
-    $input:*
+    $input:* & (CanHoistUnboundFilterFromExistsSubquery)
     $filters:[
         ...
         $item:(FiltersItem
@@ -963,7 +963,7 @@
 # HoistUnboundFilterFromExistsSubquery, but it applies to a join filter.
 [HoistUnboundJoinFilterFromExistsSubquery, Normalize]
 (Select
-    $input:*
+    $input:* & (CanHoistUnboundFilterFromExistsSubquery)
     $filters:[
         ...
         $item:(FiltersItem
