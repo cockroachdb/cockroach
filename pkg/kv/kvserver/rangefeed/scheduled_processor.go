@@ -255,8 +255,8 @@ func (p *ScheduledProcessor) cleanup() {
 	p.taskCancel()
 	close(p.stoppedC)
 	p.MemBudget.Close(ctx)
-	if p.UnregisterFromReplica != nil {
-		p.UnregisterFromReplica(p)
+	if p.UnsetFromReplica != nil {
+		p.UnsetFromReplica(p)
 	}
 
 }
