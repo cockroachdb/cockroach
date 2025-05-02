@@ -185,10 +185,13 @@ func (msstw *MultiSSTWriter) ReadOne(
 	return nil
 }
 
-// EstimatedDataSize returns the approximation of the written bytes to SSTs
-// (including currSST).
+// EstimatedDataSize returns the sum of lengths of keys and values passed
+// to any past or current SST. This is monotonically increasing.
+//
+// Note that this is not the same as the size of the SSTs themselves, as
+// SST files carry additional data but also use compression.
 func (msstw *MultiSSTWriter) EstimatedDataSize() int64 {
-	return msstw.sstSize + msstw.currSST.DataSize
+	return msstw.dataSize + msstw.currSST.DataSize
 }
 
 func (msstw *MultiSSTWriter) emitRangeKey(key rangekey.Span) {
