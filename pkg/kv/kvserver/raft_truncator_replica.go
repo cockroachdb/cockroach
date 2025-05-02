@@ -44,7 +44,7 @@ func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 func (r *raftTruncatorReplica) sideloadedStats(
 	ctx context.Context, span kvpb.RaftSpan,
 ) (entries uint64, freed int64, err error) {
-	return r.raftMu.sideloaded.Stats(ctx, span)
+	return r.logStorage.ls.Sideload.Stats(ctx, span)
 }
 
 func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {

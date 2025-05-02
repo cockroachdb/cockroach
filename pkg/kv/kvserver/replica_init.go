@@ -210,7 +210,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	// Initialize all the components of the log storage. The state of the log
 	// storage, such as RaftTruncatedState and the last entry ID, will be loaded
 	// when the replica is initialized.
-	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
+	sideloaded := logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
 		store.TODOEngine().GetAuxiliaryDir(),
@@ -229,7 +229,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.logStorage.ls = &logstore.LogStore{
 		RangeID:     rangeID,
 		Engine:      store.TODOEngine(),
-		Sideload:    r.raftMu.sideloaded,
+		Sideload:    sideloaded,
 		StateLoader: r.raftMu.stateLoader.StateLoader,
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
 		// given range ID, to ensure that callbacks are processed in order.

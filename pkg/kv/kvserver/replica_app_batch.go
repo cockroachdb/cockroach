@@ -148,7 +148,7 @@ func (b *replicaAppBatch) Stage(
 	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
 		st:          b.r.store.cfg.Settings,
 		eng:         b.r.store.TODOEngine(),
-		sideloaded:  b.r.raftMu.sideloaded,
+		sideloaded:  b.r.logStorage.ls.Sideload,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
 	}); err != nil {
 		return nil, err
@@ -529,7 +529,7 @@ func (b *replicaAppBatch) stageTruncation(
 	// usage of changeTruncatesSideloadedFiles flag at the other end.
 	//
 	// The size computation feeds into maintaining the log size in memory.
-	if entries, size, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
+	if entries, size, err := b.r.logStorage.ls.Sideload.Stats(ctx, kvpb.RaftSpan{
 		After: b.truncState.Index, Last: truncatedState.Index,
 	}); err != nil {
 		return errors.Wrap(err, "failed searching for sideloaded entries")
