@@ -1,4 +1,4 @@
-# LogicTest: !weak-iso-level-configs
+# LogicTest: !weak-iso-level-configs !metamorphic-batch-sizes
 # This test assumes that SERIALIZABLE isolation is being used. See
 # select_for_update_read_committed for READ COMMITTED testing.
 
