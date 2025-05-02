@@ -426,6 +426,11 @@ func TestLDRCreateTablesTPCC(
 		option.WithNodes(setup.workloadNode),
 		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
 
+	// Setup LDR before the workload starts. Otherwise the workload generates a
+	// backlog as the initial scan runs and it can take away while for the sql
+	// writer to catch up with the UPDATE heavy TPCC workload.
+	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
+
 	workloadDoneCh := make(chan struct{})
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
 	monitor.Go(func(ctx context.Context) error {
@@ -435,9 +440,8 @@ func TestLDRCreateTablesTPCC(
 		// on data ingested via the offline initial scan.
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), workload.workload.sourceRunCmd("system", setup.left.nodes))
 	})
-	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
 
-	maxExpectedLatency := 3 * time.Minute
+	maxExpectedLatency := time.Minute + 30*time.Second
 	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
 	monitor.Wait()
