@@ -438,15 +438,12 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	}
 
 	var jobID jobspb.JobID
-	// The scheduler is notified of the backup job completion and then the
-	// compaction job is created in a separate transaction. As such, we need to
-	// poll for the compaction job to be created.
-	testutils.SucceedsSoon(t, func() error {
-		return th.sqlDB.DB.QueryRowContext(
+	require.NoError(
+		t, th.sqlDB.DB.QueryRowContext(
 			ctx,
 			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
-		).Scan(&jobID)
-	})
+		).Scan(&jobID),
+	)
 
 	testutils.SucceedsSoon(t, func() error {
 		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -465,6 +462,101 @@ func TestScheduledBackupCompaction(t *testing.T) {
 			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup']", backupPath),
 	).Scan(&numBackups)
 	require.Equal(t, 5, numBackups)
+}
+
+func TestBlockConcurrentScheduledCompactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test covers the case outlined in #145410 where a scheduled compaction
+	// is triggered before another compaction completes. This test ensures that we
+	// avoid a race condition where the completion of a compaction job impacts
+	// another compaction job by mutating the backup chain while the other
+	// compaction job is resolving its compaction chain.
+	ctx := context.Background()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+	// Set to a time such that full backups do not unexpectedly run based on test
+	// time.
+	th.env.SetTime(time.Date(2025, 05, 01, 1, 0, 0, 0, time.UTC))
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+	th.sqlDB.Exec(
+		t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'",
+	)
+	schedules, err := th.createBackupSchedule(
+		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+	executeIncremental := func() {
+		t.Helper()
+		inc, err = jobs.ScheduledJobDB(th.internalDB()).
+			Load(context.Background(), th.env, inc.ScheduleID())
+		require.NoError(t, err)
+
+		th.env.SetTime(inc.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+	}
+	for range 3 {
+		executeIncremental()
+	}
+
+	var jobID jobspb.JobID
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&jobID),
+	)
+
+	th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	jobutils.WaitForJobToPause(t, th.sqlDB, jobID)
+	// Force another compaction to be attempted and ensure that it is blocked from
+	// running.
+	executeIncremental()
+
+	var numCompactions int
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&numCompactions),
+	)
+	require.Equal(t, 1, numCompactions)
+
+	// Allow the first compaction job to complete and cause another compaction to
+	// be attempted, which should not be blocked.
+	th.sqlDB.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToSucceed(t, th.sqlDB, jobID)
+	th.sqlDB.Exec(
+		t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
+	)
+	executeIncremental()
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&numCompactions),
+	)
+	require.Equal(t, 2, numCompactions)
 }
 
 func TestBackupCompactionUnsupportedOptions(t *testing.T) {
@@ -990,7 +1082,7 @@ func compactionQuery(backupStmt string, fullPath string, start, end hlc.Timestam
 	backupStmt = strings.ReplaceAll(backupStmt, "'", "''")
 	return fmt.Sprintf(
 		`SELECT crdb_internal.backup_compaction(
-			'%s', '%s', '%s'::DECIMAL, '%s'::DECIMAL
+			0, '%s', '%s', '%s'::DECIMAL, '%s'::DECIMAL
 		)`,
 		backupStmt, fullPath, start.AsOfSystemTime(), end.AsOfSystemTime(),
 	)
