@@ -89,7 +89,11 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					d.ScanArgs(t, "ignored-written", &ignoredWritten)
 					admissionStats.statsToIgnore.writeBytes += uint64(ignoredWritten)
 				}
-				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, admissionStats)
+				unflushedTooLarge := false
+				if d.HasArg("unflushed-too-large") {
+					unflushedTooLarge = true
+				}
+				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, admissionStats, unflushedTooLarge)
 				wL0lm, iL0lm, ilm := estimator.getModelsAtDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)

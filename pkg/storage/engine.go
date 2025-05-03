@@ -1119,6 +1119,10 @@ type Engine interface {
 	// just copies the backing bytes to a local file of if it rewrites the file
 	// key-by-key to a new file.
 	Download(ctx context.Context, span roachpb.Span, copy bool) error
+
+	// GetPebbleOptions returns the options used when creating the engine. The
+	// caller must not modify these.
+	GetPebbleOptions() *pebble.Options
 }
 
 // Batch is the interface for batch specific operations.
