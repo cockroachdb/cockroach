@@ -3982,16 +3982,16 @@ force_savepoint_restart                                    off
 foreign_key_cascades_limit                                 10000
 idle_in_transaction_session_timeout                        0
 idle_session_timeout                                       0
-index_join_streamer_batch_size                             8.0 MiB
+index_join_streamer_batch_size                             8.0
 index_recommendations_enabled                              off
 inject_retry_errors_enabled                                off
 inject_retry_errors_on_commit_enabled                      off
 integer_datetimes                                          on
 intervalstyle                                              postgres
 is_superuser                                               on
-join_reader_index_join_strategy_batch_size                 4.0 MiB
-join_reader_no_ordering_strategy_batch_size                2.0 MiB
-join_reader_ordering_strategy_batch_size                   100 KiB
+join_reader_index_join_strategy_batch_size                 4.0
+join_reader_no_ordering_strategy_batch_size                2.0
+join_reader_ordering_strategy_batch_size                   100
 large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
@@ -4055,7 +4055,7 @@ pg_trgm.similarity_threshold                               0.3
 plan_cache_mode                                            auto
 plpgsql_use_strict_into                                    off
 prefer_lookup_joins_for_fks                                off
-prepared_statements_cache_size                             0 B
+prepared_statements_cache_size                             0
 propagate_admission_header_to_leaf_transactions            on
 propagate_input_ordering                                   off
 recursion_depth_limit                                      1000

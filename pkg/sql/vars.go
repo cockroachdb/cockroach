@@ -67,6 +67,16 @@ type getStringValFn = func(
 	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, kv *kv.Txn,
 ) (string, error)
 
+// sizeValueUnit receives the value from a humanizeutil.IBytes function call
+// example ("1.0 MiB") returning the value and respective unit.
+func sizeValueUnit(humanizedBytes string) (string, string, error) {
+	parts := strings.Fields(humanizedBytes)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("unexpected format: expected 2 parts (ex: 1.0 MiB), got %d", len(parts))
+	}
+	return parts[0], parts[1], nil
+}
+
 // sessionVar provides a unified interface for performing operations on
 // variables such as the selected database, or desired syntax.
 type sessionVar struct {
@@ -76,6 +86,11 @@ type sessionVar struct {
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext, kv *kv.Txn) (string, error)
+
+	// GetUnit returns a string representing the unit in which the value of
+	// this session variable is expressed. It can be nil in which case the unit
+	// is not defined.
+	GetUnit func(evalCtx *extendedEvalContext) (string, error)
 
 	// Exists returns true if this custom session option exists in the current
 	// context. It's needed to support the current_setting builtin for custom
@@ -588,7 +603,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().WorkMemLimit)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(settingWorkMemBytes.Get(sv)))
@@ -1260,6 +1286,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().LockTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			return "ms", nil
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterLockTimeout.String(sv)
 		},
@@ -1498,6 +1527,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().TransactionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			return "ms", nil
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return "0s"
 		},
@@ -1661,6 +1693,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().StmtTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			return "ms", nil
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterStatementTimeout.String(sv)
 		},
@@ -1674,6 +1709,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData().IdleInSessionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
 		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			return "ms", nil
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterIdleInSessionTimeout.String(sv)
 		},
@@ -1685,6 +1723,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			ms := evalCtx.SessionData().IdleInTransactionSessionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10), nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			return "ms", nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterIdleInTransactionSessionTimeout.String(sv)
@@ -2291,7 +2332,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderOrderingStrategyBatchSize)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderOrderingStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderOrderingStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(rowexec.JoinReaderOrderingStrategyBatchSize.Get(sv)))
@@ -2312,7 +2364,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderNoOrderingStrategyBatchSize)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderNoOrderingStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderNoOrderingStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(rowexec.JoinReaderNoOrderingStrategyBatchSize.Get(sv)))
@@ -2333,7 +2396,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderIndexJoinStrategyBatchSize)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderIndexJoinStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderIndexJoinStrategyBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(execinfra.JoinReaderIndexJoinStrategyBatchSize.Get(sv)))
@@ -2354,7 +2428,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().IndexJoinStreamerBatchSize)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().IndexJoinStreamerBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().IndexJoinStreamerBatchSize)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return string(humanizeutil.IBytes(colfetcher.IndexJoinStreamerBatchSize.Get(sv)))
@@ -3049,7 +3134,18 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)), nil
+			value, _, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)))
+			if err != nil {
+				return "", err
+			}
+			return value, nil
+		},
+		GetUnit: func(evalCtx *extendedEvalContext) (string, error) {
+			_, unit, err := sizeValueUnit(string(humanizeutil.IBytes(evalCtx.SessionData().PreparedStatementsCacheSize)))
+			if err != nil {
+				return "", err
+			}
+			return unit, nil
 		},
 		GlobalDefault: func(_ *settings.Values) string {
 			return string(humanizeutil.IBytes(0))

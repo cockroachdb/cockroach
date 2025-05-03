@@ -3071,9 +3071,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if gen.Hidden {
 				continue
 			}
+			var valueUnit = tree.DNull
 			value, err := gen.Get(&p.extendedEvalCtx, p.Txn())
 			if err != nil {
 				return err
+			}
+			// Check if the setting has a specified unit.
+			if gen.GetUnit != nil {
+				unit, err := gen.GetUnit(&p.extendedEvalCtx)
+				if err != nil {
+					return err
+				}
+				valueUnit = tree.NewDString(unit)
 			}
 			valueDatum := tree.NewDString(value)
 			var bootDatum tree.Datum = tree.DNull
@@ -3099,7 +3108,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 			if err := addRow(
 				tree.NewDString(strings.ToLower(vName)), // name
 				valueDatum,                              // setting
-				tree.DNull,                              // unit
+				valueUnit,                               // unit
 				tree.DNull,                              // category
 				tree.DNull,                              // short_desc
 				tree.DNull,                              // extra_desc
