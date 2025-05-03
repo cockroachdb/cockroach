@@ -667,10 +667,6 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 
 	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
 	s.Index.Fixups().OnPendingSplitsMerges(func(count int) { s.PendingSplitsMerges = count })
-
-	// Suspend background fixups until ProcessFixups is explicitly called, so
-	// that vector index operations can be deterministic.
-	s.Index.SuspendFixups()
 }
 
 func (s *testState) processFixups() {
