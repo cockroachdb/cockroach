@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,329 +61,261 @@ func TestBackupCompaction(t *testing.T) {
 	)
 	defer cleanupDB()
 
-	// Expects start/end to be nanosecond epoch.
-	startCompaction := func(bucket int, subdir string, start, end int64) jobspb.JobID {
-		compactionBuiltin := `SELECT crdb_internal.backup_compaction(
-ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
-)`
-		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, bucket, subdir, start, end))
+	startCompaction := func(
+		db *sqlutils.SQLRunner, backupStmt string, fullPath string, start, end hlc.Timestamp,
+	) jobspb.JobID {
+		t.Helper()
 		var jobID jobspb.JobID
-		row.Scan(&jobID)
+		db.QueryRow(t, compactionQuery(backupStmt, fullPath, start, end)).Scan(&jobID)
 		return jobID
 	}
+
+	bucketNum := 1
+	getLatestFullDir := func(collectionURI []string) string {
+		t.Helper()
+		var backupPath string
+		db.QueryRow(
+			t,
+			fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+		).Scan(&backupPath)
+		return backupPath
+	}
+
 	// Note: Each subtest should create their backups in their own subdirectory to
 	// avoid false negatives from subtests relying on backups from other subtests.
-	const fullBackupAostCmd = "BACKUP INTO 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
-	const incBackupCmd = "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d'"
-	const incBackupAostCmd = "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
-
 	t.Run("basic operations insert, update, and delete", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE IF EXISTS foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 1, start))
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/1'").Scan(&backupPath)
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 
 		// Run twice to test compaction on top of compaction.
 		for i := range 2 {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
-			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
+			db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 			db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
+			db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 			db.Exec(t, "DELETE FROM foo WHERE a = 3")
-			end := getTime(t)
-			db.Exec(
-				t,
-				fmt.Sprintf(incBackupAostCmd, 1, end),
-			)
-			jobutils.WaitForJobToSucceed(t, db, startCompaction(1, backupPath, start, end))
-			validateCompactedBackupForTables(
-				t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end, 2+i,
-			)
+			end := getTime()
+			db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+			jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+			validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2+i)
 			start = end
 		}
 
 		// Ensure that additional backups were created.
 		var numBackups int
 		db.QueryRow(
-			t,
-			"SELECT count(DISTINCT (start_time, end_time)) FROM "+
-				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup/1']",
-			backupPath,
+			t, fmt.Sprintf("SELECT count(DISTINCT (start_time, end_time)) FROM [%s]", showBackupQuery(collectionURI, noOpts)),
 		).Scan(&numBackups)
 		require.Equal(t, 9, numBackups)
 	})
 
 	t.Run("create and drop tables", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		defer func() {
 			db.Exec(t, "DROP TABLE IF EXISTS foo, bar, baz")
 		}()
 		db.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b INT)")
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 2, start))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 
 		db.Exec(t, "CREATE TABLE bar (a INT, b INT)")
 		db.Exec(t, "INSERT INTO bar VALUES (1, 1)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 2))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "INSERT INTO bar VALUES (2, 2)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 2))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "CREATE TABLE baz (a INT, b INT)")
 		db.Exec(t, "INSERT INTO baz VALUES (3, 3)")
-		end := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd, 2, end),
-		)
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/2'").Scan(&backupPath)
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(2, backupPath, start, end))
-		validateCompactedBackupForTables(
-			t, db,
-			[]string{"foo", "bar", "baz"},
-			"'nodelocal://1/backup/2'",
-			start, end, 2,
-		)
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo", "bar", "baz"}, start, end, noOpts, noOpts, 2)
 
 		db.Exec(t, "DROP TABLE bar")
-		end = getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd, 2, end),
-		)
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(2, backupPath, start, end))
+		end = getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
-		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup/2'")
+		db.Exec(t, restoreQuery(t, fullCluster, collectionURI, noAOST, noOpts))
 		rows := db.QueryStr(t, "SELECT * FROM [SHOW TABLES] WHERE table_name = 'bar'")
 		require.Empty(t, rows)
 	})
 
 	t.Run("create indexes", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1), (2, 2), (3, 3)")
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 3, start))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 
 		db.Exec(t, "CREATE INDEX bar ON foo (a)")
 		db.Exec(t, "CREATE INDEX baz ON foo (a)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 3))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "CREATE INDEX qux ON foo (b)")
 		db.Exec(t, "DROP INDEX foo@bar")
-		end := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd, 3, end),
-		)
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/3'").Scan(&backupPath)
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(3, backupPath, start, end))
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
 		db.Exec(t, "DROP TABLE foo")
-		db.Exec(t, "RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup/3'")
+		db.Exec(t, restoreQuery(t, "TABLE foo", collectionURI, noAOST, noOpts))
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&restoredNumIndexes)
 		require.Equal(t, numIndexes, restoredNumIndexes)
 	})
 
 	t.Run("compact middle of backup chain", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		db.Exec(t, "BACKUP INTO 'nodelocal://1/backup/4'")
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, noAOST, noOpts)
+		db.Exec(t, backupStmt)
 
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		start := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd, 4, start),
-		)
+		start := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, start, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (5, 5)")
-		end := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd, 4, end),
-		)
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/4'").Scan(&backupPath)
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(4, backupPath, start, end))
-		validateCompactedBackupForTables(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end, 4,
-		)
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 4)
 	})
 
 	t.Run("table-level backups", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(
-			fullBackupAostCmd, 5, start,
-		))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 5))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 		db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
 		db.Exec(t, "DELETE FROM foo WHERE a = 1")
-		end := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(
-				incBackupAostCmd, 5, end,
-			),
-		)
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/5'").Scan(&backupPath)
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(5, backupPath, start, end))
-		validateCompactedBackupForTables(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end, 2,
-		)
+		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2)
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+		encryptOpts := "WITH encryption_passphrase = 'correct-horse-battery-staple'"
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		opts := "encryption_passphrase = 'correct-horse-battery-staple'"
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(
-			fullBackupAostCmd+" WITH %s", 6, start, opts,
-		))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, encryptOpts)
+		db.Exec(t, backupStmt)
+
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupCmd+" WITH %s", 6, opts),
-		)
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, encryptOpts))
+
 		db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-		end := getTime(t)
-		db.Exec(
-			t,
-			fmt.Sprintf(incBackupAostCmd+" WITH %s", 6, end, opts),
-		)
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/6'").Scan(&backupPath)
-		var jobID jobspb.JobID
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, encryptOpts))
+
 		pause := rand.Intn(2) == 0
 		if pause {
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 		}
-		db.QueryRow(
-			t,
-			fmt.Sprintf(
-				`SELECT crdb_internal.backup_compaction(
-ARRAY['nodelocal://1/backup/6'],
-'%s',
-crdb_internal.json_to_pb(
-'cockroach.sql.jobs.jobspb.BackupEncryptionOptions',
-'{"mode": 0, "raw_passphrase": "correct-horse-battery-staple"}'
-), '%d', '%d')`,
-				backupPath, start, end,
-			),
-		).Scan(&jobID)
+		jobID := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		if pause {
 			jobutils.WaitForJobToPause(t, db, jobID)
 			db.Exec(t, "RESUME JOB $1", jobID)
 		}
 		jobutils.WaitForJobToSucceed(t, db, jobID)
-		validateCompactedBackupForTablesWithOpts(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, 2, opts,
-		)
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, encryptOpts, encryptOpts, 2)
 	})
 
 	t.Run("pause resume and cancel", func(t *testing.T) {
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 7, start))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 7))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-		end := getTime(t)
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/7'").Scan(&backupPath)
-		jobID := startCompaction(7, backupPath, start, end)
+		jobID := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		jobutils.WaitForJobToSucceed(t, db, jobID)
-		validateCompactedBackupForTables(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/7'", start, end, 2,
-		)
+		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2)
 
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
-		end = getTime(t)
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
+		end = getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
-		jobID = startCompaction(7, backupPath, start, end)
+		jobID = startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
-	})
-
-	t.Run("builtin using backup statement", func(t *testing.T) {
-		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
-		defer func() {
-			db.Exec(t, "DROP TABLE foo")
-		}()
-		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		start := getTime(t)
-		opts := "encryption_passphrase = 'correct-horse-battery-staple'"
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd+" WITH %s", 9, start, opts))
-		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd+" WITH %s", 9, opts))
-		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-		end := getTime(t)
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd+" WITH %s", 9, end, opts))
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/9'").Scan(&backupPath)
-		var jobID jobspb.JobID
-		db.QueryRow(t, fmt.Sprintf(
-			`SELECT crdb_internal.backup_compaction(
-        'BACKUP INTO LATEST IN ''nodelocal://1/backup/9'' WITH encryption_passphrase = ''correct-horse-battery-staple''',
-        '%s', %d::DECIMAL, %d::DECIMAL
-      )`, backupPath, start, end,
-		)).Scan(&jobID)
-		jobutils.WaitForJobToSucceed(t, db, jobID)
-		validateCompactedBackupForTablesWithOpts(
-			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, 2, opts,
-		)
 	})
 
 	t.Run("compaction of chain ending in a compacted backup", func(t *testing.T) {
@@ -393,33 +325,36 @@ crdb_internal.json_to_pb(
 		// F -> I1 -> I2 -> I3
 		// We compact I2 and I3 to get C1 and then compact I1 and C1 to get C2.
 		// Both C1 and C2 will have the same end time, but C2 should not clobber C1.
+		bucketNum++
+		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
+
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
 		}()
-		start := getTime(t)
-		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 11, start))
+		start := getTime()
+		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+		db.Exec(t, backupStmt)
 
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
-		mid := getTime(t)
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 11, mid))
+		mid := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, mid, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
-		db.Exec(t, fmt.Sprintf(incBackupCmd, 11))
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
-		end := getTime(t)
-		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 11, end))
+		end := getTime()
+		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		var backupPath string
-		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/11'").Scan(&backupPath)
-		c1JobID := startCompaction(11, backupPath, mid, end)
+		fullDir := getLatestFullDir(collectionURI)
+		c1JobID := startCompaction(db, backupStmt, fullDir, mid, end)
 		jobutils.WaitForJobToSucceed(t, db, c1JobID)
 
-		c2JobID := startCompaction(11, backupPath, start, end)
+		c2JobID := startCompaction(db, backupStmt, fullDir, start, end)
 		jobutils.WaitForJobToSucceed(t, db, c2JobID)
-		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", mid, end, "")
-		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", start, end, "")
+		ensureBackupExists(t, db, collectionURI, mid, end, noOpts)
+		ensureBackupExists(t, db, collectionURI, start, end, noOpts)
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
@@ -647,28 +582,32 @@ func TestCompactionCheckpointing(t *testing.T) {
 		},
 	)
 	defer cleanup()
+
+	collectionURI := []string{"nodelocal://1/backup"}
+
 	writeQueries := func() {
 		db.Exec(t, "UPDATE data.bank SET balance = balance + 1")
 	}
 	db.Exec(t, "SET CLUSTER SETTING bulkio.backup.checkpoint_interval = '10ms'")
-	start := getTime(t)
-	db.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME %d", start))
+	start := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+	db.Exec(t, backupStmt)
 	writeQueries()
-	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 	writeQueries()
-	end := getTime(t)
-	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME %d", end))
+	end := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
 	var backupPath string
-	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+	db.QueryRow(
+		t,
+		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+	).Scan(&backupPath)
 
 	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.write_checkpoint'")
 	var jobID jobspb.JobID
-	db.QueryRow(
-		t,
-		"SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], $1, ''::BYTES, $2, $3)",
-		backupPath, start, end,
-	).Scan(&jobID)
+	db.QueryRow(t, compactionQuery(backupStmt, backupPath, start, end)).Scan(&jobID)
+
 	// Ensure that the very first manifest when the job is initially started has
 	// no files.
 	testutils.SucceedsSoon(t, func() error {
@@ -698,7 +637,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	require.Greater(t, int(manifestNumFiles.Load()), 0, "expected non-zero number of files in manifest")
 
 	jobutils.WaitForJobToSucceed(t, db, jobID)
-	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end, 2)
+	validateCompactedBackupForTables(t, db, collectionURI, []string{"bank"}, start, end, noOpts, noOpts, 2)
 }
 
 func TestToggleCompactionForRestore(t *testing.T) {
@@ -709,34 +648,28 @@ func TestToggleCompactionForRestore(t *testing.T) {
 		t, singleNode, 1 /* numAccounts */, InitManualReplication,
 	)
 	defer cleanup()
-	start := getTime(t)
-	db.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME '%d'", start))
-	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
-	end := getTime(t)
-	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME '%d'", end))
+
+	collectionURI := []string{"nodelocal://1/backup"}
+	start := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+	db.Exec(t, backupStmt)
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
+	end := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 	var backupPath string
 	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
 	var compactionID jobspb.JobID
-	db.QueryRow(
-		t,
-		fmt.Sprintf(
-			`SELECT crdb_internal.backup_compaction(
-				'BACKUP INTO LATEST IN ''nodelocal://1/backup''',
-				'%s', %d::DECIMAL, %d::DECIMAL
-			)`,
-			backupPath, start, end,
-		),
-	).Scan(&compactionID)
+	db.QueryRow(t, compactionQuery(backupStmt, backupPath, start, end)).Scan(&compactionID)
 	waitForSuccessfulJob(t, tc, compactionID)
 
 	var compRestoreID, classicRestoreID jobspb.JobID
 	var unused any
 	db.QueryRow(
-		t, "RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup' WITH new_db_name = 'data1'",
+		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data1'"),
 	).Scan(&compRestoreID, &unused, &unused, &unused)
 	db.Exec(t, "SET CLUSTER SETTING restore.compacted_backups.enabled = false")
 	db.QueryRow(
-		t, "RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup' WITH new_db_name = 'data2'",
+		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data2'"),
 	).Scan(&classicRestoreID, &unused, &unused, &unused)
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
@@ -928,47 +861,31 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 	}
 }
 
-// validateCompactedBackupForTables is a wrapper around
-// validateCompactedBackupForTablesWithOpts that passes in no options.
-func validateCompactedBackupForTables(
-	t *testing.T,
-	db *sqlutils.SQLRunner,
-	tables []string,
-	collectionURIs string,
-	start, end int64,
-	numBackups int,
-) {
-	t.Helper()
-	validateCompactedBackupForTablesWithOpts(t, db, tables, collectionURIs, start, end, numBackups, "")
-}
-
-// validateCompactedBackupForTablesWithOpts validates that a compacted backup
+// validateCompactedBackupForTables validates that a compacted backup
 // with the specified start and end time (in nanoseconds) exists and restores
 // from that backup. It checks that the tables specified have the same contents
 // before and after the restore. It also checks that the restore process used
 // the number of backups specified in numBackups.
-func validateCompactedBackupForTablesWithOpts(
+// opts should be a string starting with "WITH "
+func validateCompactedBackupForTables(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
+	collectionURI []string,
 	tables []string,
-	collectionURIs string,
-	start, end int64,
+	start, end hlc.Timestamp,
+	restoreOpts string,
+	showOpts string,
 	numBackups int,
-	opts string,
 ) {
 	t.Helper()
-	ensureBackupExists(t, db, collectionURIs, start, end, opts)
+	ensureBackupExists(t, db, collectionURI, start, end, showOpts)
 	rows := make(map[string][][]string)
 	for _, table := range tables {
 		rows[table] = db.QueryStr(t, "SELECT * FROM "+table)
 	}
 	tablesList := strings.Join(tables, ", ")
 	db.Exec(t, "DROP TABLE "+tablesList)
-	restoreQuery := fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN (%s)", tablesList, collectionURIs)
-	if opts != "" {
-		restoreQuery += " WITH " + opts
-	}
-	row := db.QueryRow(t, restoreQuery)
+	row := db.QueryRow(t, restoreQuery(t, "TABLE "+tablesList, collectionURI, noAOST, restoreOpts))
 	var restoreJobID jobspb.JobID
 	var discard *any
 	row.Scan(&restoreJobID, &discard, &discard, &discard)
@@ -998,40 +915,125 @@ func getNumBackupsInRestore(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.J
 }
 
 // ensureBackupExists ensures that a backup exists that spans the given start and end times.
+// opts should be a string starting with "WITH "
 func ensureBackupExists(
-	t *testing.T, db *sqlutils.SQLRunner, collectionURIs string, start, end int64, opts string,
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	collectionURI []string,
+	start, end hlc.Timestamp,
+	opts string,
 ) {
 	t.Helper()
-	showBackupQ := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN (%s)`, collectionURIs)
-	if opts != "" {
-		showBackupQ += " WITH " + opts
-	}
 	// Convert times to millisecond epoch. We compare millisecond epoch instead of
 	// nanosecond epoch because the backup time is stored in milliseconds, but timeutil.Now()
 	// will return a nanosecond-precise epoch.
-	times := db.Query(t,
-		fmt.Sprintf(`SELECT DISTINCT
-		COALESCE(start_time::DECIMAL * 1e6, 0),
-		COALESCE(end_time::DECIMAL * 1e6, 0)
-		FROM [%s]`, showBackupQ),
+	rows := db.Query(
+		t,
+		fmt.Sprintf(`SELECT * FROM (
+				SELECT DISTINCT
+				COALESCE(start_time::DECIMAL * 1e6, 0) as start_time,
+				COALESCE(end_time::DECIMAL * 1e6, 0) as end_time
+				FROM [%s]
+			) WHERE start_time = '%s'::DECIMAL / 1e3 AND end_time = '%s'::DECIMAL / 1e3
+			`,
+			showBackupQuery(collectionURI, opts), start.AsOfSystemTime(), end.AsOfSystemTime(),
+		),
 	)
-	defer times.Close()
-	found := false
-	for times.Next() {
-		var startTime, endTime int64
-		require.NoError(t, times.Scan(&startTime, &endTime))
-		if startTime == start/1e3 && endTime == end/1e3 {
-			found = true
-			break
-		}
-	}
-	require.True(t, found, "missing backup with start time %d and end time %d", start, end)
+	defer rows.Close()
+	require.True(
+		t, rows.Next(), "missing backup with start time %d and end time %d",
+		start.AsOfSystemTime(), end.AsOfSystemTime(),
+	)
 }
 
-// getTime returns the current time in nanoseconds since epoch.
-func getTime(t *testing.T) int64 {
+func getTime() hlc.Timestamp {
+	// Due to fun precision differences between timeutil.Now() on Unix vs MacOS
+	// and the rounding of times to the nearest millisecond by `SHOW BACKUP`, it
+	// is simpler to just ensure the precision to be milliseconds here and avoid
+	// the precision issues entirely.
+	return hlc.Timestamp{WallTime: timeutil.Now().UnixNano() / 1e3 * 1e3}
+}
+
+// Some named variables to improve test readability.
+const fullCluster = ""
+
+var noAOST = hlc.Timestamp{}
+var noOpts = ""
+
+// fullBackupQuery creates a `BACKUP INTO` statement.
+// opts should be a string starting with "WITH "
+func fullBackupQuery(
+	targets string, collectionURI []string, aost hlc.Timestamp, opts string,
+) string {
+	uri := stringifyCollectionURI(collectionURI)
+	return fmt.Sprintf(
+		"BACKUP %s INTO (%s) %s %s",
+		targets, uri, aostExpr(aost), opts,
+	)
+}
+
+// incBackupQuery creates a `BACKUP INTO LATEST` statement against the latest
+// full backup in the collection.
+// opts should be a string starting with "WITH "
+func incBackupQuery(
+	targets string, collectionURI []string, aost hlc.Timestamp, opts string,
+) string {
+	uri := stringifyCollectionURI(collectionURI)
+	return fmt.Sprintf(
+		"BACKUP %s INTO LATEST IN (%s) %s %s",
+		targets, uri, aostExpr(aost), opts,
+	)
+}
+
+// compactBackupQuery creates a `crdb_internal.backup_compaction` statement.
+func compactionQuery(backupStmt string, fullPath string, start, end hlc.Timestamp) string {
+	backupStmt = strings.ReplaceAll(backupStmt, "'", "''")
+	return fmt.Sprintf(
+		`SELECT crdb_internal.backup_compaction(
+			'%s', '%s', '%s'::DECIMAL, '%s'::DECIMAL
+		)`,
+		backupStmt, fullPath, start.AsOfSystemTime(), end.AsOfSystemTime(),
+	)
+}
+
+// restoreQuery creates a `RESTORE` statement that restores from the latest
+// backup chain in the collection.
+// opts should be a string starting with "WITH "
+func restoreQuery(
+	t *testing.T, targets string, collectionURI []string, aost hlc.Timestamp, opts string,
+) string {
 	t.Helper()
-	time, err := strconv.ParseFloat(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime(), 64)
-	require.NoError(t, err)
-	return int64(time)
+	uri := stringifyCollectionURI(collectionURI)
+	return fmt.Sprintf(
+		"RESTORE %s FROM LATEST IN (%s) %s %s",
+		targets, uri, aostExpr(aost), opts,
+	)
+}
+
+// showBackupQuery creates a `SHOW BACKUP` statement for the latest backup in
+// the collection.
+// opts should be a string starting with "WITH "
+func showBackupQuery(collectionURI []string, opts string) string {
+	uri := stringifyCollectionURI(collectionURI)
+	return fmt.Sprintf(
+		`SHOW BACKUP FROM LATEST IN (%s) %s`, uri, opts,
+	)
+}
+
+// stringifyCollectionURI converts a comma separated list of collection URIs
+// into properly quoted strings for use in SQL statements.
+func stringifyCollectionURI(collectionURI []string) string {
+	return strings.Join(
+		util.Map(collectionURI, func(uri string) string {
+			return fmt.Sprintf("'%s'", uri)
+		},
+		), ", ",
+	)
+}
+
+func aostExpr(aost hlc.Timestamp) string {
+	if aost.IsEmpty() {
+		return ""
+	}
+	return fmt.Sprintf("AS OF SYSTEM TIME '%s'", aost.AsOfSystemTime())
 }
