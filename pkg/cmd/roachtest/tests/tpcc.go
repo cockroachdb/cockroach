@@ -1157,7 +1157,7 @@ func registerTPCC(r registry.Registry) {
 			spec.WorkloadNodeCount(1),
 			spec.AWSMachineType(AWSMachineTypeC5d4xLarge),
 			spec.GCEMachineType(GCEMachineTypeN2std16),
-			spec.PreferLocalSSD(),
+			spec.DisableLocalSSD(),
 			spec.ReuseNone(),
 		),
 		CompatibleClouds:  registry.AllClouds,
