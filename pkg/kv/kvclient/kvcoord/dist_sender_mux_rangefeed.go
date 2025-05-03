@@ -529,8 +529,12 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 func (m *rangefeedMuxer) restartActiveRangeFeeds(
 	ctx context.Context, reason error, toRestart []*activeMuxRangeFeed,
 ) error {
-	for _, active := range toRestart {
+	for i, active := range toRestart {
 		if err := m.restartActiveRangeFeed(ctx, active, reason); err != nil {
+			// Release all remaining rangefeeds that we won't restart.
+			for _, remaining := range toRestart[i+1:] {
+				remaining.release()
+			}
 			return err
 		}
 	}
