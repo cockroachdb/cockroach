@@ -62,6 +62,7 @@ func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T)
 		return err
 	}
 	s.results = s.searchSet.PopResults()
+	s.resultIdx = 0
 	return nil
 }
 
