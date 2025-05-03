@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -210,7 +211,7 @@ func (r *replicaLogStorage) entriesShMuLocked(
 		// Prepend the loaded entries to the cache.
 		r.cache.Add(r.ls.RangeID, entries[cached:], false /* truncate */)
 		// Move the loaded entries to the front, to restore the correct order.
-		rotate(loaded, cached)
+		util.Rotate(loaded, cached)
 		entries = loaded
 	}
 
@@ -440,12 +441,4 @@ func (r *replicaLogStorage) reportRaftStorageError(err error) {
 		log.Errorf(r.ctx, "error in raft.LogStorage %v", err)
 	}
 	r.metrics.RaftStorageError.Inc(1)
-}
-
-// rotate does a cyclic shift of the slice, so that the specified prefix becomes
-// a suffix.
-func rotate[S ~[]E, E any](slice S, prefix int) {
-	slices.Reverse(slice[:prefix])
-	slices.Reverse(slice[prefix:])
-	slices.Reverse(slice)
 }
