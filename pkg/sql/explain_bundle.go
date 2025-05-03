@@ -1060,7 +1060,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 	binarySV, clusterSV := binarySVForBundle, sv
 	for _, varName := range varNames {
 		gen := varGen[varName]
-		value, err := gen.Get(&c.p.extendedEvalCtx, c.p.Txn())
+		value, _, err := gen.Get(&c.p.extendedEvalCtx, c.p.Txn())
 		if err != nil {
 			return err
 		}
