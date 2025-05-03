@@ -656,6 +656,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	}
 	cumCompactionStats := computeCumStoreCompactionStats(metrics.Metrics)
 
+	prevDoLogFlush := io.aux.doLogFlush
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
 		metrics.Levels[0], metrics.WriteStallCount, cumCompactionStats,
 		metrics.WAL.Failover.SecondaryWriteDuration, wt,
@@ -698,7 +699,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if io.aux.doLogFlush || io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
+	// NB: we also log if prevDoLogFlush is true, since we often see a single
+	// interval of no overload sandwiched between intervals of overload and we
+	// want to know what happened in that interval.
+	if prevDoLogFlush || io.aux.doLogFlush || io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
 	}
 }
@@ -1303,13 +1307,13 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
-		p.Printf(" (used total: %s elastic %s)", ib(res.aux.prevTokensUsed),
-			ib(res.aux.prevTokensUsedByElasticWork))
 	} else if m < unlimitedTokens {
 		p.Printf("elastic %s (rate %s/s) due to L0 growth", ib(m), ib(m/adjustmentInterval))
 	} else {
 		p.SafeString("all")
 	}
+	p.Printf(" (used total: %s elastic %s)", ib(res.aux.prevTokensUsed),
+		ib(res.aux.prevTokensUsedByElasticWork))
 	if res.elasticDiskBWTokens != unlimitedTokens {
 		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
 			"write model %.2fx+%s ingest model %.2fx+%s, ",
