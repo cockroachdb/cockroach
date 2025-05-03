@@ -81,6 +81,7 @@ func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTable
 					MinPartitionSize: 2,
 					MaxPartitionSize: 8,
 					BuildBeamSize:    4,
+					IsDeterministic:  true,
 				},
 			},
 		},
@@ -154,7 +155,6 @@ func TestVectorManager(t *testing.T) {
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
 		require.NoError(t, err)
-		idx.SuspendFixups()
 		idx.ForceSplit(ctx, nil, 0, cspann.RootKey, false /* singleStep */)
 
 		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
