@@ -24,7 +24,7 @@ import (
 func (r *Replica) getTargetByPolicy(
 	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
-	policy := r.closedTimestampPolicyRLocked()
+	policy := closedTimestampPolicy(r.descRLocked(), r.cachedClosedTimestampPolicy.Load())
 	target, ok := targetByPolicy[policy]
 	if ok {
 		return policy, target
@@ -154,7 +154,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		closedTimestampPolicy(r.descRLocked(), r.cachedClosedTimestampPolicy.Load()),
 	)
 }
 
