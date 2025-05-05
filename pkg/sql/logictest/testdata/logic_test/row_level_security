@@ -4337,6 +4337,172 @@ DROP USER ups;
 
 subtest end
 
+# An UPDATE statement enforces SELECT policies on new rows if columns are
+# referenced in SET or WHERE expressions, or if a RETURNING clause is present.
+subtest update_with_no_select_policies
+
+statement ok
+CREATE ROLE alice LOGIN;
+
+statement ok
+CREATE ROLE bob LOGIN;
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b BOOL,
+  FAMILY f (k, a, b)
+);
+
+statement ok
+INSERT INTO t VALUES (1, 10, true);
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON t TO alice, bob;
+
+statement ok
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+
+# Include in the policy a column ('b') that is not referenced or modified by any
+# UPDATE statements, except within the policy expression itself.
+statement ok
+CREATE POLICY select_policy_alice
+ON t
+FOR SELECT
+TO alice
+USING (a > 0 AND b IS true);
+
+statement ok
+CREATE POLICY update_policy_alice
+ON t
+FOR UPDATE
+TO alice
+USING (true);
+
+statement ok
+CREATE POLICY select_policy_bob
+ON t
+FOR SELECT
+TO bob
+USING (true);
+
+statement ok
+CREATE POLICY update_policy_bob
+ON t
+FOR UPDATE
+TO bob
+USING (true);
+
+statement ok
+SET ROLE alice;
+
+statement ok
+UPDATE t SET a = 0 WHERE true;
+
+statement ok
+SET ROLE bob;
+
+query II
+SELECT k, a FROM t;
+----
+1 0
+
+statement ok
+SET ROLE alice;
+
+# TODO(145894): This UPDATE is incorrectly filtered by SELECT policies, even
+# though no columns are referenced in SET or WHERE. Unlike postgres, we apply
+# policies unnecessarily.
+statement ok
+UPDATE t SET a = -1 WHERE true;
+
+statement ok
+SET ROLE bob;
+
+query II
+SELECT k, a FROM t;
+----
+1 0
+
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
+
+statement ok
+SET ROLE alice;
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = a - 10 WHERE true;
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE k = 1;
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING k;
+
+# TODO(144951): the RETURNING clause doesn't reference a column, so the SELECT
+# policy shouldn't apply.
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING 'foo';
+
+statement ok
+SET ROLE root;
+
+# Create another table to test UPDATE .. FROM. Confirm that SELECT policies on 't'
+# are not applied, even if the UPDATE references columns from this table.
+statement ok
+CREATE TABLE other (k INT PRIMARY KEY, a INT);
+
+# Insert a row into 'other' that will cause the UPDATE on 't' to violate its
+# SELECT policies. The second column will be used in the SET clause when
+# updating 't'.
+statement ok
+INSERT INTO other VALUES (1, -1);
+
+statement ok
+GRANT ALL ON other TO alice;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+UPDATE t SET a = other.a FROM other WHERE true;
+
+statement ok
+SET ROLE root;
+
+query I
+SELECT a FROM t;
+----
+-1
+
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+UPDATE t SET a = -2 FROM other WHERE other.k = 1;
+
+statement ok
+SET ROLE root;
+
+query I
+SELECT a FROM t;
+----
+-2
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP TABLE other;
+
+statement ok
+DROP ROLE alice, bob;
 
 subtest policy_with_schema_locked
 
