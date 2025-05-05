@@ -119,6 +119,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"add 'payload' column to system.eventlog table and add new index on eventType column",
+		clusterversion.V25_3_AddEventLogColumnAndIndex.Version(),
+		upgrade.NoPrecondition,
+		eventLogTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
