@@ -352,16 +352,29 @@ func (mb *mutationBuilder) buildUpdate(
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Apply SELECT policies if columns are referenced in the SET, WHERE, or
-	// RETURNING clauses.
-	// TODO(144951): colRefs covers SET and WHERE; RETURNING is assumed to require
-	// SELECT policies for now.
-	includeSelectPolicies := returning != nil
-	if !includeSelectPolicies && colRefs != nil {
+	// Build scopes for the RETURNING clause early (if present). This is needed for
+	// RLS to determine whether SELECT policies should be applied, based on
+	// whether the clause references columns in the target table.
+	returningInScope, returningOutScope := mb.maybeBuildReturningScopes(returning, colRefs)
+
+	// Apply SELECT policies if any referenced columns are read during row fetches.
+	// This includes:
+	// - Columns needed for the initial fetch (SET/WHERE).
+	// - Columns read post-mutation (e.g., for RETURNING).
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() && colRefs != nil {
 		for _, colID := range mb.fetchColIDs {
 			if colID != 0 && colRefs.Contains(colID) {
 				includeSelectPolicies = true
 				break
+			}
+		}
+		if !includeSelectPolicies && returningInScope != nil {
+			for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+				if colRefs.Contains(mb.tabID.ColumnID(i)) {
+					includeSelectPolicies = true
+					break
+				}
 			}
 		}
 	}
@@ -395,5 +408,5 @@ func (mb *mutationBuilder) buildUpdate(
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
-	mb.buildReturning(returning)
+	mb.completeBuildReturning(returningInScope, returningOutScope)
 }
