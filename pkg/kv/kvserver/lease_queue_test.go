@@ -435,7 +435,7 @@ func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 			// Also see updateLastUpdateTimesUsingStoreLivenessRLocked which is the
 			// method being tested here.
 			DisableUpdateLastUpdateTimesMapOnRaftGroupStep: func(r *kvserver.Replica) bool {
-				return r.SupportFromEnabled()
+				return r.SupportFromEnabled(r.DescRLocked())
 			},
 		},
 	}

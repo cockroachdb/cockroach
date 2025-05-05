@@ -1720,11 +1720,20 @@ func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
 // getReplicaDescriptorRLocked is like getReplicaDescriptor, but assumes that
 // r.mu is held for either reading or writing.
 func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, error) {
-	repDesc, ok := r.shMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	return getReplicaDescriptor(r.descRLocked(), r.RangeID, r.store.StoreID())
+}
+
+// getReplicaDescriptor is similar to getReplicaDescriptorRLocked but doesn't
+// require the caller to hold the replica mutex. It takes everything it needs
+// as a function argument.
+func getReplicaDescriptor(
+	desc *roachpb.RangeDescriptor, rangeID roachpb.RangeID, storeID roachpb.StoreID,
+) (roachpb.ReplicaDescriptor, error) {
+	repDesc, ok := desc.GetReplicaDescriptor(storeID)
 	if ok {
 		return repDesc, nil
 	}
-	return roachpb.ReplicaDescriptor{}, kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID())
+	return roachpb.ReplicaDescriptor{}, kvpb.NewRangeNotFoundError(rangeID, storeID)
 }
 
 func (r *Replica) getMergeCompleteCh() chan struct{} {
@@ -2111,9 +2120,6 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	// Has the replica been initialized?
 	// NB: this should have already been checked in Store.Send, so we don't need
 	// to handle this case particularly well, but if we do reach here (as some
@@ -2123,21 +2129,38 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
 	}
 
+	r.mu.RLock()
 	// Is the replica destroyed?
 	if _, err := r.isDestroyedRLocked(); err != nil {
+		r.mu.RUnlock()
 		return kvserverpb.LeaseStatus{}, err
 	}
+
+	// In order to reduce replica mutex contention, we take everything we need
+	// from the replica while we hold the RLock and then release it.
+	desc := r.descRLocked()
+	mergeInProgress := r.mergeInProgressRLocked()
+	mergeTxnID := r.mu.mergeTxnID
+	minLeaseProposedTS := r.mu.minLeaseProposedTS
+	minValidObservedTimestamp := r.mu.minValidObservedTimestamp
+	raftBasicStatus := r.raftBasicStatusRLocked()
+	lease := r.shMu.state.Lease
+	lai := r.shMu.state.LeaseAppliedIndex
+	closedTS := r.shMu.state.RaftClosedTimestamp
+	r.mu.RUnlock()
 
 	// Is the request fully contained in the range?
 	// NB: we only need to check that the request is in the Range's key bounds
 	// at evaluation time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	cachedClosedTimestampPolicy := *r.cachedClosedTimestampPolicy.Load()
+	if err := checkSpanInRange(ctx, rSpan, desc, lease, cachedClosedTimestampPolicy); err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	st, err := r.checkLeaseRLocked(ctx, ba)
+	st, err := r.checkLease(ctx, ba, desc, minLeaseProposedTS, minValidObservedTimestamp,
+		lease, raftBasicStatus, lai, closedTS)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -2147,14 +2170,24 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	// Tests such as TestClosedTimestampFrozenAfterSubsumption also rely on this late-checking of
 	// merges by checking for a NotLeaseholderError on replicas in a critical phase for certain
 	// requests.
-	if r.mergeInProgressRLocked() && g.HoldingLatches() {
+	if mergeInProgress && g.HoldingLatches() {
 		// We only check for a merge if we are holding latches. In practice,
 		// this means that any request where concurrency.shouldAcquireLatches()
 		// is false (e.g. RequestLeaseRequests) will not wait for a pending
 		// merge before executing and, as such, can execute while a range is in
 		// a merge's critical phase (i.e. while the RHS of the merge is
 		// subsumed).
-		if err := r.shouldWaitForPendingMergeRLocked(ctx, ba); err != nil {
+		//
+		// Note that we are not relying on r.mu synchronization here. On the
+		// RHS leaseholder that originally sees the Subsume, we hold latches
+		// across all keys[1a] while calling WatchForMerge[1b].
+		// When a new leaseholder steps up, it installs the merge watcher channel in
+		// leasePostApply, before the lease can be used to serve requests.
+		//
+		// [1a]: see batcheval.declareKeysSubsume.
+		// [1b]: see batcheval.Subsume.
+		// [2]: see leasePostApply.
+		if err := shouldWaitForPendingMerge(ctx, ba, desc, mergeInProgress, mergeTxnID); err != nil {
 			// TODO(nvanbenschoten): we should still be able to serve reads
 			// below the closed timestamp in this case.
 			return kvserverpb.LeaseStatus{}, err
@@ -2186,7 +2219,8 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// meaningful in the context of follower reads. This is because latches on
 	// followers don't provide the synchronization with concurrent splits like
 	// they do on leaseholders.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	if err := checkSpanInRange(ctx, rSpan, r.descRLocked(), r.shMu.state.Lease,
+		*r.cachedClosedTimestampPolicy.Load()); err != nil {
 		return err
 	}
 
@@ -2221,12 +2255,20 @@ func (r *Replica) checkExecutionCanProceedRWOrAdmin(
 	return st, nil
 }
 
-// checkLeaseRLocked checks the provided batch against the GC
-// threshold and lease. A nil error indicates to go ahead with the batch, and
-// is accompanied either by a valid or zero lease status, the latter case
-// indicating that the request was permitted to bypass the lease check.
-func (r *Replica) checkLeaseRLocked(
-	ctx context.Context, ba *kvpb.BatchRequest,
+// checkLease checks the provided batch against the GC threshold and lease. A
+// nil error indicates to go ahead with the batch, and is accompanied either by
+// a valid or zero lease status, the latter case indicating that the request was
+// permitted to bypass the lease check.
+func (r *Replica) checkLease(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	desc *roachpb.RangeDescriptor,
+	minLeaseProposedTS hlc.ClockTimestamp,
+	minValidObservedTimestamp hlc.ClockTimestamp,
+	lease *roachpb.Lease,
+	basicStatus raft.BasicStatus,
+	lai kvpb.LeaseAppliedIndex,
+	raftClosed hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, error) {
 	now := r.Clock().NowAsClockTimestamp()
 	// If the request is a write or a consistent read, it requires the
@@ -2237,7 +2279,8 @@ func (r *Replica) checkLeaseRLocked(
 	// For INCONSISTENT requests (which are always pure reads), this coincides
 	// with the read timestamp.
 	reqTS := ba.WriteTimestamp()
-	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+	st := r.leaseStatusForRequest(ctx, now, reqTS, minLeaseProposedTS, minValidObservedTimestamp,
+		lease, basicStatus)
 
 	// Write commands that skip the lease check in practice are exactly
 	// RequestLease and TransferLease. Both use the provided previous lease for
@@ -2249,11 +2292,11 @@ func (r *Replica) checkLeaseRLocked(
 	// doesn't check the lease.
 	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != kvpb.INCONSISTENT {
 		// Check the lease.
-		err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+		err := r.leaseGoodToGoForStatus(ctx, now, reqTS, st, desc)
 		if err != nil {
 			// No valid lease, but if we can serve this request via follower reads,
 			// we may continue.
-			if !r.canServeFollowerReadRLocked(ctx, ba) {
+			if !r.canServeFollowerRead(ctx, ba, desc, lai, lease.Replica.NodeID, raftClosed) {
 				// If not, return the error.
 				return kvserverpb.LeaseStatus{}, err
 			}
@@ -2277,10 +2320,12 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	status := r.leaseStatusForRequestRLocked(ctx, now, ts)
+	status := r.leaseStatusForRequest(ctx, now, ts, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	} else if err := checkSpanInRange(ctx, rSpan, r.descRLocked(), r.shMu.state.Lease,
+		*r.cachedClosedTimestampPolicy.Load()); err != nil {
 		return err
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
@@ -2291,17 +2336,22 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	return nil
 }
 
-// checkSpanInRangeRLocked returns an error if a request (identified by its
-// key span) can not be run on the replica.
-func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
-	desc := r.shMu.state.Desc
+// checkSpanInRange returns an error if a request (identified by its key span)
+// can not be run on the replica.
+func checkSpanInRange(
+	ctx context.Context,
+	rspan roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	lease *roachpb.Lease,
+	cachedClosedTimestampPolicy ctpb.RangeClosedTimestampPolicy,
+) error {
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, toClientClosedTsPolicy(closedTimestampPolicy(
-			desc, *r.cachedClosedTimestampPolicy.Load())))
+		lease, toClientClosedTsPolicy(closedTimestampPolicy(
+			desc, cachedClosedTimestampPolicy)))
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
@@ -2328,15 +2378,19 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 	}
 }
 
-// shouldWaitForPendingMergeRLocked determines whether the given batch request
+// shouldWaitForPendingMerge determines whether the given batch request
 // should wait for an on-going merge to conclude before being allowed to proceed.
 // If not, an error is returned to prevent the request from proceeding until the
 // merge completes.
-func (r *Replica) shouldWaitForPendingMergeRLocked(
-	ctx context.Context, ba *kvpb.BatchRequest,
+func shouldWaitForPendingMerge(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	desc *roachpb.RangeDescriptor,
+	mergeInProgress bool,
+	mergeTxnID uuid.UUID,
 ) error {
-	if !r.mergeInProgressRLocked() {
-		log.Fatal(ctx, "programming error: shouldWaitForPendingMergeRLocked should"+
+	if !mergeInProgress {
+		log.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
 			" only be called when a range merge is in progress")
 		return nil
 	}
@@ -2414,9 +2468,8 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 	// refresh. Such an improvement would eliminate the need for this special
 	// case, but until we generalize the mechanism to prune refresh spans based
 	// on intent spans, we're forced to live with this.
-	if ba.Txn != nil && ba.Txn.ID == r.mu.mergeTxnID {
+	if ba.Txn != nil && ba.Txn.ID == mergeTxnID {
 		if ba.IsSingleRefreshRequest() {
-			desc := r.descRLocked()
 			descKey := keys.RangeDescriptorKey(desc.StartKey)
 			if ba.Requests[0].GetRefresh().Key.Equal(descKey) {
 				return nil

@@ -2361,7 +2361,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// acquiring the new lease, which will wake them up.
 		//
 		// NB: cluster settings haven't propagated yet, so we have to check the last
-		// known lease instead of desiredLeaseTypeRLocked. We also check Sequence >
+		// known lease instead of desiredLeaseType. We also check Sequence >
 		// 0 to omit ranges that haven't seen a lease yet.
 		if l, _ := rep.GetLease(); !l.SupportsQuiescence() && l.Sequence > 0 {
 			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)

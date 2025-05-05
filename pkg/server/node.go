@@ -1194,7 +1194,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 
 // updateNodeRangeCount updates the internal counter of the total ranges across
 // all stores. This value is used to make a decision on whether the node should
-// use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
+// use expiration leases (see Replica.shouldUseExpirationLease).
 func (n *Node) updateNodeRangeCount() {
 	var count int64
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
