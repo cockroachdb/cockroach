@@ -8,16 +8,19 @@ package kvserver_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,10 +37,16 @@ func TestAtomicReplicationChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	var logRangeID atomic.Int64
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{},
+				Store: &kvserver.StoreTestingKnobs{
+					RaftLogReadyRaftMuLocked: func(
+						ctx context.Context, rangeID roachpb.RangeID, replID roachpb.ReplicaID, rd raft.Ready) bool {
+						return logRangeID.Load() == int64(rangeID)
+					},
+				},
 			},
 		},
 		ReplicationMode: base.ReplicationManual,
@@ -111,6 +120,16 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	// Replicas should now live on all stores except s3.
 	checkDesc(desc, 1, 2, 4, 5, 6)
+
+	// Start logging all raft Ready handling to diagnose issues such as:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/145946
+	//
+	// We don't do this under Duress since this logging is fairly
+	// verbose and thus expensive.
+	if !skip.Duress() {
+		logRangeID.Store(int64(desc.RangeID))
+	}
 
 	// Transfer the lease to s5.
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(4)))
