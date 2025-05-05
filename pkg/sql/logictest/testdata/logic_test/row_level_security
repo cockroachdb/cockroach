@@ -707,6 +707,15 @@ statement ok
 CREATE USER ins;
 
 statement ok
+CREATE TABLE other (k INT PRIMARY KEY);
+
+statement ok
+INSERT INTO other VALUES (99);
+
+statement ok
+GRANT ALL ON other TO ins;
+
+statement ok
 ALTER TABLE ins OWNER TO ins;
 
 statement ok
@@ -726,9 +735,30 @@ statement ok
 INSERT INTO ins VALUES (1),(2),(3),(4);
 
 # Verify that the same statement with RETURNING will fail because it enforces
-# the SELECT policy.
+# the SELECT policy. Unless the RETURNING clause doesn't reference any columns.
 statement error pq: new row violates row-level security policy for table "ins"
 INSERT INTO ins VALUES (1),(2),(3),(4) RETURNING c1;
+
+statement error pq: new row violates row-level security policy for table "ins"
+INSERT INTO ins VALUES (5) RETURNING *;
+
+statement error pq: new row violates row-level security policy for table "ins"
+INSERT INTO ins VALUES (7) RETURNING (select ins.c1);
+
+query T
+INSERT INTO ins VALUES (9) RETURNING 'foo';
+----
+foo
+
+query I
+INSERT INTO ins VALUES (11) RETURNING (select 1);
+----
+1
+
+query I
+INSERT INTO ins VALUES (13) RETURNING (SELECT k FROM other);
+----
+99
 
 # Verify that only rows that pass the USING expression are allowed (even numbers).
 statement ok
@@ -743,6 +773,9 @@ SET ROLE root;
 
 statement ok
 DROP TABLE ins;
+
+statement ok
+DROP TABLE other;
 
 statement ok
 DROP USER ins;
@@ -4441,13 +4474,59 @@ UPDATE t SET a = 0 WHERE k = 1;
 statement error pq: new row violates row-level security policy for table "t"
 UPDATE t SET a = 0 WHERE true RETURNING k;
 
-# TODO(144951): the RETURNING clause doesn't reference a column, so the SELECT
-# policy shouldn't apply.
 statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING k + 1;
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING (select t.a);
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING *;
+
+statement error pq: new row violates row-level security policy for table "t"
+UPDATE t SET a = 0 WHERE true RETURNING t.*;
+
+query T
 UPDATE t SET a = 0 WHERE true RETURNING 'foo';
+----
+foo
+
+statement ok
+SET ROLE bob;
+
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
+
+statement ok
+SET ROLE alice;
+
+query I
+UPDATE t SET a = 0 WHERE true RETURNING (select 1);
+----
+1
+
+statement ok
+SET ROLE bob;
+
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
+
+statement ok
+SET ROLE alice;
+
+query IIT
+UPDATE t SET a = 0 WHERE true RETURNING 1 + 1, 2, 'three'
+----
+2 2 three
 
 statement ok
 SET ROLE root;
+
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
 
 # Create another table to test UPDATE .. FROM. Confirm that SELECT policies on 't'
 # are not applied, even if the UPDATE references columns from this table.
@@ -4472,10 +4551,27 @@ UPDATE t SET a = other.a FROM other WHERE true;
 statement ok
 SET ROLE root;
 
+# Reset the row.
+statement ok
+UPDATE t SET k = 1, a = 10 WHERE true;
+
+statement ok
+SET ROLE alice;
+
+# Ensure SELECT policies on 't' are not applied when the RETURNING clause
+# only references a column from the 'other' table.
+query I
+UPDATE t SET a = -3 FROM other WHERE true RETURNING other.k;
+----
+1
+
+statement ok
+SET ROLE root;
+
 query I
 SELECT a FROM t;
 ----
--1
+-3
 
 # Reset the row.
 statement ok
