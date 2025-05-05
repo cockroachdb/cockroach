@@ -944,6 +944,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/channel",
+        "//pkg/util/log/eventlog",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",

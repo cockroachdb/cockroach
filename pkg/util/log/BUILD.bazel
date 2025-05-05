@@ -61,6 +61,7 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/allstacks",
+        "//pkg/util/buildutil",
         "//pkg/util/caller",
         "//pkg/util/ctxutil",
         "//pkg/util/debugutil",

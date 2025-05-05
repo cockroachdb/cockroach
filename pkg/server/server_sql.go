@@ -1107,9 +1107,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if sqlStatsKnobs := cfg.TestingKnobs.SQLStatsKnobs; sqlStatsKnobs != nil {
 		execCfg.SQLStatsTestingKnobs = sqlStatsKnobs.(*sqlstats.TestingKnobs)
 	}
-	if eventlogKnobs := cfg.TestingKnobs.EventLog; eventlogKnobs != nil {
-		execCfg.EventLogTestingKnobs = eventlogKnobs.(*sql.EventLogTestingKnobs)
-	}
+	//if eventlogKnobs := cfg.TestingKnobs.EventLog; eventlogKnobs != nil {
+	//	execCfg.EventLogTestingKnobs = eventlogKnobs.(*sql.EventLogTestingKnobs)
+	//}
 	if telemetryLoggingKnobs := cfg.TestingKnobs.TelemetryLoggingKnobs; telemetryLoggingKnobs != nil {
 		execCfg.TelemetryLoggingTestingKnobs = telemetryLoggingKnobs.(*sql.TelemetryLoggingTestingKnobs)
 	}
