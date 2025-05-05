@@ -2646,6 +2646,7 @@ GO_TARGETS = [
     "//pkg/util/limit:limit",
     "//pkg/util/limit:limit_test",
     "//pkg/util/log/channel:channel",
+    "//pkg/util/log/eventlog:eventlog",
     "//pkg/util/log/eventpb/eventpbgen:eventpbgen",
     "//pkg/util/log/eventpb/eventpbgen:eventpbgen_lib",
     "//pkg/util/log/eventpb:eventpb",

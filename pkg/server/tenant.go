@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -716,6 +717,18 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		})
 	})
 
+	// TODO (kyle): is this correct?
+	if s.sqlServer.serviceMode == mtinfopb.ServiceModeShared {
+		eventTableSink := eventlog.NewEventTableSink(
+			s.sqlServer.SQLInstanceID(),
+			s.sqlServer.execCfg.InternalDB,
+			true,
+			s.stopper,
+			s.cfg.AmbientCtx,
+			s.ClusterSettings(),
+		)
+		log.RegisterEventLogSink(eventTableSink)
+	}
 	// Init a log metrics registry.
 	logRegistry := logmetrics.NewRegistry()
 	if logRegistry == nil {

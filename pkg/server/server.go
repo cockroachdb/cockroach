@@ -110,6 +110,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1748,7 +1749,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
-
+	eventTableSink := eventlog.NewEventTableSink(base.SQLInstanceID(state.nodeID), s.sqlServer.internalDB, true, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
+	log.RegisterEventLogSink(eventTableSink)
 	s.rpcContext.StorageClusterID.Set(ctx, state.clusterID)
 	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
