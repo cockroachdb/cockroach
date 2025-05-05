@@ -1015,7 +1015,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	if hasReady {
-		logRaftReady(ctx, ready)
+		r.maybeLogRaftReadyRaftMuLocked(ctx, ready)
 	}
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
