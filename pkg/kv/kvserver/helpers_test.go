@@ -708,6 +708,13 @@ func (r *Replica) SupportFromEnabled() bool {
 	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
 }
 
+// SupportFromEnabledWithoutRLock exports
+// (replicaRLockedStoreLiveness).SupportFromEnabledWithoutRLock for testing
+// purposes.
+func (r *Replica) SupportFromEnabledWithoutRLock(desc *roachpb.RangeDescriptor) bool {
+	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabledWithoutRLock(desc)
+}
+
 // RaftFortificationEnabledForRangeID exports raftFortificationEnabledForRangeID
 // for use in tests.
 func RaftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
