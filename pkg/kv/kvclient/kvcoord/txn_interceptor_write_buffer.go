@@ -452,39 +452,32 @@ func (twb *txnWriteBuffer) adjustError(
 		// therefore weren't sent to the KV layer. We can then adjust the error
 		// index accordingly.
 		numStripped := int32(0)
-		numOriginalRequests := len(ba.Requests) + len(rr)
 		baIdx := int32(0)
-		for i := range numOriginalRequests {
-			if len(rr) > 0 && rr[0].index == i {
-				curTs := rr[0]
-				rr = rr[1:]
-				if curTs.stripped {
-					numStripped++
-				} else {
-					// This is a transformed request (for example a LockingGet that was
-					// sent instead of a Del). In this case, the error might be a bit
-					// confusing to the client since the request that had an error isn't
-					// exactly the request the user sent.
-					//
-					// For now, we handle this by logging and removing the error index.
-					//
-					// [1] Get requests are always collected as transformations, but
-					// they're never transformed. Attributing an error to them shouldn't
-					// confuse the client.
-					if baIdx == pErr.Index.Index && curTs.origRequest.Method() != kvpb.Get {
-						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
-						pErr.Index = nil
-						return pErr
-					}
+		// Note that all requests in the batch are guaranteed to be in the list of
+		// transformations.
+		for _, record := range rr {
+			if record.stripped {
+				numStripped++
+			} else {
+				// This is a transformed request (for example a LockingGet that was
+				// sent instead of a Del). In this case, the error might be a bit
+				// confusing to the client since the request that had an error isn't
+				// exactly the request the user sent [1].
+				//
+				// For now, we handle this by logging and removing the error index.
+				//
+				// [1] Some requests are always collected as transformations, but
+				// they're never transformed. Attributing an error to them shouldn't
+				// confuse the client.
+				if baIdx == pErr.Index.Index && record.transformed {
+					log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					pErr.Index = nil
+					return pErr
+				} else if baIdx == pErr.Index.Index {
+					break
 				}
-				if curTs.origRequest.Method() != kvpb.Get {
-					continue
-				}
+				baIdx++
 			}
-			if baIdx == pErr.Index.Index {
-				break
-			}
-			baIdx++
 		}
 
 		pErr.Index.Index += numStripped
