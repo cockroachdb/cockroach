@@ -55,7 +55,13 @@ go_library(
 
 go_test(
     name = "operations_test",
-    srcs = ["cluster_settings_test.go"],
+    srcs = [
+        "cluster_settings_test.go",
+        "utils_test.go",
+    ],
     embed = [":operations"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/cmd/roachtest/operations/changefeeds",
+        "@com_github_stretchr_testify//require",
+    ],
 )
