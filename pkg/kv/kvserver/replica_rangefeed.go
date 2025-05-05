@@ -344,7 +344,17 @@ func (r *Replica) RangeFeed(
 func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Processor, *rangefeed.Filter) {
 	r.rangefeedMu.RLock()
 	defer r.rangefeedMu.RUnlock()
-	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
+	p := r.rangefeedMu.proc
+	if p != nil && p.StopEnqueued() {
+		// This is here only to try to preserve existing behaviour when fixing
+		// #144828. Previously, all call paths that would result in stop being
+		// called would immediately remove the processor. Now, we want to defer
+		// removing the processor, but we still want to skip any processing that
+		// would have been skipped.
+		return nil, r.rangefeedMu.opFilter
+	} else {
+		return p, r.rangefeedMu.opFilter
+	}
 }
 
 func (r *Replica) getRangefeedProcessor() rangefeed.Processor {
@@ -438,16 +448,18 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		if p == nil {
 			break
 		}
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			stream)
-		if reg {
-			// Registered successfully with an existing processor.
-			// Update the rangefeed filter to avoid filtering ops
-			// that this new registration might be interested in.
-			r.setRangefeedFilterLocked(filter)
-			r.rangefeedMu.Unlock()
-			catchUpIter = nil
-			return p, disconnector, nil
+		if !p.StopEnqueued() {
+			reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+				stream)
+			if reg {
+				// Registered successfully with an existing processor.
+				// Update the rangefeed filter to avoid filtering ops
+				// that this new registration might be interested in.
+				r.setRangefeedFilterLocked(filter)
+				r.rangefeedMu.Unlock()
+				catchUpIter = nil
+				return p, disconnector, nil
+			}
 		}
 		r.rangefeedMu.Unlock()
 		if attempts >= maxAttempts {

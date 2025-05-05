@@ -61,6 +61,8 @@ type ScheduledProcessor struct {
 	// to be complete.
 	stopping bool
 	stoppedC chan struct{}
+	// stopEnqueued is set when a stop request has been enqueued.
+	stopEnqueued atomic.Bool
 
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
@@ -283,6 +285,10 @@ func (p *ScheduledProcessor) Stopped() <-chan struct{} {
 	return p.stoppedC
 }
 
+func (p *ScheduledProcessor) StopEnqueued() bool {
+	return p.stopEnqueued.Load()
+}
+
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 // the given span with the given error.
 func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
@@ -295,6 +301,7 @@ func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb
 }
 
 func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
+	p.stopEnqueued.Store(true)
 	p.enqueueRequest(func(ctx context.Context) {
 		p.stopInternal(ctx, pErr)
 	})

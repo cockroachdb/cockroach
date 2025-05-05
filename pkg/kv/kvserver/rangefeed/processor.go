@@ -170,6 +170,9 @@ type Processor interface {
 	// routine.
 	Stopped() <-chan struct{}
 
+	// Returns true if a Stop() has already been issued against this processor.
+	StopEnqueued() bool
+
 	// Lifecycle of registrations.
 
 	// Register registers the stream over the specified span of keys.
