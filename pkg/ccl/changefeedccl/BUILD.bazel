@@ -328,6 +328,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/metamorphic",
         "//pkg/util/mon",
         "//pkg/util/parquet",
         "//pkg/util/protoutil",
