@@ -442,16 +442,25 @@ func (p *planner) AlterDatabaseDropRegion(
 			)
 		}
 
+		// The system database, once it's been made multi-region, must not be
+		// allowed to go back.
 		isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID
-		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop ||
-			// The system database, once it's been made multi-region, must not be
-			// allowed to go back.
-			isSystemDatabase {
+		if isSystemDatabase {
 			return nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
-				"databases in this cluster must have at least 1 region",
+				"cannot drop %s; system database must have at least 1 region",
 				n.Region,
-				sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
+			)
+		}
+		if allowDrop := allowDropFinalRegion.Get(&p.execCfg.Settings.SV); !allowDrop {
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"cannot drop %s; databases in this cluster must have at least 1 region",
+					n.Region,
+				),
+				"Try enabling the %s cluster setting.",
+				allowDropFinalRegion.Name(),
 			)
 		}
 
