@@ -1062,7 +1062,7 @@ func (p *Provider) createVM(
 			// premium-disk specific disk configurations.
 			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesEmpty
 			dataDisks[0].ManagedDisk = &compute.ManagedDiskParameters{
-				StorageAccountType: compute.StorageAccountTypesPremiumLRS,
+				StorageAccountType: compute.StorageAccountTypesPremiumV2LRS,
 			}
 		default:
 			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
