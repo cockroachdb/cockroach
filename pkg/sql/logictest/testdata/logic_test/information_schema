@@ -3476,36 +3476,42 @@ NULL     admin    system         public        eventlog    targetID     SELECT  
 NULL     admin    system         public        eventlog    reportingID  SELECT          NULL
 NULL     admin    system         public        eventlog    info         SELECT          NULL
 NULL     admin    system         public        eventlog    uniqueID     SELECT          NULL
+NULL     admin    system         public        eventlog    event        SELECT          NULL
 NULL     admin    system         public        eventlog    timestamp    INSERT          NULL
 NULL     admin    system         public        eventlog    eventType    INSERT          NULL
 NULL     admin    system         public        eventlog    targetID     INSERT          NULL
 NULL     admin    system         public        eventlog    reportingID  INSERT          NULL
 NULL     admin    system         public        eventlog    info         INSERT          NULL
 NULL     admin    system         public        eventlog    uniqueID     INSERT          NULL
+NULL     admin    system         public        eventlog    event        INSERT          NULL
 NULL     admin    system         public        eventlog    timestamp    UPDATE          NULL
 NULL     admin    system         public        eventlog    eventType    UPDATE          NULL
 NULL     admin    system         public        eventlog    targetID     UPDATE          NULL
 NULL     admin    system         public        eventlog    reportingID  UPDATE          NULL
 NULL     admin    system         public        eventlog    info         UPDATE          NULL
 NULL     admin    system         public        eventlog    uniqueID     UPDATE          NULL
+NULL     admin    system         public        eventlog    event        UPDATE          NULL
 NULL     root     system         public        eventlog    timestamp    SELECT          NULL
 NULL     root     system         public        eventlog    eventType    SELECT          NULL
 NULL     root     system         public        eventlog    targetID     SELECT          NULL
 NULL     root     system         public        eventlog    reportingID  SELECT          NULL
 NULL     root     system         public        eventlog    info         SELECT          NULL
 NULL     root     system         public        eventlog    uniqueID     SELECT          NULL
+NULL     root     system         public        eventlog    event        SELECT          NULL
 NULL     root     system         public        eventlog    timestamp    INSERT          NULL
 NULL     root     system         public        eventlog    eventType    INSERT          NULL
 NULL     root     system         public        eventlog    targetID     INSERT          NULL
 NULL     root     system         public        eventlog    reportingID  INSERT          NULL
 NULL     root     system         public        eventlog    info         INSERT          NULL
 NULL     root     system         public        eventlog    uniqueID     INSERT          NULL
+NULL     root     system         public        eventlog    event        INSERT          NULL
 NULL     root     system         public        eventlog    timestamp    UPDATE          NULL
 NULL     root     system         public        eventlog    eventType    UPDATE          NULL
 NULL     root     system         public        eventlog    targetID     UPDATE          NULL
 NULL     root     system         public        eventlog    reportingID  UPDATE          NULL
 NULL     root     system         public        eventlog    info         UPDATE          NULL
 NULL     root     system         public        eventlog    uniqueID     UPDATE          NULL
+NULL     root     system         public        eventlog    event        UPDATE          NULL
 
 # information_schema.administrable_role_authorizations
 

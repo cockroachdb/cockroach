@@ -84,12 +84,13 @@ crdb_region      BYTES  false  NULL  ·  {primary}  false
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
-timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
-eventType    STRING     false  NULL       ·  {primary}  false
-targetID     INT8       false  NULL       ·  {primary}  false
-reportingID  INT8       false  NULL       ·  {primary}  false
-info         STRING     true   NULL       ·  {primary}  false
-uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
+timestamp    TIMESTAMP  false  NULL       ·  {event_type_idx,primary}  false
+eventType    STRING     false  NULL       ·  {event_type_idx,primary}  false
+targetID     INT8       false  NULL       ·  {primary}                 false
+reportingID  INT8       false  NULL       ·  {primary}                 false
+info         STRING     true   NULL       ·  {primary}                 false
+uniqueID     BYTES      false  uuid_v4()  ·  {event_type_idx,primary}  false
+event        JSONB      true   NULL       ·  {primary}                 false
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.rangelog
