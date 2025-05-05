@@ -208,12 +208,12 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	e.mu.utilizationLimit = utilizationLimit
 	e.mu.tb.UpdateConfig(tokenbucket.TokensPerSecond(rate), tokenbucket.Tokens(rate))
 	if now := timeutil.Now(); now.Sub(e.mu.tbLastReset) > 15*time.Second { // TODO(irfansharif): make this is a cluster setting?
-		// Periodically reset the token bucket. This is just defense-in-depth
-		// and at worst, over-admits. We've seen production clusters where the
-		// token bucket was severely in debt and caused wait queue times of
-		// minutes, which can be long enough to fail backups completely
-		// (#102817).
-		e.mu.tb.Reset()
+		// Periodically ensure the tokens are at least 0. This is just
+		// defense-in-depth and at worst, over-admits. We've seen production
+		// clusters where the token bucket was severely in debt and caused wait
+		// queue times of minutes, which can be long enough to fail backups
+		// completely (#102817).
+		e.mu.tb.EnsureLowerBound(0)
 		e.mu.tbLastReset = now
 	}
 	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Microseconds())
