@@ -672,16 +672,28 @@ func (twb *txnWriteBuffer) applyTransformations(
 	// objects as well.
 	baRemote.Requests = nil
 
-	var ts transformations
+	ts := make(transformations, 0, len(ba.Requests))
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
+		// Track a transformation for the request regardless of the type, and
+		// regardless of whether it was served from the buffer or not. For truly
+		// transformed requests (e.g. CPut) this is expected. For Gets and Scans, we
+		// need to track a transformation because we haven't buffered any writes
+		// from our current batch in the buffer yet, so checking the buffer here, at
+		// request time, isn't sufficient to determine whether the request needs to
+		// serve a read from the buffer before returning a response or not.
+		//
+		// Only QueryLocksRequest and LeaseInfoRequest don't require a tracking
+		// transformation, but it's harmless to add one, and it simplifies the code.
+		//
+		// The stripped field will be set below for specific stripped requests.
+		tr := transformation{
+			stripped:    false,
+			index:       i,
+			origRequest: req,
+		}
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
-			ts = append(ts, transformation{
-				stripped:    false,
-				index:       i,
-				origRequest: req,
-			})
 			// NB: Regardless of whether there is already a buffered write on
 			// this key or not, we need to send a locking Get to the KV layer to
 			// acquire a lock. However, if we had knowledge of what locks the
@@ -720,11 +732,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			ts = append(ts, transformation{
-				stripped:    !t.MustAcquireExclusiveLock,
-				index:       i,
-				origRequest: req,
-			})
+			tr.stripped = !t.MustAcquireExclusiveLock
 
 		case *kvpb.DeleteRequest:
 			// If MustAcquireExclusiveLock flag is set on the DeleteRequest,
@@ -744,11 +752,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			ts = append(ts, transformation{
-				stripped:    !t.MustAcquireExclusiveLock,
-				index:       i,
-				origRequest: req,
-			})
+			tr.stripped = !t.MustAcquireExclusiveLock
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
@@ -779,43 +783,12 @@ func (twb *txnWriteBuffer) applyTransformations(
 				// Wasn't served locally; send the request to the KV layer.
 				baRemote.Requests = append(baRemote.Requests, ru)
 			}
-			// Even if the request wasn't served from the buffer here, we still track
-			// a transformation for it. That's because we haven't buffered any writes
-			// from our current batch in the buffer yet, so checking the buffer above
-			// isn't sufficient to determine whether the request needs to serve a read
-			// from the buffer before returning a response or not.
-			ts = append(ts, transformation{
-				stripped:    stripped,
-				index:       i,
-				origRequest: req,
-			})
+			tr.stripped = stripped
 
-		case *kvpb.ScanRequest:
-			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
-			if overlaps {
-				ts = append(ts, transformation{
-					stripped:    false,
-					index:       i,
-					origRequest: req,
-				})
-			}
+		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
 			// Regardless of whether the scan overlaps with any writes in the buffer
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
-			baRemote.Requests = append(baRemote.Requests, ru)
-
-		case *kvpb.ReverseScanRequest:
-			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
-			if overlaps {
-				ts = append(ts, transformation{
-					stripped:    false,
-					index:       i,
-					origRequest: req,
-				})
-			}
-			// Similar to the reasoning above, regardless of whether the reverse
-			// scan overlaps with any writes in the buffer or not, we must send
-			// the request to the KV layer.
 			baRemote.Requests = append(baRemote.Requests, ru)
 
 		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
@@ -826,6 +799,7 @@ func (twb *txnWriteBuffer) applyTransformations(
 		default:
 			return nil, nil, kvpb.NewError(unsupportedMethodError(t.Method()))
 		}
+		ts = append(ts, tr)
 	}
 	return baRemote, ts, nil
 }
@@ -871,14 +845,6 @@ func (twb *txnWriteBuffer) maybeServeRead(
 		return nil, false
 	}
 	return nil, false
-}
-
-// scanOverlaps returns whether the given key range overlaps with any buffered
-// write.
-func (twb *txnWriteBuffer) scanOverlaps(key roachpb.Key, endKey roachpb.Key) bool {
-	it := twb.buffer.MakeIter()
-	it.FirstOverlap(twb.seekItemForSpan(key, endKey))
-	return it.Valid()
 }
 
 // mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
