@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +51,10 @@ type execFactory struct {
 	planner *planner
 	// isExplain is true if this factory is used to build a statement inside
 	// EXPLAIN or EXPLAIN ANALYZE.
-	isExplain bool
+	isExplain        bool
+	compile          bool
+	compiled         exec.CompiledPlan
+	compiledPlanNode exec.Node
 }
 
 var _ exec.Factory = &execFactory{}
@@ -66,10 +71,44 @@ func (ef *execFactory) Ctx() context.Context {
 	return ef.ctx
 }
 
+// EnableCompilation implements the Factory interface.
+func (f *execFactory) EnableCompilation() {
+	f.compile = true
+}
+
+// DisableCompilation implements the Factory interface.
+func (f *execFactory) DisableCompilation() {
+	f.compile = false
+}
+
+// Compiled implements the Factory interface.
+func (f *execFactory) Compiled() exec.CompiledPlan {
+	return f.compiled
+}
+
+// CompiledPlanNode implements the Factory interface.
+func (f *execFactory) CompiledPlan() exec.Node {
+	return f.compiledPlanNode
+}
+
+func (f *execFactory) compilationUnsupported() {
+	f.compiled = nil
+	f.compiledPlanNode = nil
+}
+
+// func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
+// 	if ef.alloc == nil {
+// 		ef.alloc = &tree.DatumAlloc{}
+// 	}
+// 	return ef.alloc
+// }
+
 // ConstructValues is part of the exec.Factory interface.
 func (ef *execFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols colinfo.ResultColumns,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if len(cols) == 0 && len(rows) == 1 {
 		return &unaryNode{}, nil
 	}
@@ -87,6 +126,8 @@ func (ef *execFactory) ConstructValues(
 func (ef *execFactory) ConstructLiteralValues(
 	rows tree.ExprContainer, cols colinfo.ResultColumns,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if len(cols) == 0 && rows.NumRows() == 1 {
 		return &unaryNode{}, nil
 	}
@@ -117,6 +158,8 @@ func (ef *execFactory) ConstructLiteralValues(
 func (ef *execFactory) ConstructScan(
 	table cat.Table, index cat.Index, params exec.ScanParams, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if table.IsVirtualTable() {
 		return ef.constructVirtualScan(table, index, params, reqOrdering)
 	}
@@ -124,7 +167,7 @@ func (ef *execFactory) ConstructScan(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	// Create a scanNode.
-	scan := ef.planner.Scan()
+	scan := NewScanNode()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	if err := scan.initDescDefaults(tabDesc, colCfg); err != nil {
@@ -201,10 +244,146 @@ func (ef *execFactory) constructVirtualScan(
 	)
 }
 
+func (ef *execFactory) ConstructPlaceholderScan(
+	table cat.Table, index cat.Index, params exec.PlaceholderScanParams,
+) (exec.Node, error) {
+	if table.IsVirtualTable() {
+		return nil, errors.AssertionFailedf("cannot plan placeholder scan on virtual table")
+	}
+
+	evalCtx := ef.planner.EvalContext()
+	tabDesc := table.(*optTable).desc
+	idx := index.(*optIndex).idx
+
+	colCfg := makeScanColumnsConfig(table, params.NeededCols)
+
+	var planningInfo fetchPlanningInfo
+	if err := planningInfo.initDescDefaults(tabDesc, colCfg); err != nil {
+		return nil, err
+	}
+
+	// TODO: Estimated row count. Move this to planning info, I think, if it is
+	// indeed needed.
+	// scan.estimatedRowCount = params.EstimatedRowCount
+
+	splitter := span.MakeSplitter(tabDesc, idx, params.NeededCols)
+
+	if ef.compile && params.PKPointLookup && !ef.isExplain && !ef.planner.SessionData().Internal {
+		// ef.compiled = func(
+		// 	ctx context.Context,
+		// 	evalCtx *eval.Context,
+		// 	idxUsage *idxusage.LocalIndexUsageStats,
+		// ) (exec.Plan, error) {
+		// 	// Make local copies to avoid allocations if ef.compile is false.
+		// 	planningInfo := planningInfo
+		// 	sb := sb
+		// 	splitter := splitter
+		// 	node, err := finalizePlaceholderScan(
+		// 		ctx, evalCtx, &planningInfo,
+		// 		tabDesc, idx, sb, splitter, params,
+		// 		idxUsage, false /* isExplain */, false, /* isInternal */
+		// 	)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// 	// TODO: Use ef flags here?
+		// 	var flags exec.PlanFlags
+		// 	return constructPlan(node, nil, nil, nil, nil, 0 /* rootRowCount */, flags)
+		// }
+		// TODO: Cannot copy sb because of copy lock.
+		var sb span.Builder
+		codec := ef.planner.ExecCfg().Codec
+		sb.InitAllowingExternalRowData(evalCtx, codec, tabDesc, idx)
+		n := &pkLookup{
+			params:   params,
+			sb:       &sb,
+			splitter: splitter,
+			columns:  planningInfo.columns,
+			// spec: &fetchpb.IndexFetchSpec{
+			// 	Version:          fetchpb.IndexFetchSpecVersionInitial,
+			// 	TableID:          tabDesc.GetID(),
+			// 	TableName:        tabDesc.GetName(),
+			// 	IndexID:          idx.GetID(),
+			// 	IndexName:        idx.GetName(),
+			// 	IsSecondaryIndex: false,
+			// 	IsUniqueIndex:    true,
+			// 	// GeoConfig:            geopb.Config{},
+			// 	// EncodingType:         0,
+			// 	NumKeySuffixColumns:  idx.Nu,
+			// 	MaxKeysPerRow:        0,
+			// 	KeyPrefixLength:      0,
+			// 	MaxFamilyID:          0,
+			// 	FamilyDefaultColumns: nil,
+			// 	KeyAndSuffixColumns:  nil,
+			// 	FetchedColumns:       nil,
+			// 	External:             nil,
+			// },
+		}
+		err := rowenc.InitIndexFetchSpec(&n.spec, codec, tabDesc, idx, colCfg.wantedColumns)
+		if err != nil {
+			return nil, err
+		}
+		ef.compiledPlanNode = n
+	}
+
+	var sb span.Builder
+	sb.InitAllowingExternalRowData(evalCtx, ef.planner.ExecCfg().Codec, tabDesc, idx)
+	return finalizePlaceholderScan(
+		ef.ctx, evalCtx, &planningInfo,
+		tabDesc, idx, sb, splitter, params,
+		ef.planner.extendedEvalCtx.indexUsageStats,
+		ef.isExplain, ef.planner.SessionData().Internal,
+	)
+}
+
+func finalizePlaceholderScan(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	planningInfo *fetchPlanningInfo,
+	tabDesc catalog.TableDescriptor,
+	idx catalog.Index,
+	sb span.Builder,
+	splitter span.Splitter,
+	params exec.PlaceholderScanParams,
+	idxUsage *idxusage.LocalIndexUsageStats,
+	isExplain bool,
+	internal bool,
+) (exec.Node, error) {
+	// Create a scanNode.
+	scan := NewScanNode()
+	scan.fetchPlanningInfo = *planningInfo
+
+	scan.index = idx
+	// scan.softLimit = params.SoftLimit
+
+	var c constraint.Constraint
+	params.InitConstraint(ctx, evalCtx, &c)
+
+	var err error
+	scan.spans, err = sb.SpansFromConstraint(&c, splitter)
+	if err != nil {
+		return nil, err
+	}
+
+	scan.isFull = false
+
+	if !isExplain && !internal {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		idxUsage.RecordRead(idxUsageKey)
+	}
+
+	return scan, nil
+}
+
 // ConstructFilter is part of the exec.Factory interface.
 func (ef *execFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	p := n.(planNode)
 	f := &filterNode{
 		singleInputPlanNode: singleInputPlanNode{p},
@@ -230,6 +409,8 @@ func (ef *execFactory) ConstructInvertedFilter(
 	preFiltererType *types.T,
 	invColumn exec.NodeColumnOrdinal,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	inputCols := planColumns(n.(planNode))
 	columns := make(colinfo.ResultColumns, len(inputCols))
 	copy(columns, inputCols)
@@ -250,6 +431,8 @@ func (ef *execFactory) ConstructInvertedFilter(
 func (ef *execFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return constructSimpleProjectForPlanNode(n.(planNode), cols, nil /* colNames */, reqOrdering)
 }
 
@@ -338,6 +521,10 @@ func canRearrangeRenders(cols []exec.NodeColumnOrdinal, render tree.TypedExprs) 
 func (ef *execFactory) ConstructSerializingProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
+	// TODO(mgartner): This is a temporary workaround for now. We need to figure
+	// out how to support it in a compiled plan or something else...?
+	// ef.compilationUnsupported()
+
 	node := n.(planNode)
 	// If we are just renaming columns, we can do that in place.
 	if len(cols) == len(planColumns(node)) {
@@ -390,6 +577,8 @@ func (ef *execFactory) ConstructRender(
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 	rb.setOutput(exprs, columns)
@@ -405,6 +594,8 @@ func (ef *execFactory) ConstructHashJoin(
 	extraOnCond tree.TypedExpr,
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	p := ef.planner
 	leftPlan := left.(planNode)
 	rightPlan := right.(planNode)
@@ -437,6 +628,8 @@ func (ef *execFactory) ConstructApplyJoin(
 	onCond tree.TypedExpr,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	l := left.(planNode)
 	leftCols := planColumns(l)
 	pred := makePredicate(joinType, leftCols, rightColumns, onCond)
@@ -453,6 +646,8 @@ func (ef *execFactory) ConstructMergeJoin(
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	var err error
 	p := ef.planner
 	leftPlan := left.(planNode)
@@ -488,6 +683,8 @@ func (ef *execFactory) ConstructMergeJoin(
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo, estimatedInputRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// There are no grouping columns with scalar GroupBy, so we create empty
 	// arguments upfront to be passed into getResultColumnsForGroupBy call
 	// below.
@@ -518,6 +715,8 @@ func (ef *execFactory) ConstructGroupBy(
 	estimatedRowCount uint64,
 	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
 	// TODO(harding): Use groupingOrder to determine when to use a hash
@@ -576,6 +775,8 @@ func (ef *execFactory) ConstructDistinct(
 	nullsAreDistinct bool,
 	errorOnDup string,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &distinctNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		distinctOnColIdxs:   distinctCols,
@@ -590,6 +791,8 @@ func (ef *execFactory) ConstructDistinct(
 func (ef *execFactory) ConstructHashSetOp(
 	typ tree.UnionType, all bool, left, right exec.Node,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return ef.planner.newUnionNode(
 		typ, all, left.(planNode), right.(planNode),
 		nil /* leftOrdering */, nil, /* rightOrdering */
@@ -606,6 +809,8 @@ func (ef *execFactory) ConstructStreamingSetOp(
 	leftOrdering, rightOrdering, streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return ef.planner.newUnionNode(
 		typ,
 		all,
@@ -628,6 +833,8 @@ func (ef *execFactory) ConstructUnionAll(
 	hardLimit uint64,
 	enforceHomeRegion bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
 		true, /* all */
@@ -649,6 +856,8 @@ func (ef *execFactory) ConstructSort(
 	alreadyOrderedPrefix int,
 	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &sortNode{
 		singleInputPlanNode:    singleInputPlanNode{input.(planNode)},
 		ordering:               colinfo.ColumnOrdering(ordering),
@@ -659,6 +868,8 @@ func (ef *execFactory) ConstructSort(
 
 // ConstructOrdinality is part of the exec.Factory interface.
 func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	plan := input.(planNode)
 	inputColumns := planColumns(plan)
 	cols := make(colinfo.ResultColumns, len(inputColumns)+1)
@@ -881,6 +1092,8 @@ func (ef *execFactory) ConstructInvertedJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
@@ -1002,6 +1215,8 @@ func (ef *execFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if len(leftEqCols) != len(rightEqCols) {
 		return nil, errors.AssertionFailedf("creating zigzag join with unequal number of equated cols")
 	}
@@ -1066,6 +1281,8 @@ func (ef *execFactory) ConstructZigzagJoin(
 func (ef *execFactory) ConstructLimit(
 	input exec.Node, limit, offset tree.TypedExpr,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	plan := input.(planNode)
 	// If the input plan is also a limitNode that has just an offset, and we are
 	// only applying a limit, update the existing node. This is useful because
@@ -1096,6 +1313,8 @@ func (ef *execFactory) ConstructTopK(
 	alreadyOrderedPrefix int,
 	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &topKNode{
 		singleInputPlanNode:    singleInputPlanNode{input.(planNode)},
 		k:                      k,
@@ -1107,6 +1326,8 @@ func (ef *execFactory) ConstructTopK(
 
 // ConstructMax1Row is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &max1RowNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		errorText:           errorText,
@@ -1115,6 +1336,8 @@ func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec
 
 // ConstructBuffer is part of the exec.Factory interface.
 func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &bufferNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		label:               label,
@@ -1123,6 +1346,8 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node
 
 // ConstructScanBuffer is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if n, ok := ref.(*explain.Node); ok {
 		// This can happen if we used explain on the main query but we construct the
 		// scan buffer inside a separate plan (e.g. recursive CTEs).
@@ -1138,6 +1363,8 @@ func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.No
 func (ef *execFactory) ConstructRecursiveCTE(
 	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string, deduplicate bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &recursiveCTENode{
 		singleInputPlanNode: singleInputPlanNode{initial.(planNode)},
 		genIterationFn:      fn,
@@ -1150,6 +1377,8 @@ func (ef *execFactory) ConstructRecursiveCTE(
 func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols colinfo.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	p := n.(planNode)
 	cols := planColumns(p)
 	allCols := append(cols, zipCols...)
@@ -1166,6 +1395,8 @@ func (ef *execFactory) ConstructProjectSet(
 
 // ConstructWindow is part of the exec.Factory interface.
 func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	partitionIdxs := make([]uint32, len(wi.Partition))
 	for i, idx := range wi.Partition {
 		partitionIdxs[i] = uint32(idx)
@@ -1220,7 +1451,7 @@ func (ef *execFactory) ConstructPlan(
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.input
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,
@@ -1344,6 +1575,8 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 func (ef *execFactory) ConstructExplainOpt(
 	planText string, envOpts exec.ExplainEnvData,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// If this was an EXPLAIN (opt, env), we need to run a bunch of auxiliary
 	// queries to fetch the environment info.
 	if envOpts.ShowEnv {
@@ -1365,6 +1598,8 @@ func (ef *execFactory) ConstructExplainOpt(
 
 // ConstructShowTrace is part of the exec.Factory interface.
 func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	var node planNode = ef.planner.makeShowTraceNode(compact, typ == tree.ShowTraceKV)
 
 	// Ensure the messages are sorted in age order, so that the user
@@ -1409,6 +1644,8 @@ func (ef *execFactory) ConstructInsert(
 	autoCommit bool,
 	vectorInsert bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1482,6 +1719,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1575,6 +1814,8 @@ func (ef *execFactory) ConstructUpdate(
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// TODO(radu): the execution code has an annoying limitation that the fetch
 	// columns must be a superset of the update columns, even when the "old" value
 	// of a column is not necessary. The optimizer code for pruning columns is
@@ -1671,6 +1912,8 @@ func (ef *execFactory) ConstructUpsert(
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1766,6 +2009,8 @@ func (ef *execFactory) ConstructDelete(
 	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1830,6 +2075,8 @@ func (ef *execFactory) ConstructDeleteRange(
 	indexConstraint *constraint.Constraint,
 	autoCommit bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	tabDesc := table.(*optTable).desc
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
@@ -1858,6 +2105,8 @@ func (ef *execFactory) ConstructVectorSearch(
 	queryVector tree.TypedExpr,
 	targetNeighborCount uint64,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).idx
 	cols := makeColList(table, outCols)
@@ -1895,6 +2144,8 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 	suffixKeyCols []exec.NodeColumnOrdinal,
 	isIndexPut bool,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	// Pass through the input columns, and project the partition key column and
 	// optionally the quantized vectors.
 	inputPlan := input.(planNode)
@@ -1924,6 +2175,8 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -1941,6 +2194,8 @@ func (ef *execFactory) ConstructCreateTable(
 func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -1965,6 +2220,7 @@ func (ef *execFactory) ConstructCreateView(
 	deps opt.SchemaDeps,
 	typeDeps opt.SchemaTypeDeps,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
 
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
@@ -1997,6 +2253,7 @@ func (ef *execFactory) ConstructCreateFunction(
 	typeDeps opt.SchemaTypeDeps,
 	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
 
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
@@ -2031,6 +2288,8 @@ func (ef *execFactory) ConstructCreateFunction(
 
 // ConstructCreateTrigger is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateTrigger(ct *tree.CreateTrigger) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -2090,6 +2349,8 @@ func toPlanDependencies(
 
 // ConstructSequenceSelect is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return ef.planner.SequenceSelectNode(sequence.(*optSequence).desc)
 }
 
@@ -2097,6 +2358,8 @@ func (ef *execFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node
 func (ef *execFactory) ConstructSaveTable(
 	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return ef.planner.makeSaveTable(input.(planNode), table, colNames), nil
 }
 
@@ -2104,6 +2367,8 @@ func (ef *execFactory) ConstructSaveTable(
 func (ef *execFactory) ConstructErrorIfRows(
 	input exec.Node, mkErr exec.MkErrFn,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &errorIfRowsNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		mkErr:               mkErr,
@@ -2112,6 +2377,8 @@ func (ef *execFactory) ConstructErrorIfRows(
 
 // ConstructOpaque is part of the exec.Factory interface.
 func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return constructOpaque(metadata)
 }
 
@@ -2119,6 +2386,7 @@ func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, 
 func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
 
 	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
@@ -2150,6 +2418,8 @@ func (ef *execFactory) ConstructAlterTableSplit(
 func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -2166,6 +2436,8 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -2183,6 +2455,8 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &relocateNode{
 		subjectReplicas:     relocateSubject,
 		tableDesc:           index.Table().(*optTable).desc,
@@ -2198,6 +2472,8 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &relocateRange{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		subjectReplicas:     relocateSubject,
@@ -2210,6 +2486,8 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	reasonDatum, err := eval.Expr(ef.ctx, ef.planner.EvalContext(), reason)
 	if err != nil {
 		return nil, err
@@ -2235,6 +2513,8 @@ func (ef *execFactory) ConstructControlJobs(
 func (ef *execFactory) ConstructControlSchedules(
 	command tree.ScheduleCommand, input exec.Node,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &controlSchedulesNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		command:             command,
@@ -2243,6 +2523,8 @@ func (ef *execFactory) ConstructControlSchedules(
 
 // ConstructShowCompletions is part of the exec.Factory interface.
 func (ef *execFactory) ConstructShowCompletions(command *tree.ShowCompletions) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &completionsNode{
 		n: command,
 	}, nil
@@ -2250,6 +2532,8 @@ func (ef *execFactory) ConstructShowCompletions(command *tree.ShowCompletions) (
 
 // ConstructCancelQueries is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &cancelQueriesNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		ifExists:            ifExists,
@@ -2258,6 +2542,8 @@ func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (e
 
 // ConstructCancelSessions is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &cancelSessionsNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		ifExists:            ifExists,
@@ -2266,6 +2552,8 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 
 // ConstructCreateStatistics is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if err := featureflag.CheckEnabled(
 		ef.ctx,
 		ef.planner.ExecCfg(),
@@ -2291,6 +2579,8 @@ func (ef *execFactory) ConstructExplain(
 	stmtType tree.StatementReturnType,
 	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
@@ -2330,7 +2620,9 @@ func (ef *execFactory) ConstructExplain(
 }
 
 // ConstructCall is part of the exec.Factory interface.
-func (e *execFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+func (ef *execFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+	ef.compilationUnsupported()
+
 	return &callNode{proc: proc}, nil
 }
 

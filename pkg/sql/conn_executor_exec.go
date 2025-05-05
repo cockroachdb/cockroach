@@ -2852,6 +2852,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
+		// TODO
 		ctx, err = ex.makeExecPlan(ctx, planner)
 		defer planner.curPlan.close(ctx)
 	}
@@ -2889,7 +2890,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols colinfo.ResultColumns
 	if stmt.AST.StatementReturnType() == tree.Rows {
-		cols = planner.curPlan.main.planColumns()
+		if planner.compiledPlan != nil {
+			cols = planColumns(planner.compiledPlan)
+		} else {
+			cols = planner.curPlan.main.planColumns()
+		}
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
 		res.SetError(err)
@@ -2897,6 +2902,38 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+
+	// TODO: Do something with the plan here.
+	if p := planner.compiledPlan; p != nil {
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, crtime.NowMono())
+		params := runParams{
+			ctx:             ctx,
+			extendedEvalCtx: ex.planner.ExtendedEvalContext(),
+			p:               &ex.planner,
+		}
+		if err := startExec(params, p); err != nil {
+			return err
+		}
+		for {
+			hasRow, err := p.Next(params)
+			if err != nil {
+				return err
+			}
+			if !hasRow {
+				break
+			}
+			if err := res.AddRow(ctx, p.Values()); err != nil {
+				return err
+			}
+			// TODO
+			ex.extraTxnState.rowsRead += 1
+			ex.extraTxnState.bytesRead += 1
+			ex.extraTxnState.rowsWritten += 1
+		}
+		p.Close(ctx)
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, crtime.NowMono())
+		return nil
+	}
 
 	var afterGetPlanDistribution func()
 	if planner.pausablePortal != nil {
@@ -3505,7 +3542,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		if ex.executorType == executorTypeExec {
 			// Check if a PCR reader catalog timestamp is set, which
 			// will cause to turn all txns into system time queries.
-			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() {
+			if newTS := ex.GetPCRReaderTimestamp(); !newTS.IsEmpty() { // TODO: This is 0.7% of allocations.
 				return tree.ReadOnly, now, &newTS, nil
 			}
 		}
@@ -3661,12 +3698,12 @@ func (ex *connExecutor) beginImplicitTxn(
 	// an AOST clause. In these cases the clause is evaluated and applied
 	// when the command is evaluated again.
 	noBeginStmt := (*tree.BeginTransaction)(nil)
-	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt) // TODO: This is 1.5% of allocations.
 	if err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
 	return eventStartImplicitTxn,
-		makeEventTxnStartPayload(
+		makeEventTxnStartPayload( // TODO: This is 0.7% of allocations (somewhere in this return expression).
 			ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 			mode,
 			sqlTs,
