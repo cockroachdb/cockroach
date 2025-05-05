@@ -110,6 +110,14 @@ func registerCreateSQLOperations(r registry.Registry) {
 				return fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, val STRING)", name)
 			},
 		},
+		{
+			name:       "create-sequence",
+			objectType: "SEQUENCE",
+			prefix:     "roachtest_sequence",
+			createSQL: func(name string) string {
+				return fmt.Sprintf("CREATE SEQUENCE %s", name)
+			},
+		},
 	}
 
 	for _, obj := range objs {
