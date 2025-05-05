@@ -102,9 +102,11 @@ type HistogramMetric struct {
 	Elapsed MetricPoint
 }
 
-// GetWorkloadHistogramArgs creates a histogram flag string based on the roachtest to pass to workload binary
+// GetWorkloadHistogramString creates a histogram flag string based on the roachtest to pass to workload binary
 // This is used to make use of t.ExportOpenmetrics() method and create appropriate exporter
-func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
+func GetWorkloadHistogramString(
+	t test.Test, c cluster.Cluster, labels map[string]string, disableTempFile bool,
+) string {
 	var histogramArgs string
 	if t.ExportOpenmetrics() {
 		// Add openmetrics related labels and arguments
@@ -115,7 +117,16 @@ func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]
 		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t))
 	}
 
+	if disableTempFile {
+		histogramArgs += " --disable-temp-hist-file"
+	}
+
 	return histogramArgs
+}
+
+// GetWorkloadHistogramArgs makes disableTempFile false
+func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]string) string {
+	return GetWorkloadHistogramString(t, c, labels, false)
 }
 
 // GetBenchmarkMetricsFileName returns the file name to store the benchmark output

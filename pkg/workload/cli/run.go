@@ -90,6 +90,10 @@ var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
 
+var disableTempHistogramFile = runFlags.Bool("disable-temp-hist-file", false,
+	"If true, disables the use of a temporary file for incremental histogram data. Instead, data is written directly to the final file. "+
+		"Note: If the workload stops abruptly, the final file may become corrupted.")
+
 var openmetricsLabels = runFlags.String("openmetrics-labels", "",
 	"Comma separated list of key value pairs used as labels, used by openmetrics exporter. Eg 'cloud=aws, workload=tpcc'")
 
@@ -696,8 +700,12 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 	dir := filepath.Dir(finalPath)
 	tempFilePath = filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d", filepath.Base(finalPath), timeutil.Now().UnixNano()))
 
-	// Create the temporary file instead of the final file
-	file, err = os.Create(tempFilePath)
+	// Create the file based on the disableTempHistogramFile flag
+	if *disableTempHistogramFile {
+		file, err = os.Create(finalPath)
+	} else {
+		file, err = os.Create(tempFilePath)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -715,6 +723,13 @@ func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file 
 				log.Infof(ctx, "no file to close")
 				return nil
 			}
+
+			// if disableTempHistogramFile is enabled, directly close the final file.
+			if *disableTempHistogramFile {
+				return file.Close()
+
+			}
+
 			return renameTempFile(file, *histograms)
 		}); err != nil {
 			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
