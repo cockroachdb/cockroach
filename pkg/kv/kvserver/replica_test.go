@@ -7190,9 +7190,11 @@ func TestReplicaDestroy(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		_, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
-			DestroyData: true,
-		})
+		_, err := tc.store.removeInitializedReplicaRaftMuLocked(
+			ctx, tc.repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()),
+			RemoveOptions{
+				DestroyData: true,
+			})
 		require.NoError(t, err)
 	}()
 
@@ -7372,9 +7374,11 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(
+			ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()),
+			RemoveOptions{
+				DestroyData: true,
+			}); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -9411,8 +9415,7 @@ func TestCancelPendingCommands(t *testing.T) {
 		t.Fatalf("command finished earlier than expected with error %v", pErr)
 	default:
 	}
-	require.NoError(t, tc.store.RemoveReplica(ctx, tc.repl, tc.repl.Desc().NextReplicaID,
-		RemoveOptions{DestroyData: true}))
+	require.NoError(t, tc.store.RemoveReplica(ctx, tc.repl, tc.repl.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{DestroyData: true}))
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)

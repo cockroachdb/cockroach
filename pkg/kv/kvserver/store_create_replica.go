@@ -127,7 +127,7 @@ func (s *Store) tryGetReplica(
 		}
 
 		repl.mu.RUnlock()
-		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
+		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, "superseded by newer Replica", RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
 			log.Fatalf(ctx, "failed to remove replica: %v", err)

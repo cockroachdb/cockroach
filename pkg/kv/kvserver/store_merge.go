@@ -126,12 +126,14 @@ func (s *Store) MergeRange(
 	//
 	// We ask removeInitializedReplicaRaftMuLocked to install a placeholder which
 	// we'll drop atomically with extending the right-hand side down below.
-	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
-		// The replica was destroyed by the tombstones added to the batch in
-		// runPostAddTriggers.
-		DestroyData:       false,
-		InsertPlaceholder: true,
-	})
+	ph, err := s.removeInitializedReplicaRaftMuLocked(
+		ctx, rightRepl, rightDesc.NextReplicaID, "merge trigger",
+		RemoveOptions{
+			// The replica was destroyed by the tombstones added to the batch in
+			// runPostAddTriggers.
+			DestroyData:       false,
+			InsertPlaceholder: true,
+		})
 	if err != nil {
 		return errors.Wrap(err, "cannot remove range")
 	}

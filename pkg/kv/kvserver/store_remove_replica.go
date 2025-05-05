@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RemoveOptions bundles boolean parameters for Store.RemoveReplica.
@@ -36,28 +37,36 @@ type RemoveOptions struct {
 //
 // The passed replica must be initialized.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context,
+	rep *Replica,
+	nextReplicaID roachpb.ReplicaID,
+	reason redact.SafeString,
+	opts RemoveOptions,
 ) error {
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	if opts.InsertPlaceholder {
 		return errors.Errorf("InsertPlaceholder not supported in RemoveReplica")
 	}
-	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+	_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, opts)
 	return err
 }
 
 // removeReplicaRaftMuLocked removes the passed replica. If the replica is
 // initialized the RemoveOptions will be consulted.
 func (s *Store) removeReplicaRaftMuLocked(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context,
+	rep *Replica,
+	nextReplicaID roachpb.ReplicaID,
+	reason redact.SafeString,
+	opts RemoveOptions,
 ) error {
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
 		if opts.InsertPlaceholder {
 			return errors.Errorf("InsertPlaceholder unsupported in removeReplicaRaftMuLocked")
 		}
-		_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, opts)
+		_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, opts)
 		return errors.Wrap(err,
 			"failed to remove replica")
 	}
@@ -69,7 +78,11 @@ func (s *Store) removeReplicaRaftMuLocked(
 // which is sometimes called directly when the necessary lock is already held.
 // It requires that Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
-	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
+	ctx context.Context,
+	rep *Replica,
+	nextReplicaID roachpb.ReplicaID,
+	reason redact.SafeString,
+	opts RemoveOptions,
 ) (*ReplicaPlaceholder, error) {
 	rep.raftMu.AssertHeld()
 	if !rep.IsInitialized() {
@@ -149,7 +162,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
-	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, rep.replicaID)
+	log.Infof(ctx, "removing replica r%d/%d (%s)", rep.RangeID, rep.replicaID, reason)
 
 	s.mu.Lock()
 	if it := s.getOverlappingKeyRangeLocked(desc); it.repl != rep {
