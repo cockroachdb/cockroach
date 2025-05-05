@@ -1524,38 +1524,41 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.entireSpanExcludedFromBackupRLocked(ctx, sp)
+	return entireSpanExcludedFromBackup(ctx, sp, r.mu.conf.ExcludeDataFromBackup, r.mu.confSpan)
 }
 
-func (r *Replica) excludeReplicaFromBackupRLocked(ctx context.Context, rspan roachpb.RSpan) bool {
+func excludeReplicaFromBackup(
+	ctx context.Context, rspan roachpb.RSpan, excludeDataFromBackup bool, confSpan roachpb.Span,
+) bool {
 	// We ignore the error here to avoid failing requests that
 	// don't need to fail.
-	excluded, _ := r.entireSpanExcludedFromBackupRLocked(ctx, rspan.AsRawSpanWithNoLocals())
+	excluded, _ := entireSpanExcludedFromBackup(ctx, rspan.AsRawSpanWithNoLocals(),
+		excludeDataFromBackup, confSpan)
 	return excluded
 }
 
-// entireSpanExcludedFromBackupRLocked returns true if this replica
+// entireSpanExcludedFromBackup returns true if this replica
 // has ExcludeDataFromBackup set in its span configuration and that
 // span configuration covers the entire given span.
-func (r *Replica) entireSpanExcludedFromBackupRLocked(
-	ctx context.Context, sp roachpb.Span,
+func entireSpanExcludedFromBackup(
+	ctx context.Context, sp roachpb.Span, excludeDataFromBackup bool, confSpan roachpb.Span,
 ) (bool, error) {
-	if r.mu.conf.ExcludeDataFromBackup {
+	if excludeDataFromBackup {
 		// If ExcludeDataFromBackup is set, we also want to ensure that
 		// we only elide data if the span configuration we currently
 		// have actually contains the requested span.
-		if r.mu.confSpan.Equal(roachpb.Span{}) {
+		if confSpan.Equal(roachpb.Span{}) {
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
-		if !r.mu.confSpan.Contains(sp) {
+		if !confSpan.Contains(sp) {
 			log.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
 				sp,
-				r.mu.confSpan)
+				confSpan)
 
 			return false, nil
 		}
 	}
-	return r.mu.conf.ExcludeDataFromBackup, nil
+	return excludeDataFromBackup, nil
 }
 
 // Version returns the replica version.
@@ -1614,19 +1617,25 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	}
 }
 
-// getImpliedGCThresholdRLocked returns the gc threshold of the replica which
+// getImpliedGCThreshold returns the gc threshold of the replica which
 // should be used to determine the validity of commands. The returned timestamp
 // may be newer than the replica's true GC threshold if strict enforcement
 // is enabled and the TTL has passed. If this is an admin command or this range
 // opts out of strict GC enforcement (typically data outside the user keyspace),
 // we return the true GC threshold.
-func (r *Replica) getImpliedGCThresholdRLocked(
-	st kvserverpb.LeaseStatus, isAdmin bool,
+func (r *Replica) getImpliedGCThreshold(
+	st kvserverpb.LeaseStatus,
+	isAdmin bool,
+	spanConfigExplicitlySet bool,
+	ignoreStrictEnforcement bool,
+	gcThreshold hlc.Timestamp,
+	cachedProtectedTS cachedProtectedTimestampState,
+	confTTL time.Duration,
 ) hlc.Timestamp {
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
-		r.shouldIgnoreStrictGCEnforcementRLocked() {
-		return *r.shMu.state.GCThreshold
+		r.shouldIgnoreStrictGCEnforcement(spanConfigExplicitlySet, ignoreStrictEnforcement) {
+		return gcThreshold
 	}
 
 	// In order to make this check inexpensive, we keep a copy of the reading of
@@ -1637,26 +1646,26 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// has technically expired. Fortunately this strict enforcement is merely a
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
-	c := r.mu.cachedProtectedTS
-	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
-		return *r.shMu.state.GCThreshold
+	if st.State != kvserverpb.LeaseState_VALID ||
+		cachedProtectedTS.readAt.Less(st.Lease.Start.ToTimestamp()) {
+		return gcThreshold
 	}
 
-	gcTTL := r.mu.conf.TTL()
-	gcThreshold := gc.CalculateThreshold(c.readAt, gcTTL)
-	if !c.earliestProtectionTimestamp.IsEmpty() {
+	gcTTL := confTTL
+	newGCThreshold := gc.CalculateThreshold(cachedProtectedTS.readAt, gcTTL)
+	if !cachedProtectedTS.earliestProtectionTimestamp.IsEmpty() {
 		// We want to allow GC up to the timestamp preceding the earliest valid
 		// protection timestamp.
-		impliedGCThreshold := c.earliestProtectionTimestamp.Prev()
+		impliedGCThreshold := cachedProtectedTS.earliestProtectionTimestamp.Prev()
 		// If we have a protected timestamp record which precedes the gcThreshold,
 		// use the threshold it implies instead.
-		if impliedGCThreshold.Less(gcThreshold) {
-			gcThreshold = impliedGCThreshold
+		if impliedGCThreshold.Less(newGCThreshold) {
+			newGCThreshold = impliedGCThreshold
 		}
 	}
-	gcThreshold.Forward(*r.shMu.state.GCThreshold)
+	newGCThreshold.Forward(gcThreshold)
 
-	return gcThreshold
+	return newGCThreshold
 }
 
 func (r *Replica) isRangefeedEnabled() (ret bool) {
@@ -1673,8 +1682,10 @@ func (r *Replica) isRangefeedEnabledRLocked() (ret bool) {
 	return r.mu.conf.RangefeedEnabled
 }
 
-func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
-	if !r.mu.spanConfigExplicitlySet {
+func (r *Replica) shouldIgnoreStrictGCEnforcement(
+	spanConfigExplicitlySet bool, ignoreStrictEnforcement bool,
+) (ret bool) {
+	if !spanConfigExplicitlySet {
 		return true
 	}
 
@@ -1682,7 +1693,7 @@ func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
 		return true
 	}
 
-	return r.mu.conf.GCPolicy.IgnoreStrictEnforcement
+	return ignoreStrictEnforcement
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -2205,7 +2216,17 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	}
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	lease := r.shMu.state.Lease
+	spanConfExplicitlySet := r.mu.spanConfigExplicitlySet
+	ignoreStrictEnforcement := r.mu.conf.GCPolicy.IgnoreStrictEnforcement
+	gcThreshold := *r.shMu.state.GCThreshold
+	cachedProtectedTS := r.mu.cachedProtectedTS
+	confTTL := r.mu.conf.TTL()
+	desc := r.descRLocked()
+	confSpan := r.mu.confSpan
+	excludeDataFromBackup := r.mu.conf.ExcludeDataFromBackup
+	cachedClosedTimestampPolicy := *r.cachedClosedTimestampPolicy.Load()
+	r.mu.RUnlock()
 
 	// Ensure the request is entirely contained within the range's key bounds
 	// (even) after the storage engine has been pinned by the iterator. Given we
@@ -2213,8 +2234,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// meaningful in the context of follower reads. This is because latches on
 	// followers don't provide the synchronization with concurrent splits like
 	// they do on leaseholders.
-	if err := checkSpanInRange(ctx, rSpan, r.descRLocked(), r.shMu.state.Lease,
-		*r.cachedClosedTimestampPolicy.Load()); err != nil {
+	if err := checkSpanInRange(ctx, rSpan, desc, lease, cachedClosedTimestampPolicy); err != nil {
 		return err
 	}
 
@@ -2231,7 +2251,9 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// TODO(aayush): The above description intentionally omits some details, as
 	// they are going to be changed as part of
 	// https://github.com/cockroachdb/cockroach/issues/55293.
-	return r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
+	return r.checkTSAboveGCThreshold(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan,
+		spanConfExplicitlySet, ignoreStrictEnforcement, gcThreshold, cachedProtectedTS, confTTL,
+		desc, confSpan, excludeDataFromBackup)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -2324,7 +2346,10 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	} else if err := r.checkTSAboveGCThresholdRLocked(ctx, ts, status, false /* isAdmin */, rSpan); err != nil {
+	} else if err := r.checkTSAboveGCThreshold(ctx, ts, status, false /* isAdmin */, rSpan,
+		r.mu.spanConfigExplicitlySet, r.mu.conf.GCPolicy.IgnoreStrictEnforcement,
+		*r.shMu.state.GCThreshold, r.mu.cachedProtectedTS, r.mu.conf.TTL(), r.descRLocked(),
+		r.mu.confSpan, r.mu.conf.ExcludeDataFromBackup); err != nil {
 		return err
 	}
 	return nil
@@ -2348,24 +2373,32 @@ func checkSpanInRange(
 			desc, cachedClosedTimestampPolicy)))
 }
 
-// checkTSAboveGCThresholdRLocked returns an error if a request (identified by
+// checkTSAboveGCThreshold returns an error if a request (identified by
 // its read timestamp) wants to read below the range's GC threshold.
-func (r *Replica) checkTSAboveGCThresholdRLocked(
+func (r *Replica) checkTSAboveGCThreshold(
 	ctx context.Context,
 	ts hlc.Timestamp,
 	st kvserverpb.LeaseStatus,
 	isAdmin bool,
 	rspan roachpb.RSpan,
+	spanConfigExplicitlySet bool,
+	ignoreStrictEnforcement bool,
+	gcThreshold hlc.Timestamp,
+	cachedProtectedTS cachedProtectedTimestampState,
+	confTTL time.Duration,
+	desc *roachpb.RangeDescriptor,
+	confSpan roachpb.Span,
+	excludeDataFromBackup bool,
 ) error {
-	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
+	threshold := r.getImpliedGCThreshold(st, isAdmin, spanConfigExplicitlySet,
+		ignoreStrictEnforcement, gcThreshold, cachedProtectedTS, confTTL)
 	if threshold.Less(ts) {
 		return nil
 	}
-	desc := r.descRLocked()
 	return &kvpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
-		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(ctx, rspan),
+		DataExcludedFromBackup: excludeReplicaFromBackup(ctx, rspan, excludeDataFromBackup, confSpan),
 		RangeID:                desc.RangeID,
 		StartKey:               desc.StartKey.AsRawKey(),
 		EndKey:                 desc.EndKey.AsRawKey(),
