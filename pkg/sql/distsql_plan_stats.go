@@ -410,7 +410,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 
 	sampledColumnIDs := make([]descpb.ColumnID, len(scan.catalogCols))
 	spec := execinfrapb.SketchSpec{
-		SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 		GenerateHistogram:   reqStat.histogram,
 		HistogramMaxBuckets: reqStat.histogramMaxBuckets,
 		Columns:             make([]uint32, len(reqStat.columns)),
@@ -656,7 +655,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	sampledColumnIDs := make([]descpb.ColumnID, len(requestedCols))
 	for _, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
-			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: s.histogramMaxBuckets,
 			Columns:             make([]uint32, len(s.columns)),
