@@ -106,7 +106,7 @@ func (p *planner) forEachMutableTableInDatabase(
 	dbDesc catalog.DatabaseDescriptor,
 	fn func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error,
 ) error {
-	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	all, err := p.Descriptors().GetAll(ctx, p.txn)
 	if err != nil {
 		return err
 	}
