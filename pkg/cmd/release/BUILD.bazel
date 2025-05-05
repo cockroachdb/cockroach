@@ -3,14 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "release_lib",
     srcs = [
-        "blockers.go",
         "git.go",
-        "github.go",
-        "jira.go",
         "main.go",
-        "metadata.go",
         "orchestration.go",
-        "pick_sha.go",
         "sender.go",
         "set_cockroach_version.go",
         "templates.go",
@@ -27,15 +22,11 @@ go_library(
         "//pkg/testutils/release",
         "//pkg/util/httputil",
         "//pkg/util/timeutil",
-        "@com_github_andygrunwald_go_jira//:go-jira",
         "@com_github_cockroachdb_version//:version",
-        "@com_github_google_go_github_v42//github",
         "@com_github_jordan_wright_email//:email",
         "@com_github_masterminds_semver_v3//:semver",
         "@com_github_spf13_cobra//:cobra",
-        "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@org_golang_x_oauth2//:oauth2",
     ],
 )
 
@@ -48,11 +39,8 @@ go_binary(
 go_test(
     name = "release_test",
     srcs = [
-        "blockers_test.go",
         "git_test.go",
-        "sender_test.go",
         "update_releases_test.go",
-        "update_versions_test.go",
     ],
     data = glob([
         "templates/**",
@@ -61,7 +49,6 @@ go_test(
     embed = [":release_lib"],
     deps = [
         "//pkg/testutils/release",
-        "@com_github_masterminds_semver_v3//:semver",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],

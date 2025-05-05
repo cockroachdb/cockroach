@@ -1,8 +1,0 @@
-A candidate SHA has been selected for v21.1.13. Proceeding to qualification shortly.
-
-	SHA: 0fd6eead6c6eb7b2529deb39197cc3c95e93ded8
-	Tracking Issue: https://cockroachlabs.atlassian.net/browse/REL-111
-	List of changes since last release: https://github.com/cockroachdb/cockroach/compare/v21.1.13...0fd6eead6c6eb7b2529deb39197cc3c95e93ded8
-
-Thanks
-Release Engineering
