@@ -750,9 +750,9 @@ with &1 (update_last_trade)
                      ├── key: (141)
                      ├── fd: (141)-->(142-144)
                      ├── project
-                     │    ├── columns: "?column?":140
+                     │    ├── columns: "?column?":130
                      │    ├── volatile, mutations
-                     │    ├── fd: ()-->(140)
+                     │    ├── fd: ()-->(130)
                      │    ├── update trade
                      │    │    ├── columns: t_id:88!null
                      │    │    ├── fetch columns: t_id:105 t_dts:106 trade.t_st_id:107 t_tt_id:108 t_is_cash:109 t_s_symb:110 t_qty:111 t_bid_price:112 t_ca_id:113 t_exec_name:114 t_trade_price:115 t_chrg:116 t_comm:117 t_lifo:119
@@ -790,18 +790,18 @@ with &1 (update_last_trade)
                      │    │    └── f-k-checks
                      │    │         └── f-k-checks-item: trade(t_st_id) -> status_type(st_id)
                      │    │              └── anti-join (lookup status_type)
-                     │    │                   ├── columns: t_st_id:135!null
-                     │    │                   ├── key columns: [135] = [136]
+                     │    │                   ├── columns: t_st_id:136!null
+                     │    │                   ├── key columns: [136] = [137]
                      │    │                   ├── lookup columns are key
-                     │    │                   ├── fd: ()-->(135)
+                     │    │                   ├── fd: ()-->(136)
                      │    │                   ├── with-scan &6
-                     │    │                   │    ├── columns: t_st_id:135!null
+                     │    │                   │    ├── columns: t_st_id:136!null
                      │    │                   │    ├── mapping:
-                     │    │                   │    │    └──  t_st_id_cast:129 => t_st_id:135
-                     │    │                   │    └── fd: ()-->(135)
+                     │    │                   │    │    └──  t_st_id_cast:129 => t_st_id:136
+                     │    │                   │    └── fd: ()-->(136)
                      │    │                   └── filters (true)
                      │    └── projections
-                     │         └── NULL [as="?column?":140]
+                     │         └── NULL [as="?column?":130]
                      └── with-scan &2 (request_list)
                           ├── columns: tr_t_id:141!null tr_bid_price:142!null tr_tt_id:143!null tr_qty:144!null
                           ├── mapping:
@@ -3980,11 +3980,11 @@ opt
 RETURNING t_tax::FLOAT8;
 ----
 project
- ├── columns: t_tax:53!null
+ ├── columns: t_tax:48!null
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(53)
+ ├── fd: ()-->(48)
  ├── update trade
  │    ├── columns: t_id:1!null trade.t_tax:14!null
  │    ├── fetch columns: t_id:18 trade.t_tax:31
@@ -3993,17 +3993,17 @@ project
  │    ├── return-mapping:
  │    │    ├── t_id:18 => t_id:1
  │    │    └── t_tax_cast:47 => trade.t_tax:14
- │    ├── check columns: check5:52
+ │    ├── check columns: check5:53
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1,14)
  │    └── project
- │         ├── columns: check5:52 t_id:18!null trade.t_tax:31!null t_tax_cast:47
+ │         ├── columns: check5:53 t_id:18!null trade.t_tax:31!null t_tax_cast:47
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(18,31,47,52)
+ │         ├── fd: ()-->(18,31,47,53)
  │         ├── project
  │         │    ├── columns: t_tax_cast:47 t_id:18!null trade.t_tax:31!null
  │         │    ├── cardinality: [0 - 1]
@@ -4043,9 +4043,9 @@ project
  │         │                   │                   └── tx_rate:37
  │         │                   └── 2E+1
  │         └── projections
- │              └── t_tax_cast:47 >= 0 [as=check5:52, outer=(47), immutable]
+ │              └── t_tax_cast:47 >= 0 [as=check5:53, outer=(47), immutable]
  └── projections
-      └── trade.t_tax:14::FLOAT8 [as=t_tax:53, outer=(14), immutable]
+      └── trade.t_tax:14::FLOAT8 [as=t_tax:48, outer=(14), immutable]
 
 # Q13
 opt
@@ -4212,11 +4212,11 @@ with &2 (update_trade_commission)
  ├── key: ()
  ├── fd: ()-->(104)
  ├── project
- │    ├── columns: "?column?":52!null
+ │    ├── columns: "?column?":42!null
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
- │    ├── fd: ()-->(52)
+ │    ├── fd: ()-->(42)
  │    ├── update trade
  │    │    ├── columns: t_id:1!null
  │    │    ├── fetch columns: t_id:18 t_dts:19 trade.t_st_id:20 t_tt_id:21 t_is_cash:22 t_s_symb:23 t_qty:24 t_bid_price:25 t_ca_id:26 t_exec_name:27 t_trade_price:28 t_chrg:29 t_comm:30 t_lifo:32
@@ -4227,17 +4227,17 @@ with &2 (update_trade_commission)
  │    │    │    └── t_comm_cast:41 => t_comm:13
  │    │    ├── return-mapping:
  │    │    │    └── t_id:18 => t_id:1
- │    │    ├── check columns: check4:45
+ │    │    ├── check columns: check4:46
  │    │    ├── input binding: &1
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── volatile, mutations
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    ├── project
- │    │    │    ├── columns: check4:45!null t_comm_cast:41!null t_st_id_cast:39!null t_trade_price_cast:40!null t_dts_new:36!null t_id:18!null t_dts:19!null trade.t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
+ │    │    │    ├── columns: check4:46!null t_comm_cast:41!null t_st_id_cast:39!null t_trade_price_cast:40!null t_dts_new:36!null t_id:18!null t_dts:19!null trade.t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(18-30,32,36,39-41,45)
+ │    │    │    ├── fd: ()-->(18-30,32,36,39-41,46)
  │    │    │    ├── scan trade
  │    │    │    │    ├── columns: t_id:18!null t_dts:19!null trade.t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
  │    │    │    │    ├── constraint: /18: [/0 - /0]
@@ -4246,7 +4246,7 @@ with &2 (update_trade_commission)
  │    │    │    │    ├── key: ()
  │    │    │    │    └── fd: ()-->(18-30,32)
  │    │    │    └── projections
- │    │    │         ├── true [as=check4:45]
+ │    │    │         ├── true [as=check4:46]
  │    │    │         ├── 50.00 [as=t_comm_cast:41]
  │    │    │         ├── 'ACTV' [as=t_st_id_cast:39]
  │    │    │         ├── 100.00 [as=t_trade_price_cast:40]
@@ -4254,22 +4254,22 @@ with &2 (update_trade_commission)
  │    │    └── f-k-checks
  │    │         └── f-k-checks-item: trade(t_st_id) -> status_type(st_id)
  │    │              └── anti-join (lookup status_type)
- │    │                   ├── columns: t_st_id:47!null
- │    │                   ├── key columns: [47] = [48]
+ │    │                   ├── columns: t_st_id:48!null
+ │    │                   ├── key columns: [48] = [49]
  │    │                   ├── lookup columns are key
  │    │                   ├── cardinality: [0 - 1]
  │    │                   ├── key: ()
- │    │                   ├── fd: ()-->(47)
+ │    │                   ├── fd: ()-->(48)
  │    │                   ├── with-scan &1
- │    │                   │    ├── columns: t_st_id:47!null
+ │    │                   │    ├── columns: t_st_id:48!null
  │    │                   │    ├── mapping:
- │    │                   │    │    └──  t_st_id_cast:39 => t_st_id:47
+ │    │                   │    │    └──  t_st_id_cast:39 => t_st_id:48
  │    │                   │    ├── cardinality: [0 - 1]
  │    │                   │    ├── key: ()
- │    │                   │    └── fd: ()-->(47)
+ │    │                   │    └── fd: ()-->(48)
  │    │                   └── filters (true)
  │    └── projections
- │         └── 1 [as="?column?":52]
+ │         └── 1 [as="?column?":42]
  └── with &3 (update_broker_commission)
       ├── columns: "?column?":104!null
       ├── cardinality: [1 - 1]
@@ -4414,11 +4414,11 @@ WHERE ca_id = 0
 RETURNING ca_bal::FLOAT8;
 ----
 with &2 (insert_settlement)
- ├── columns: ca_bal:82!null
+ ├── columns: ca_bal:81!null
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(82)
+ ├── fd: ()-->(81)
  ├── project
  │    ├── columns: "?column?":31!null
  │    ├── cardinality: [1 - 1]
@@ -4465,11 +4465,11 @@ with &2 (insert_settlement)
  │    └── projections
  │         └── 1 [as="?column?":31]
  └── with &4 (insert_cash_transaction)
-      ├── columns: ca_bal:82!null
+      ├── columns: ca_bal:81!null
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
-      ├── fd: ()-->(82)
+      ├── fd: ()-->(81)
       ├── project
       │    ├── columns: "?column?":62!null
       │    ├── cardinality: [1 - 1]
@@ -4516,11 +4516,11 @@ with &2 (insert_settlement)
       │    └── projections
       │         └── 1 [as="?column?":62]
       └── project
-           ├── columns: ca_bal:82!null
+           ├── columns: ca_bal:81!null
            ├── cardinality: [0 - 1]
            ├── volatile, mutations
            ├── key: ()
-           ├── fd: ()-->(82)
+           ├── fd: ()-->(81)
            ├── update customer_account
            │    ├── columns: ca_id:63!null customer_account.ca_bal:68!null
            │    ├── fetch columns: ca_id:71 ca_b_id:72 ca_c_id:73 ca_name:74 ca_tax_st:75 customer_account.ca_bal:76
@@ -4550,7 +4550,7 @@ with &2 (insert_settlement)
            │              └── assignment-cast: DECIMAL(12,2) [as=ca_bal_cast:80, outer=(76), immutable]
            │                   └── customer_account.ca_bal:76 + 1E+2
            └── projections
-                └── customer_account.ca_bal:68::FLOAT8 [as=ca_bal:82, outer=(68), immutable]
+                └── customer_account.ca_bal:68::FLOAT8 [as=ca_bal:81, outer=(68), immutable]
 
 # Q16
 opt

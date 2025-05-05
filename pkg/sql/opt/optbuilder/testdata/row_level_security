@@ -192,7 +192,7 @@ build
 UPDATE T1 SET c1 = 2 WHERE true RETURNING 'foo';
 ----
 project
- ├── columns: "?column?":15!null
+ ├── columns: "?column?":14!null
  ├── update t1
  │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
  │    ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
@@ -203,9 +203,9 @@ project
  │    │    ├── c2:8 => c2:2
  │    │    ├── c3:9 => c3:3
  │    │    └── rowid:10 => rowid:4
- │    ├── check columns: rls:14
+ │    ├── check columns: rls:15
  │    └── project
- │         ├── columns: rls:14!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
+ │         ├── columns: rls:15!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 c1_new:13!null
  │         ├── project
  │         │    ├── columns: c1_new:13!null c1:7!null c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         │    ├── select
@@ -222,9 +222,9 @@ project
  │         │    └── projections
  │         │         └── 2 [as=c1_new:13]
  │         └── projections
- │              └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
+ │              └── c1_new:13 < 100 [as=rls:15]
  └── projections
-      └── 'foo' [as="?column?":15]
+      └── 'foo' [as="?column?":14]
 
 build
 UPDATE T1 SET c1 = c1 + 1 WHERE true;
@@ -437,6 +437,68 @@ update t1
       │         └── -2 [as=c1_new:17]
       └── projections
            └── c1_new:17 < 100 [as=rls:18]
+
+# Ensure that column references to the 'other' table in the RETURNING clause
+# do not result in the SELECT policy being applied.
+build
+UPDATE T1 SET c1 = -20 FROM other RETURNING other.k;
+----
+project
+ ├── columns: k:13
+ └── update t1
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── fetch columns: c1:7 c2:8 c3:9 rowid:10
+      ├── passthrough columns: k:13 a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── update-mapping:
+      │    └── c1_new:17 => c1:1
+      ├── return-mapping:
+      │    ├── c1_new:17 => c1:1
+      │    ├── c2:8 => c2:2
+      │    ├── c3:9 => c3:3
+      │    └── rowid:10 => rowid:4
+      ├── check columns: rls:18
+      └── project
+           ├── columns: rls:18!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16 c1_new:17!null
+           ├── project
+           │    ├── columns: c1_new:17!null c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    ├── distinct-on
+           │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    ├── grouping columns: rowid:10!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12 k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: c1:7!null c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │    ├── scan t1
+           │    │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null t1.crdb_internal_mvcc_timestamp:11 t1.tableoid:12
+           │    │    │    │    │    └── flags: avoid-full-scan
+           │    │    │    │    └── filters
+           │    │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
+           │    │    │    ├── scan other
+           │    │    │    │    └── columns: k:13!null a:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+           │    │    │    └── filters (true)
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=c1:7]
+           │    │         │    └── c1:7
+           │    │         ├── first-agg [as=c2:8]
+           │    │         │    └── c2:8
+           │    │         ├── first-agg [as=c3:9]
+           │    │         │    └── c3:9
+           │    │         ├── first-agg [as=t1.crdb_internal_mvcc_timestamp:11]
+           │    │         │    └── t1.crdb_internal_mvcc_timestamp:11
+           │    │         ├── first-agg [as=t1.tableoid:12]
+           │    │         │    └── t1.tableoid:12
+           │    │         ├── first-agg [as=k:13]
+           │    │         │    └── k:13
+           │    │         ├── first-agg [as=a:14]
+           │    │         │    └── a:14
+           │    │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:15]
+           │    │         │    └── other.crdb_internal_mvcc_timestamp:15
+           │    │         └── first-agg [as=other.tableoid:16]
+           │    │              └── other.tableoid:16
+           │    └── projections
+           │         └── -20 [as=c1_new:17]
+           └── projections
+                └── c1_new:17 < 100 [as=rls:18]
 
 # Verify a DELETE won't use policies for UPDATE.
 
@@ -768,9 +830,11 @@ insert t1
       └── projections
            └── char_length(c2:8) < 10 [as=rls:14]
 
-# Apply SELECT policies on inserted rows if a RETURNING clause is present.
-# The first case handles inserts without RETURNING; the second handles inserts
-# with RETURNING.
+# Apply SELECT policies on inserted rows if the RETURNING clause exists and
+# references any columns.
+# - Case 1: No RETURNING clause — SELECT policies are not needed.
+# - Case 2: RETURNING clause references columns — SELECT policies are required.
+# - Case 3: RETURNING clause does not reference columns — SELECT policies are not needed.
 
 build
 INSERT INTO t1(c1) VALUES (10);
@@ -828,6 +892,48 @@ project
            │         └── unique_rowid() [as=rowid_default:10]
            └── projections
                 └── (c3_default:9 IN ('2013-06-02', '1988-07-01')) AND (char_length(c2_default:8) < 10) [as=rls:11]
+
+build
+INSERT INTO t1(c1) VALUES (10) RETURNING (select 1);
+----
+project
+ ├── columns: "?column?":15
+ ├── insert t1
+ │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
+ │    ├── insert-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── return-mapping:
+ │    │    ├── column1:7 => c1:1
+ │    │    ├── c2_default:8 => c2:2
+ │    │    ├── c3_default:9 => c3:3
+ │    │    └── rowid_default:10 => rowid:4
+ │    ├── check columns: rls:13
+ │    └── project
+ │         ├── columns: rls:13 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+ │         ├── project
+ │         │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+ │         │    ├── values
+ │         │    │    ├── columns: column1:7!null
+ │         │    │    └── (10,)
+ │         │    └── projections
+ │         │         ├── NULL::STRING [as=c2_default:8]
+ │         │         ├── NULL::DATE [as=c3_default:9]
+ │         │         └── unique_rowid() [as=rowid_default:10]
+ │         └── projections
+ │              └── char_length(c2_default:8) < 10 [as=rls:13]
+ └── projections
+      └── subquery [as="?column?":15]
+           └── max1-row
+                ├── columns: "?column?":14!null
+                └── project
+                     ├── columns: "?column?":14!null
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── 1 [as="?column?":14]
 
 exec-ddl
 DROP POLICY p_select on t1;
