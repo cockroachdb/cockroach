@@ -389,7 +389,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
 
 		// Build each of the SET expressions.
-		mb.addUpdateCols(ins.OnConflict.Exprs)
+		mb.addUpdateCols(ins.OnConflict.Exprs, nil /* colRefs */)
 
 		// Project row-level BEFORE triggers for UPDATE.
 		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
@@ -762,7 +762,7 @@ func (mb *mutationBuilder) buildInsert(
 
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols(false, /* isUpdate */
-		cat.PolicyScopeInsert, returning != nil || hasOnConflict /* includeSelectOnInsert */)
+		cat.PolicyScopeInsert, returning != nil || hasOnConflict /* includeSelectPolicies */)
 
 	// Project partial index PUT boolean columns.
 	mb.projectPartialIndexPutCols()
@@ -968,7 +968,7 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols(false, /* isUpdate */
-		cat.PolicyScopeUpsert, false /* includeSelectOnInsert */)
+		cat.PolicyScopeUpsert, false /* includeSelectPolicies */)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
@@ -1105,5 +1105,5 @@ func (mb *mutationBuilder) buildOnConflictWhereClause(
 			Right: whereClause.Expr,
 		},
 	}
-	mb.b.buildWhere(where, mb.outScope)
+	mb.b.buildWhere(where, mb.outScope, nil /* colRefs */)
 }

@@ -350,6 +350,26 @@ UPDATE writer SET value = value WHERE key = 5;
           locking strength: for update
           policies: p_select, p_update1
 
+# Should not apply select policy for the new row because columns weren't
+# referenced in the SET or WHERE clause.
+plan
+UPDATE writer SET key = 10 WHERE true;
+----
+• update
+│ table: writer
+│ set: key
+│ auto commit
+│ policies: p_update1, p_update2
+│
+└── • render
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          locking strength: for update
+          policies: p_select, p_update1
+
+
 # Show policy information for delete
 # ----------------------------------------------------------------------
 
