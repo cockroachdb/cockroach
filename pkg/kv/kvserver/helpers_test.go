@@ -702,10 +702,9 @@ func NewRangefeedTxnPusher(
 	}
 }
 
-// SupportFromEnabled exports (replicaRLockedStoreLiveness).SupportFromEnabled
-// for testing purposes.
-func (r *Replica) SupportFromEnabled() bool {
-	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
+// descRLocked exports (*Replica).descRLocked() for testing purposes.
+func (r *Replica) DescRLocked() *roachpb.RangeDescriptor {
+	return r.descRLocked()
 }
 
 // RaftFortificationEnabledForRangeID exports raftFortificationEnabledForRangeID

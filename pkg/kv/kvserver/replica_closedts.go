@@ -88,7 +88,8 @@ func (r *Replica) BumpSideTransportClosed(
 
 	lai := r.shMu.state.LeaseAppliedIndex
 	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
-	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
+	st := r.leaseStatusForRequest(ctx, now, hlc.Timestamp{} /* reqTS */, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
