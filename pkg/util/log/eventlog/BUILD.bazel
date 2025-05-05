@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "eventlog",
+    srcs = ["sink.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventlog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/log",
+        "//pkg/util/log/logpb",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
