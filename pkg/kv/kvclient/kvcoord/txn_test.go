@@ -2308,12 +2308,10 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 				b.Scan(keyB, keyC)
 				return b
 			},
-			// The Scans should see the values written preceding in the same batch,
-			// but currently they don't because of a bug (#146103) that doesn't add
-			// always add a transformation for a Scan request.
+			// The Scans should see the values written preceding in the same batch.
 			expected: map[int32]map[string][]byte{
 				0: {"keyB": value22},
-				2: {"keyB": value22},
+				2: {"keyB": value3},
 			},
 		},
 		// TODO(mira): See if we need more test coverage for other request types
