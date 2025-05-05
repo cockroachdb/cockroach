@@ -26,6 +26,9 @@ environment:
   RUN_DURATION: 12h
   MAX_CONN_LIFETIME: 3m
 
+  # GCP Cloud Storage bucket for storing backups
+  BUCKET_US_EAST_1: cockroach-drt-backup-us-east1
+
 dependent_file_locations:
   - artifacts/roachprod
   - artifacts/roachtest
@@ -244,7 +247,7 @@ targets:
           - --
           - -e
           - |
-            BACKUP INTO 'gs://cockroach-drt-backup-us-east1/drt-pua-9?AUTH=implicit'
+            BACKUP INTO 'gs://$BUCKET_US_EAST_1/$CLUSTER?AUTH=implicit'
             WITH OPTIONS (revision_history = true, detached)
         wait: 1800
       - command: sql # create changefeed without initial scan

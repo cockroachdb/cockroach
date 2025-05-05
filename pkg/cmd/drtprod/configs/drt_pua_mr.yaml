@@ -33,6 +33,11 @@ environment:
   MAX_RATE: 500
   MAX_CONN_LIFETIME: 3m
 
+  # GCP Cloud Storage bucket for storing locality-aware backups
+  BUCKET_NORTH_AMERICA: cockroach-drt-backup-northamerica-northeast2
+  BUCKET_US_EAST_5: cockroach-drt-backup-us-east5
+  BUCKET_US_EAST_1: cockroach-drt-backup-us-east1
+
 dependent_file_locations:
   - artifacts/roachprod
   - artifacts/roachtest
@@ -248,9 +253,9 @@ targets:
           - --
           - -e
           - |
-            BACKUP INTO ('gs://cockroach-drt-backup-northamerica-northeast2/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=default',
-                            'gs://cockroach-drt-backup-us-east5/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
-                            'gs://cockroach-drt-backup-us-east1/drt-pua-15?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
+            BACKUP INTO ('gs://$BUCKET_NORTH_AMERICA/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=default',
+                            'gs://$BUCKET_US_EAST_5/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
+                            'gs://$BUCKET_US_EAST_1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
             WITH OPTIONS (revision_history = true, detached)
         wait: 1500
       - command: sql # create changefeed without initial scan
