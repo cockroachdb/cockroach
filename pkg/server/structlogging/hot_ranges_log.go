@@ -117,8 +117,9 @@ func StartHotRangesLoggingScheduler(
 // installation.
 func (s *hotRangesLoggingScheduler) startTask(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
-		err := s.start(ctx, stopper)
-		log.Warningf(ctx, "hot ranges stats logging scheduler stopped: %s", err)
+		if err := s.start(ctx, stopper); err != nil {
+			log.Warningf(ctx, "hot ranges stats logging scheduler stopped: %v", err)
+		}
 	})
 }
 
