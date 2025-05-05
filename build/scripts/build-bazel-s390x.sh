@@ -15,18 +15,16 @@
 # This code originated in https://github.com/linux-on-ibm-z/scripts/blob/master/CockroachDB/24.1.6/build_crdb.sh, SHA d2d885b3b9edae9d0e69383c18475485149875b1
 
 # Instructions:
-# Download build script: wget https://raw.githubusercontent.com/linux-on-ibm-z/scripts/master/Bazel/7.4.1/build_bazel.sh
-# Execute build script: bash build_bazel.sh    (provide -h for help)
+# Execute build script: bash build-bazel-s390x.sh    (provide -h for help)
 #
 set -e  -o pipefail
 
 PACKAGE_NAME="bazel"
-PACKAGE_VERSION="7.4.1"
+PACKAGE_VERSION="7.6.0"
 NETTY_TCNATIVE_VERSION="2.0.61"
 NETTY_VERSION="4.1.93"
 SOURCE_ROOT="$(pwd)"
 USER="$(whoami)"
-PATCH_URL="https://raw.githubusercontent.com/linux-on-ibm-z/scripts/master/Bazel/7.4.1/patch"
 
 FORCE="false"
 TESTS="false"
@@ -128,14 +126,7 @@ function configureAndInstall() {
 
     printf -- '\nCheckout and patch the Bazel source... \n'
     cd $SOURCE_ROOT
-    git clone --depth 1 -b $PACKAGE_VERSION https://github.com/bazelbuild/bazel.git
-    cd bazel
-    curl -sSLo $SOURCE_ROOT/bazel/third_party/rules_graalvm_fix.patch $PATCH_URL/rules_graalvm_0.11.1.patch
-    curl -sSLO $PATCH_URL/bazel.patch
-    patch -p1 < bazel.patch || error "Patch bazel"
-    rm -f bazel.patch
-
-    cd $SOURCE_ROOT
+    git clone -b crl-release-7.6.0-s390x https://github.com/cockroachdb/bazel
 
     #Copy netty and netty-tcnative jar to respective bazel directory
     cp $SOURCE_ROOT/netty-tcnative/openssl-classes/target/netty-tcnative-classes-$NETTY_TCNATIVE_VERSION.Final.jar \
