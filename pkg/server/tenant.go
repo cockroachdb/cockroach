@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -715,6 +716,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
 	})
+
+	eventTableSink := eventlog.NewEventTableSink(
+		s.sqlServer.SQLInstanceID(),
+		s.sqlServer.execCfg.InternalDB,
+		true,
+		s.stopper,
+		s.cfg.AmbientCtx,
+		s.ClusterSettings(),
+	)
+	log.RegisterEventLogSink(ctx, s.sqlCfg.TenantID.ToUint64(), eventTableSink)
 
 	// Init a log metrics registry.
 	logRegistry := logmetrics.NewRegistry()
