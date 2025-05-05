@@ -715,28 +715,7 @@ func parseVersion(versionStr string) (*semver.Version, error) {
 	return version, nil
 }
 
-// hasVersionTxt returns whether a given version uses the version.txt
-// file to determine binary version.
-func hasVersionTxt(version *semver.Version) bool {
-	return version.Major() >= 23
-}
-
 func generateCommitMessage(prefix string, released, next *semver.Version) string {
-	var nextVersionMsg string
-	if hasVersionTxt(released) {
-		nextVersionMsg = ". Next version: " + next.String()
-	}
+	nextVersionMsg := ". Next version: " + next.String()
 	return fmt.Sprintf(commitTemplate, prefix, released, nextVersionMsg)
-}
-
-// nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
-func nextReleaseSeries(version *semver.Version) string {
-	nextMinor := version.IncMinor()
-	// TODO(rail): revisit when we have more than 2 releases a year
-	if nextMinor.Minor() > 2 {
-		nextMinor = nextMinor.IncMajor()
-		// IncMajor() resets all version parts to 0, thus we need to bump the minor part to match our version schema.
-		nextMinor = nextMinor.IncMinor()
-	}
-	return fmt.Sprintf("%d.%d", nextMinor.Major(), nextMinor.Minor())
 }
