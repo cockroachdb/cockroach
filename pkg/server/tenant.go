@@ -826,7 +826,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		serverpb.FeatureFlags{
 			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID) ||
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
-			DisableKvLevelAdvancedDebug: true,
+			DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
 		},
 	); err != nil {
 		return err
