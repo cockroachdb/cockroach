@@ -16,13 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// TODO (kyle.wong) Update this diagram
 // The logging functions in this file are the different stages of a
 // pipeline that add more and more information to logging events until
 // they are ready to be sent to either external sinks or to a system
@@ -401,23 +402,6 @@ func LogEventForJobs(
 	)
 }
 
-var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"server.eventlog.enabled",
-	"if set, logged notable events are also stored in the table system.eventlog",
-	true,
-	settings.WithPublic)
-
-// EventLogTestingKnobs provides hooks and knobs for event logging.
-type EventLogTestingKnobs struct {
-	// SyncWrites causes events to be written on the same txn as
-	// the SQL statement that causes them.
-	SyncWrites bool
-}
-
-// ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
-func (*EventLogTestingKnobs) ModuleTestingKnobs() {}
-
 // LogEventDestination indicates for InsertEventRecords where the
 // event should be directed to.
 type LogEventDestination int
@@ -529,7 +513,7 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventlog.EventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
