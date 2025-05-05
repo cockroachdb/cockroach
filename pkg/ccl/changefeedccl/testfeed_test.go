@@ -178,6 +178,9 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 		// The second time we see a duplicated message, this field is not
 		// necessarily the same, so we remove it before marking it as seen.
 		delete(valueMap, "ts_ns")
+		// It's usually not necessary to delete the op field, but in the case of schema backfills
+		// the op is set to `u`, which can cause duplicates to surface in tests if the original was a `c` (likely).
+		delete(valueMap, "op")
 
 		if marshalledValue, err := gojson.Marshal(valueMap); err == nil {
 			normalizedValue = marshalledValue
@@ -2316,12 +2319,25 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 func extractTopicFromJSONValue(
 	envelopeType changefeedbase.EnvelopeType, wrapped []byte,
 ) (topic string, value []byte, err error) {
+	// Enriched envelopes dont have the topic in them per se but they have the table name so use that.
+	if envelopeType == changefeedbase.OptEnvelopeEnriched {
+		var parsed map[string]any
+		if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
+			return "", nil, err
+		}
+		source, ok := parsed["source"]
+		if !ok {
+			return "", wrapped, nil
+		}
+		topic = source.(map[string]any)["table_name"].(string)
+		return topic, wrapped, nil
+	}
+
 	var topicRaw gojson.RawMessage
 	topicRaw, value, err = extractFieldFromJSONValue("topic", envelopeType, wrapped)
 	if err != nil {
 		return "", nil, err
 	}
-	// TODO: this, or skip this method for enriched
 	if topicRaw == nil {
 		return "", value, nil
 	}
@@ -2387,6 +2403,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
 							return nil, err
 						}
+						// here?
 						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
 							return nil, err
 						}

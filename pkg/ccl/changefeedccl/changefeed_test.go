@@ -1099,7 +1099,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`, optOutOfMetamorphicEnrichedEnvelope{reason: "this test calls testfeed.Next() directly"})
 		defer closeFeed(t, foo)
 
 		// Grab the first non resolved-timestamp row.
@@ -2045,8 +2045,12 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY id_a, TABLE hasfams FAMILY b_and_c`)
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY id_a, TABLE hasfams FAMILY b_and_c`, args...)
 		defer closeFeed(t, cf)
 		assertPayloads(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
@@ -3271,7 +3275,11 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		// Must specify WITH split_column_families
 		sqlDB.ExpectErrWithTimeout(t, `multiple column families`, `CREATE CHANGEFEED FOR foo`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`, args...)
 		defer closeFeed(t, foo)
 
 		assertPayloads(t, foo, []string{
@@ -3341,21 +3349,27 @@ func TestChangefeedSingleColumnFamily(t *testing.T) {
 
 		sqlDB.ExpectErrWithTimeout(t, `nosuchfamily`, `CREATE CHANGEFEED FOR foo FAMILY nosuchfamily`)
 
-		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`)
+		// TODO(#145927): unskip this when we have family or topic info in enriched feeds.
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+
+		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`, args...)
 		defer closeFeed(t, fooMost)
 		assertPayloads(t, fooMost, []string{
 			`foo.most: [0]->{"after": {"a": 0, "b": "dog"}}`,
 			`foo.most: [1]->{"after": {"a": 1, "b": "dollar"}}`,
 		})
 
-		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`)
+		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`, args...)
 		defer closeFeed(t, fooRest)
 		assertPayloads(t, fooRest, []string{
 			`foo.rest: [0]->{"after": {"c": "cat", "d": null}}`,
 			`foo.rest: [1]->{"after": {"c": "cent", "d": null}}`,
 		})
 
-		fooBoth := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest, foo FAMILY most`)
+		fooBoth := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest, foo FAMILY most`, args...)
 		defer closeFeed(t, fooBoth)
 		assertPayloads(t, fooBoth, []string{
 			`foo.most: [0]->{"after": {"a": 0, "b": "dog"}}`,
@@ -3391,13 +3405,14 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
 
-		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`)
+		arg := optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families; see #145927"}
+		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`, arg)
 		defer closeFeed(t, fooMost)
 		assertPayloads(t, fooMost, []string{
 			`foo.most: [0]->{"after": {"a": 0, "b": "dog"}}`,
 		})
 
-		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`)
+		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`, arg)
 		defer closeFeed(t, fooRest)
 		assertPayloads(t, fooRest, []string{
 			`foo.rest: [0]->{"after": {"c": "cat"}}`,
@@ -3432,7 +3447,13 @@ func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY f1 (a,b), FAMILY f2 (c))`)
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
+
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`, args...)
 		defer closeFeed(t, foo)
 		assertPayloads(t, foo, []string{
 			`foo.f1: [0]->{"after": {"a": 0, "b": "dog"}}`,
@@ -3732,7 +3753,8 @@ func TestChangefeedCustomKey(t *testing.T) {
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'dog', 'cat')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH key_column='b', unordered`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH key_column='b', unordered`,
+			optOutOfMetamorphicEnrichedEnvelope{reason: "custom key not supported in test framework"})
 		defer closeFeed(t, foo)
 		assertPayloads(t, foo, []string{
 			`foo: ["dog"]->{"after": {"a": 0, "b": "dog", "c": "cat"}}`,
@@ -4145,12 +4167,9 @@ func TestChangefeedEnriched(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-				_, isWebhook := f.(*webhookFeedFactory)
 
-				// The webhook sink forces key_in_value, and its implementation
-				// in the cdctest framework strips out the key in the value.
-				// This makes it impossible to test these features on that sink.
-				// TODO(#138749): fix this situation
+				// The webhook testfeed removes the key from the value, so skip keyInValue and schema'd tests for it.
+				_, isWebhook := f.(*webhookFeedFactory)
 				if isWebhook && (tc.keyInValue || slices.Contains(tc.enrichedProperties, "schema")) {
 					return
 				}
@@ -4167,11 +4186,10 @@ func TestChangefeedEnriched(t *testing.T) {
 				}
 				foo := feed(t, f, create)
 				defer closeFeed(t, foo)
-				// TODO(#139660): the webhook sink forces topic_in_value, but
-				// this is not supported by the enriched envelope type. We should adapt
-				// the test framework to account for this.
+
+				// The webhook testfeed relies on source.table_name for assertion matching. See: #145927
 				topic := "foo"
-				if isWebhook {
+				if isWebhook && !slices.Contains(tc.enrichedProperties, "source") {
 					topic = ""
 				}
 
@@ -4632,7 +4650,7 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 					assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
 				}
 			}
-			for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage"} {
+			for _, sink := range []string{"kafka", "pubsub", "sinkless", "cloudstorage", "webhook"} {
 				testLocality := roachpb.Locality{
 					Tiers: []roachpb.Tier{{
 						Key:   "region",
@@ -4641,110 +4659,6 @@ func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
 				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
 					feedTestUseLocality(testLocality))
 			}
-		})
-	})
-}
-
-// TODO(#139660): the webhook sink forces topic_in_value, but
-// this is not supported by the enriched envelope type. We should adapt
-// the test framework to account for this.
-func TestChangefeedEnrichedSourceWithDataJSONWebhook(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
-		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
-			clusterName := "clusterName123"
-			dbVersion := "v999.0.0"
-			defer build.TestingOverrideVersion(dbVersion)()
-			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
-
-					sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
-					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-					stmt := `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`
-					if withMVCCTS {
-						stmt += ", mvcc_timestamp"
-					}
-					if withUpdated {
-						stmt += ", updated"
-					}
-					testFeed := feed(t, f, stmt)
-					defer closeFeed(t, testFeed)
-
-					var jobID int64
-					var nodeName string
-					var sourceAssertion func(actualSource map[string]any)
-					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
-						jobID = int64(ef.JobID())
-					}
-					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
-
-					sourceAssertion = func(actualSource map[string]any) {
-						nodeID := actualSource["node_id"]
-						require.NotNil(t, nodeID)
-
-						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
-
-						const dummyMvccTimestamp = "1234567890.0001"
-						jobIDStr := strconv.FormatInt(jobID, 10)
-
-						dummyUpdatedTSNS := 12345678900001000
-						dummyUpdatedTSHLC :=
-							hlc.Timestamp{WallTime: int64(dummyUpdatedTSNS), Logical: 0}.AsOfSystemTime()
-
-						var assertion string
-						assertionMap := map[string]any{
-							"cluster_id":           clusterID,
-							"cluster_name":         clusterName,
-							"db_version":           dbVersion,
-							"job_id":               jobIDStr,
-							"node_id":              nodeID,
-							"node_name":            nodeName,
-							"origin":               "cockroachdb",
-							"changefeed_sink":      sink,
-							"source_node_locality": sourceNodeLocality,
-							"database_name":        "d",
-							"schema_name":          "public",
-							"table_name":           "foo",
-							"primary_keys":         []any{"i"},
-						}
-						if withMVCCTS {
-							assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
-							actualSource["mvcc_timestamp"] = dummyMvccTimestamp
-							assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
-						}
-						if withUpdated {
-							tsns := actualSource["ts_ns"].(gojson.Number)
-							tsnsInt, err := tsns.Int64()
-							require.NoError(t, err)
-							assertReasonableMVCCTimestamp(t, tsns.String())
-							actualSource["ts_ns"] = dummyUpdatedTSNS
-							assertionMap["ts_ns"] = dummyUpdatedTSNS
-							assertEqualTSNSHLCWalltime(t, tsnsInt, actualSource["ts_hlc"].(string))
-							actualSource["ts_hlc"] = dummyUpdatedTSHLC
-							assertionMap["ts_hlc"] = dummyUpdatedTSHLC
-						}
-						assertion = toJSON(t, assertionMap)
-
-						value, err := reformatJSON(actualSource)
-						require.NoError(t, err)
-						require.JSONEq(t, assertion, string(value))
-					}
-
-					assertPayloadsEnriched(t, testFeed, []string{`: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
-				}
-			}
-			testLocality := roachpb.Locality{
-				Tiers: []roachpb.Tier{{
-					Key:   "region",
-					Value: testServerRegion,
-				}}}
-			cdcTest(t, mkTestFn("webhook"), feedTestForceSink("webhook"), feedTestUseClusterName(clusterName),
-				feedTestUseLocality(testLocality))
 		})
 	})
 }
@@ -4827,7 +4741,8 @@ func TestChangefeedEnrichedSourceSchemaInfo(t *testing.T) {
 				assertPayloadsEnriched(t, foo, testCase.expectedRowsAfterSchemaChange, sourceAssertionAfterSchemaChange)
 			}
 
-			cdcTest(t, testFn, feedTestForceSink("kafka"))
+			// TODO(?issue?): add other enriched sinks to this test.
+			cdcTest(t, testFn, feedTestRestrictSinks("kafka"))
 		})
 	}
 }
@@ -4909,7 +4824,8 @@ func TestChangefeedEnrichedSourceSchemaInfoOnPrimaryKeyChange(t *testing.T) {
 				assertPayloadsEnriched(t, foo, []string{testCase.expectedRowAfter}, sourceAssertionAfterPKChange)
 			}
 
-			cdcTest(t, testFn, feedTestForceSink("kafka"))
+			// TODO(?issue?): add other enriched sinks to this test.
+			cdcTest(t, testFn, feedTestRestrictSinks("kafka"))
 		})
 	}
 }
@@ -5325,6 +5241,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	waitForSchemaChangeError(t, feed)
 }
 
+// TODO: address this one - translation is missing the crdb_region even tho its in the source.primary_key
 func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5337,7 +5254,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr`)
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr`, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support custom key"})
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -5358,7 +5275,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`)
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support custom key"})
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -5375,7 +5292,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT, region crdb_internal_region NOT NULL DEFAULT 'us-east-1')`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
-			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`)
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr WITH format=avro`, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support custom key"})
 			defer closeFeed(t, rbr)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
 			assertPayloads(t, rbr, []string{
@@ -8396,7 +8313,8 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'initial')`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH resolved = '100ms', updated`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH resolved = '100ms', updated`,
+			optOutOfMetamorphicEnrichedEnvelope{reason: "this test uses readNextMessages directly, which the metamorphic enriched envelope does not support"})
 
 		// Sketch of the test is as follows:
 		//
@@ -8522,7 +8440,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
 
 func TestChangefeedBackfillCheckpoint(t *testing.T) {
