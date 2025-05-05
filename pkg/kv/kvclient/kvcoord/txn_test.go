@@ -42,15 +42,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkResults(t *testing.T, expected map[string][]byte, results ...kv.Result) {
-	for _, result := range results {
-		require.Equal(t, len(expected), len(result.Rows))
-		for _, row := range result.Rows {
-			require.Equal(t, expected[string(row.Key)], row.ValueBytes())
-		}
-	}
-}
-
 // TestTxnDBBasics verifies that a simple transaction can be run and
 // either committed or aborted. On commit, mutations are visible; on
 // abort, mutations are never visible. During the txn, verify that
@@ -2308,12 +2299,10 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 				b.Scan(keyB, keyC)
 				return b
 			},
-			// The Scans should see the values written preceding in the same batch,
-			// but currently they don't because of a bug (#146103) that doesn't add
-			// always add a transformation for a Scan request.
+			// The Scans should see the values written preceding in the same batch.
 			expected: map[int32]map[string][]byte{
 				0: {"keyB": value22},
-				2: {"keyB": value22},
+				2: {"keyB": value3},
 			},
 		},
 		// TODO(mira): See if we need more test coverage for other request types
@@ -2332,7 +2321,10 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 				return err
 			}
 			for i, expected := range tc.expected {
-				checkResults(t, expected, b.Results[i])
+				require.Equal(t, len(expected), len(b.Results[i].Rows))
+				for _, row := range b.Results[i].Rows {
+					require.Equal(t, expected[string(row.Key)], row.ValueBytes())
+				}
 			}
 
 			return nil
