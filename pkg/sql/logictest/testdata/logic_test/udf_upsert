@@ -275,20 +275,12 @@ CREATE TABLE table_drop (
 );
 INSERT INTO table_drop VALUES (1,2,3), (4,5,6), (7,8,9);
 
-# An insert routine created with use_improved_routine_dependency_tracking = true
-# should not depend on columns other than the target column "a". 
-statement ok
-SET use_improved_routine_dependency_tracking = true;
-
 statement ok
 DROP FUNCTION f_upsert;
 CREATE FUNCTION f_upsert() RETURNS INT LANGUAGE SQL AS $$
   UPSERT INTO table_drop (a, b) VALUES (100, 200);
   SELECT 1;
 $$;
-
-statement ok
-RESET use_improved_routine_dependency_tracking;
 
 statement ok
 DROP INDEX i;
