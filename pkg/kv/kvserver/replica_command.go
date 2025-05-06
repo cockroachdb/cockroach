@@ -4266,11 +4266,6 @@ func (r *Replica) adminScatter(
 		// that were moved so the value may not be entirely accurate, but it is
 		// adequate.
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
-		// NB: this needs to be a separate field, since we can't reliably infer
-		// "no replica moved" from ReplicasScatteredBytes == 0. Empty ranges have
-		// stats.Total() == 0 and ReplicasScatteredBytes will be 0 regardless of
-		// whether any replicas were moved.
-		NoReplicasMoved: numReplicasMoved == 0,
 	}, nil
 }
 

@@ -212,26 +212,11 @@ func (s dbSplitAndScatterer) scatter(
 			// throughput.
 			log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
 				newScatterKey, newScatterKey.Next(), pErr.GoError())
-		} else {
-			// Log at INFO level when scatter request is rejected because the range is
-			// non-empty (range size exceeds req.MaxSize). This is expected during
-			// RESTORE resume.
-			log.Infof(ctx, "failed to scatter span [%s,%s): %+v",
-				newScatterKey, newScatterKey.Next(), pErr.GoError())
 		}
 		return 0, nil
 	}
 
-	scatteredResp, ok := res.(*kvpb.AdminScatterResponse)
-	if !ok {
-		log.Fatalf(ctx, "expected AdminScatterResponse, got %T", res)
-	}
-	if scatteredResp.NoReplicasMoved {
-		// TODO(#144856): DR should consider retrying the scatter if no replicas
-		// were moved.
-		log.Warningf(ctx, "no replicas moved during scatter")
-	}
-	return s.findDestination(scatteredResp), nil
+	return s.findDestination(res.(*kvpb.AdminScatterResponse)), nil
 }
 
 // findDestination returns the node ID of the node of the destination of the
