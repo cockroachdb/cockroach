@@ -1749,6 +1749,19 @@ var (
 func addName(name string, meta metric.Metadata) metric.Metadata {
 	rv := meta
 	rv.Name = rv.Name + name
+
+	if name == KVWork.String() && meta.Name == "admission.wait_durations." {
+		rv.Essential = true
+		rv.Category = metric.Metadata_OVERLOAD
+		rv.HowToUse = "This metric shows if admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive."
+	}
+
+	if name == fmt.Sprintf("%s-stores", KVWork.String()) && meta.Name == "admission.wait_durations." {
+		rv.Essential = true
+		rv.Category = metric.Metadata_OVERLOAD
+		rv.HowToUse = "This metric shows if admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive."
+	}
+
 	return rv
 }
 
