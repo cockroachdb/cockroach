@@ -167,8 +167,12 @@ func (ms *MemoryStorage) InitialState() (pb.HardState, pb.ConfState, error) {
 func (ms *MemoryStorage) SetHardState(st pb.HardState) error {
 	ms.Lock()
 	defer ms.Unlock()
-	ms.hardState = st
+	ms.SetHardStateLocked(st)
 	return nil
+}
+
+func (ms *MemoryStorage) SetHardStateLocked(st pb.HardState) {
+	ms.hardState = st
 }
 
 // Entries implements the Storage interface.
@@ -307,6 +311,13 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	}
 	ms.Lock()
 	defer ms.Unlock()
+	return ms.AppendLocked(entries)
+}
+
+func (ms *MemoryStorage) AppendLocked(entries []pb.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 
 	first := entries[0].Index
 	if first <= ms.ls.prev.index {
