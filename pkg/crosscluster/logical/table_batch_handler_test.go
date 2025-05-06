@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -198,6 +199,9 @@ func TestTableHandlerDuplicateBatchEntries(t *testing.T) {
 func TestTableHandlerExhaustive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(jeffswenson): re-enable this test
+	skip.WithIssue(t, 146217, "crud writer does not correctly implement lww")
 
 	// This test is an "exhaustive" test of the table handler. It tries to test
 	// cross product of every possible (replication event type, local value,

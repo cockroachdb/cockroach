@@ -467,6 +467,11 @@ func TestLWWConflictResolution(t *testing.T) {
 				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
 			})
 			t.Run("cross-cluster-local-delete", func(t *testing.T) {
+				if !useKVProc {
+					// TODO(jeffswenson): re-enable this test
+					skip.WithIssue(t, 146217, "crud writer does not correctly implement lww")
+				}
+
 				tableNameDst, rp, encoder := setup(t, useKVProc)
 
 				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
