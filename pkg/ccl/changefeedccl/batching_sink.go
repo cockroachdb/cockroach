@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -388,6 +389,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	}
 
 	tryFlushBatch := func(topic string) error {
+		ctx, sp := tracing.ChildSpan(ctx, "changefeed.batching_sink.try_flush_batch")
+		defer sp.Finish()
+
 		batchBuffer, ok := topicBatches[topic]
 		if !ok || batchBuffer.isEmpty() {
 			return nil
