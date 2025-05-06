@@ -115,13 +115,6 @@ func TestLogic_mixed_version_plpgsql_srf(
 	runLogicTest(t, "mixed_version_plpgsql_srf")
 }
 
-func TestLogic_mixed_version_stats(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_stats")
-}
-
 func TestLogic_mixed_version_timeseries_range_already_exists(
 	t *testing.T,
 ) {
