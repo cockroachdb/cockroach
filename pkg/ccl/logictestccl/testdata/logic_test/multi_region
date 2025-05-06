@@ -1,6 +1,9 @@
 # knob-opt: sync-event-log
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
+statement ok
+SET experimental_enable_temp_tables=true
+
 query TTTTT colnames,rowsort
 SHOW REGIONS
 ----
@@ -791,6 +794,14 @@ create database alter_survive_db
 statement ok
 use alter_survive_db
 
+# Including a type and a temp to repro issue #97975. Prior to fixing that, ADD
+# REGION would fail because it couldn't find a temp schema
+statement ok
+create type my_enum as enum ('value1', 'value2');
+
+statement ok
+CREATE TEMP TABLE tbl (a int)
+
 statement error database must have associated regions before a survival goal can be set
 alter database alter_survive_db survive region failure
 
@@ -805,6 +816,9 @@ alter database alter_survive_db add region "ap-southeast-2"
 
 statement ok
 alter database alter_survive_db add region "us-east-1"
+
+statement ok
+drop type my_enum;
 
 # Create some tables to validate that their zone configurations are adjusted appropriately.
 query TT
