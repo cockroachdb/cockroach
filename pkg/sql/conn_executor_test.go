@@ -1782,6 +1782,9 @@ func TestAbortedTxnLocks(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	// TODO(#146238): either remove this or leave a comment for why it's ok.
+	s.SQLConn(t).QueryRow("SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
+
 	var TransactionStatus string
 
 	conn1, err := s.SQLConn(t).Conn(ctx)
