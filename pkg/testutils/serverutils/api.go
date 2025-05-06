@@ -359,6 +359,12 @@ type ApplicationLayerInterface interface {
 	// with verbose method name.
 	GetUnauthenticatedHTTPClient() (http.Client, error)
 
+	// GetUnauthenticatedHTTPClientWithTransport returns an http client and its
+	// corresponding transport configured with the client TLS config required by
+	// the TestServer's configuration. Discourages implementer from using
+	// unauthenticated http connections with verbose method name.
+	GetUnauthenticatedHTTPClientWithTransport() (http.Client, *http.Transport, error)
+
 	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
