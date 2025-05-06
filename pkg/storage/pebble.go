@@ -2051,7 +2051,7 @@ func (p *Pebble) ApproximateDiskBytes(
 
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
-	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
+	return p.db.Compact(context.TODO(), nil, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
 }
 
 // CompactRange implements the Engine interface.
@@ -2069,7 +2069,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	if ek, ok := DecodeEngineKey(end); !ok || ek.Validate() != nil {
 		return errors.Errorf("invalid end key: %q", end)
 	}
-	return p.db.Compact(start, end, true /* parallel */)
+	return p.db.Compact(context.TODO(), start, end, true /* parallel */)
 }
 
 // RegisterFlushCompletedCallback implements the Engine interface.
