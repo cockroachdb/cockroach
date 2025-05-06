@@ -321,9 +321,11 @@ func DecodeRaBitQVectorToSet(
 	if err != nil {
 		return nil, err
 	}
+	// TODO(andyk): Also decode CentroidDotProducts once we support other distance
+	// metrics.
 	vectorSet.CodeCounts = append(vectorSet.CodeCounts, codeCount)
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
-	vectorSet.DotProducts = append(vectorSet.DotProducts, dotProduct)
+	vectorSet.QuantizedDotProducts = append(vectorSet.QuantizedDotProducts, dotProduct)
 	vectorSet.Codes.Data = slices.Grow(vectorSet.Codes.Data, vectorSet.Codes.Width)
 	for range vectorSet.Codes.Width {
 		var codeWord uint64

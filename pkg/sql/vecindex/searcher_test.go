@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -64,7 +65,7 @@ func TestSearcher(t *testing.T) {
 		EncodingType:        catenumpb.SecondaryIndexEncoding,
 	}
 
-	quantizer := quantize.NewUnQuantizer(2)
+	quantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 	store, err := vecstore.NewWithColumnID(
 		ctx,
 		internalDB,
