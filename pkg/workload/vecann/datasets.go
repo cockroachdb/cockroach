@@ -84,8 +84,9 @@ type DatasetLoader struct {
 // Load checks whether the given dataset has been downloaded. If not, it
 // downloads it from the GCP bucket and unzips it into the fixtures folder. It
 // returns the dataset once it's cached locally.
-func (dl *DatasetLoader) Load(ctx context.Context) error {
-	if err := dl.ensureCacheFolder(); err != nil {
+func (dl *DatasetLoader) Load(ctx context.Context) (err error) {
+	dl.CacheFolder, err = EnsureCacheFolder(dl.CacheFolder)
+	if err != nil {
 		return err
 	}
 
@@ -93,7 +94,7 @@ func (dl *DatasetLoader) Load(ctx context.Context) error {
 	searchDataFileName := fmt.Sprintf("%s/%s.search.gob", dl.CacheFolder, dl.DatasetName)
 
 	// If dataset file has already been downloaded, load it from disk into memory.
-	_, err := os.Stat(dataFileName)
+	_, err = os.Stat(dataFileName)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
 			return errors.Wrapf(err, "getting OS stats for %s", dataFileName)
@@ -131,15 +132,16 @@ func (dl *DatasetLoader) Load(ctx context.Context) error {
 // LoadForSearch is similar to Load, except that it only loads up the subset of
 // data needed to search the index, not to build it. This includes the Test
 // vectors and neighbor information, but not the Train vectors.
-func (dl *DatasetLoader) LoadForSearch(ctx context.Context) error {
-	if err := dl.ensureCacheFolder(); err != nil {
+func (dl *DatasetLoader) LoadForSearch(ctx context.Context) (err error) {
+	dl.CacheFolder, err = EnsureCacheFolder(dl.CacheFolder)
+	if err != nil {
 		return err
 	}
 
 	fileName := fmt.Sprintf("%s/%s.search.gob", dl.CacheFolder, dl.DatasetName)
 
 	// If search data is not cached, download it now.
-	_, err := os.Stat(fileName)
+	_, err = os.Stat(fileName)
 	if err != nil {
 		if !oserror.IsNotExist(err) {
 			return errors.Wrapf(err, "getting search data file %s", fileName)
@@ -389,23 +391,22 @@ func (dl *DatasetLoader) loadFromDisk(ctx context.Context) error {
 	return nil
 }
 
-// ensureCacheFolder ensures that the dl.CacheFolder field has been set to the
-// directory that caches workload datasets. The default is set to
-// ~/.cache/workload-datasets, if not already specified. The directory is
-// created, it not already present.
-func (dl *DatasetLoader) ensureCacheFolder() error {
-	if dl.CacheFolder == "" {
+// EnsureCacheFolder creates the given directory path if it is not already
+// present. If the path is the empty string, then ~/.cache/workload-datasets is
+// used as the default. EnsureCacheFolder returns the path of the cache folder.
+func EnsureCacheFolder(path string) (string, error) {
+	if path == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return errors.Wrapf(err, "getting home directory")
+			return "", errors.Wrapf(err, "getting home directory")
 		}
-		dl.CacheFolder = fmt.Sprintf("%s/.cache/workload-datasets", homeDir)
+		path = fmt.Sprintf("%s/.cache/workload-datasets", homeDir)
 	}
 
 	// Create the cache folder.
-	if err := os.MkdirAll(dl.CacheFolder, os.ModePerm); err != nil {
-		return errors.Wrapf(err, "creating cache folder")
+	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		return "", errors.Wrapf(err, "creating cache folder")
 	}
 
-	return nil
+	return path, nil
 }
