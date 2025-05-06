@@ -415,7 +415,7 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	conflictingTxns := make([]txnInConflict, 0, 4)
+	var conflictingTxns []txnInConflict
 
 	// Start the server. (One node is sufficient; the outliers system is
 	// currently in-memory only.)
@@ -443,19 +443,25 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
 
 	connDefault.Exec(t, "SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'")
+	// Disable write buffering since this test assumes that
+	// kvpb.TransactionRetryWithProtoRefreshError.ConflictingTxn is populated
+	// which is only the case for some retry reasons (like REASON_INTENT during
+	// a refresh) that doesn't happen with write buffering.
+	// TODO(#146238): confirm whether this behavior is expected, and perhaps
+	// adjust the test to be agnostic to buffered writes.
+	connDefault.Exec(t, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
 
 	// Set up myUsers table with 2 users.
-	connDefault.Exec(t, "CREATE TABLE myUsers (name STRING, city STRING)")
-	connDefault.Exec(t, "INSERT INTO myUsers VALUES ('WENDY', 'NYC'), ('NOVI', 'TORONTO')")
+	connDefault.Exec(t, "CREATE TABLE myUsers (k INT PRIMARY KEY, name STRING, city STRING)")
+	connDefault.Exec(t, "INSERT INTO myUsers VALUES (1, 'WENDY', 'NYC'), (2, 'NOVI', 'TORONTO')")
 
 	conn1.Exec(t, "SET SESSION application_name=$1", appName)
 	conn2.Exec(t, "SET SESSION application_name=$1", appName)
 
-	// The first 2 recorded txns are setting the session name.
-	conflictingTxns = conflictingTxns[2:]
-
 	testutils.RunTrueAndFalse(t, "enable recording SERIALIZATION_CONFLICT events", func(t *testing.T, enabled bool) {
 		contention.EnableSerializationConflictEvents.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, enabled)
+		// Ignore any recorded txns before the test begins.
+		conflictingTxns = conflictingTxns[:0]
 		// We will simulate a 40001 transaction retry error due to conflicting locks.
 		// Transaction 1 will fail on COMMIT.
 		tx1 := conn1.Begin(t)
@@ -518,6 +524,7 @@ AND query = 'SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ 
 		var txRetryErr *kvpb.TransactionRetryWithProtoRefreshError
 		require.Error(t, conflictingTxns[0].err)
 		require.ErrorAs(t, conflictingTxns[0].err, &txRetryErr)
+		require.NotNil(t, txRetryErr.ConflictingTxn)
 		conflictingTxnID := txRetryErr.ConflictingTxn.ID
 
 		if enabled {
@@ -557,8 +564,6 @@ WHERE contention_type = 'SERIALIZATION_CONFLICT'`)
 			require.NoError(t, err)
 			require.False(t, rows.Next())
 		}
-
-		conflictingTxns = make([]txnInConflict, 0, 2)
 	})
 }
 
