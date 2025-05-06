@@ -298,18 +298,12 @@ CREATE TABLE t_computed (
 )
 
 # An insert routine created with use_improved_routine_dependency_tracking = true
-# should not depend on columns other than the target column "a".
-statement ok
-SET use_improved_routine_dependency_tracking = true;
-
+# (the default) should not depend on columns other than the target column "a".
 statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
   INSERT INTO t_computed VALUES (100);
   SELECT 1;
 $$;
-
-statement ok
-RESET use_improved_routine_dependency_tracking;
 
 statement ok
 SELECT f145098();
@@ -415,16 +409,10 @@ CREATE TABLE t_hash_sharded (
 )
 
 statement ok
-SET use_improved_routine_dependency_tracking = true;
-
-statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
   INSERT INTO t_hash_sharded VALUES (100) RETURNING crdb_internal_a_shard_16;
   SELECT 1;
 $$;
-
-statement ok
-RESET use_improved_routine_dependency_tracking;
 
 statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
 DROP INDEX i;

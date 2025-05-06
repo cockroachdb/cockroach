@@ -574,15 +574,9 @@ statement ok
 DROP PROCEDURE proc_select_145100
 
 statement ok
-SET use_improved_routine_dependency_tracking = true;
-
-statement ok
 CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
   INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
 $$;
-
-statement ok
-RESET use_improved_routine_dependency_tracking;
 
 statement ok
 DROP INDEX tab_145100@tab_145100_i_idx
