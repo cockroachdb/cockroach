@@ -1,5 +1,8 @@
 # LogicTest: local-read-committed
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # This test uses local-read-committed so that it can also test locking behavior
 # with READ COMMITTED transactions. However, we'll use a default of SERIALIZABLE
 # for all transactions.
@@ -55,6 +58,9 @@ let $root_session
 SHOW session_id
 
 user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
 
 statement ok
 SET default_transaction_isolation = 'SERIALIZABLE'
