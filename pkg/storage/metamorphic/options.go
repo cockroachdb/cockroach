@@ -127,7 +127,7 @@ func randomOptions() *pebble.Options {
 	opts.MemTableSize = 1 << rngIntRange(rng, 11, 28)
 	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
 	maxConcurrentCompactions := int(rngIntRange(rng, 1, 4))
-	opts.MaxConcurrentCompactions = func() int { return maxConcurrentCompactions }
+	opts.CompactionConcurrencyRange = func() (lower, upper int) { return 1, maxConcurrentCompactions }
 
 	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
 	defer opts.Cache.Unref()
