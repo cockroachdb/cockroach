@@ -618,8 +618,8 @@ github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 h1:qVTb3XEv+7VVj
 github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40/go.mod h1:cllxeV+TYc387/XzQRnDg6YThHoDzFewovWffzAm37Q=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8 h1:Hli+oX84dKq44sLVCcsGKqifm5Lg9J8VoJ2P3h9iPdI=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8/go.mod h1:75wnig8+TF6vst9hChkpcFO7YrRLddouJ5is8uqpfv0=
-github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2 h1:8Vfw2iNEpYIV6aLtMwT5UOGuPmp9MKlEKWKFTuB+MPU=
-github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2/go.mod h1:P9WiZOdQ1R/ZZDL0WzF5wlyRvrjtfhNOwMZymFpBwjE=
+github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410 h1:GuIAxxl30gmd9m7ct6fgYb49GUv8GAxICU5VfU9GRvc=
+github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410/go.mod h1:P9WiZOdQ1R/ZZDL0WzF5wlyRvrjtfhNOwMZymFpBwjE=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82 h1:8htEd1lLILqfjKardWfKKGgXVCs0WmcgEj9cXnmcuos=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82/go.mod h1:+bhevpN4bd6bstiRREkJDaMWZR3lTe5ypydTtXgf7GU=
 github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c h1:fL+zfQ88TclMTv0pWlHhe3z+rZvb9CpyCp+fFQSN2Ys=

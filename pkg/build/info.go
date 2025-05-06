@@ -116,7 +116,7 @@ func VersionForURLs() string {
 		if phaseAndOrdinal <= "alpha.1" {
 			return "dev"
 		}
-	} else if parsedVersionTxt.IsCustomOrNightlyBuild() {
+	} else if parsedVersionTxt.IsCustomOrAdhocBuild() {
 		return "dev"
 	}
 	return parsedVersionTxt.Major().String()

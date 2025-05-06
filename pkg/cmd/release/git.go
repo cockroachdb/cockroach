@@ -10,17 +10,16 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"sort"
-	"strconv"
+	"slices"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/cockroachdb/version"
 )
 
 const remoteOrigin = "origin"
 
-func findVersions(text string) []*semver.Version {
-	var versions []*semver.Version
+func findVersions(text string) []version.Version {
+	var versions []version.Version
 	for _, line := range strings.Split(text, "\n") {
 		trimmedLine := strings.TrimSpace(line)
 		if trimmedLine == "" {
@@ -30,7 +29,7 @@ func findVersions(text string) []*semver.Version {
 		if strings.Contains(trimmedLine, "-alpha.0000") {
 			continue
 		}
-		version, err := semver.NewVersion(trimmedLine)
+		version, err := version.Parse(trimmedLine)
 		if err != nil {
 			fmt.Printf("WARNING: cannot parse version '%s'\n", trimmedLine)
 			continue
@@ -59,52 +58,36 @@ func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, 
 		return "", fmt.Errorf("zero versions found")
 	}
 	if ignorePrereleases {
-		var filteredVersions []*semver.Version
+		var filteredVersions []version.Version
 		for _, v := range versions {
-			if v.Prerelease() == "" {
+			if !v.IsPrerelease() {
 				filteredVersions = append(filteredVersions, v)
 			}
 		}
 		versions = filteredVersions
 	}
-	sort.Sort(semver.Collection(versions))
-	return versions[len(versions)-1].Original(), nil
+	slices.SortFunc(versions, func(a, b version.Version) int {
+		return a.Compare(b)
+	})
+	return versions[len(versions)-1].String(), nil
 }
 
 // bumpVersion increases the patch release version (the last digit) of a given version.
 // For pre-release versions, the pre-release part is bumped.
-func bumpVersion(version string) (string, error) {
+func bumpVersion(versionStr string) (version.Version, error) {
 	// special case for versions like v23.2.0-alpha.00000000
-	if strings.HasSuffix(version, "-alpha.00000000") {
+	if strings.HasSuffix(versionStr, "-alpha.00000000") {
 		// reset the version to something we can parse and bump
-		version = strings.TrimSuffix(version, ".00000000") + ".0"
+		versionStr = strings.TrimSuffix(versionStr, ".00000000") + ".0"
 	}
-	semanticVersion, err := semver.NewVersion(version)
+	ver, err := version.Parse(versionStr)
 	if err != nil {
-		return "", fmt.Errorf("cannot parse version: %w", err)
+		return version.Version{}, fmt.Errorf("cannot parse version: %w", err)
 	}
-	var nextVersion semver.Version
-	if semanticVersion.Prerelease() == "" {
-		// For regular releases we can use IncPatch without any modification
-		nextVersion = semanticVersion.IncPatch()
-	} else {
-		// For pre-releases (alpha, beta, rc), we need to implement our own bumper. It takes the last digit and increments it.
-		pre := semanticVersion.Prerelease()
-		preType, digit, found := strings.Cut(pre, ".")
-		if !found {
-			return "", fmt.Errorf("parsing prerelease %s", semanticVersion.Original())
-		}
-		preVersion, err := strconv.Atoi(digit)
-		if err != nil {
-			return "", fmt.Errorf("atoi prerelease error %s: %w", semanticVersion.Original(), err)
-		}
-		preVersion++
-		nextVersion, err = semanticVersion.SetPrerelease(fmt.Sprintf("%s.%d", preType, preVersion))
-		if err != nil {
-			return "", fmt.Errorf("bumping prerelease %s: %w", semanticVersion.Original(), err)
-		}
+	if ver.IsPrerelease() {
+		return ver.IncPreRelease()
 	}
-	return nextVersion.Original(), nil
+	return ver.IncPatch()
 }
 
 // listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
