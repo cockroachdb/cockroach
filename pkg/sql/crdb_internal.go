@@ -6539,6 +6539,54 @@ CREATE TABLE crdb_internal.invalid_objects (
 				return err
 			}
 
+			// Validate the system.comments table.
+			txn := p.InternalSQLTxn()
+			rows, err := txn.QueryIterator(ctx, "scan-comments-table",
+				txn.KV(), "SELECT type, object_id, sub_id FROM system.comments")
+			if err != nil {
+				return err
+			}
+			defer func() {
+				if err := rows.Close(); err != nil {
+					log.Infof(ctx, "error closing rows: %s", err)
+				}
+			}()
+			for {
+				hasMore, err := rows.Next(ctx)
+				if err != nil {
+					return err
+				}
+				if !hasMore {
+					break
+				}
+				datums := rows.Cur()
+				commentType := tree.MustBeDInt(datums[0])
+				objectID := tree.MustBeDInt(datums[1])
+				subID := tree.MustBeDInt(datums[2])
+				cmtKey := catalogkeys.MakeCommentKey(uint32(objectID), uint32(subID), catalogkeys.CommentType(commentType))
+				// Validate the objects exist for the comments.
+				desc := c.LookupDescriptor(descpb.ID(objectID))
+				if desc == nil {
+					missingDescErr := errors.AssertionFailedf("comment exists for non-existent descriptor %d", objectID)
+					if err := addRow(
+						tree.NewDInt(objectID),
+						tree.NewDString(""),
+						tree.NewDString(""),
+						tree.NewDString(""),
+						tree.NewDString(missingDescErr.Error()),
+						tree.NewDString(missingDescErr.Error())); err != nil {
+						return err
+					}
+					continue
+				}
+				// Validate the comment key is sane.
+				if validationErr := cmtKey.Validate(); validationErr != nil {
+					if err := addValidationErrorRow(desc, validationErr, lCtx); err != nil {
+						return err
+					}
+				}
+			}
+
 			return c.ForEachNamespaceEntry(func(ne nstree.NamespaceEntry) error {
 				if dbContext != nil {
 					if ne.GetParentID() == descpb.InvalidID {

@@ -495,6 +495,11 @@ func (tc *Collection) WriteCommentToBatch(
 		}
 	}
 
+	// Validate the values being used when updating the table.
+	if !catalogkeys.IsValidCommentType(key.CommentType) {
+		return errors.AssertionFailedf("invalid comment type %d", key.CommentType)
+	}
+
 	var err error
 	if expValues == nil {
 		err = cmtWriter.Insert(ctx, b, kvTrace, values...)
