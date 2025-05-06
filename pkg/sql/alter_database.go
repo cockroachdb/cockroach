@@ -491,29 +491,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
 			return nil, err
 		}
-		tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
-		for _, t := range tablesToClean {
-			livenessQuery := fmt.Sprintf(
-				`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = '%s' AND 
-          crdb_internal.sql_liveness_is_alive(session_id)`, t, n.Region)
-			row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
-				sessiondata.NodeUserSessionDataOverride, livenessQuery)
-			if err != nil {
-				return nil, err
-			}
-			// Block dropping n.Region if any associated session is active.
-			if tree.MustBeDBool(row[0]) {
-				return nil, errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidDatabaseDefinition,
-						"cannot drop region %q",
-						n.Region,
-					),
-					"You must not have any active sessions that are in this region. "+
-						"Ensure that there no nodes that still belong to region %q", n.Region,
-				)
-			}
-		}
+
 		// For the region_liveness table, we can just safely remove the reference
 		// (if any) of the dropping region from the table.
 		if _, err := p.ExecEx(ctx, "remove-region-liveness-ref",
@@ -615,10 +593,37 @@ func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region t
 		})
 		return errors.WithHintf(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"cannot drop region %v from the system database while that region is still in use",
+				"cannot drop region %q from the system database while that region is still in use",
 				&region,
 			), "region is in use by databases: %v", &databases)
 	}
+
+	tablesToClean := []string{"sqlliveness", "lease", "sql_instances"}
+	for _, t := range tablesToClean {
+		// Use the synchronous version of sql_liveness_is_alive to make sure
+		// data is fresh.
+		livenessQuery := fmt.Sprintf(
+			`SELECT count(*) > 0 FROM system.%s WHERE crdb_region = $1 AND
+          crdb_internal.sql_liveness_is_alive(session_id, true)`, t)
+		row, err := p.QueryRowEx(ctx, "check-session-liveness-for-region",
+			sessiondata.NodeUserSessionDataOverride, livenessQuery, region)
+		if err != nil {
+			return err
+		}
+		// Block dropping n.Region if any associated session is active.
+		if tree.MustBeDBool(row[0]) {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"cannot drop region %q from the system database while there are live nodes in that region",
+					region,
+				),
+				"You must not have any active sessions that are in this region. "+
+					"Ensure that there no nodes that still belong to region %q", region,
+			)
+		}
+	}
+
 	return nil
 }
 
