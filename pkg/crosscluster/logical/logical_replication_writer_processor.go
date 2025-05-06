@@ -114,7 +114,9 @@ var immediateModeWriter = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.immediate_mode_writer",
 	"the writer to use when in immediate mode",
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeSQL), string(writerTypeLegacyKV), string(writerTypeCRUD)),
+	// TODO(jeffswenson): re-enable the SQL writer once tombstone handling is fixed
+	// metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeSQL), string(writerTypeLegacyKV), string(writerTypeCRUD)),
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(writerTypeLegacyKV)),
 	settings.WithValidateString(func(sv *settings.Values, val string) error {
 		if val != string(writerTypeSQL) && val != string(writerTypeLegacyKV) && val != string(writerTypeCRUD) {
 			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)
@@ -783,12 +785,7 @@ func getWriterType(
 ) (writerType, error) {
 	switch mode {
 	case jobspb.LogicalReplicationDetails_Immediate:
-		// Require v25.2 to use the sql writer by default to ensure that the
-		// KV origin timestamp validation is available on all nodes.
-		if settings.Version.IsActive(ctx, clusterversion.V25_2) {
-			return writerType(immediateModeWriter.Get(&settings.SV)), nil
-		}
-		return writerTypeSQL, nil
+		return writerType(immediateModeWriter.Get(&settings.SV)), nil
 	case jobspb.LogicalReplicationDetails_Validated:
 		return writerTypeSQL, nil
 	default:

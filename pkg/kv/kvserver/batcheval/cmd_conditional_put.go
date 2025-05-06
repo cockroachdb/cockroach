@@ -61,9 +61,9 @@ func ConditionalPut(
 	originTimestampForValueHeader := h.WriteOptions.GetOriginTimestamp()
 	if args.OriginTimestamp.IsSet() {
 		originTimestampForValueHeader = args.OriginTimestamp
-	}
-	if args.OriginTimestamp.IsSet() && h.WriteOptions.GetOriginTimestamp().IsSet() {
-		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
+		if h.WriteOptions.GetOriginTimestamp().IsSet() && args.OriginTimestamp != h.WriteOptions.GetOriginTimestamp() {
+			return result.Result{}, errors.AssertionFailedf("OriginTimestamp passed via CPut arg must match the origin timestamp in the request header")
+		}
 	}
 
 	opts := storage.ConditionalPutWriteOptions{
