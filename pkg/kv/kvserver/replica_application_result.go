@@ -500,27 +500,31 @@ func (r *Replica) handleLeaseResult(
 
 // stagePendingTruncationRaftMuLocked installs the new RaftTruncatedState,
 // updates the log size, and truncates the raft log cache.
+// TODO(pav-kv): move the truncation functions to replicaLogStorage files.
 func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
+	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
+}
+
+func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
-	ls := r.asLogStorage()
 	// NB: The expected first index can be zero if this proposal is from before
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	pt.isDeltaTrusted = pt.isDeltaTrusted && ls.shMu.trunc.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.trunc.Index+1 == pt.expectedFirstIndex
 
 	// TODO(pav-kv): move this logic to replicaLogStorage type.
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		ls.shMu.trunc = pt.RaftTruncatedState
+		r.shMu.trunc = pt.RaftTruncatedState
 		// Ensure the raft log size is not negative since it isn't persisted between
 		// server restarts.
 		// TODO(pav-kv): should we distrust the log size if it goes negative?
-		ls.shMu.size = max(ls.shMu.size+pt.logDeltaBytes, 0)
-		ls.shMu.lastCheckSize = max(ls.shMu.lastCheckSize+pt.logDeltaBytes, 0)
+		r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
+		r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
 		if !pt.isDeltaTrusted {
-			ls.shMu.sizeTrusted = false
+			r.shMu.sizeTrusted = false
 		}
 	}()
 
@@ -529,7 +533,7 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	// state matters here. At this point, there can not be a concurrent reader of
 	// the raft log holding only Replica.mu that tries to read the entries below
 	// the new truncated index.
-	r.store.raftEntryCache.Clear(r.RangeID, pt.Index)
+	r.cache.Clear(r.ls.RangeID, pt.Index)
 }
 
 // finalizeTruncationRaftMuLocked is a post-apply handler for the raft log
