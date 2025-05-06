@@ -132,6 +132,7 @@ go_library(
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
         "//pkg/util/buildutil",
+        "//pkg/util/bulk",
         "//pkg/util/cache",
         "//pkg/util/cancelchecker",
         "//pkg/util/cidr",
