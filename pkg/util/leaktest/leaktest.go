@@ -70,6 +70,9 @@ func interestingGoroutines() map[int64]string {
 			// duration of the process.
 			strings.Contains(stack, "log.flushDaemon") ||
 			strings.Contains(stack, "log.signalFlusher") ||
+			// Ignore the goschedstats goroutine that lives for the duration of
+			// the process.
+			strings.Contains(stack, "util/goschedstats.init") ||
 			// Below are the stacks ignored by the upstream leaktest code.
 			strings.Contains(stack, "testing.Main(") ||
 			strings.Contains(stack, "testing.tRunner(") ||
@@ -172,7 +175,7 @@ func AfterTest(t T) func() {
 	}
 }
 
-// diffGoroutines compares the current goroutines with the base snapshort and
+// diffGoroutines compares the current goroutines with the base snapshot and
 // returns an error if they differ.
 func diffGoroutines(base map[int64]string) error {
 	var leaked []string
@@ -188,7 +191,7 @@ func diffGoroutines(base map[int64]string) error {
 	sort.Strings(leaked)
 	var b strings.Builder
 	for _, g := range leaked {
-		b.WriteString(fmt.Sprintf("Leaked goroutine: %v\n\n", g))
+		b.WriteString(fmt.Sprintf("\nLeaked goroutine: %v\n", g))
 	}
 	return errors.Newf("%s", b.String())
 }
