@@ -1,5 +1,12 @@
 # LogicTest: local
 
+# Write buffering changes can influence whether a BatchRequest makes it to the
+# KV server where we populate "kv nodes" information (which determines whether
+# this information is shown on EXPLAIN ANALYZE), so we unconditionally disable
+# it.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false
+
 # Put both columns in a family to avoid column-family randomization changing the
 # plans non-deterministically.
 statement ok
