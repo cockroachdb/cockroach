@@ -160,7 +160,7 @@ will then convert it to the --format requested in the current invocation.
 			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
 				stream, err := tsClient.DumpRaw(context.Background(), req)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "connecting to %s", conn.Target())
 				}
 
 				// Buffer the writes to os.Stdout since we're going to
@@ -190,7 +190,7 @@ will then convert it to the --format requested in the current invocation.
 			}
 			stream, err := tsClient.Dump(context.Background(), req)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "connecting to %s", conn.Target())
 			}
 			recv = stream.Recv
 		} else {
@@ -245,7 +245,7 @@ will then convert it to the --format requested in the current invocation.
 				return w.Flush()
 			}
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
 			}
 			if err := w.Emit(data); err != nil {
 				return err
