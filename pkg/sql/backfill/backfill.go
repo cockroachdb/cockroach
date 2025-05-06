@@ -404,8 +404,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// VectorIndexUpdateHelper in this case.
 		var pm row.PartialIndexUpdateHelper
 		var vh row.VectorIndexUpdateHelper
+		var oth row.OriginTimestampCPutHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, vh, nil, false /* mustValidateOldPKValues */, traceKV,
+			ctx, b, oldValues, updateValues, pm, vh, oth, false /* mustValidateOldPKValues */, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

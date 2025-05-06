@@ -168,7 +168,7 @@ func (ri *Inserter) InsertRow(
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
-	oth *OriginTimestampCPutHelper,
+	oth OriginTimestampCPutHelper,
 	kvOp KVInsertOp,
 	traceKV bool,
 ) error {
