@@ -132,6 +132,7 @@ go_test(
         "sql_row_reader_test.go",
         "sql_row_writer_test.go",
         "table_batch_handler_test.go",
+        "tombstone_updater_test.go",
         "udf_row_processor_test.go",
     ],
     data = glob(["testdata/**"]) + [
