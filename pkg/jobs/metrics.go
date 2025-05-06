@@ -89,6 +89,11 @@ func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		LabeledName: "jobs",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, typeStr,
+			metric.LabelStatus, "currently_running",
+		),
 	}
 
 	switch jt {
@@ -122,6 +127,11 @@ func makeMetaCurrentlyIdle(jt jobspb.Type) metric.Metadata {
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		LabeledName: "jobs",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, typeStr,
+			metric.LabelStatus, "currently_idle",
+		),
 	}
 }
 
@@ -134,6 +144,11 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		LabeledName: "jobs",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "currently_paused",
+		),
 	}
 	switch jt {
 	case jobspb.TypeAutoCreateStats:
@@ -164,7 +179,12 @@ func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.resume",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "completed",
+		),
 	}
 
 	switch jt {
@@ -184,7 +204,12 @@ func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.resume",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "retry_error",
+		),
 	}
 }
 
@@ -196,7 +221,12 @@ func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.resume",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "failed",
+		),
 	}
 
 	switch jt {
@@ -221,7 +251,12 @@ func makeMetaFailOrCancelCompeted(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.fail_or_cancel",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "completed",
+		),
 	}
 }
 
@@ -234,7 +269,12 @@ func makeMetaFailOrCancelRetryError(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.fail_or_cancel",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "retry_error",
+		),
 	}
 }
 
@@ -247,7 +287,12 @@ func makeMetaFailOrCancelFailed(jt jobspb.Type) metric.Metadata {
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
-		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.fail_or_cancel",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, typeStr,
+			metric.LabelStatus, "failed",
+		),
 	}
 }
 
@@ -259,6 +304,10 @@ func makeMetaProtectedCount(jt jobspb.Type) metric.Metadata {
 		Measurement: "records",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		LabeledName: "jobs.protected_record_count",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, typeStr,
+		),
 	}
 }
 
@@ -270,6 +319,10 @@ func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
 		Measurement: "seconds",
 		Unit:        metric.Unit_SECONDS,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+		LabeledName: "jobs.protected_age_sec",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, typeStr,
+		),
 	}
 
 	switch jt {
@@ -290,6 +343,10 @@ func makeMetaExpiredPTS(jt jobspb.Type) metric.Metadata {
 		Measurement: "records",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
+		LabeledName: "jobs.expired_pts_records",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, typeStr,
+		),
 	}
 }
 
