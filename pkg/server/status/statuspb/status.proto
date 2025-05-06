@@ -92,6 +92,8 @@ message NodeStatus {
 // A HealthAlert is an undesired condition detected by a server which should be
 // exposed to the operators.
 message HealthAlert {
+  option (gogoproto.goproto_stringer) = false;
+
   // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
   int32 store_id = 1 [
     // NB: trying to make this nullable does not work with the custom type. You need a
@@ -105,11 +107,17 @@ message HealthAlert {
     NETWORK = 1;
   }
   Category category = 2;
-  string description = 3;
+  // SafeDescription must not contain PII as it will be unredacted in logs.
+  string safe_description = 3 [
+    (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString",
+    (gogoproto.nullable) = false
+  ];
   double value = 4;
 }
 
 // HealthCheckResult holds a number of HealthAlerts.
 message HealthCheckResult{
+  option (gogoproto.goproto_stringer) = false;
+
   repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
 }
