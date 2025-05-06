@@ -165,11 +165,6 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings`
 
 const startupScriptCron = `
-# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
-systemctl stop unattended-upgrades
-sudo rm -rf /var/log/unattended-upgrades
-apt-get purge -y unattended-upgrades
-
 {{ if not .EnableCron }}
 systemctl stop cron
 systemctl mask cron
@@ -197,7 +192,12 @@ echo "startup script starting: $(date -u)"
 if [ -e {{ .DisksInitializedFile }} ]; then
 	echo "Already initialized, exiting."
 	exit 0
-fi`
+fi
+
+# Uninstall some packages to prevent them running cronjobs and similar jobs in parallel
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades`
 
 const startupScriptHostname = `
 # set hostname according to the name used by roachprod. There's host
@@ -286,6 +286,7 @@ sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
 {{ end }}
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo sed -i 's/TCPKeepAlive no/TCPKeepAlive yes/g' /etc/ssh/sshd_config
 
 sudo service sshd restart
 sudo service ssh restart`
