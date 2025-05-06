@@ -180,24 +180,29 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 // available.
 type compressionAlgorithm int64
 
+// These values end up being the underlying value of the cluster setting, so
+// they must be stable across releases.
 const (
 	compressionAlgorithmSnappy compressionAlgorithm = 1
 	compressionAlgorithmZstd   compressionAlgorithm = 2
 	compressionAlgorithmNone   compressionAlgorithm = 3
+	compressionAlgorithmMinLZ  compressionAlgorithm = 4
 )
+
+var compressionAlgorithmToString = map[compressionAlgorithm]string{
+	compressionAlgorithmSnappy: "snappy",
+	compressionAlgorithmMinLZ:  "minlz",
+	compressionAlgorithmNone:   "none",
+	compressionAlgorithmZstd:   "zstd",
+}
 
 // String implements fmt.Stringer for CompressionAlgorithm.
 func (c compressionAlgorithm) String() string {
-	switch c {
-	case compressionAlgorithmSnappy:
-		return "snappy"
-	case compressionAlgorithmZstd:
-		return "zstd"
-	case compressionAlgorithmNone:
-		return "none"
-	default:
-		panic(errors.Errorf("unknown compression type: %d", c))
+	str := compressionAlgorithmToString[c]
+	if str == "" {
+		panic(errors.Errorf("invalid compression type: %d", c))
 	}
+	return str
 }
 
 // RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
@@ -214,11 +219,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 		// will need to override it because they depend on a deterministic sstable
 		// size.
 		defaultValue.String(),
-		map[compressionAlgorithm]string{
-			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
-			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
-			compressionAlgorithmNone:   compressionAlgorithmNone.String(),
-		},
+		compressionAlgorithmToString,
 		settings.WithPublic,
 	)
 }
@@ -269,6 +270,8 @@ func getCompressionAlgorithm(
 		return pebble.ZstdCompression
 	case compressionAlgorithmNone:
 		return pebble.NoCompression
+	case compressionAlgorithmMinLZ:
+		return pebble.MinLZCompression
 	default:
 		return pebble.DefaultCompression
 	}
