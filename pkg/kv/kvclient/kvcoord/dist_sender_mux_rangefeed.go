@@ -455,72 +455,77 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 	ctx context.Context, receiver muxRangeFeedEventReceiver, ms *muxStream,
 ) error {
 	for {
-		event, err := receiver.Recv()
-		if err != nil {
-			return err
-		}
-
-		active := ms.lookupStream(event.StreamID)
-
-		// The stream may already have terminated. That's fine -- we may have
-		// encountered range split or similar rangefeed error, causing the caller to
-		// exit (and terminate this stream), but the server side stream termination
-		// is async and probabilistic (rangefeed registration output loop may have a
-		// checkpoint event available, *and* it may have context cancellation, but
-		// which one executes is a coin flip) and so it is possible that we may see
-		// additional event(s) arriving for a stream that is no longer active.
-		if active == nil {
-			if log.V(1) {
-				log.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
-			}
-			continue
-		}
-
-		if m.cfg.knobs.onRangefeedEvent != nil {
-			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, event.StreamID, &event.RangeFeedEvent)
-			if err != nil {
-				return err
-			}
-			if skip {
-				continue
-			}
-		}
-
-		switch t := event.GetValue().(type) {
-		case *kvpb.RangeFeedCheckpoint:
-			if t.Span.Contains(active.Span) {
-				// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
-				if active.catchupRes != nil {
-					active.releaseCatchupScan()
-				}
-				// Note that this timestamp means that all rows in the span with
-				// writes at or before the timestamp have now been seen. The
-				// Timestamp field in the request is exclusive, meaning if we send
-				// the request with exactly the ResolveTS, we'll see only rows after
-				// that timestamp.
-				active.startAfter.Forward(t.ResolvedTS)
-			}
-		case *kvpb.RangeFeedError:
-			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
-			if active.catchupRes != nil {
-				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
-			}
-			ms.streams.Delete(event.StreamID)
-			// Restart rangefeed on another goroutine. Restart might be a bit
-			// expensive, particularly if we have to resolve span.  We do not want
-			// to block receiveEventsFromNode for too long.
-			m.g.GoCtx(func(ctx context.Context) error {
-				return m.restartActiveRangeFeed(ctx, active, t.Error.GoError())
-			})
-			continue
-		}
-
-		active.onRangeEvent(ms.nodeID, event.RangeID, &event.RangeFeedEvent)
-		msg := RangeFeedMessage{RangeFeedEvent: &event.RangeFeedEvent, RegisteredSpan: active.Span}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case m.eventCh <- msg:
+		default:
+			event, err := receiver.Recv()
+			if err != nil {
+				return err
+			}
+
+			active := ms.lookupStream(event.StreamID)
+
+			// The stream may already have terminated. That's fine -- we may have
+			// encountered range split or similar rangefeed error, causing the caller to
+			// exit (and terminate this stream), but the server side stream termination
+			// is async and probabilistic (rangefeed registration output loop may have a
+			// checkpoint event available, *and* it may have context cancellation, but
+			// which one executes is a coin flip) and so it is possible that we may see
+			// additional event(s) arriving for a stream that is no longer active.
+			if active == nil {
+				if log.V(1) {
+					log.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
+				}
+				continue
+			}
+
+			if m.cfg.knobs.onRangefeedEvent != nil {
+				skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, event.StreamID, &event.RangeFeedEvent)
+				if err != nil {
+					return err
+				}
+				if skip {
+					continue
+				}
+			}
+
+			switch t := event.GetValue().(type) {
+			case *kvpb.RangeFeedCheckpoint:
+				if t.Span.Contains(active.Span) {
+					// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
+					if active.catchupRes != nil {
+						active.releaseCatchupScan()
+					}
+					// Note that this timestamp means that all rows in the span with
+					// writes at or before the timestamp have now been seen. The
+					// Timestamp field in the request is exclusive, meaning if we send
+					// the request with exactly the ResolveTS, we'll see only rows after
+					// that timestamp.
+					active.startAfter.Forward(t.ResolvedTS)
+				}
+			case *kvpb.RangeFeedError:
+				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
+				if active.catchupRes != nil {
+					m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
+				}
+				ms.streams.Delete(event.StreamID)
+				// Restart rangefeed on another goroutine. Restart might be a bit
+				// expensive, particularly if we have to resolve span.  We do not want
+				// to block receiveEventsFromNode for too long.
+				m.g.GoCtx(func(ctx context.Context) error {
+					return m.restartActiveRangeFeed(ctx, active, t.Error.GoError())
+				})
+				continue
+			}
+
+			active.onRangeEvent(ms.nodeID, event.RangeID, &event.RangeFeedEvent)
+			msg := RangeFeedMessage{RangeFeedEvent: &event.RangeFeedEvent, RegisteredSpan: active.Span}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case m.eventCh <- msg:
+			}
 		}
 	}
 }
