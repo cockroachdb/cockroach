@@ -62,6 +62,7 @@ go_test(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/commontest",
         "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/vecdist",
         "//pkg/sql/vecindex/vecencoding",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
