@@ -249,6 +249,13 @@ func GCEVolumeType(volumeType string) Option {
 	}
 }
 
+// GCEVolumeCount sets the volume count when the cluster is on GCE.
+func GCEVolumeCount(volumeCount int) Option {
+	return func(spec *ClusterSpec) {
+		spec.GCE.VolumeCount = volumeCount
+	}
+}
+
 // GCEZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on GCE.
 //
