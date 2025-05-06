@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -198,16 +197,12 @@ func TestBatchHandlerExhaustiveSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 146117)
-
 	testBatchHandlerExhaustive(t, newSqlBatchHandler)
 }
 
 func TestBatchHandlerExhaustiveCrud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 146117)
 
 	testBatchHandlerExhaustive(t, newCrudBatchHandler)
 }
@@ -369,7 +364,6 @@ func testBatchHandlerExhaustive(t *testing.T, factory batchHandlerFactory) {
 		for _, localValue := range localValues {
 			for _, replicationType := range replicationTypes {
 				for _, winLww := range []bool{true, false} {
-
 					if !winLww {
 						if localValue == localValueNull {
 							// If there is no tombstone or local row, then its

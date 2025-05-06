@@ -185,12 +185,19 @@ func (tu *tableUpserter) row(
 		// read, we need to tell the KV layer to acquire the lock explicitly.
 		// - if buffered writes are disabled, then the KV layer will write an
 		// intent which acts as a lock.
+		// DO NOT SUBMIT(jeffswenson): does the legacy sql writer ever hit this path?
 		kvOp := row.PutMustAcquireExclusiveLockOp
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, kvOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, nil, kvOp, traceKV)
 	}
 	if datums[tu.canaryOrdinal] == tree.DNull {
+		var oh *row.OriginTimestampCPutHelper
+		if tu.originTimestamp.IsSet() {
+			oh = &row.OriginTimestampCPutHelper{
+				OriginTimestamp: tu.originTimestamp,
+			}
+		}
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, row.CPutOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, oh, row.CPutOp, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -229,11 +236,12 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oh *row.OriginTimestampCPutHelper,
 	kvOp row.KVInsertOp,
 	traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, nil /* oth */, kvOp, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, oh, kvOp, traceKV); err != nil {
 		return err
 	}
 
