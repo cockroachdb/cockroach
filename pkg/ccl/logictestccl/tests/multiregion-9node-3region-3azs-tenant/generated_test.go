@@ -104,6 +104,13 @@ func TestCCLLogic_multi_region_privileges(
 	runCCLLogicTest(t, "multi_region_privileges")
 }
 
+func TestCCLLogic_multi_region_secondary_tenants_abstractions_allowed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_secondary_tenants_abstractions_allowed")
+}
+
 func TestCCLLogic_multi_region_secondary_tenants_abstractions_disallowed(
 	t *testing.T,
 ) {
