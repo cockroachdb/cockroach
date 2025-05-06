@@ -242,8 +242,15 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		return err
 	}
 
+	var oth *row.OriginTimestampCPutHelper
+	if params.p.SessionData().OriginTimestampForLogicalDataReplication.IsSet() {
+		oth = &row.OriginTimestampCPutHelper{
+			OriginTimestamp: params.p.SessionData().OriginTimestampForLogicalDataReplication,
+		}
+	}
+
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, insertVals, pm, vh, oth, r.traceKV); err != nil {
 		return err
 	}
 
