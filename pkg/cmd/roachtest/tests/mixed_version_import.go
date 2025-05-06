@@ -24,11 +24,13 @@ func registerImportMixedVersions(r registry.Registry) {
 		// backported. This test is fragile because it expects the special
 		// 'workload://' fixtures to be deterministic across versions. A better
 		// version of this test would use actual CSV fixtures.
-		Skip:             "Issue #143870",
-		Name:             "import/mixed-versions",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		Skip:    "Issue #143870",
+		Name:    "import/mixed-versions",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

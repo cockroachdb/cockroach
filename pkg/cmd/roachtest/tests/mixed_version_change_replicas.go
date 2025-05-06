@@ -26,10 +26,12 @@ import (
 
 func registerChangeReplicasMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "change-replicas/mixed-version",
-		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "change-replicas/mixed-version",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,

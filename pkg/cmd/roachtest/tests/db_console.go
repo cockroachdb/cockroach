@@ -199,20 +199,24 @@ func (d *dbConsoleCypressTest) writeCypressFilesToWorkloadNode(ctx context.Conte
 
 func registerDbConsole(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "db-console/mixed-version-cypress",
-		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
+		Name:    "db-console/mixed-version-cypress",
+		Owner:   registry.OwnerObservability,
+		Cluster: r.MakeClusterSpec(5, spec.WorkloadNode()),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypressMixedVersions,
 		Timeout:          2 * time.Hour,
 	})
 	r.Add(registry.TestSpec{
-		Name:             "db-console/cypress",
-		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
+		Name:    "db-console/cypress",
+		Owner:   registry.OwnerObservability,
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
+		// Disabled on IBM because of some nodejs dependencies that are not
+		// available on s390x.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypress,
