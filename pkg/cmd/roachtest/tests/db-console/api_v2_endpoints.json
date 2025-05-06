@@ -1,0 +1,93 @@
+{
+  "endpoints": [
+    {
+      "url": "/api/v2/sessions/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/nodes/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/nodes/{node_id}/ranges/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/ranges/hot/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/ranges/{range_id}/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/health/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/users/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/events/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/databases/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/databases/{database_name}/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/databases/{database_name}/grants/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/databases/{database_name}/tables/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/databases/{database_name}/tables/{table_name}/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/rules/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/sql/",
+      "verb": "POST"
+    },
+    {
+      "url": "/api/v2/database_metadata/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/database_metadata/{database_id}/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/table_metadata/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/table_metadata/{table_id}/",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/api/v2/table_metadata/updatejob/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/grants/databases/{database_id}/",
+      "verb": "GET"
+    },
+    {
+      "url": "/api/v2/grants/tables/{table_id}/",
+      "verb": "GET"
+    }
+  ]
+} 
