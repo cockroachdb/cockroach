@@ -481,3 +481,32 @@ statement ok
 DROP DATABASE database_108751 CASCADE
 
 subtest end
+
+# Test ALTER TYPE when a temp table exists.
+subtest alter_type
+
+statement ok
+USE defaultdb;
+
+statement ok
+SET experimental_enable_temp_tables=on
+
+statement ok
+create type my_enum as enum ('value1', 'value2');
+
+statement ok
+create temporary table tmp_table (id int primary key);
+
+statement ok
+insert into tmp_table values (1), (2), (3);
+
+statement ok
+ALTER TYPE my_enum ADD VALUE 'value3';
+
+statement ok
+DROP TYPE my_enum;
+
+statement ok
+DROP TABLE tmp_table;
+
+subtest end
