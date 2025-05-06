@@ -261,17 +261,24 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 	// Find and validate all required binaries and libraries.
 	initBinariesAndLibraries()
 
-	if roachtestflags.ARM64Probability > 0 {
-		fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", roachtestflags.ARM64Probability)
-	}
-	amd64Probability := 1 - roachtestflags.ARM64Probability
-	if amd64Probability > 0 {
-		fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
-	}
-	if roachtestflags.FIPSProbability > 0 {
-		// N.B. roachtestflags.ARM64Probability < 1, otherwise roachtestflags.FIPSProbability == 0, as per above check.
-		// Hence, amd64Probability > 0 is implied.
-		fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", roachtestflags.FIPSProbability*amd64Probability)
+	if roachtestflags.Cloud == spec.IBM {
+		fmt.Printf("S390x clusters will be provisioned with probability 1\n")
+		if roachtestflags.ARM64Probability > 0 || roachtestflags.FIPSProbability > 0 {
+			fmt.Printf("Warning: despite --metamorphic-(arm64|fips)-probability argument, ARM64 and FIPS clusters will not be provisioned on IBM Cloud!\n")
+		}
+	} else {
+		if roachtestflags.ARM64Probability > 0 {
+			fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", roachtestflags.ARM64Probability)
+		}
+		amd64Probability := 1 - roachtestflags.ARM64Probability
+		if amd64Probability > 0 {
+			fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
+		}
+		if roachtestflags.FIPSProbability > 0 {
+			// N.B. roachtestflags.ARM64Probability < 1, otherwise roachtestflags.FIPSProbability == 0, as per above check.
+			// Hence, amd64Probability > 0 is implied.
+			fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", roachtestflags.FIPSProbability*amd64Probability)
+		}
 	}
 
 	if roachtestflags.SelectProbability > 0 && roachtestflags.SelectProbability < 1 {
