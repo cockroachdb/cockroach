@@ -404,7 +404,7 @@ SELECT count(*) FROM uvw
 user host-cluster-root
 
 statement ok
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '30s'
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '99999s'
 
 user root
 
