@@ -2798,7 +2798,7 @@ func TestGetWriterType(t *testing.T) {
 		)
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
-		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeLegacyKV, wt)
 	})
 
 	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
