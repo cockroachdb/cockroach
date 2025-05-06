@@ -20,6 +20,7 @@ go_library(
         "network_partition.go",
         "node_kill.go",
         "pause_job.go",
+        "probe_ranges.go",
         "register.go",
         "resize.go",
         "session_vars.go",
