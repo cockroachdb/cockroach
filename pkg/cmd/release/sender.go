@@ -12,70 +12,17 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"path/filepath"
-	"strings"
 
 	"github.com/jordan-wright/email"
 )
 
 const (
-	templatePrefixPickSHA           = "pick-sha"
-	templatePrefixPostBlockers      = "post-blockers"
-	templatePrefixPostBlockersAlpha = "post-blockers.alpha"
-
-	templatePrefixPostBlockersDayBeforePrep = "post-blockers.day-before-prep"
-	templatePrefixPostBlockersDayOfPrep     = "post-blockers.day-of-prep"
-	templatePrefixPostBlockersPastPrep      = "post-blockers.past-prep"
-
-	templatePrefixTemplateBlockers = "template-blockers"
-	templatePrefixUpdateVersions   = "update-versions"
+	templatePrefixUpdateVersions = "update-versions"
 )
-
-type messageDataPickSHA struct {
-	Version          string
-	SHA              string
-	TrackingIssue    string
-	TrackingIssueURL htmltemplate.URL
-	DiffURL          htmltemplate.URL
-}
 
 type messageDataUpdateVersions struct {
 	Version string
 	PRs     []htmltemplate.URL
-}
-
-// ProjectBlocker lists the number of blockers per project.
-// This needs to be public in order to be used by the html/template engine.
-type ProjectBlocker struct {
-	ProjectName string
-	NumBlockers int
-}
-
-type messageDataPostBlockers struct {
-	Version           string
-	PrepDate          string
-	ReleaseDate       string
-	TotalBlockers     int
-	BlockersURL       string
-	ReleaseBranch     string
-	ReleaseSeries     string
-	DayBeforePrepDate string
-	NextReleaseDate   string
-	BlockerList       []ProjectBlocker
-
-	// DaysBeforePrep is used to determine which post-blockers email to send.
-	DaysBeforePrep daysBeforePrep
-}
-
-type messageDataCancelReleaseDate struct {
-	Version         string
-	ReleaseSeries   string
-	ReleaseDate     string
-	NextReleaseDate string
-}
-
-type postBlockerTemplateArgs struct {
-	BackportsUseBackboard       bool
-	BackportsWeeklyTriageReview bool
 }
 
 type message struct {
@@ -127,88 +74,6 @@ type sendOpts struct {
 	password     string
 	from         string
 	to           []string
-}
-
-func getPostBlockersTemplate(daysBeforePrep daysBeforePrep) string {
-	if daysBeforePrep == daysBeforePrepDayBefore {
-		return templatePrefixPostBlockersDayBeforePrep
-	}
-	if daysBeforePrep == daysBeforePrepDayOf {
-		return templatePrefixPostBlockersDayOfPrep
-	}
-	// default daysBeforePrepManyDays
-	return templatePrefixPostBlockers
-}
-
-func sendMailPostBlockers(args messageDataPostBlockers, opts sendOpts) error {
-	templatePrefix := getPostBlockersTemplate(args.DaysBeforePrep)
-	// Backport policy:
-	// - stable/production: refer to backboard
-	// - alpha: no need to mention backports
-	// - beta/rc's: backports reviewed during triage meeting
-	backportsUseBackboard := false
-	backportsWeeklyTriageReview := false
-
-	switch {
-	case strings.Contains(args.Version, "-alpha."):
-		// alpha copy is so different that we'll use a completely separate template.
-		templatePrefix = templatePrefixPostBlockersAlpha
-	case
-		strings.Contains(args.Version, "-beta."),
-		strings.Contains(args.Version, "-rc."):
-		backportsWeeklyTriageReview = true
-	default: // stable/production
-		backportsUseBackboard = true
-	}
-
-	data := struct {
-		Args     messageDataPostBlockers
-		Template postBlockerTemplateArgs
-	}{
-		Args: args,
-		Template: postBlockerTemplateArgs{
-			BackportsUseBackboard:       backportsUseBackboard,
-			BackportsWeeklyTriageReview: backportsWeeklyTriageReview,
-		},
-	}
-	template := messageTemplates{
-		SubjectPrefix: templatePrefixPostBlockers,
-		BodyPrefixes:  []string{templatePrefix, templatePrefixTemplateBlockers},
-	}
-	msg, err := newMessage(opts.templatesDir, template, data)
-	if err != nil {
-		return fmt.Errorf("newMessage: %w", err)
-	}
-	return sendmail(msg, opts)
-}
-
-func sendMailCancelReleaseDate(args messageDataCancelReleaseDate, opts sendOpts) error {
-	data := struct {
-		Args messageDataCancelReleaseDate
-	}{
-		Args: args,
-	}
-	template := messageTemplates{
-		SubjectPrefix: templatePrefixPostBlockers,
-		BodyPrefixes:  []string{templatePrefixPostBlockersPastPrep},
-	}
-	msg, err := newMessage(opts.templatesDir, template, data)
-	if err != nil {
-		return fmt.Errorf("newMessage: %w", err)
-	}
-	return sendmail(msg, opts)
-}
-
-func sendMailPickSHA(args messageDataPickSHA, opts sendOpts) error {
-	template := messageTemplates{
-		SubjectPrefix: templatePrefixPickSHA,
-		BodyPrefixes:  []string{templatePrefixPickSHA},
-	}
-	msg, err := newMessage(opts.templatesDir, template, args)
-	if err != nil {
-		return fmt.Errorf("newMessage: %w", err)
-	}
-	return sendmail(msg, opts)
 }
 
 func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts) error {
