@@ -72,9 +72,11 @@ type updateRun struct {
 	regionLocalInfo regionLocalInfoType
 
 	mustValidateOldPKValues bool
+
+	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *updateRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
+func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
@@ -86,13 +88,21 @@ func (r *updateRun) initRowContainer(params runParams, columns colinfo.ResultCol
 	for i := range r.resultRowBuffer {
 		r.resultRowBuffer[i] = tree.DNull
 	}
+
+	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+		r.originTimestampCPutHelper.OriginTimestamp = ots
+	}
 }
 
 func (u *updateNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	u.run.initRowContainer(params, u.columns)
+	u.run.init(params, u.columns)
+
+	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+		u.run.originTimestampCPutHelper.OriginTimestamp = ots
+	}
 
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -242,7 +252,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, r.mustValidateOldPKValues, r.traceKV,
+		params.ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	)
 	if err != nil {
 		return err

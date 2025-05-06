@@ -42,7 +42,7 @@ func (d *deleteSwapNode) startExec(params runParams) error {
 
 	d.run.mustValidateOldPKValues = true
 
-	d.run.initRowContainer(params, d.columns)
+	d.run.init(params, d.columns)
 
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }

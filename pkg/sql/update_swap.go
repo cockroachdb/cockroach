@@ -42,7 +42,7 @@ func (u *updateSwapNode) startExec(params runParams) error {
 
 	u.run.mustValidateOldPKValues = true
 
-	u.run.initRowContainer(params, u.columns)
+	u.run.init(params, u.columns)
 
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
