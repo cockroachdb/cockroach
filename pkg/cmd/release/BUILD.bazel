@@ -5,9 +5,7 @@ go_library(
     srcs = [
         "git.go",
         "main.go",
-        "orchestration.go",
         "sender.go",
-        "set_cockroach_version.go",
         "templates.go",
         "update_brew.go",
         "update_helm.go",
@@ -24,7 +22,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_version//:version",
         "@com_github_jordan_wright_email//:email",
-        "@com_github_masterminds_semver_v3//:semver",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
@@ -49,6 +46,7 @@ go_test(
     embed = [":release_lib"],
     deps = [
         "//pkg/testutils/release",
+        "@com_github_cockroachdb_version//:version",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
