@@ -79,6 +79,7 @@ func distChangefeedFlow(
 	details jobspb.ChangefeedDetails,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
+	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -132,7 +133,7 @@ func distChangefeedFlow(
 		}
 	}
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh, onTracingEvent)
 }
 
 func fetchTableDescriptors(
@@ -230,6 +231,7 @@ func startDistChangefeed(
 	initialHighWater hlc.Timestamp,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
+	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	execCfg := execCtx.ExecCfg()
 	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
@@ -283,6 +285,9 @@ func startDistChangefeed(
 						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
 					}
 					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
+				}
+				if meta.AggregatorEvents != nil && onTracingEvent != nil {
+					onTracingEvent(ctx, meta.AggregatorEvents)
 				}
 				return nil
 			},
