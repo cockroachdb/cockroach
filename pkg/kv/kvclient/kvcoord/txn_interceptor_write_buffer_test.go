@@ -36,6 +36,12 @@ func makeMockTxnWriteBuffer(st *cluster.Settings) (txnWriteBuffer, *mockLockedSe
 	}, mockSender
 }
 
+func getArgs(key roachpb.Key) *kvpb.GetRequest {
+	return &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key},
+	}
+}
+
 func putArgs(key roachpb.Key, value string, seq enginepb.TxnSeq) *kvpb.PutRequest {
 	return &kvpb.PutRequest{
 		RequestHeader: kvpb.RequestHeader{Key: key, Sequence: seq},
@@ -2047,5 +2053,134 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 			require.Equal(t, numCalledBefore, mockSender.NumCalled())
 
 		})
+	}
+}
+
+// BenchmarkTxnWriteBuffer benchmarks txnWriteBuffer.SendLocked(). The test sets
+// up a transaction with an existing buffer and runs a single batch through
+// SendLocked(). The test varies the state of the buffer, the fraction of reads
+// in the batch, as well as the fraction of  reads served from the buffer.
+// TODO(mira): Should we test more cases?
+//  - Batches with requests other than Get and Put.
+//  - Batches that exercise error paths.
+func BenchmarkTxnWriteBuffer(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb.setEnabled(true)
+
+	// The total number of requests in the batch being benchmarked are broken down
+	// into five groups, executed in the order below.
+	// 0. Not included in the batch: previous writes by the same transaction.
+	// 1. Reads served from the buffer (same keys as 0).
+	// 2. Writes in the same transaction and the same batch.
+	// 3. Reads served from the buffer from the same batch (same keys as 2).
+	// 4. Reads not served from the buffer.
+	// 5. Writes not seen by any reads in the batch.
+	numRequests := 100
+	bufferNeedsFlush := []bool{true, false}
+	// The fraction of reads in the benchmarked batch.
+	fractionsReads := []float64{0.0, 0.5, 1.0}
+	// The fraction of the reads in the batch to be served from the buffer.
+	fractionsFromBuffer := []float64{0.0, 0.5, 1.0}
+	// The fraction of reads served from the buffer that come from the same batch.
+	fractionsFromBufferSameBatch := []float64{0.0, 0.5, 1.0}
+	for _, needsFlush := range bufferNeedsFlush {
+		for _, fractionReads := range fractionsReads {
+			for _, fractionFromBuffer := range fractionsFromBuffer {
+				for _, fractionFromBufferSameBatch := range fractionsFromBufferSameBatch {
+					name := fmt.Sprintf(
+						"needs_flush=%v,reads=%2.2f,from_buffer=%2.2f,from_batch=%2.2f", needsFlush,
+						fractionReads*100, fractionFromBuffer*100, fractionFromBufferSameBatch*100,
+					)
+					b.Run(
+						name, func(b *testing.B) {
+							txn := makeTxnProto()
+							ba := &kvpb.BatchRequest{}
+							ba.Header = kvpb.Header{Txn: &txn}
+
+							numReads := int(fractionReads * float64(numRequests))
+							numWrites := numRequests - numReads
+							readsFromBuffer := int(fractionFromBuffer * float64(numReads))
+							readsFromBufferSameBatch := int(fractionFromBufferSameBatch * float64(readsFromBuffer))
+							readsFromPrevBatch := readsFromBuffer - readsFromBufferSameBatch
+
+							// Write to the keys that will later be served from the buffer but
+							// not from the benchmarked batch.
+							for i := 0; i < readsFromPrevBatch; i++ {
+								k := roachpb.Key(fmt.Sprintf("a%d", i))
+								ba.Add(putArgs(k, "test-value", enginepb.TxnSeq(i)))
+							}
+							_, pErr := twb.SendLocked(ctx, ba)
+							if pErr != nil {
+								b.Fatal(pErr)
+							}
+
+							// Create the benchmarked batch.
+							ba = &kvpb.BatchRequest{}
+							ba.Header = kvpb.Header{Txn: &txn}
+							if needsFlush {
+								twb.flushOnNextBatch = true
+							}
+							// Read from the keys that were written above (same transaction,
+							// previous batch).
+							for i := 0; i < readsFromPrevBatch; i++ {
+								k := roachpb.Key(fmt.Sprintf("a%d", i))
+								ba.Add(getArgs(k))
+							}
+							// Write and then read the keys that are served from the buffer
+							// and are in the benchmarked batch.
+							for i := readsFromPrevBatch; i < readsFromPrevBatch + readsFromBufferSameBatch; i++ {
+								k := roachpb.Key(fmt.Sprintf("a%d", i))
+								ba.Add(putArgs(k, "test-value", enginepb.TxnSeq(i)))
+								ba.Add(getArgs(k))
+							}
+							// Add any remaining reads, not served from the buffer.
+							for i := readsFromPrevBatch + readsFromBufferSameBatch; i < numReads; i++ {
+								k := roachpb.Key(fmt.Sprintf("a%d", i))
+								ba.Add(getArgs(k))
+							}
+							// Add any remaining writes, not observed by any reads.
+							for i := readsFromPrevBatch + readsFromBufferSameBatch; i < numWrites; i++ {
+								k := roachpb.Key(fmt.Sprintf("a%d", i))
+								ba.Add(putArgs(k, "test-value", enginepb.TxnSeq(i)))
+							}
+
+							mockSender.MockSend(
+								func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+									br := ba.CreateReply()
+									br.Txn = ba.Txn
+									var resps []kvpb.ResponseUnion
+									for _, req := range ba.Requests {
+										// All reads get responses.
+										if req.GetGet() != nil {
+											resp := kvpb.ResponseUnion{
+												Value: &kvpb.ResponseUnion_Get{
+													Get: &kvpb.GetResponse{
+														Value: &roachpb.Value{RawBytes: []byte("test-value")},
+													},
+												},
+											}
+											resps = append(resps,resp)
+										}
+									}
+									br.Responses = resps
+									return br, nil
+								},
+							)
+
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								_, pErr = twb.SendLocked(ctx, ba)
+								if pErr != nil {
+									b.Fatal(pErr)
+								}
+							}
+						},
+					)
+				}
+			}
+		}
 	}
 }
