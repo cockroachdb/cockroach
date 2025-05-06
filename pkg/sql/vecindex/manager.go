@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -170,7 +171,7 @@ func (m *Manager) GetWithDesc(
 		func() (*cspann.Index, error) {
 			// TODO(drewk): use the config to populate the index options as well.
 			config := index.GetVecConfig()
-			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
+			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed, vecdist.L2Squared)
 			store, err := vecstore.NewWithColumnID(
 				ctx, m.db, quantizer, m.codec, desc, index.GetID(), index.VectorColumnID(),
 			)
@@ -201,7 +202,7 @@ func (m *Manager) Get(
 				return nil, err
 			}
 			// TODO(drewk): use the config to populate the index options as well.
-			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
+			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed, vecdist.L2Squared)
 			store, err := vecstore.New(ctx, m.db, quantizer, m.codec, tableID, indexID)
 			if err != nil {
 				return nil, err

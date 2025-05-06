@@ -44,20 +44,6 @@ func (vs *UnQuantizedVectorSet) Clear(centroid vector.T) {
 	vs.Vectors.Clear()
 }
 
-// ComputeSquaredDistances computes the exact squared distances between the
-// given query vector and the vectors in the set, and writes the distances to
-// the "squaredDistances" slice.
-//
-// The caller is responsible for allocating the "squaredDistances" slice with
-// length equal to the number of vectors in this set.
-func (vs *UnQuantizedVectorSet) ComputeSquaredDistances(
-	queryVector vector.T, squaredDistances []float32,
-) {
-	for i := 0; i < vs.Vectors.Count; i++ {
-		squaredDistances[i] = num32.L2SquaredDistance(queryVector, vs.Vectors.At(i))
-	}
-}
-
 // AddSet adds the given set of vectors to this set.
 func (vs *UnQuantizedVectorSet) AddSet(vectors vector.Set) {
 	vs.Vectors.AddSet(vectors)

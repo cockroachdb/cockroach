@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -242,7 +243,7 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 		return nil
 	}
 
-	quantizer := quantize.NewRaBitQuantizer(m.dims, seed)
+	quantizer := quantize.NewRaBitQuantizer(m.dims, seed, vecdist.L2Squared)
 	if m.store == nil {
 		// Construct empty store if one doesn't yet exist.
 		m.store = memstore.New(quantizer, seed)

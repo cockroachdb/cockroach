@@ -159,7 +159,7 @@ func (p *Partition) Search(
 	// Estimate distances of the data vectors from the query vector.
 	tempSquaredDistances := tempFloats[:count]
 	tempErrorBounds := tempFloats[count : count*2]
-	p.quantizer.EstimateSquaredDistances(
+	p.quantizer.EstimateDistances(
 		w, p.quantizedSet, queryVector, tempSquaredDistances, tempErrorBounds)
 	centroidDistances := p.quantizedSet.GetCentroidDistances()
 

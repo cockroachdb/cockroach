@@ -6,6 +6,7 @@
 package quantize
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -24,6 +25,10 @@ type Quantizer interface {
 	// quantized.
 	GetDims() int
 
+	// GetDistanceMetric specifies the method by which vector similarity is
+	// determined, e.g. Euclidean (L2Squared), InnerProduct, or Cosine.
+	GetDistanceMetric() vecdist.Metric
+
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. The set's centroid is calculated from the
 	// input vectors.
@@ -40,19 +45,20 @@ type Quantizer interface {
 	// number of vectors specified.
 	NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet
 
-	// EstimateSquaredDistances returns the estimated squared distances of the
-	// query vector from each data vector represented in the given quantized
-	// vector set, as well as the error bounds for those distances.
+	// EstimateDistances returns the estimated distances of the query vector from
+	// each data vector represented in the given quantized vector set, as well as
+	// the error bounds for those distances. The quantizer has already been
+	// initialized with the correct distance function to use for the calculation.
 	//
-	// The caller is responsible for allocating the "squaredDistances" and
-	// "errorBounds" slices with length equal to the number of quantized vectors
-	// in "quantizedSet". EstimateSquaredDistances will update the slices with
-	// distances and distance error bounds.
-	EstimateSquaredDistances(
+	// The caller is responsible for allocating the "distances" and "errorBounds"
+	// slices with length equal to the number of quantized vectors in
+	// "quantizedSet". EstimateDistances will update the slices with distances and
+	// distance error bounds.
+	EstimateDistances(
 		w *workspace.T,
 		quantizedSet QuantizedVectorSet,
 		queryVector vector.T,
-		squaredDistances []float32,
+		distances []float32,
 		errorBounds []float32,
 	)
 }

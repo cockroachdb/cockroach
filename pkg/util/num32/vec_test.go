@@ -17,6 +17,27 @@ import (
 var NaN32 = float32(math.NaN())
 var Inf32 = float32(math.Inf(1))
 
+func TestNormalize(t *testing.T) {
+	testCases := []struct {
+		v   []float32
+		res []float32
+	}{
+		{v: []float32{}, res: []float32{}},
+		{v: []float32{0}, res: []float32{1}},
+		{v: []float32{1}, res: []float32{1}},
+		{v: []float32{0, 0}, res: []float32{0.7071, 0.7071}},
+		{v: []float32{0, 1}, res: []float32{0, 1}},
+		{v: []float32{1, 1}, res: []float32{0.7071, 0.7071}},
+		{v: []float32{0, 0, 0}, res: []float32{0.5774, 0.5774, 0.5774}},
+		{v: []float32{1, 2, 3}, res: []float32{0.2673, 0.5345, 0.8018}},
+	}
+
+	for _, tc := range testCases {
+		Normalize(tc.v)
+		require.Equal(t, tc.res, roundFloats(tc.v, 4))
+	}
+}
+
 func TestDistances(t *testing.T) {
 	// Test L1, L2 and L2 squared distances.
 	testCases := []struct {
@@ -78,6 +99,23 @@ func TestDot(t *testing.T) {
 		} else {
 			require.Panics(t, func() { Dot(tc.v1, tc.v2) })
 		}
+	}
+}
+
+func TestSquaredNorm(t *testing.T) {
+	testCases := []struct {
+		v    []float32
+		norm float32
+	}{
+		{v: []float32{}, norm: 0},
+		{v: []float32{1, 2, 3}, norm: 14},
+		{v: []float32{0, 0, 0}, norm: 0},
+		{v: []float32{-1, -2, -3}, norm: 14},
+	}
+
+	for _, tc := range testCases {
+		norm := SquaredNorm(tc.v)
+		require.Equal(t, tc.norm, norm)
 	}
 }
 
@@ -271,6 +309,23 @@ func TestArithmetic(t *testing.T) {
 	}
 }
 
+func TestAddTo(t *testing.T) {
+	testCases := []struct {
+		v   []float32
+		c   float32
+		res []float32
+	}{
+		{v: []float32{}, c: 10, res: []float32{}},
+		{v: []float32{0}, c: 10, res: []float32{10}},
+		{v: []float32{-2, 0, 2}, c: 10, res: []float32{8, 10, 12}},
+	}
+
+	for _, tc := range testCases {
+		AddConst(tc.c, tc.v)
+		require.Equal(t, tc.res, tc.v)
+	}
+}
+
 func TestScale(t *testing.T) {
 	testCases := []struct {
 		v     []float32
@@ -376,4 +431,15 @@ func makeRandomVector(rng *rand.Rand, dims int) []float32 {
 
 func testEqualOrNaN(t *testing.T, v1, v2 float32) {
 	require.True(t, v1 == v2 || (IsNaN(v1) && IsNaN(v2)), "%v != %v", v1, v2)
+}
+
+// roundFloats rounds all float32 values in the slice using the given precision.
+func roundFloats(s []float32, prec int) []float32 {
+	if len(s) == 0 {
+		return s
+	}
+	t := make([]float32, len(s))
+	copy(t, s)
+	Round(t, prec)
+	return t
 }
