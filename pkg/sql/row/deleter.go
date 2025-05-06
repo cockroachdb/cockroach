@@ -140,7 +140,7 @@ func (rd *Deleter) DeleteRow(
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
-	oth *OriginTimestampCPutHelper,
+	oth OriginTimestampCPutHelper,
 	mustValidateOldPKValues bool,
 	traceKV bool,
 ) error {

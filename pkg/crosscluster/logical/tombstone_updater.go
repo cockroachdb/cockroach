@@ -144,7 +144,7 @@ func (tu *tombstoneUpdater) addToBatch(
 		afterRow,
 		ph,
 		vh,
-		&row.OriginTimestampCPutHelper{
+		row.OriginTimestampCPutHelper{
 			OriginTimestamp:    mvccTimestamp,
 			PreviousWasDeleted: true,
 		},

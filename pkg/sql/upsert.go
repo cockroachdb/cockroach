@@ -49,11 +49,21 @@ type upsertRun struct {
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
+
+	originTimestampCPutHelper row.OriginTimestampCPutHelper
+}
+
+func (r *upsertRun) init(params runParams) {
+	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+		r.originTimestampCPutHelper.OriginTimestamp = ots
+	}
 }
 
 func (n *upsertNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+
+	n.run.init(params)
 
 	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -204,7 +214,7 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return r.tw.row(params.ctx, upsertVals, pm, vh, r.traceKV)
+	return r.tw.row(params.ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
 }
 
 // BatchedCount implements the batchedPlanNode interface.

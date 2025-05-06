@@ -18,7 +18,7 @@ UPDATE [104 AS replication_target] SET id = $5::INT8, name = $6::STRING, value =
 
 show-delete table=basic_table
 ----
-DELETE FROM [104 AS replication_target] WHERE (((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES)
+DELETE FROM [104 AS replication_target] WHERE (((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES) RETURNING *
 
 show-select table=basic_table
 ----
@@ -52,7 +52,7 @@ UPDATE [107 AS replication_target] SET id = $7::INT8, title = $8::STRING, descri
 
 show-delete table=tasks
 ----
-DELETE FROM [107 AS replication_target] WHERE (((((id = $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP)
+DELETE FROM [107 AS replication_target] WHERE (((((id = $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP) RETURNING *
 
 show-select table=tasks
 ----
@@ -86,7 +86,7 @@ UPDATE [108 AS replication_target] SET id = $7::INT8, name = $8::STRING, unit_pr
 # NOTE: total_price and discount_price are not included since they are computed.[
 show-delete table=products
 ----
-DELETE FROM [108 AS replication_target] WHERE ((((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $6::TIMESTAMP)
+DELETE FROM [108 AS replication_target] WHERE ((((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $6::TIMESTAMP) RETURNING *
 
 # NOTE: total_price is not included because it is a computed column, but
 # discount_price is included because its part of the primary key.
@@ -137,7 +137,7 @@ UPDATE [109 AS replication_target] SET id = $8::INT8, first_name = $9::STRING, l
 
 show-delete table=employees
 ----
-DELETE FROM [109 AS replication_target] WHERE ((((((id = $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE)
+DELETE FROM [109 AS replication_target] WHERE ((((((id = $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE) RETURNING *
 
 show-select table=employees
 ----
@@ -171,7 +171,7 @@ UPDATE [112 AS replication_target] SET id = $7::UUID, user_id = $8::INT8, event_
 
 show-delete table=user_events
 ----
-DELETE FROM [112 AS replication_target] WHERE (((((id = $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region = $6::@100110)
+DELETE FROM [112 AS replication_target] WHERE (((((id = $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region = $6::@100110) RETURNING *
 
 show-select table=user_events
 ----

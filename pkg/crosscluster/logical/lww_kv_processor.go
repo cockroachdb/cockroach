@@ -493,7 +493,7 @@ func (p *kvTableWriter) insertRow(ctx context.Context, b *kv.Batch, after cdceve
 	// TODO(dt): support partial indexes.
 	var vh row.VectorIndexUpdateHelper
 	// TODO(mw5h, drewk): support vector indexes.
-	oth := &row.OriginTimestampCPutHelper{
+	oth := row.OriginTimestampCPutHelper{
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
@@ -516,7 +516,7 @@ func (p *kvTableWriter) updateRow(
 	// TODO(dt): support partial indexes.
 	var vh row.VectorIndexUpdateHelper
 	// TODO(mw5h, drewk): support vector indexes.
-	oth := &row.OriginTimestampCPutHelper{
+	oth := row.OriginTimestampCPutHelper{
 		OriginTimestamp: after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
 		// and destination clusters.
@@ -540,7 +540,7 @@ func (p *kvTableWriter) deleteRow(
 	// TODO(dt): support partial indexes.
 	var vh row.VectorIndexUpdateHelper
 	// TODO(mw5h, drewk): support vector indexes.
-	oth := &row.OriginTimestampCPutHelper{
+	oth := row.OriginTimestampCPutHelper{
 		PreviousWasDeleted: before.IsDeleted(),
 		OriginTimestamp:    after.MvccTimestamp,
 		// TODO(ssd): We should choose this based by comparing the cluster IDs of the source
