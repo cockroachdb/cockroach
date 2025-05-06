@@ -279,6 +279,7 @@ var tpccMeta = workload.Meta{
 			`fake-time`:                {RuntimeOnly: true},
 			`txn-preamble-file`:        {RuntimeOnly: true},
 			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`literal-implementation`:   {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
