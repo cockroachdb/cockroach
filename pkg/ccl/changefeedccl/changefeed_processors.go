@@ -800,7 +800,7 @@ func (ca *changeAggregator) computeTrailingMetadata(meta *execinfrapb.Changefeed
 	// elements; but we are not interested in flushing potentially large number of events;
 	// all we want to ensure is that any previously observed event (such as resolved timestamp)
 	// has been fully processed.
-	if err := ca.flushBufferedEvents(); err != nil {
+	if err := ca.flushBufferedEvents(ca.Ctx()); err != nil {
 		// This method may be invoked during shutdown when the context already canceled.
 		// Regardless for the cause of this error, there is nothing we can do with it anyway.
 		// All we want to ensure is that if any error occurs we still return correct checkpoint,
@@ -854,23 +854,31 @@ func (ca *changeAggregator) tick() error {
 		}
 		return ca.noteResolvedSpan(resolved)
 	case kvevent.TypeFlush:
-		return ca.flushBufferedEvents()
+		return ca.flushBufferedEvents(ca.Ctx())
 	}
 
 	return nil
 }
 
-func (ca *changeAggregator) flushBufferedEvents() error {
-	if err := ca.eventConsumer.Flush(ca.Ctx()); err != nil {
+func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.aggregator.flush_buffered_events")
+	defer sp.Finish()
+	if err := ca.eventConsumer.Flush(ctx); err != nil {
 		return err
 	}
-	return ca.sink.Flush(ca.Ctx())
+	return ca.sink.Flush(ctx)
 }
 
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
+	ctx, sp := tracing.ChildSpan(ca.Ctx(), "changefeed.aggregator.note_resolved_span")
+	defer sp.Finish()
+
+	if log.V(2) {
+		log.Infof(ca.Ctx(), "resolved span from kv feed: %#v", resolved)
+	}
 	if resolved.Timestamp.IsEmpty() {
 		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
 		// When rangefeed starts running, it emits @0.0 resolved timestamp.
@@ -886,7 +894,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 
 	defer func(ctx context.Context) {
 		maybeLogBehindSpan(ctx, "aggregator", ca.frontier, advanced, sv)
-	}(ca.Ctx())
+	}(ctx)
 
 	// The resolved sliMetric data backs the aggregator_progress metric
 	if advanced {
@@ -912,7 +920,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 				returnErr = errors.CombineErrors(returnErr, err)
 			}
 		}()
-		return ca.flushFrontier()
+		return ca.flushFrontier(ctx)
 	}
 
 	// At a lower frequency we checkpoint specific spans in the job progress
@@ -926,18 +934,20 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 		defer func() {
 			ca.lastSpanFlush = timeutil.Now()
 		}()
-		return ca.flushFrontier()
+		return ca.flushFrontier(ctx)
 	}
 	return returnErr
 }
 
-// flushFrontier flushes sink and emits resolved timestamp if needed.
-func (ca *changeAggregator) flushFrontier() error {
-	// Make sure to the sink before forwarding resolved spans,
+// flushFrontier flushes sink and emits resolved spans to the change frontier.
+func (ca *changeAggregator) flushFrontier(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.aggregator.flush_frontier")
+	defer sp.Finish()
+	// Make sure to flush the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
 	// resolved spans in the job progress.
-	if err := ca.flushBufferedEvents(); err != nil {
+	if err := ca.flushBufferedEvents(ctx); err != nil {
 		return err
 	}
 
@@ -1609,7 +1619,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			continue
 		}
 
-		if err := cf.noteAggregatorProgress(row[0]); err != nil {
+		if err := cf.noteAggregatorProgress(cf.Ctx(), row[0]); err != nil {
 			if log.V(2) {
 				log.Infof(cf.Ctx(), "change frontier moving to draining after error while processing aggregator progress: %v", err)
 			}
@@ -1620,7 +1630,10 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 	return nil, cf.DrainHelper()
 }
 
-func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
+func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.EncDatum) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.note_aggregator_progress")
+	defer sp.Finish()
+
 	if err := d.EnsureDecoded(changefeedResultTypes[0], &cf.a); err != nil {
 		return err
 	}
@@ -1635,7 +1648,7 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
 	if log.V(2) {
-		log.Infof(cf.Ctx(), "progress update from aggregator: %#v", resolvedSpans)
+		log.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
 	}
 
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
@@ -1693,7 +1706,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// all feeds in the scope.
 		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
 
-		return cf.maybeEmitResolved(newResolved)
+		return cf.maybeEmitResolved(cf.Ctx(), newResolved)
 	}
 
 	return nil
@@ -1720,6 +1733,9 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 func (cf *changeFrontier) maybeCheckpointJob(
 	resolvedSpan jobspb.ResolvedSpan, frontierChanged bool,
 ) (bool, error) {
+	ctx, sp := tracing.ChildSpan(cf.Ctx(), "changefeed.frontier.maybe_checkpoint_job")
+	defer sp.Finish()
+
 	// When in a Backfill, the frontier remains unchanged at the backfill boundary
 	// as we receive spans from the scan request at the Backfill Timestamp
 	inBackfill := !frontierChanged && cf.frontier.InBackfill(resolvedSpan)
@@ -1750,11 +1766,15 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
+<<<<<<< HEAD
 		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
+=======
+		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint, cf.evalCtx.Settings.Version)
+>>>>>>> d1adfc9d000 (changefeedccl: add more tracing spans)
 		if err != nil {
 			return false, err
 		}
-		cf.js.checkpointCompleted(cf.Ctx(), timeutil.Since(checkpointStart))
+		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 		return updated, nil
 	}
 
@@ -1764,8 +1784,12 @@ func (cf *changeFrontier) maybeCheckpointJob(
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	ctx context.Context,
+	frontier hlc.Timestamp,
+	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 ) (bool, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
+	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
 	if cf.knobs.RaiseRetryableError != nil {
@@ -1799,8 +1823,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
 
-			if ptsUpdated, err = cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
-				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
+			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
+				log.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
 			}
 
@@ -1845,6 +1869,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 func (cf *changeFrontier) manageProtectedTimestamps(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) (updated bool, err error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.manage_protected_timestamps")
+	defer sp.Finish()
+
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
@@ -1934,7 +1961,7 @@ func (cf *changeFrontier) remakePTSRecord(
 	return nil
 }
 
-func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
+func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc.Timestamp) error {
 	if cf.freqEmitResolved == emitNoResolved || newResolved.IsEmpty() {
 		return nil
 	}
@@ -1943,7 +1970,7 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	if !shouldEmit {
 		return nil
 	}
-	if err := emitResolvedTimestamp(cf.Ctx(), cf.encoder, cf.sink, newResolved); err != nil {
+	if err := emitResolvedTimestamp(ctx, cf.encoder, cf.sink, newResolved); err != nil {
 		return err
 	}
 	cf.lastEmitResolved = newResolved.GoTime()

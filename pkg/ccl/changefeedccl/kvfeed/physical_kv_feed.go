@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,6 +60,9 @@ type rangefeed struct {
 
 // Run implements the physicalFeedFactory interface.
 func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.physical_kv_feed.run")
+	defer sp.Finish()
+
 	// To avoid blocking raft, RangeFeed puts all entries in a server side
 	// buffer. But to keep things simple, it's a small fixed-sized buffer. This
 	// means we need to ingest everything we get back as quickly as possible, so
@@ -109,6 +113,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 // addEventsToBuffer consumes rangefeed events from `p.eventCh`, transforms
 // them to kvevent.Event's, and pushes them into `p.memBuf`.
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.physical_kv_feed.add_events_to_buffer")
+	defer sp.Finish()
+
 	for {
 		select {
 		case e := <-p.eventCh:
