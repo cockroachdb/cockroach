@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
@@ -395,7 +395,21 @@ func TestMaximumMemoryUsage(t *testing.T) {
 	skip.UnderRace(t, "multinode cluster setup times out under race")
 
 	const numNodes = 3
-	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					// We disable the randomization of the batch sizes so that
+					// small number of gRPC calls is issued in the query below
+					// (with kv-batch-size=1 we would issue 10k of them which
+					// might result in dropping the ComponentStats proto that
+					// powers "maximum memory usage" from the trace, flaking the
+					// test).
+					ForceProductionValues: true,
+				},
+			},
+		},
+	})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
@@ -418,29 +432,19 @@ func TestMaximumMemoryUsage(t *testing.T) {
 		return err
 	})
 
-	// In rare cases (due to metamorphic randomization) we might drop the
-	// ComponentStats proto that powers "maximum memory usage" stat from the
-	// trace, so we add a retry loop around this.
-	testutils.SucceedsSoon(t, func() error {
-		rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
-		var output strings.Builder
-		maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
-		var maxMemoryUsage float64
-		for _, row := range rows {
-			output.WriteString(row[0])
-			output.WriteString("\n")
-			s := strings.TrimSpace(row[0])
-			if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
-				var err error
-				maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
-				if err != nil {
-					return err
-				}
-			}
+	rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
+	var output strings.Builder
+	maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
+	var maxMemoryUsage float64
+	for _, row := range rows {
+		output.WriteString(row[0])
+		output.WriteString("\n")
+		s := strings.TrimSpace(row[0])
+		if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
+			var err error
+			maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
+			require.NoError(t, err)
 		}
-		if maxMemoryUsage < 5.0 {
-			return errors.Newf("expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
-		}
-		return nil
-	})
+	}
+	require.Greaterf(t, maxMemoryUsage, 5.0, "expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
 }
