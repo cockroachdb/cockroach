@@ -178,26 +178,26 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 
 // CompressionAlgorithm is an enumeration of available compression algorithms
 // available.
-type compressionAlgorithm int64
+type CompressionAlgorithm int64
 
 // These values end up being the underlying value of the cluster setting, so
 // they must be stable across releases.
 const (
-	compressionAlgorithmSnappy compressionAlgorithm = 1
-	compressionAlgorithmZstd   compressionAlgorithm = 2
-	compressionAlgorithmNone   compressionAlgorithm = 3
-	compressionAlgorithmMinLZ  compressionAlgorithm = 4
+	CompressionAlgorithmSnappy CompressionAlgorithm = 1
+	CompressionAlgorithmZstd   CompressionAlgorithm = 2
+	CompressionAlgorithmNone   CompressionAlgorithm = 3
+	CompressionAlgorithmMinLZ  CompressionAlgorithm = 4
 )
 
-var compressionAlgorithmToString = map[compressionAlgorithm]string{
-	compressionAlgorithmSnappy: "snappy",
-	compressionAlgorithmMinLZ:  "minlz",
-	compressionAlgorithmNone:   "none",
-	compressionAlgorithmZstd:   "zstd",
+var compressionAlgorithmToString = map[CompressionAlgorithm]string{
+	CompressionAlgorithmSnappy: "snappy",
+	CompressionAlgorithmMinLZ:  "minlz",
+	CompressionAlgorithmNone:   "none",
+	CompressionAlgorithmZstd:   "zstd",
 }
 
 // String implements fmt.Stringer for CompressionAlgorithm.
-func (c compressionAlgorithm) String() string {
+func (c CompressionAlgorithm) String() string {
 	str := compressionAlgorithmToString[c]
 	if str == "" {
 		panic(errors.Errorf("invalid compression type: %d", c))
@@ -208,8 +208,8 @@ func (c compressionAlgorithm) String() string {
 // RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
 // cluster setting with the given name, description and default value.
 func RegisterCompressionAlgorithmClusterSetting(
-	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
-) *settings.EnumSetting[compressionAlgorithm] {
+	name settings.InternalKey, desc string, defaultValue CompressionAlgorithm,
+) *settings.EnumSetting[CompressionAlgorithm] {
 	return settings.RegisterEnumSetting(
 		// NB: We can't use settings.SystemOnly today because we may need to read the
 		// value from within a tenant building an sstable for AddSSTable.
@@ -232,7 +232,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
 	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
@@ -242,7 +242,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -255,22 +255,22 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
 	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
-	compressionAlgorithmSnappy, // Default.
+	CompressionAlgorithmMinLZ, // Default.
 )
 
 func getCompressionAlgorithm(
 	ctx context.Context,
 	settings *cluster.Settings,
-	setting *settings.EnumSetting[compressionAlgorithm],
+	setting *settings.EnumSetting[CompressionAlgorithm],
 ) pebble.Compression {
 	switch setting.Get(&settings.SV) {
-	case compressionAlgorithmSnappy:
+	case CompressionAlgorithmSnappy:
 		return pebble.SnappyCompression
-	case compressionAlgorithmZstd:
+	case CompressionAlgorithmZstd:
 		return pebble.ZstdCompression
-	case compressionAlgorithmNone:
+	case CompressionAlgorithmNone:
 		return pebble.NoCompression
-	case compressionAlgorithmMinLZ:
+	case CompressionAlgorithmMinLZ:
 		if !settings.Version.IsActive(ctx, clusterversion.V25_3) {
 			// Fall back on Snappy if the cluster version is not 25.3. Note that even
 			// though we can't enable MinLZ in 25.2, the 25.2 Pebble format supports
