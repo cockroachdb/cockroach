@@ -996,39 +996,38 @@ project
 opt
 SELECT * FROM (SELECT count(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
 ----
-project
+select
  ├── columns: cnt:7(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- └── inner-join (cross)
-      ├── columns: count_rows:7(int!null)
-      ├── cardinality: [0 - 1]
-      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-      ├── key: ()
-      ├── fd: ()-->(7)
-      ├── select
-      │    ├── columns: count_rows:7(int!null)
-      │    ├── cardinality: [0 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(7)
-      │    ├── scalar-group-by
-      │    │    ├── columns: count_rows:7(int!null)
-      │    │    ├── cardinality: [1 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(7)
-      │    │    ├── prune: (7)
-      │    │    ├── scan xysd@xysd_s_d_key
-      │    │    └── aggregations
-      │    │         └── count-rows [as=count_rows:7, type=int]
-      │    └── filters
-      │         └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-      │              ├── variable: count_rows:7 [type=int]
-      │              └── const: 1 [type=int]
-      ├── scan uv
-      │    ├── limit: 1
-      │    └── key: ()
-      └── filters (true)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:7(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7)
+ │    ├── prune: (7)
+ │    ├── scan xysd@xysd_s_d_key
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:7, type=int]
+ └── filters
+      ├── coalesce [type=bool, subquery]
+      │    ├── subquery [type=bool]
+      │    │    └── project
+      │    │         ├── columns: column14:14(bool!null)
+      │    │         ├── cardinality: [0 - 1]
+      │    │         ├── key: ()
+      │    │         ├── fd: ()-->(14)
+      │    │         ├── prune: (14)
+      │    │         ├── scan uv
+      │    │         │    ├── limit: 1
+      │    │         │    └── key: ()
+      │    │         └── projections
+      │    │              └── true [as=column14:14, type=bool]
+      │    └── false [type=bool]
+      └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           ├── variable: count_rows:7 [type=int]
+           └── const: 1 [type=int]
 
 # Maximum cardinality of the right input is propagated to the SemiJoin when
 # right rows are guaranteed at most one match each over the join filters.
