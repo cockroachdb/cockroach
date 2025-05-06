@@ -1201,7 +1201,7 @@ inner-join (cross)
 
 # Regression for issue 28818. Try to trigger undetectable cycle between the
 # PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
-norm
+norm disable=HoistUnboundJoinFilterFromExistsSubquery
 SELECT 1
 FROM a
 WHERE EXISTS (
