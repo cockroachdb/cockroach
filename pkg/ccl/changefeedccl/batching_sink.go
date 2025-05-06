@@ -392,6 +392,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	}
 
 	tryFlushBatch := func(topic string) error {
+		ctx, sp := tracing.ChildSpan(ctx, "changefeed.batching_sink.try_flush_batch")
+		defer sp.Finish()
+
 		batchBuffer, ok := topicBatches[topic]
 		if !ok || batchBuffer.isEmpty() {
 			return nil
