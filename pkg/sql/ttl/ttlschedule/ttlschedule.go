@@ -312,6 +312,11 @@ func init() {
 		tree.ScheduledRowLevelTTLExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
 			m := jobs.MakeExecutorMetrics(tree.ScheduledRowLevelTTLExecutor.InternalName())
+
+			m.NumFailed.Essential = true
+			m.NumFailed.Category = metric.Metadata_TTL
+			m.NumFailed.HowToUse = `Monitor this metric to ensure the Row Level TTL job is running. If it is non-zero, it means the job could not be created.`
+
 			return &rowLevelTTLExecutor{
 				metrics: rowLevelTTLMetrics{
 					ExecutorMetrics: &m,

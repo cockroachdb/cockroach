@@ -286,6 +286,63 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(typeStr)),
 			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(typeStr)),
 		}
+
+		switch jt {
+		case jobspb.TypeAutoCreateStats:
+			actMetrics := m.JobMetrics[jt]
+			actMetrics.ResumeFailed.Essential = true
+			actMetrics.ResumeFailed.Category = metric.Metadata_SQL
+			actMetrics.ResumeFailed.HowToUse = `This metric is a high-level indicator that automatically generated table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`
+
+			actMetrics.CurrentlyRunning.Essential = true
+			actMetrics.CurrentlyRunning.Category = metric.Metadata_SQL
+			actMetrics.CurrentlyRunning.HowToUse = `This metric tracks the number of active automatically generated statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.`
+
+			actMetrics.CurrentlyPaused.Essential = true
+			actMetrics.CurrentlyPaused.Category = metric.Metadata_SQL
+			actMetrics.CurrentlyPaused.HowToUse = `This metric is a high-level indicator that automatically generated statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`
+		case jobspb.TypeCreateStats:
+			csMetrics := m.JobMetrics[jt]
+			csMetrics.CurrentlyRunning.Essential = true
+			csMetrics.CurrentlyRunning.Category = metric.Metadata_SQL
+			csMetrics.CurrentlyRunning.HowToUse = `This metric tracks the number of active create statistics jobs that may be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.`
+		case jobspb.TypeBackup:
+			bMetrics := m.JobMetrics[jt]
+			bMetrics.CurrentlyRunning.Essential = true
+			bMetrics.CurrentlyRunning.Category = metric.Metadata_SQL
+			bMetrics.CurrentlyRunning.HowToUse = `See Description.`
+
+			bMetrics.CurrentlyPaused.Essential = true
+			bMetrics.CurrentlyPaused.Category = metric.Metadata_SQL
+			bMetrics.CurrentlyPaused.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a backup job in a paused state for an extended period of time. In functional areas, a paused job can hold resources or have concurrency impact or some other negative consequence. Paused backup may break the recovery point objective (RPO).`
+		case jobspb.TypeChangefeed:
+			cfMetrics := m.JobMetrics[jt]
+			cfMetrics.CurrentlyPaused.Essential = true
+			cfMetrics.CurrentlyPaused.Category = metric.Metadata_CHANGEFEEDS
+			cfMetrics.CurrentlyPaused.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a changefeed job in a paused state for an extended period of time. Changefeed jobs should not be paused for a long time because the protected timestamp prevents garbage collection.`
+
+			cfMetrics.ProtectedAge.Essential = true
+			cfMetrics.ProtectedAge.Category = metric.Metadata_CHANGEFEEDS
+			cfMetrics.ProtectedAge.HowToUse = `Changefeeds use protected timestamps to protect the data from being garbage collected. Ensure the protected timestamp age does not significantly exceed the GC TTL zone configuration. Alert on this metric if the protected timestamp age is greater than 3 times the GC TTL.`
+		case jobspb.TypeRowLevelTTL:
+			rlttlMetrics := m.JobMetrics[jt]
+			rlttlMetrics.CurrentlyRunning.Essential = true
+			rlttlMetrics.CurrentlyRunning.Category = metric.Metadata_TTL
+			rlttlMetrics.CurrentlyRunning.HowToUse = `Monitor this metric to ensure there are not too many Row Level TTL jobs running at the same time. Generally, this metric should be in the low single digits.`
+
+			rlttlMetrics.CurrentlyPaused.Essential = true
+			rlttlMetrics.CurrentlyPaused.Category = metric.Metadata_TTL
+			rlttlMetrics.CurrentlyPaused.HowToUse = `Monitor this metric to ensure the Row Level TTL job does not remain paused inadvertently for an extended period.`
+
+			rlttlMetrics.ResumeCompleted.Essential = true
+			rlttlMetrics.ResumeCompleted.Category = metric.Metadata_TTL
+			rlttlMetrics.ResumeCompleted.HowToUse = `If Row Level TTL is enabled, this metric should be nonzero and correspond to the ttl_cron setting that was chosen. If this metric is zero, it means the job is not running`
+
+			rlttlMetrics.ResumeFailed.Essential = true
+			rlttlMetrics.ResumeFailed.Category = metric.Metadata_TTL
+			rlttlMetrics.ResumeFailed.HowToUse = `This metric should remain at zero. Repeated errors means the Row Level TTL job is not deleting data.`
+		}
+
 		if opts, ok := getRegisterOptions(jt); ok {
 			if opts.metrics != nil {
 				m.JobSpecificMetrics[jt] = opts.metrics
