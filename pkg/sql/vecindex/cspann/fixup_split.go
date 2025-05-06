@@ -131,14 +131,6 @@ func (fw *fixupWorker) splitPartition(
 		}
 	}
 
-	if metadata.Level != LeafLevel && partition.Count() == 0 {
-		if partitionKey != RootKey || metadata.StateDetails.State == ReadyState {
-			// Something's terribly wrong, abort and hope that merge can clean this up.
-			return errors.AssertionFailedf("non-leaf partition %d (state=%s) should not have 0 vectors",
-				partitionKey, metadata.StateDetails.State.String())
-		}
-	}
-
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
 		expected := metadata
