@@ -2910,7 +2910,16 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+  name NOT IN (
+    'optimizer',
+    'crdb_version',
+    'session_id',
+    'distsql_workmem',
+    'copy_fast_path_enabled',
+    'direct_columnar_scans_enabled',
+    'multiple_active_portals_enabled',
+    'kv_transaction_buffered_writes_enabled'
+  )
 ORDER BY name
 ----
 name                                                       setting             category  short_desc  extra_desc  vartype
@@ -3004,7 +3013,6 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL      NULL        NULL        string
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL      NULL        NULL        string
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL      NULL        NULL        string
-kv_transaction_buffered_writes_enabled                     off                 NULL      NULL        NULL        string
 large_full_scan_rows                                       0                   NULL      NULL        NULL        string
 lc_collate                                                 C.UTF-8             NULL      NULL        NULL        string
 lc_ctype                                                   C.UTF-8             NULL      NULL        NULL        string
@@ -3131,7 +3139,16 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+  name NOT IN (
+    'optimizer',
+    'crdb_version',
+    'session_id',
+    'distsql_workmem',
+    'copy_fast_path_enabled',
+    'direct_columnar_scans_enabled',
+    'multiple_active_portals_enabled',
+    'kv_transaction_buffered_writes_enabled'
+  )
 ORDER BY name
 ----
 name                                                       setting             unit  context  enumvals  boot_val            reset_val
@@ -3225,7 +3242,6 @@ is_superuser                                               on                  N
 join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL  user     NULL      4.0 MiB             4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL  user     NULL      2.0 MiB             2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB             NULL  user     NULL      100 KiB             100 KiB
-kv_transaction_buffered_writes_enabled                     off                 NULL  user     NULL      off                 off
 large_full_scan_rows                                       0                   NULL  user     NULL      0                   0
 lc_collate                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_ctype                                                   C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8

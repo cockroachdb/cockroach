@@ -52,6 +52,14 @@ SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
 
 user root
 
+# We lowered max raft command size. If we were to keep the default value of
+# max buffer size of write buffering, we would hit an error when attempting to
+# flush the buffer along with the BatchRequest that would put it above the limit.
+# To prevent that, we reduce the max buffer size to be "in sync" with the max
+# raft command size.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1MiB';
+
 statement ok
 CREATE TABLE src (s STRING);
 
