@@ -58,12 +58,18 @@ var (
 		Help:        "Expiration for the CA certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaClientCAExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.client-ca",
 		Help:        "Expiration for the client CA certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaClientExpiration = metric.Metadata{
 		Name: "security.certificate.expiration.client",
@@ -77,24 +83,36 @@ var (
 		Help:        "Expiration for the UI CA certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaNodeExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node",
 		Help:        "Expiration for the node certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaNodeClientExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node-client",
 		Help:        "Expiration for the node's client certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaUIExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.ui",
 		Help:        "Expiration for the UI certificate. 0 means no certificate or error.",
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
+		Essential:   true,
+		Category:    metric.Metadata_EXPIRATIONS,
+		HowToUse:    "See Description.",
 	}
 	metaTenantCAExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.ca-client-tenant",

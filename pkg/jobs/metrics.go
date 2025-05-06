@@ -76,8 +76,13 @@ type JobTypeMetrics struct {
 // MetricStruct implements the metric.Struct interface.
 func (JobTypeMetrics) MetricStruct() {}
 
-func makeMetaCurrentlyRunning(typeStr string) metric.Metadata {
-	return metric.Metadata{
+func typeToString(jobType jobspb.Type) string {
+	return strings.ToLower(strings.Replace(jobType.String(), " ", "_", -1))
+}
+
+func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
+	m := metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_running", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently running in Resume or OnFailOrCancel state",
 			typeStr),
@@ -85,9 +90,31 @@ func makeMetaCurrentlyRunning(typeStr string) metric.Metadata {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	switch jt {
+	case jobspb.TypeAutoCreateStats:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `This metric tracks the number of active automatically generated statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.`
+	case jobspb.TypeCreateStats:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `This metric tracks the number of active create statistics jobs that may be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.`
+	case jobspb.TypeBackup:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `See Description.`
+	case jobspb.TypeRowLevelTTL:
+		m.Essential = true
+		m.Category = metric.Metadata_TTL
+		m.HowToUse = `Monitor this metric to ensure there are not too many Row Level TTL jobs running at the same time. Generally, this metric should be in the low single digits.`
+	}
+
+	return m
 }
 
-func makeMetaCurrentlyIdle(typeStr string) metric.Metadata {
+func makeMetaCurrentlyIdle(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_idle", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently considered Idle and can be freely shut down",
@@ -98,8 +125,9 @@ func makeMetaCurrentlyIdle(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaCurrentlyPaused(typeStr string) metric.Metadata {
-	return metric.Metadata{
+func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
+	m := metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_paused", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently considered Paused",
 			typeStr),
@@ -107,10 +135,30 @@ func makeMetaCurrentlyPaused(typeStr string) metric.Metadata {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+	switch jt {
+	case jobspb.TypeAutoCreateStats:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `This metric is a high-level indicator that automatically generated statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`
+	case jobspb.TypeBackup:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a backup job in a paused state for an extended period of time. In functional areas, a paused job can hold resources or have concurrency impact or some other negative consequence. Paused backup may break the recovery point objective (RPO).`
+	case jobspb.TypeChangefeed:
+		m.Essential = true
+		m.Category = metric.Metadata_CHANGEFEEDS
+		m.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a changefeed job in a paused state for an extended period of time. Changefeed jobs should not be paused for a long time because the protected timestamp prevents garbage collection.`
+	case jobspb.TypeRowLevelTTL:
+		m.Essential = true
+		m.Category = metric.Metadata_TTL
+		m.HowToUse = `Monitor this metric to ensure the Row Level TTL job does not remain paused inadvertently for an extended period.`
+	}
+	return m
 }
 
-func makeMetaResumeCompeted(typeStr string) metric.Metadata {
-	return metric.Metadata{
+func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
+	m := metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_completed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which successfully resumed to completion",
 			typeStr),
@@ -118,9 +166,18 @@ func makeMetaResumeCompeted(typeStr string) metric.Metadata {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	switch jt {
+	case jobspb.TypeRowLevelTTL:
+		m.Essential = true
+		m.Category = metric.Metadata_TTL
+		m.HowToUse = `If Row Level TTL is enabled, this metric should be nonzero and correspond to the ttl_cron setting that was chosen. If this metric is zero, it means the job is not running`
+	}
+	return m
 }
 
-func makeMetaResumeRetryError(typeStr string) metric.Metadata {
+func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_retry_error", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable error",
@@ -131,8 +188,9 @@ func makeMetaResumeRetryError(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaResumeFailed(typeStr string) metric.Metadata {
-	return metric.Metadata{
+func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
+	m := metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_failed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a non-retriable error",
 			typeStr),
@@ -140,9 +198,22 @@ func makeMetaResumeFailed(typeStr string) metric.Metadata {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	switch jt {
+	case jobspb.TypeAutoCreateStats:
+		m.Essential = true
+		m.Category = metric.Metadata_SQL
+		m.HowToUse = `This metric is a high-level indicator that automatically generated table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`
+	case jobspb.TypeRowLevelTTL:
+		m.Essential = true
+		m.Category = metric.Metadata_TTL
+		m.HowToUse = `This metric should remain at zero. Repeated errors means the Row Level TTL job is not deleting data.`
+	}
+	return m
 }
 
-func makeMetaFailOrCancelCompeted(typeStr string) metric.Metadata {
+func makeMetaFailOrCancelCompeted(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_completed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which successfully completed "+
@@ -154,7 +225,8 @@ func makeMetaFailOrCancelCompeted(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaFailOrCancelRetryError(typeStr string) metric.Metadata {
+func makeMetaFailOrCancelRetryError(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_retry_error", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable "+
@@ -166,7 +238,8 @@ func makeMetaFailOrCancelRetryError(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
+func makeMetaFailOrCancelFailed(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_failed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a "+
@@ -178,7 +251,8 @@ func makeMetaFailOrCancelFailed(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaProtectedCount(typeStr string) metric.Metadata {
+func makeMetaProtectedCount(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.protected_record_count", typeStr),
 		Help:        fmt.Sprintf("Number of protected timestamp records held by %s jobs", typeStr),
@@ -188,17 +262,28 @@ func makeMetaProtectedCount(typeStr string) metric.Metadata {
 	}
 }
 
-func makeMetaProtectedAge(typeStr string) metric.Metadata {
-	return metric.Metadata{
+func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
+	m := metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.protected_age_sec", typeStr),
 		Help:        fmt.Sprintf("The age of the oldest PTS record protected by %s jobs", typeStr),
 		Measurement: "seconds",
 		Unit:        metric.Unit_SECONDS,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	switch jt {
+	case jobspb.TypeChangefeed:
+		m.Essential = true
+		m.Category = metric.Metadata_CHANGEFEEDS
+		m.HowToUse = `Changefeeds use protected timestamps to protect the data from being garbage collected. Ensure the protected timestamp age does not significantly exceed the GC TTL zone configuration. Alert on this metric if the protected timestamp age is greater than 3 times the GC TTL.`
+	}
+
+	return m
 }
 
-func makeMetaExpiredPTS(typeStr string) metric.Metadata {
+func makeMetaExpiredPTS(jt jobspb.Type) metric.Metadata {
+	typeStr := typeToString(jt)
 	return metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.expired_pts_records", typeStr),
 		Help:        fmt.Sprintf("Number of expired protected timestamp records owned by %s jobs", typeStr),
@@ -271,21 +356,21 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified
 			continue
 		}
-		typeStr := strings.ToLower(strings.Replace(jt.String(), " ", "_", -1))
 		m.JobMetrics[jt] = &JobTypeMetrics{
-			CurrentlyRunning:       metric.NewGauge(makeMetaCurrentlyRunning(typeStr)),
-			CurrentlyIdle:          metric.NewGauge(makeMetaCurrentlyIdle(typeStr)),
-			CurrentlyPaused:        metric.NewGauge(makeMetaCurrentlyPaused(typeStr)),
-			ResumeCompleted:        metric.NewCounter(makeMetaResumeCompeted(typeStr)),
-			ResumeRetryError:       metric.NewCounter(makeMetaResumeRetryError(typeStr)),
-			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(typeStr)),
-			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(typeStr)),
-			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(typeStr)),
-			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(typeStr)),
-			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(typeStr)),
-			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(typeStr)),
-			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(typeStr)),
+			CurrentlyRunning:       metric.NewGauge(makeMetaCurrentlyRunning(jt)),
+			CurrentlyIdle:          metric.NewGauge(makeMetaCurrentlyIdle(jt)),
+			CurrentlyPaused:        metric.NewGauge(makeMetaCurrentlyPaused(jt)),
+			ResumeCompleted:        metric.NewCounter(makeMetaResumeCompeted(jt)),
+			ResumeRetryError:       metric.NewCounter(makeMetaResumeRetryError(jt)),
+			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(jt)),
+			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(jt)),
+			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(jt)),
+			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(jt)),
+			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(jt)),
+			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(jt)),
+			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(jt)),
 		}
+
 		if opts, ok := getRegisterOptions(jt); ok {
 			if opts.metrics != nil {
 				m.JobSpecificMetrics[jt] = opts.metrics

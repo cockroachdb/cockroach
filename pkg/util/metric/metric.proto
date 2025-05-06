@@ -87,6 +87,7 @@ message Metadata {
     SQL = 13;
     STORAGE = 14;
     TTL = 15;
+    EXPIRATIONS = 16;
   }
   
   // if essential is true, the metric is required to be included in

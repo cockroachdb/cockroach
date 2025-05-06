@@ -8,6 +8,7 @@ package jobs
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -104,7 +105,7 @@ var _ metric.Struct = &SchedulerMetrics{}
 
 // MakeExecutorMetrics creates metrics for scheduled job executor.
 func MakeExecutorMetrics(name string) ExecutorMetrics {
-	return ExecutorMetrics{
+	m := ExecutorMetrics{
 		NumStarted: metric.NewCounter(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.started", name),
 			Help:        fmt.Sprintf("Number of %s jobs started", name),
@@ -126,6 +127,20 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Unit:        metric.Unit_COUNT,
 		}),
 	}
+
+	if name == tree.ScheduledBackupExecutor.UserName() {
+		m.NumFailed.Essential = true
+		m.NumFailed.Category = metric.Metadata_SQL
+		m.NumFailed.HowToUse = `Monitor this metric and investigate backup job failures.`
+	}
+
+	if name == tree.ScheduledRowLevelTTLExecutor.InternalName() {
+		m.NumFailed.Essential = true
+		m.NumFailed.Category = metric.Metadata_TTL
+		m.NumFailed.HowToUse = `Monitor this metric to ensure the Row Level TTL job is running. If it is non-zero, it means the job could not be created.`
+	}
+
+	return m
 }
 
 // MakeExecutorPTSMetrics creates PTS metrics.
