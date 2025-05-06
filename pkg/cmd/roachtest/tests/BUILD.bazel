@@ -92,6 +92,7 @@ go_library(
         "jasyncsql.go",
         "jasyncsql_blocklist.go",
         "java_helpers.go",
+        "javascript_helpers.go",
         "jepsen.go",
         "jobs.go",
         "jobs_util.go",

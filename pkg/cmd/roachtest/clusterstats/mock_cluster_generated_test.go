@@ -616,6 +616,20 @@ func (mr *MockClusterMockRecorder) Nodes(arg0 ...interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nodes", reflect.TypeOf((*MockCluster)(nil).Nodes), arg0...)
 }
 
+// PopulateEtcHosts mocks base method.
+func (m *MockCluster) PopulateEtcHosts(arg0 context.Context, arg1 *logger.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PopulateEtcHosts", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PopulateEtcHosts indicates an expected call of PopulateEtcHosts.
+func (mr *MockClusterMockRecorder) PopulateEtcHosts(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopulateEtcHosts", reflect.TypeOf((*MockCluster)(nil).PopulateEtcHosts), arg0, arg1)
+}
+
 // Put mocks base method.
 func (m *MockCluster) Put(arg0 context.Context, arg1, arg2 string, arg3 ...option.Option) {
 	m.ctrl.T.Helper()

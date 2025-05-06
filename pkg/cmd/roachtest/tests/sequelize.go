@@ -90,39 +90,9 @@ func registerSequelize(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// In case we are running into a state where machines are being reused, we first check to see if we
-		// can use npm to reduce the potential of trying to add another nodesource key
-		// (preventing gpg: dearmoring failed: File exists) errors.
-		if err := c.RunE(
-			ctx, option.WithNodes(node), `sudo npm i -g npm`,
-		); err != nil {
-			if err := repeatRunE(
-				ctx,
-				t,
-				c,
-				node,
-				"add nodesource key and deb repository",
-				`
-sudo apt-get update && \
-sudo apt-get install -y ca-certificates curl gnupg && \
-sudo mkdir -p /etc/apt/keyrings && \
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := repeatRunE(
-				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := repeatRunE(
-				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
-			); err != nil {
-				t.Fatal(err)
-			}
+		// Install NodeJS 18.x and update NPM to the latest.
+		if err := installNode18(ctx, t, c, node, nodeOpts{}); err != nil {
+			t.Fatal(err)
 		}
 
 		if err := repeatRunE(

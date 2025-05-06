@@ -132,6 +132,24 @@ Local Clusters
 	return createCmd
 }
 
+func (cr *commandRegistry) buildPopulateEtcHosts() *cobra.Command {
+	populateEtchHostsCmd := &cobra.Command{
+		Use:   `populate-etc-hosts <cluster>`,
+		Short: `populate /etc/hosts`,
+		Long: `populate /etc/hosts on all nodes in a cluster with the private
+IP addresses of the nodes. This is useful for running cockroach tests that use
+DNS to resolve the IP addresses of the nodes (e.g. jepsen) in Cloud environments
+where there is no DNS server to resolve the IP addresses of the nodes.
+`,
+		Args: cobra.ExactArgs(1),
+		Run: wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.PopulateEtcHosts(context.Background(), config.Logger, args[0])
+		}),
+	}
+	initFlagInsecureForCmd(populateEtchHostsCmd)
+	return populateEtchHostsCmd
+}
+
 func (cr *commandRegistry) buildGrowCmd() *cobra.Command {
 	growCmd := &cobra.Command{
 		Use:   `grow <cluster> <num-nodes>`,
