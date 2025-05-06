@@ -398,6 +398,13 @@ func TestReadCommittedLogic_cluster_locks(
 	runLogicTest(t, "cluster_locks")
 }
 
+func TestReadCommittedLogic_cluster_locks_write_buffering(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cluster_locks_write_buffering")
+}
+
 func TestReadCommittedLogic_cluster_settings(
 	t *testing.T,
 ) {
