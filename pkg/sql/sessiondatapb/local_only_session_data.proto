@@ -667,6 +667,10 @@ message LocalOnlySessionData {
   // PropagateAdmissionHeaderToLeafTransactions, when true, causes leaf
   // transactions to inherit the admission header from the root transaction.
   bool propagate_admission_header_to_leaf_transactions = 169;
+  // UseImprovedRoutineDependencyTracking, when true, causes newly-created
+  // routines to only consider user-specified target columns when determining the
+  // dependencies of an INSERT statement in a routine.
+  bool use_improved_routine_dependency_tracking = 170;
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
