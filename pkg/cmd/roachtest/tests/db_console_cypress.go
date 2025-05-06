@@ -197,7 +197,7 @@ func (d *dbConsoleCypressTest) writeCypressFilesToWorkloadNode(ctx context.Conte
 	}
 }
 
-func registerDbConsole(r registry.Registry) {
+func registerDbConsoleCypress(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "db-console/mixed-version-cypress",
 		Owner:   registry.OwnerObservability,
