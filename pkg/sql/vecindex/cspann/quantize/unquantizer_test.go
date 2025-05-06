@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 // Basic tests.
 func TestUnQuantizerSimple(t *testing.T) {
 	var workspace workspace.T
-	quantizer := NewUnQuantizer(2)
+	quantizer := NewUnQuantizer(2, vecdist.L2Squared)
 	require.Equal(t, 2, quantizer.GetDims())
 
 	// Quantize empty set.
@@ -43,14 +44,14 @@ func TestUnQuantizerSimple(t *testing.T) {
 	// Ensure distances and error bounds are correct.
 	distances := make([]float32, quantizedSet.GetCount())
 	errorBounds := make([]float32, quantizedSet.GetCount())
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 	require.Equal(t, []float32{17, 1, 41, 13, 41}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{0, 0, 0, 0, 0}, testutils.RoundFloats(errorBounds, 2))
 	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 
 	// Query vector is centroid.
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, vector.T{0, 0}, distances, errorBounds)
 	require.Equal(t, []float32{29, 5, 61, 25, 61}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{0, 0, 0, 0, 0}, testutils.RoundFloats(errorBounds, 2))
@@ -64,7 +65,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:2]
 	errorBounds = errorBounds[:2]
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 	require.Equal(t, []float32{17, 41}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{0, 0}, testutils.RoundFloats(errorBounds, 2))
@@ -77,7 +78,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 	require.Equal(t, []float32{}, testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:0]
 	errorBounds = errorBounds[:0]
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 
 	// Empty quantized set.
@@ -94,7 +95,7 @@ func TestUnQuantizerSimple(t *testing.T) {
 		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:1]
 	errorBounds = errorBounds[:1]
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 	require.Equal(t, []float32{18}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{0}, testutils.RoundFloats(errorBounds, 2))

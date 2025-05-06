@@ -8,6 +8,7 @@ package quantize
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,22 +65,23 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	quantizedSet.Centroid = []float32{1, 2, 3}
 	quantizedSet.Codes.Width = 3
 
-	quantizedSet.AddUndefined(5)
+	quantizedSet.AddUndefined(5, vecdist.L2Squared)
 	copy(quantizedSet.Codes.At(4), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[4] = 15
 	quantizedSet.CentroidDistances[4] = 1.23
-	quantizedSet.DotProducts[4] = 4.56
+	quantizedSet.QuantizedDotProducts[4] = 4.56
 	require.Equal(t, 5, quantizedSet.Codes.Count)
 	require.Len(t, quantizedSet.CodeCounts, 5)
 	require.Len(t, quantizedSet.CentroidDistances, 5)
-	require.Len(t, quantizedSet.DotProducts, 5)
+	require.Len(t, quantizedSet.QuantizedDotProducts, 5)
+	require.Nil(t, quantizedSet.CentroidDotProducts)
 
 	// Ensure that cloning does not disturb anything.
 	cloned := quantizedSet.Clone().(*RaBitQuantizedVectorSet)
 	copy(cloned.Codes.At(0), []uint64{10, 20, 30})
 	cloned.CodeCounts[0] = 10
 	cloned.CentroidDistances[0] = 10
-	cloned.DotProducts[0] = 10
+	cloned.QuantizedDotProducts[0] = 10
 	cloned.ReplaceWithLast(1)
 	cloned.ReplaceWithLast(1)
 	cloned.ReplaceWithLast(1)
@@ -92,13 +94,32 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, uint32(15), quantizedSet.CodeCounts[2])
 	require.Len(t, quantizedSet.CentroidDistances, 4)
 	require.Equal(t, float32(1.23), quantizedSet.CentroidDistances[2])
-	require.Len(t, quantizedSet.DotProducts, 4)
-	require.Equal(t, float32(4.56), quantizedSet.DotProducts[2])
+	require.Len(t, quantizedSet.QuantizedDotProducts, 4)
+	require.Equal(t, float32(4.56), quantizedSet.QuantizedDotProducts[2])
 
 	// Check that clone is unaffected.
 	require.Equal(t, []float32{1, 2, 3}, cloned.Centroid)
 	require.Equal(t, RaBitQCodeSet{Count: 1, Width: 3, Data: []uint64{10, 20, 30}}, cloned.Codes)
 	require.Equal(t, []uint32{10}, cloned.CodeCounts)
 	require.Equal(t, []float32{10}, cloned.CentroidDistances)
-	require.Equal(t, []float32{10}, cloned.DotProducts)
+	require.Equal(t, []float32{10}, cloned.QuantizedDotProducts)
+
+	// Test InnerProduct distance metric, which uses the CentroidDotProducts
+	// field (L2Squared does not use it).
+	quantizedSet.Clear(quantizedSet.Centroid)
+	quantizedSet.AddUndefined(2, vecdist.InnerProduct)
+	copy(quantizedSet.Codes.At(1), []uint64{1, 2, 3})
+	quantizedSet.CodeCounts[1] = 15
+	quantizedSet.CentroidDistances[1] = 1.23
+	quantizedSet.QuantizedDotProducts[1] = 4.56
+	quantizedSet.CentroidDotProducts[1] = 7.89
+	require.Len(t, quantizedSet.CentroidDotProducts, 2)
+
+	cloned = quantizedSet.Clone().(*RaBitQuantizedVectorSet)
+	require.Equal(t, quantizedSet.CentroidDotProducts, cloned.CentroidDotProducts)
+	quantizedSet.ReplaceWithLast(0)
+	require.Equal(t, float32(7.89), quantizedSet.CentroidDotProducts[0])
+	require.Len(t, cloned.CentroidDotProducts, 2)
+	cloned.Clear(quantizedSet.Centroid)
+	require.Len(t, cloned.CentroidDotProducts, 0)
 }
