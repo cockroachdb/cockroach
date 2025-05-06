@@ -158,6 +158,9 @@ var (
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
 		Measurement: "Nodes",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
 	}
 	metaHeartbeatsInFlight = metric.Metadata{
 		Name:        "liveness.heartbeatsinflight",
@@ -188,6 +191,9 @@ var (
 		Help:        "Node liveness heartbeat latency",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
 	}
 )
 

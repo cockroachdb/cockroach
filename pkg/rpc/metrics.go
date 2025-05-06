@@ -35,6 +35,9 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionUnhealthy = metric.Metadata{
@@ -42,6 +45,9 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
 
 	metaConnectionInactive = metric.Metadata{
@@ -63,6 +69,9 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
 
 	metaConnectionUnhealthyNanos = metric.Metadata{
@@ -74,6 +83,9 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
 
 	metaConnectionHeartbeats = metric.Metadata{
@@ -81,6 +93,9 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionFailures = metric.Metadata{
@@ -95,6 +110,9 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionAvgRoundTripLatency = metric.Metadata{
@@ -112,6 +130,9 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
+		Essential:   true,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
 	}
 	metaConnectionConnected = metric.Metadata{
 		Name: "rpc.connection.connected",
