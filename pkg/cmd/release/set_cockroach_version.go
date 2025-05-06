@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 )
 
-const versionFile = "pkg/build/version.txt"
+const (
+	versionFile = "pkg/build/version.txt"
+	versionFlag = "version"
+)
 
 var setCockroachVersionFlags = struct {
 	versionStr string
@@ -33,7 +36,7 @@ func init() {
 
 func setCockroachVersion(_ *cobra.Command, _ []string) error {
 	// validate the version given
-	_, err := semver.NewVersion(setCockroachVersionFlags.versionStr)
+	_, err := version.Parse(setCockroachVersionFlags.versionStr)
 	if err != nil {
 		return fmt.Errorf("cannot parse version %s: %w", setCockroachVersionFlags.versionStr, err)
 	}
