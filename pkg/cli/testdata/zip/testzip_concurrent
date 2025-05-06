@@ -212,4 +212,4 @@ zip
 [node ?] ? log files found
 [node ?] ? log files found
 [node ?] ? log files found
-debug zip --timeout=30s --cpu-profile-duration=0s /dev/null
+debug zip --timeout=30s --cpu-profile-duration=0s --validate-zip-file=false /dev/null

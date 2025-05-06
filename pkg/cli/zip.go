@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql/driver"
 	"fmt"
@@ -179,6 +180,32 @@ func (zc *debugZipContext) getRedactedNodeDetails(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
+// validateZipFile checks the integrity of the generated zip file.
+func validateZipFile(zipFilePath string, zr *zipReporter) error {
+	// skip validation if the user has not requested it.
+	if !zipCtx.validateZipFile {
+		return nil
+	}
+	// Open the zip file.
+	r, err := zip.OpenReader(zipFilePath)
+
+	defer func(r *zip.ReadCloser) {
+		if r != nil {
+			err := r.Close()
+			if err != nil {
+				zr.info("failed to close zip file: %v", err)
+			}
+		}
+	}(r)
+
+	if err != nil {
+		zr.info("The generated file %s is corrupt. Please retry debug zip generation. error: %v", zipFilePath, err)
+		return err
+	}
+
+	return nil
+}
+
 func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
@@ -245,6 +272,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	z := newZipper(out)
 	defer func() {
 		cErr := z.close()
+		if err = validateZipFile(dirName, zr); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
 		retErr = errors.CombineErrors(retErr, cErr)
 	}()
 	s.done()
