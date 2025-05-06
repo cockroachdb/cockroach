@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -349,6 +350,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	// Once finalized, batches are sent to a parallelIO struct which handles
 	// performing multiple Flushes in parallel while maintaining Keys() ordering.
 	ioHandler := func(ctx context.Context, req IORequest) error {
+		ctx, sp := tracing.ChildSpan(ctx, "changefeed.batching_sink.io_handler")
+		defer sp.Finish()
+
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
@@ -569,6 +573,9 @@ func makeBatchingSink(
 	}
 
 	sink.wg.GoCtx(func(ctx context.Context) error {
+		ctx, sp := tracing.ChildSpan(ctx, "changefeed.batching_sink.worker")
+		defer sp.Finish()
+
 		sink.runBatchingWorker(ctx)
 		return nil
 	})
