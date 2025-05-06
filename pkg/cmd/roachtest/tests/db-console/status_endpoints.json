@@ -1,0 +1,246 @@
+{
+  "endpoints": [
+    {
+      "url": "/_status/certificates/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/details/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/nodes",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/nodes/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/nodes_ui",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/nodes_ui/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/raft",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/ranges/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/tenant_service_status",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/tenant_ranges",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_status/gossip/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/enginestats/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/allocator/node/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/allocator/range/{range_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/sessions",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/local_sessions",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/contention_events",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/local_contention_events",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/distsql_flows",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/local_distsql_flows",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/stacks/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/profile/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/metrics/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/files/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/logfiles/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/logfiles/{node_id}/{file}",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_status/logs/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/problemranges",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/downloadspans",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/range/{range_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/diagnostics/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/stores/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/statements",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/combinedstmts",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/stmtdetails/{fingerprint_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/stmtdiagreports",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/stmtdiag/{statement_diagnostics_id}",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_status/job_registry/{node_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/job/{job_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/indexusagestatistics",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/databases/{database}/tables/{table}/indexstats",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/sqlroles",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/transactioncontentionevents",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/connectivity",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/request_job_profiler_execution_details/{job_id}",
+      "verb": "GET",
+			"skip": true
+    },
+    {
+      "url": "/_status/job_profiler_execution_details/{job_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/list_job_profiler_execution_details/{job_id}",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/throttling",
+      "verb": "GET"
+    },
+    {
+      "url": "/_status/cancel_query/{node_id}",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/cancel_session/{node_id}",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/span",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/critical_nodes",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/v2/hotranges",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/keyvissamples",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/stmtdiagreports",
+      "verb": "POST",
+			"skip": true
+    },
+    {
+      "url": "/_status/stmtdiagreports/cancel",
+      "verb": "POST",
+			"skip": true
+    },
+    {
+      "url": "/_status/resetsqlstats",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/resetindexusagestats",
+      "verb": "POST"
+    },
+    {
+      "url": "/_status/vars",
+      "verb": "GET"
+    }
+  ]
+} 
