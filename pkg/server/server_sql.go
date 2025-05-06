@@ -846,11 +846,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		InternalRowMetrics: &internalRowMetrics,
 		KVStreamerMetrics:  &kvStreamerMetrics,
 
-		SQLLivenessReader: cfg.sqlLivenessProvider.CachedReader(),
-		JobRegistry:       jobRegistry,
-		Gossip:            cfg.gossip,
-		SQLInstanceDialer: cfg.sqlInstanceDialer,
-		LeaseManager:      leaseMgr,
+		SQLLivenessReader:         cfg.sqlLivenessProvider.CachedReader(),
+		BlockingSQLLivenessReader: cfg.sqlLivenessProvider.BlockingReader(),
+		JobRegistry:               jobRegistry,
+		Gossip:                    cfg.gossip,
+		SQLInstanceDialer:         cfg.sqlInstanceDialer,
+		LeaseManager:              leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
@@ -1745,7 +1746,7 @@ func (s *SQLServer) preStart(
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
+	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos, s.execCfg.Locality)
 
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
