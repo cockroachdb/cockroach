@@ -110,6 +110,11 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs started", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "started",
+			),
 		}),
 
 		NumSucceeded: metric.NewCounter(metric.Metadata{
@@ -117,6 +122,11 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs succeeded", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "succeeded",
+			),
 		}),
 
 		NumFailed: metric.NewCounter(metric.Metadata{
@@ -124,6 +134,11 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 			Help:        fmt.Sprintf("Number of %s jobs failed", name),
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
+			LabeledName: "schedules",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+				metric.LabelStatus, "failed",
+			),
 		}),
 	}
 }
@@ -137,6 +152,10 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			Measurement: "Records",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_GAUGE,
+			LabeledName: "schedules.protected_record_count",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+			),
 		}),
 		PTSAge: metric.NewGauge(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.protected_age_sec", name),
@@ -144,6 +163,10 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			Measurement: "Seconds",
 			Unit:        metric.Unit_SECONDS,
 			MetricType:  io_prometheus_client.MetricType_GAUGE,
+			LabeledName: "schedules.protected_age_sec",
+			StaticLabels: metric.MakeLabelPairs(
+				metric.LabelName, name,
+			),
 		}),
 	}
 }
