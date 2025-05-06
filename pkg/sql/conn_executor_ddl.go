@@ -95,7 +95,6 @@ func (ex *connExecutor) maybeAdjustTxnForDDL(ctx context.Context, stmt Statement
 	if tree.CanModifySchema(ast) {
 		if ex.state.mu.txn.BufferedWritesEnabled() {
 			ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
-			p.BufferClientNotice(ctx, pgnotice.Newf("disabling buffered writes on the current txn due to schema change"))
 		}
 	}
 	return nil
