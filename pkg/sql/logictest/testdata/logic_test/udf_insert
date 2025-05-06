@@ -276,18 +276,12 @@ CREATE TABLE t_computed (
 )
 
 # An insert routine created with use_improved_routine_dependency_tracking = true
-# should not depend on columns other than the target column "a". 
-statement ok
-SET use_improved_routine_dependency_tracking = true;
-
+# (the default) should not depend on columns other than the target column "a".
 statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
   INSERT INTO t_computed VALUES (100);
   SELECT 1;
 $$;
-
-statement ok
-RESET use_improved_routine_dependency_tracking;
 
 statement ok
 SELECT f145098();
