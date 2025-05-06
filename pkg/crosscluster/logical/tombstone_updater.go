@@ -97,6 +97,7 @@ func (tu *tombstoneUpdater) updateTombstone(
 			// If updateTombstone is called in a transaction, create and run a batch
 			// in the transaction.
 			batch := txn.KV().NewBatch()
+			batch.Header.WriteOptions = originID1Options
 			if err := tu.addToBatch(ctx, txn.KV(), batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
@@ -106,6 +107,7 @@ func (tu *tombstoneUpdater) updateTombstone(
 		// 1pc transaction.
 		return tu.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			batch := txn.NewBatch()
+			batch.Header.WriteOptions = originID1Options
 			if err := tu.addToBatch(ctx, txn, batch, mvccTimestamp, afterRow); err != nil {
 				return err
 			}
