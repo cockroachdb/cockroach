@@ -91,6 +91,28 @@ func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 	return client, nil
 }
 
+// GetUnauthenticatedHTTPClientWithTransport implements TestServerInterface.
+func (ts *httpTestServer) GetUnauthenticatedHTTPClientWithTransport() (
+	http.Client,
+	*http.Transport,
+	error,
+) {
+	client, err := ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
+	if err != nil {
+		return client, nil, err
+	}
+	transport := client.Transport.(*http.Transport)
+	client.Transport = &tenantHeaderDecorator{
+		RoundTripper: client.Transport,
+		tenantName:   ts.t.tenantName,
+	}
+	client.Timeout = 2 * time.Second
+	if util.RaceEnabled {
+		client.Timeout = 30 * time.Second
+	}
+	return client, transport, nil
+}
+
 // GetAdminHTTPClient implements the TestServerInterface.
 func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
 	httpClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(
