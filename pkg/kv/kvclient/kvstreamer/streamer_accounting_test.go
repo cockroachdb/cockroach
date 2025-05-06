@@ -80,7 +80,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+		leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */)
 		metrics := MakeMetrics()
 		s := NewStreamer(
 			s.DistSenderI().(*kvcoord.DistSender),
