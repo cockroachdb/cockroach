@@ -23,7 +23,17 @@ UTF8                1
 query TT colnames
 SELECT *
 FROM [SHOW ALL]
-WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+WHERE
+  variable NOT IN (
+    'optimizer',
+    'crdb_version',
+    'session_id',
+    'distsql_workmem',
+    'copy_fast_path_enabled',
+    'direct_columnar_scans_enabled',
+    'multiple_active_portals_enabled',
+    'kv_transaction_buffered_writes_enabled'
+  )
 ORDER BY variable
 ----
 variable                                                   value
@@ -117,7 +127,6 @@ is_superuser                                               on
 join_reader_index_join_strategy_batch_size                 4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB
-kv_transaction_buffered_writes_enabled                     off
 large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
