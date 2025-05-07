@@ -820,6 +820,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "creating disk monitor")
 			}
+			detail(redact.Sprintf("store %d: disk deviceID: %s", i, monitor.DeviceID()))
 
 			statsCollector, err := cfg.DiskWriteStats.GetOrCreateCollector(spec.Path)
 			if err != nil {
