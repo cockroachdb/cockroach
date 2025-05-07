@@ -334,11 +334,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
 	md.withBindings = nil
 
-	md.rlsMeta = from.rlsMeta
-	md.rlsMeta.PoliciesApplied = make(map[TableID]PoliciesApplied)
-	for id, policies := range from.rlsMeta.PoliciesApplied {
-		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
-	}
+	md.rlsMeta = from.rlsMeta.Copy()
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from

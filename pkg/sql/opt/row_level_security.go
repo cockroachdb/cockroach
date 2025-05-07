@@ -104,6 +104,23 @@ func (r *RowLevelSecurityMeta) RefreshNoPoliciesAppliedForTable(tableID TableID)
 	}
 }
 
+// Copy returns a deep copy of the RowLevelSecurityMeta.
+func (r *RowLevelSecurityMeta) Copy() RowLevelSecurityMeta {
+	cpy := RowLevelSecurityMeta{
+		IsInitialized:     r.IsInitialized,
+		User:              r.User,
+		HasAdminRole:      r.HasAdminRole,
+		NoPoliciesApplied: r.NoPoliciesApplied,
+	}
+	for id, policies := range r.PoliciesApplied {
+		if cpy.PoliciesApplied == nil {
+			cpy.PoliciesApplied = make(map[TableID]PoliciesApplied)
+		}
+		cpy.PoliciesApplied[id] = policies.Copy()
+	}
+	return cpy
+}
+
 // PoliciesApplied stores the set of policies that were applied to a table.
 type PoliciesApplied struct {
 	// NoForceExempt is true if the policies were exempt because they were the
