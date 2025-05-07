@@ -88,6 +88,64 @@ TRUNCATE bar
 statement ok
 DROP TABLE bar;
 
+subtest index_dependencies
+
+statement ok
+CREATE TABLE t0(c0 INT UNIQUE CHECK(true));
+
+statement ok
+INSERT INTO t0 VALUES (0),(1),(2);
+
+# Create two dependencies on the index. One from a view and one from a
+# function.
+statement ok
+CREATE VIEW v0 AS SELECT c0 FROM t0 @{FORCE_INDEX = t0_c0_key};
+
+statement ok
+create function get_min_t0() RETURNS INT LANGUAGE SQL AS $$ SELECT c0 FROM t0@t0_c0_key ORDER BY c0 LIMIT 1; $$;
+
+query I
+SELECT * FROM v0 ORDER BY c0;
+----
+0
+1
+2
+
+query I
+SELECT get_min_t0();
+----
+0
+
+statement ok
+TRUNCATE TABLE t0;
+
+query I
+SELECT * FROM v0 ORDER BY c0;
+----
+
+query I
+SELECT get_min_t0();
+----
+NULL
+
+# Ensure the index dependency was copied over.
+statement error pq: index "t0_c0_key" is in use as unique constraint.*
+DROP INDEX t0@t0_c0_key;
+
+statement ok
+DROP INDEX t0@t0_c0_key CASCADE;
+
+# Ensure the cascade got rid of the view
+statement error pq: relation "v0" does not exist
+SELECT * FROM v0;
+
+# Ensure the cascade got rid of the function
+statement error pq: unknown function: get_min_t0()
+SELECT get_min_t0();
+
+statement ok
+DROP TABLE t0;
+
 subtest truncate_30547
 
 statement ok
