@@ -336,7 +336,7 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+	tenEast1, tenEast1SQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -344,9 +344,12 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 			},
 		},
 	})
-	defer ten.AppStopper().Stop(ctx)
-	defer tSQL.Close()
-	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
+	defer tenEast1.AppStopper().Stop(ctx)
+	defer tenEast1SQL.Close()
+	tenEast1SQLDB := sqlutils.MakeSQLRunner(tenEast1SQL)
+
+	// Shorten the sqlliveness TTL to speed up the test.
+	tenEast1SQLDB.Exec(t, "SET CLUSTER SETTING server.sqlliveness.ttl = '5s'")
 
 	// Update system database with regions.
 	checkRegions := func(t *testing.T, regions ...string) {
@@ -354,48 +357,86 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 		for _, r := range regions {
 			res = append(res, []string{r})
 		}
-		tenSQLDB.CheckQueryResults(t, "SELECT region FROM [SHOW REGIONS] ORDER BY region ASC", res)
+		tenEast1SQLDB.CheckQueryResults(t, "SELECT region FROM [SHOW REGIONS] ORDER BY region ASC", res)
 	}
 
 	// Note that before we've made this a multi-region tenant, because we've
 	// enabled the cluster setting, we can see all the host cluster regions,
 	// and we can create databases using them.
 	checkRegions(t, "us-east1", "us-east2", "us-east3")
-	tenSQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east1"`)
-	tenSQLDB.Exec(t, `DROP DATABASE db`)
+	tenEast1SQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `DROP DATABASE db`)
 
 	// Convert the tenant to a multi-region tenant by adding a primary region
 	// to the system database.  Ensure that the regions show up as they are added.
-	tenSQLDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	checkRegions(t, "us-east1")
 
 	// Check that regions which are not part of the database cannot be used
 	// until they are added to the system database.
-	tenSQLDB.ExpectErr(t, `region "us-east2" does not exist`,
+	tenEast1SQLDB.ExpectErr(t, `region "us-east2" does not exist`,
 		`CREATE DATABASE db PRIMARY REGION "us-east2"`)
-	tenSQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east1"`)
 
-	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	checkRegions(t, "us-east1", "us-east2")
-	tenSQLDB.ExpectErr(t, `region "us-east3" does not exist`,
+
+	tenEast1SQLDB.ExpectErr(t, `region "us-east3" does not exist`,
 		`CREATE DATABASE db2 PRIMARY REGION "us-east3"`)
-	tenSQLDB.ExpectErr(t, `region "us-east3" does not exist`,
+	tenEast1SQLDB.ExpectErr(t, `region "us-east3" does not exist`,
 		`ALTER DATABASE db ADD REGION "us-east3"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east2"`)
+
+	// Start a tenant instance in us-east2. Starting it after adding us-east2 to
+	// the system database ensures that the tenant's sqlliveness session is
+	// tied to us-east2.
+	tenEast2, _ := serverutils.StartTenant(t, tc.Server(1), base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east2"},
+			},
+		},
+	})
+	defer tenEast2.AppStopper().Stop(ctx)
+	tenEast1SQLDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'us-east2' AND crdb_internal.sql_liveness_is_alive(session_id, true)",
+		[][]string{{"1"}},
+	)
 
 	// Check that a region cannot be dropped from the system database while
 	// it is in use in any database in that tenant.
-	tenSQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
+	tenEast1SQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
 		`database while that region is still in use\s+HINT: region is in use by `+
 		`databases: db`,
 		`ALTER DATABASE system DROP REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db DROP REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db DROP REGION "us-east2"`)
 
-	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+	// Check that region cannot be dropped from the system database while
+	// there are live sessions in that region.
+	tenEast1SQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
+		`database while there are live nodes in that region\s+HINT: You must not `+
+		`have any active sessions that are in this region.`,
+		`ALTER DATABASE system DROP REGION "us-east2"`)
+
+	// Stop the tenant, and make sure it's no longer alive.
+	tenEast2.AppStopper().Stop(ctx)
+	tenEast1SQLDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'us-east2' AND crdb_internal.sql_liveness_is_alive(session_id, true)",
+		[][]string{{"0"}},
+	)
+
+	// Drop the region and make sure it is no longer in the enum type.
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east2"`)
+	tenEast1SQLDB.CheckQueryResults(t,
+		"USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'",
+		[][]string{{"us-east1"}},
+	)
+
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 	checkRegions(t, "us-east1", "us-east3")
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east3"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east3"`)
 }
 
 func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
@@ -552,83 +593,5 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"ALTER PARTITION \"us-east1\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east1]',\n\tlease_preferences = '[[+region=us-east1]]'"},
 		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
 		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
-	})
-}
-
-func TestMrSystemDatabaseDropRegion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// Enable settings required for configuring a tenant's system database as multi-region.
-	makeSettings := func() *cluster.Settings {
-		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(),
-			clusterversion.MinSupported.Version(),
-			false)
-		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		return cs
-	}
-
-	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
-		base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
-			},
-		},
-		multiregionccltestutils.WithSettings(makeSettings()))
-	defer cleanup()
-	id, err := roachpb.MakeTenantID(11)
-	require.NoError(t, err)
-
-	// Disable license enforcement for this test.
-	for _, s := range cluster.Servers {
-		s.ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.Disable(ctx)
-	}
-
-	tenantArgs := base.TestTenantArgs{
-		Settings: makeSettings(),
-		TestingKnobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
-			},
-		},
-		TenantID: id,
-		Locality: cluster.Servers[0].Locality(),
-	}
-	appLayer, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
-	appLayer.ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.Disable(ctx)
-
-	tDB := sqlutils.MakeSQLRunner(tenantSQL)
-
-	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
-	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
-	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
-	tDB.Exec(t, `ALTER DATABASE defaultdb SET PRIMARY REGION "us-east1"`)
-	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east2"`)
-	tDB.Exec(t, `ALTER DATABASE defaultdb ADD REGION "us-east3"`)
-
-	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
-		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
-	})
-
-	tDB.ExpectErr(t, "region is still in use", `ALTER DATABASE system DROP REGION "us-east3"`)
-	tDB.Exec(t, `ALTER DATABASE defaultdb DROP REGION "us-east3"`)
-	tDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east3"`)
-
-	tDB.CheckQueryResults(t, `SELECT count(*) FROM system.sql_instances WHERE crdb_region != 'us-east1'::system.public.crdb_internal_region AND crdb_region != 'us-east2'::system.public.crdb_internal_region`, [][]string{
-		{"0"},
-	})
-	tDB.CheckQueryResults(t, `SELECT count(*) FROM system.sqlliveness WHERE crdb_region != 'us-east1'::system.public.crdb_internal_region AND crdb_region != 'us-east2'::system.public.crdb_internal_region`, [][]string{
-		{"0"},
-	})
-	tDB.CheckQueryResults(t, `SELECT count(*) FROM system.region_liveness WHERE crdb_region != 'us-east1'::system.public.crdb_internal_region AND crdb_region != 'us-east2'::system.public.crdb_internal_region`, [][]string{
-		{"0"},
-	})
-	tDB.CheckQueryResults(t, `SELECT count(*) FROM system.lease WHERE crdb_region != 'us-east1'::system.public.crdb_internal_region AND crdb_region != 'us-east2'::system.public.crdb_internal_region`, [][]string{
-		{"0"},
 	})
 }
