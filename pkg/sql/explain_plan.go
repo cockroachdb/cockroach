@@ -93,7 +93,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 
 			ctxSessionData := planCtx.EvalContext().SessionData()
 			var willVectorize bool
-			if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
+			if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff || params.p.curPlan.avoidVectorization {
 				willVectorize = false
 			} else {
 				willVectorize = true
