@@ -1012,41 +1012,28 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 		return br, nil
 	}
 
-	// Figure out the length of the merged responses slice.
-	mergedRespsLen := len(br.Responses)
-	for _, t := range rr {
-		if t.stripped {
-			mergedRespsLen++
-		}
-	}
-	mergedResps := make([]kvpb.ResponseUnion, mergedRespsLen)
-	for i := range mergedResps {
-		if len(rr) > 0 && rr[0].index == i {
-			if !rr[0].stripped {
-				// If the transformation wasn't stripped from the batch we sent to KV,
-				// we received a response for it, which then needs to be combined with
-				// what's in the write buffer.
-				resp := br.Responses[0]
-				mergedResps[i], pErr = rr[0].toResp(ctx, twb, resp, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
-				br.Responses = br.Responses[1:]
-			} else {
-				mergedResps[i], pErr = rr[0].toResp(ctx, twb, kvpb.ResponseUnion{}, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
+	// All original requests are guaranteed to be in the list of requestRecords,
+	// so the length of the merged responses is the same length as rr.
+	mergedResps := make([]kvpb.ResponseUnion, 0, len(rr))
+	for _, record := range rr {
+		brResp := kvpb.ResponseUnion{}
+		if !record.stripped {
+			if len(br.Responses) == 0 {
+				log.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
-
-			rr = rr[1:]
-			continue
+			// If the request wasn't stripped from the batch we sent to KV, we
+			// received a response for it, which then needs to be combined with
+			// what's in the write buffer.
+			brResp = br.Responses[0]
+			br.Responses = br.Responses[1:]
 		}
-
-		// No transformation applies at this index. Copy over the response as is.
-		mergedResps[i] = br.Responses[0]
-		br.Responses = br.Responses[1:]
+		resp, pErr := record.toResp(ctx, twb, brResp, br.Txn)
+		if pErr != nil {
+			return nil, pErr
+		}
+		mergedResps = append(mergedResps, resp)
 	}
+
 	br.Responses = mergedResps
 	return br, nil
 }
