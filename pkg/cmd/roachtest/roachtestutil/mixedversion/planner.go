@@ -938,10 +938,12 @@ func (p *testPlanner) finalizeUpgradeSteps(
 		// auto-upgrading after resetting a cluster setting, we need to
 		// "manually" run the migrations at this point.
 		if toVersion.AtLeast(tenantSupportsAutoUpgradeVersion) {
-			steps = append(
-				steps,
-				p.concurrently(mixedVersionLabel, p.hooks.MixedVersionSteps(p.currentContext, p.prng))...,
-			)
+			if scheduleHooks {
+				steps = append(
+					steps,
+					p.concurrently(mixedVersionLabel, p.hooks.MixedVersionSteps(p.currentContext, p.prng))...,
+				)
+			}
 		} else {
 			runStepsWithTenantMigrations()
 		}
