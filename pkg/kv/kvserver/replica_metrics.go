@@ -117,8 +117,8 @@ func (r *Replica) Metrics(
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.shMu.raftLogSize,
-		raftLogSizeTrusted:       r.shMu.raftLogSizeTrusted,
+		raftLogSize:              r.asLogStorage().shMu.raftLogSize,
+		raftLogSizeTrusted:       r.asLogStorage().shMu.raftLogSizeTrusted,
 		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
@@ -400,10 +400,11 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// of the bytes in raftLogLastCheckSize are already part of pending
 	// truncations since this comparison is looking at whether the raft log has
 	// grown sufficiently.
-	checkRaftLog := r.shMu.raftLogSize-r.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	ls := r.asLogStorage()
+	checkRaftLog := ls.shMu.raftLogSize-ls.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.raftMu.AssertHeld()
-		r.shMu.raftLogLastCheckSize = r.shMu.raftLogSize
+		ls.shMu.raftLogLastCheckSize = ls.shMu.raftLogSize
 	}
 	return checkRaftLog
 }
