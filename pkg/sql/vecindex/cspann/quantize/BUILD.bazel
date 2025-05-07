@@ -38,6 +38,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/vecindex/cspann/vecdist",
         "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/buildutil",
         "//pkg/util/num32",
@@ -49,18 +50,24 @@ go_library(
 go_test(
     name = "quantize_test",
     srcs = [
+        "quantizer_test.go",
         "rabitq_test.go",
         "rabitqpb_test.go",
         "unquantizedpb_test.go",
         "unquantizer_test.go",
     ],
-    data = ["//pkg/sql/vecindex/cspann:features_10000"],
+    data = glob(["testdata/**"]) + ["//pkg/sql/vecindex/cspann:features_10000"],
     embed = [":quantize"],
     deps = [
         "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/cspann/utils",
+        "//pkg/sql/vecindex/cspann/vecdist",
         "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/num32",
         "//pkg/util/vector",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )

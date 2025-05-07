@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -184,7 +185,7 @@ func TestStore(t *testing.T) {
 	// Ensure that races to create partition metadata either do not error, or
 	// they error with WriteTooOldError.
 	t.Run("race to create partition metadata", func(t *testing.T) {
-		store := makeStore(quantize.NewUnQuantizer(2)).(*testStore)
+		store := makeStore(quantize.NewUnQuantizer(2, vecdist.L2Squared)).(*testStore)
 
 		var done atomic.Int64
 		getMetadata := func(treeKey cspann.TreeKey) {
@@ -254,8 +255,8 @@ func TestQuantizeAndEncode(t *testing.T) {
 	centroid := vector.T{0.0, 0.0, 0.0, 0.0}
 
 	// Create quantizers.
-	rootQuantizer := quantize.NewUnQuantizer(dims)
-	quantizer := quantize.NewRaBitQuantizer(dims, seed)
+	rootQuantizer := quantize.NewUnQuantizer(dims, vecdist.L2Squared)
+	quantizer := quantize.NewRaBitQuantizer(dims, seed, vecdist.L2Squared)
 
 	// Create a transaction and metadata.
 	tx := &Txn{codec: makePartitionCodec(rootQuantizer, quantizer)}

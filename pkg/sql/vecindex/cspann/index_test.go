@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -660,7 +661,7 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	}
 
 	const seed = 42
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed)
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, seed, vecdist.L2Squared)
 	s.MemStore = memstore.New(s.Quantizer, seed)
 	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, seed, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
@@ -889,7 +890,7 @@ func TestRandomizeVector(t *testing.T) {
 
 	const dims = 97
 	const count = 5
-	quantizer := quantize.NewRaBitQuantizer(dims, 46)
+	quantizer := quantize.NewRaBitQuantizer(dims, 46, vecdist.L2Squared)
 	inMemStore := memstore.New(quantizer, 42)
 	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
 	require.NoError(t, err)
@@ -924,11 +925,11 @@ func TestRandomizeVector(t *testing.T) {
 
 	distances := make([]float32, count)
 	errorBounds := make([]float32, count)
-	quantizer.EstimateSquaredDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
+	quantizer.EstimateDistances(&workspace, originalSet, original.At(0), distances, errorBounds)
 	require.Equal(t, []float32{0, 272.75, 550.86, 950.93, 2421.41}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 
-	quantizer.EstimateSquaredDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
+	quantizer.EstimateDistances(&workspace, randomizedSet, randomized.At(0), distances, errorBounds)
 	require.Equal(t, []float32{5.1, 292.72, 454.95, 1011.85, 2475.87}, testutils.RoundFloats(distances, 2))
 	require.Equal(t, []float32{37.58, 46.08, 57.55, 69.46, 110.57}, testutils.RoundFloats(errorBounds, 2))
 }
@@ -965,7 +966,7 @@ func TestIndexConcurrency(t *testing.T) {
 		// Construct store. Multiple index instances running on different goroutines
 		// will use this store.
 		const seed = 42
-		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed, vecdist.L2Squared)
 		store := memstore.New(quantizer, seed)
 
 		// Create 8 instances of the index, all using the same shared Store.

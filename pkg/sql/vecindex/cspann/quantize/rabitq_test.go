@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -21,7 +22,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 	defer require.True(t, workspace.IsClear())
 
 	t.Run("add and remove vectors", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42)
+		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 		require.Equal(t, 2, quantizer.GetDims())
 
 		// Add 3 vectors and verify centroid and centroid distances.
@@ -39,7 +40,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		// Ensure distances and error bounds are correct.
 		distances := make([]float32, quantizedSet.GetCount())
 		errorBounds := make([]float32, quantizedSet.GetCount())
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{17, 0, 41, 13, 41}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{7.21, 16.12, 14.42, 0, 14.42},
@@ -53,7 +54,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		require.Equal(t, 2, quantizedSet.GetCount())
 		distances = distances[:2]
 		errorBounds = errorBounds[:2]
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{17, 41}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{7.21, 14.42}, testutils.RoundFloats(errorBounds, 2))
@@ -65,12 +66,12 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
 		distances = distances[:0]
 		errorBounds = errorBounds[:0]
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 	})
 
 	t.Run("empty quantized set", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42)
+		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 		vectors := vector.MakeSet(2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors)
 		require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
@@ -78,7 +79,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 	})
 
 	t.Run("empty quantized set with capacity", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(65, 42)
+		quantizer := NewRaBitQuantizer(65, 42, vecdist.L2Squared)
 		centroid := make([]float32, 65)
 		for i := range centroid {
 			centroid[i] = float32(i)
@@ -91,7 +92,7 @@ func TestRaBitQuantizerSimple(t *testing.T) {
 		require.Equal(t, 10, cap(quantizedSet.Codes.Data))
 		require.Equal(t, 5, cap(quantizedSet.CodeCounts))
 		require.Equal(t, 5, cap(quantizedSet.CentroidDistances))
-		require.Equal(t, 5, cap(quantizedSet.DotProducts))
+		require.Equal(t, 5, cap(quantizedSet.QuantizedDotProducts))
 	})
 }
 
@@ -102,7 +103,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 	// Search for query vector with two equal dimensions, which makes Δ = 0.
 	t.Run("two dimensions equal", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42)
+		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 		vectors := vector.MakeSetFromRawData([]float32{4, 4, -3, -3}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, 2, quantizedSet.GetCount())
@@ -111,7 +112,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 		distances := make([]float32, 2)
 		errorBounds := make([]float32, 2)
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{1, 1}, distances, errorBounds)
 		require.Equal(t, []float32{18, 32}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{4.95, 4.95}, testutils.RoundFloats(errorBounds, 2))
@@ -119,7 +120,7 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 	t.Run("many dimensions, not multiple of 64", func(t *testing.T) {
 		// Number dimensions is > 64 and not a multiple of 64.
-		quantizer := NewRaBitQuantizer(141, 42)
+		quantizer := NewRaBitQuantizer(141, 42, vecdist.L2Squared)
 
 		vectors := vector.MakeSet(141)
 		vectors.AddUndefined(2)
@@ -141,14 +142,14 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 		distances := make([]float32, quantizedSet.GetCount())
 		errorBounds := make([]float32, quantizedSet.GetCount())
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, ones, distances, errorBounds)
 		require.Equal(t, []float32{141, 0}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{5.94, 5.94}, testutils.RoundFloats(errorBounds, 2))
 	})
 
 	t.Run("add centroid to set", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42)
+		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 		vectors := vector.MakeSetFromRawData([]float32{1, 5, 5, 13}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, []float32{3, 9}, quantizedSet.Centroid)
@@ -158,20 +159,20 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 		quantizer.QuantizeInSet(&workspace, quantizedSet, vectors)
 		distances := make([]float32, 4)
 		errorBounds := make([]float32, 4)
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{3, 2}, distances, errorBounds)
 		require.Equal(t, []float32{22.33, 115.67, 22.33, 49}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{44.27, 44.27, 44.27, 0}, testutils.RoundFloats(errorBounds, 2))
 	})
 
 	t.Run("query vector is centroid", func(t *testing.T) {
-		quantizer := NewRaBitQuantizer(2, 42)
+		quantizer := NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 		vectors := vector.MakeSetFromRawData([]float32{1, 5, -3, -9}, 2)
 		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
 		require.Equal(t, []float32{-1, -2}, quantizedSet.Centroid)
 		distances := make([]float32, 2)
 		errorBounds := make([]float32, 2)
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{-1, -2}, distances, errorBounds)
 		require.Equal(t, []float32{53, 53}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{0, 0}, testutils.RoundFloats(errorBounds, 2))
@@ -184,7 +185,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 	defer require.True(t, workspace.IsClear())
 
 	features := testutils.LoadFeatures(t, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42)
+	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
 	require.Equal(t, 512, quantizer.GetDims())
 
 	quantizedSet := quantizer.Quantize(&workspace, features)
@@ -203,7 +204,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 	queryVector := features.At(0)
 	squaredDistances := make([]float32, quantizedSet.GetCount())
 	errorBounds := make([]float32, quantizedSet.GetCount())
-	quantizer.EstimateSquaredDistances(
+	quantizer.EstimateDistances(
 		&workspace, quantizedSet, queryVector, squaredDistances, errorBounds)
 	num32.Round(squaredDistances, 4)
 	num32.Round(errorBounds, 4)
@@ -217,7 +218,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 func BenchmarkQuantize(b *testing.B) {
 	var workspace workspace.T
 	features := testutils.LoadFeatures(b, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42)
+	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
 
 	b.ResetTimer()
 
@@ -230,7 +231,7 @@ func BenchmarkQuantize(b *testing.B) {
 func BenchmarkEstimateSquaredDistances(b *testing.B) {
 	var workspace workspace.T
 	features := testutils.LoadFeatures(b, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42)
+	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
 	quantizedSet := quantizer.Quantize(&workspace, features)
 
 	queryVector := features.At(0)
@@ -240,7 +241,7 @@ func BenchmarkEstimateSquaredDistances(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		quantizer.EstimateSquaredDistances(
+		quantizer.EstimateDistances(
 			&workspace, quantizedSet, queryVector, squaredDistances, errorBounds)
 	}
 }
