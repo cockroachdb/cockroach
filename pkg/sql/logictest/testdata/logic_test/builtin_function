@@ -493,6 +493,18 @@ SELECT split_part('joeuser@mydatabase', '?', -2)
 ----
 ·
 
+# Verify min value for field
+query T
+SELECT split_part('joeuser@mydatabase', '@', -9223372036854775808);
+----
+·
+
+# Verify max value for field
+query T
+SELECT split_part('joeuser@mydatabase', '@', 9223372036854775807);
+----
+·
+
 query T
 SELECT repeat('Pg', 4)
 ----
