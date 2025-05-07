@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -507,6 +508,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Locality,
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
+				[]roachpb.LocalityAddress{},
 			); err != nil {
 				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
@@ -600,26 +602,39 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the sqlInstanceDialer unless we
-	// are serving the system tenant despite the fact that we've
-	// arranged for pod IDs and instance IDs to match since the
-	// secondary tenant gRPC servers currently live on a different
-	// port.
-	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsSQLInstanceDialer {
-		cfg.sqlInstanceDialer = cfg.kvNodeDialer
-	} else {
-		// In a multi-tenant environment, use the sqlInstanceReader to resolve
-		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+	addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		if cfg.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
 				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+			defaultAddress := &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}
+			return cfg.Locality.LookupAddress(info.LocalityAddressList, defaultAddress), info.Locality, nil
+		} else {
+			// We can't use the nodeDialer as the sqlInstanceDialer unless we
+			// are serving the system tenant despite the fact that we've
+			// arranged for pod IDs and instance IDs to match since the
+			// secondary tenant gRPC servers currently live on a different
+			// port.
+			canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
+			if canUseNodeDialerAsSQLInstanceDialer {
+				g, _ := cfg.gossip.Optional(138715)
+				return gossip.AddressResolver(g)(nodeID)
+			} else {
+				// In a multi-tenant environment, use the sqlInstanceReader to resolve
+				// SQL pod addresses.
+				addressResolverOld := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+					info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
+					if err != nil {
+						return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
+					}
+					return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+				}
+				return addressResolverOld(nodeID)
+			}
 		}
-		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	}
+	cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -787,17 +802,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext:   cfg.AmbientCtx,
-		Settings:         cfg.Settings,
-		RuntimeStats:     cfg.runtime,
-		LogicalClusterID: clusterIDForSQL,
-		ClusterName:      cfg.ClusterName,
-		NodeID:           cfg.nodeIDContainer,
-		Locality:         cfg.Locality,
-		Codec:            codec,
-		DB:               cfg.internalDB,
-		RPCContext:       cfg.rpcContext,
-		Stopper:          cfg.stopper,
+		AmbientContext:    cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		RuntimeStats:      cfg.runtime,
+		LogicalClusterID:  clusterIDForSQL,
+		ClusterName:       cfg.ClusterName,
+		NodeID:            cfg.nodeIDContainer,
+		Locality:          cfg.Locality,
+		LocalityAddresses: cfg.LocalityAddresses,
+		Codec:             codec,
+		DB:                cfg.internalDB,
+		RPCContext:        cfg.rpcContext,
+		Stopper:           cfg.stopper,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -1570,6 +1586,10 @@ func (s *SQLServer) preStart(
 		stopper.ShouldQuiesce(),
 		"sql create node instance row",
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
+			updatedLocalityAddresses, err := updateLocalityAddressesForSharedSecondaryTenants(s.distSQLServer.LocalityAddresses, s.cfg.AdvertiseAddr)
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
 			if hasNodeID {
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
@@ -1580,6 +1600,7 @@ func (s *SQLServer) preStart(
 					s.distSQLServer.Locality,
 					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
+					updatedLocalityAddresses,
 				)
 			}
 			return s.sqlInstanceStorage.CreateInstance(
@@ -1589,6 +1610,7 @@ func (s *SQLServer) preStart(
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
 				s.execCfg.Settings.Version.LatestVersion(),
+				updatedLocalityAddresses,
 			)
 		})
 	if err != nil {
@@ -1790,6 +1812,34 @@ func (s *SQLServer) preStart(
 	}
 
 	return nil
+}
+
+// updateLocalityAddressesForSharedSecondaryTenants updates the locality addresses of this sql instance
+// if the instance is a shared secondary tenant. We update the port part of each address to that of the
+// advertised address as this will be stored in the sql_instances table and will be consulted by the
+// sqlInstanceDialer when attempting to dial this sql instance.
+func updateLocalityAddressesForSharedSecondaryTenants(
+	localityAddresses []roachpb.LocalityAddress, advertiseAddr string,
+) ([]roachpb.LocalityAddress, error) {
+	// Extract port from advertise address.
+	_, portStr, err := net.SplitHostPort(advertiseAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract port from advertise address %q: %w", advertiseAddr, err)
+	}
+
+	updatedLocalityAddresses := make([]roachpb.LocalityAddress, len(localityAddresses))
+	// Loop over the slice and update the port in a copy.
+	for i, locAddr := range localityAddresses {
+		host, _, err := net.SplitHostPort(locAddr.Address.AddressField)
+		if err != nil {
+			return nil, fmt.Errorf("failed to split locality address %q: %w", locAddr.Address.AddressField, err)
+		}
+		newAddr := net.JoinHostPort(host, portStr)
+		// Copy the locality address and update the AddressField.
+		updatedLocalityAddresses[i] = locAddr
+		updatedLocalityAddresses[i].Address.AddressField = newAddr
+	}
+	return updatedLocalityAddresses, nil
 }
 
 func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKnobs) {
