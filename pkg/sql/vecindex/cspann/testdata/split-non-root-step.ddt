@@ -587,8 +587,7 @@ force-split partition-key=2 parent-partition-key=1
 ----
 • 1 (3, 6)
 │
-├───• 2 (3, 6) [DrainingForSplit:4,5]
-├───• 4 (5, 6) [Updating:2]
+├───• 5 (5, 6)
 │   │
 │   └───• 3 (5, 6)
 │       │
@@ -596,7 +595,7 @@ force-split partition-key=2 parent-partition-key=1
 │       ├───• vec3 (6, 8)
 │       └───• vec4 (6, 5)
 │
-└───• 5 (5, 6) [Updating:2]
+└───• 4 (5, 6)
     │
     └───• 3 (5, 6)
         │

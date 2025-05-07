@@ -31,7 +31,6 @@ import (
 )
 
 const defaultDataset = "unsplash-512-euclidean"
-const tempDir = "tmp"
 const minPartitionSize = 16
 const maxPartitionSize = 128
 
@@ -86,9 +85,9 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 //	sift-128-euclidean (1M vectors, 128 dims)
 //	dbpedia-openai-100k-angular (100K vectors, 1536 dims)
 //
-// After download, the datasets are cached in a local tmp directory and a vector
-// index is created. The built vector index is also cached in the tmp directory
-// so that it can be rapidly reconstituted across benchmark runs.
+// After download, the datasets are cached in a local temp directory and a
+// vector index is created. The built vector index is also cached in the temp
+// directory so that it can be rapidly reconstituted across benchmark runs.
 //
 // The search benchmark runs over a set of test vectors that are not part of the
 // indexed vectors. It outputs average recall rates across the test vectors for
