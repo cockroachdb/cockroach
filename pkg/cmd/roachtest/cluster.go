@@ -53,10 +53,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func init() {
-	_ = roachprod.InitProviders()
-}
-
 var (
 	// maps cpuArch to the corresponding crdb binary's absolute path
 	cockroach = make(map[vm.CPUArch]string)
