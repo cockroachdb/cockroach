@@ -58,7 +58,28 @@ func (r *replicaLogStorage) appendRaftMuLocked(
 ) (logstore.RaftState, error) {
 	state := r.stateRaftMuLocked()
 	cb := (*replicaSyncCallback)(r)
-	return r.raftMu.logStorage.StoreEntries(ctx, state, app, cb, stats)
+	state, err := r.raftMu.logStorage.StoreEntries(ctx, state, app, cb, stats)
+	if err != nil {
+		return state, err
+	}
+	// Update raft log entry cache. We clear any older, uncommitted log entries
+	// and cache the latest ones.
+	//
+	// In the blocking log sync case, these entries are already durable. In the
+	// non-blocking case, these entries have been written to storage (so reads of
+	// the engine will see them), but they are not yet durable. This means that
+	// the entry cache can lead the durable log. This is allowed by raft, which
+	// maintains its own tracking of entry durability by splitting its log into an
+	// unstable portion for entries that are not known to be durable and a stable
+	// portion for entries that are known to be durable.
+	//
+	// TODO(pav-kv): for safety, decompose this update into two steps: before
+	// writing to storage, truncate the suffix of the cache if entries are
+	// overwritten; after the write, append new entries to the cache. Currently,
+	// the cache can contain stale entries while storage is already updated, and
+	// the only hope is that nobody tries to read it under Replica.mu only.
+	r.store.raftEntryCache.Add(r.RangeID, app.Entries, true /* truncate */)
+	return state, nil
 }
 
 // updateStateRaftMuLockedMuLocked updates the in-memory reflection of the raft

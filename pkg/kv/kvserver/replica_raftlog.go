@@ -143,8 +143,13 @@ func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error
 	}
 	// Cache the entry except if it is sideloaded. We don't load/inline the
 	// sideloaded entries here to keep the term fetching cheap.
-	// TODO(pav-kv): consider not caching here, after measuring if it makes any
-	// difference.
+	//
+	// TODO(pav-kv): consider not caching here, after measuring or guessing
+	// whether it makes any difference. It might be harmful to the cache since
+	// terms tend to be loaded randomly, and the cache assumes moving forward. We
+	// also now have the term cache in raft which makes optimizations here
+	// unnecessary. Plus, there is a longer-term better solution not involving
+	// entry loads: the term cache can be maintained in storage. See #136296.
 	if typ, _, err := raftlog.EncodingOf(entry); err != nil {
 		return 0, err
 	} else if !typ.IsSideloaded() {
