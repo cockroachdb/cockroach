@@ -86,6 +86,16 @@ func (m *monitorTracer) RecordEvent(event traceEvent) {
 	}
 }
 
+// LastEventTime returns the time of the last traceEvent that was queued.
+func (m *monitorTracer) LastEventTime() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sizeLocked() == 0 {
+		return time.Time{}
+	}
+	return m.mu.trace[(m.mu.end-1)%m.capacity].time
+}
+
 // Latest retrieves the last traceEvent that was queued. Returns a zero-valued
 // traceEvent if none exists.
 func (m *monitorTracer) Latest() traceEvent {
