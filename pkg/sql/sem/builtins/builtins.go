@@ -1189,7 +1189,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				}
 
 				splits := strings.Split(text, sep)
-				if field > len(splits) || -1*field > len(splits) {
+				if field > len(splits) || (field < 0 && field < -len(splits)) {
 					return tree.NewDString(""), nil
 				}
 
