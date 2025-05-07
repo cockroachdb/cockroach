@@ -124,7 +124,7 @@ func (r *Registry) Create(
 	}
 
 	now := r.clock().UTC()
-	basename := now.Format("20060102-1504")
+	basename := now.Format("20060102-150405.000")
 
 	metadata := FixtureMetadata{
 		CreatedAt:    now,
