@@ -392,6 +392,176 @@ func runDiskStalledDetection(
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
 }
 
+// registerDiskStalledWALFailoverWithProgress registers a test that induces
+// WAL failover while the workload is running. This test is similar to
+// disk-stalled/wal-failover/among-stores, but allows some progress to be
+// made while failover is in progress.
+//
+// The workload run in this test is meant to ramp up to 50% disk bandwidth.
+// See: https://cloud.google.com/compute/docs/disks/performance for estimatiions on disk performance.
+// For a 100GB pd-ssd disk we get an estimated max performance of:
+// - 6K IOPS (3K baseline + (30 ops * 100GB disk).
+// - 288 MiB/s (240 MiB/s baseline + 0.48 * 100GB disk).
+func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name: "disk-stalled/wal-failover/among-stores/with-progress",
+		// TODO(xinhaoz): Should the ownership here be AC?
+		Owner: registry.OwnerStorage,
+		Cluster: r.MakeClusterSpec(4,
+			spec.CPU(16),
+			spec.WorkloadNode(),
+			spec.ReuseNone(),
+			spec.DisableLocalSSD(),
+			spec.GCEVolumeCount(2),
+			spec.GCEVolumeType("pd-ssd"),
+			spec.VolumeSize(100),
+		),
+		CompatibleClouds:    registry.OnlyGCE,
+		Suites:              registry.Suites(registry.Nightly),
+		Timeout:             2 * time.Hour,
+		SkipPostValidations: registry.PostValidationNoDeadNodes,
+		EncryptionSupport:   registry.EncryptionMetamorphic,
+		Leases:              registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runDiskStalledWALFailoverWithProgress(ctx, t, c)
+		},
+	})
+}
+
+func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c cluster.Cluster) {
+	// Stall the disk every 10 seconds for 200ms.
+	const (
+		runDuration   = 1 * time.Hour
+		maxSyncDur    = 60 * time.Second
+		stallInterval = 10 * time.Second
+		stallDuration = 200 * time.Millisecond
+	)
+	startSettings := install.MakeClusterSettings()
+	// Set a high value for the max sync durations to avoid the disk
+	// stall detector fataling the node.
+	startSettings.Env = append(startSettings.Env,
+		"COCKROACH_AUTO_BALLAST=false",
+		fmt.Sprintf("COCKROACH_LOG_MAX_SYNC_DURATION=%s", maxSyncDur),
+		fmt.Sprintf("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s", maxSyncDur))
+
+	t.Status("setting up disk staller")
+	// Use CgroupDiskStaller with readsToo=false to only stall writes.
+	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */)
+	s.Setup(ctx)
+	defer s.Cleanup(ctx)
+
+	t.Status("starting cluster")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.WALFailover = "among-stores"
+	startOpts.RoachprodOpts.StoreCount = 2
+	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
+
+	// Open a SQL connection to n1, the node that will be stalled.
+	n1Conn := c.Conn(ctx, t.L(), 1)
+	defer n1Conn.Close()
+	require.NoError(t, n1Conn.PingContext(ctx))
+	// Wait for upreplication.
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n1Conn))
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
+	require.NoError(t, err)
+	adminURL := adminUIAddrs[0]
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	_, err = n1Conn.ExecContext(ctx, `USE kv;`)
+	require.NoError(t, err)
+
+	t.Status("starting workload with disk stalls")
+	workloadStartAt := timeutil.Now()
+	m := c.NewMonitor(ctx, c.CRDBNodes())
+
+	// Workload goroutine.
+	m.Go(func(ctx context.Context) error {
+		for timeutil.Since(workloadStartAt) < runDuration {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				t.Status("starting new workload cycle (1m ramp + 1m)")
+				// Target ~50% of disk bandwidth. This should be ~144MiB/s.
+				workloadCmd := `./cockroach workload run kv --read-percent 0 ` +
+					`--duration 2m --concurrency 4096 --ramp=1m --max-rate=2048 --tolerate-errors ` +
+					`--min-block-bytes=4096 --max-block-bytes=4096 --timeout 1s {pgurl:1-3}`
+
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
+			}
+		}
+		return nil
+	})
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	progressEvery := roachtestutil.Every(time.Minute)
+	for timeutil.Since(workloadStartAt) < runDuration {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("context done before finished workload: %s", ctx.Err())
+		case now := <-ticker.C:
+			if now.Sub(workloadStartAt)%stallInterval < time.Second {
+				if progressEvery.ShouldLog() {
+					t.Status("inducing short disk stall on n1")
+				}
+				func() {
+					// Use Slow instead of Stall to allow some progress.
+					s.Slow(ctx, c.Node(1), 10)
+					stopStall := time.After(stallDuration)
+					t.Status("Stalled disk on n1")
+					defer func() {
+						// NB: We use a background context in the defer'ed unstall command,
+						// otherwise on test failure our Unstall calls will be ignored. Leaving
+						// the disk stalled will prevent artifact collection, making debugging
+						// difficult.
+						ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+						defer cancel()
+						t.Status("Unstalling disk on n1")
+						s.Unstall(ctx, c.Node(1))
+						t.Status("Unstalled disk on n1")
+					}()
+
+					select {
+					case <-ctx.Done():
+						t.Fatalf("context done while stall induced: %s", ctx.Err())
+					case <-stopStall:
+						return
+					}
+				}()
+			}
+		}
+	}
+	t.Status("exited stall loop")
+
+	time.Sleep(1 * time.Second)
+	exit, ok := getProcessExitMonotonic(ctx, t, c, 1)
+	if ok && exit > 0 {
+		t.Fatal("process exited unexpectedly")
+	}
+
+	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,
+		workloadStartAt.Add(5*time.Minute),
+		timeutil.Now().Add(-time.Minute),
+		[]tsQuery{
+			{name: "cr.store.storage.wal.failover.secondary.duration", queryType: total, sources: []string{"1"}},
+		})
+
+	// Over the course of the 1h test, we expect many short stalls. Assert that
+	// the total time spent writing to the secondary is at least 30m.
+	durInFailover := time.Duration(data.Results[0].Datapoints[len(data.Results[0].Datapoints)-1].Value)
+	t.L().PrintfCtx(ctx, "duration s1 spent writing to secondary %s", durInFailover)
+	if durInFailover < 30*time.Minute {
+		t.Errorf("expected s1 to spend at least 30m writing to secondary, but spent %s", durInFailover)
+	}
+
+	// Wait for the workload to finish (if it hasn't already).
+	m.Wait()
+
+	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
+}
+
 func getProcessStartMonotonic(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int,
 ) (since time.Duration, ok bool) {
