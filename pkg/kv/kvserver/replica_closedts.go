@@ -19,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// getTargetByPolicy returns a range's closed timestamp policy and target
+// getTargetByPolicyRLocked returns a range's closed timestamp policy and target
 // timestamp.
-func (r *Replica) getTargetByPolicy(
+func (r *Replica) getTargetByPolicyRLocked(
 	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
-	policy := r.closedTimestampPolicyRLocked()
+	policy := closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load())
 	target, ok := targetByPolicy[policy]
 	if ok {
 		return policy, target
@@ -87,7 +87,7 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy, target := r.getTargetByPolicy(targetByPolicy)
+	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
@@ -154,7 +154,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
 	)
 }
 
