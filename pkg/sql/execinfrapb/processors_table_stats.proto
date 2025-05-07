@@ -17,9 +17,18 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
 
+// TODO(yuzefovich): this can be removed once compatibility with 24.3 is no
+// longer needed.
+enum SketchType {
+  // This is the github.com/axiomhq/hyperloglog binary format (as of commit
+  // 730eea1) for a sketch with precision 14. Values are encoded using their key
+  // encoding, except integers which are encoded in 8 bytes (little-endian).
+  HLL_PLUS_PLUS_V1 = 0;
+}
+
 // SketchSpec contains the specification for a generated statistic.
 message SketchSpec {
-  reserved 1;
+  optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
 
   // Each value is an index identifying a column in the input stream.
   // TODO(radu): currently only one column is supported.

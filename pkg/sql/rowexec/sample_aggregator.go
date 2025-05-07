@@ -10,12 +10,14 @@ import (
 	"math"
 	"time"
 
-	"github.com/axiomhq/hyperloglog"
+	hllNew "github.com/axiomhq/hyperloglog"
+	hllOld "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -101,6 +103,7 @@ func newSampleAggregator(
 			return nil, errors.Errorf("histograms require one column")
 		}
 	}
+	useNewHLL := execversion.FromContext(ctx) >= execversion.V25_1
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
@@ -141,9 +144,13 @@ func newSampleAggregator(
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
-			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
+		}
+		if useNewHLL {
+			s.sketches[i].sketchNew = hllNew.New14()
+		} else {
+			s.sketches[i].sketchOld = hllOld.New14()
 		}
 		if spec.Sketches[i].GenerateHistogram {
 			sampleCols.Add(int(spec.Sketches[i].Columns[0]))
@@ -166,9 +173,13 @@ func newSampleAggregator(
 		s.invSr[col] = &sr
 		s.invSketch[col] = &sketchInfo{
 			spec:     spec.InvertedSketches[i],
-			sketch:   hyperloglog.New14(),
 			numNulls: 0,
 			numRows:  0,
+		}
+		if useNewHLL {
+			s.invSketch[col].sketchNew = hllNew.New14()
+		} else {
+			s.invSketch[col].sketchOld = hllOld.New14()
 		}
 	}
 
@@ -361,8 +372,6 @@ func (s *sampleAggregator) mainLoop(
 func (s *sampleAggregator) processSketchRow(
 	sketch *sketchInfo, row rowenc.EncDatumRow, da *tree.DatumAlloc,
 ) error {
-	var tmpSketch hyperloglog.Sketch
-
 	numRows, err := row[s.numRowsCol].GetInt()
 	if err != nil {
 		return err
@@ -389,11 +398,22 @@ func (s *sampleAggregator) processSketchRow(
 	if d == tree.DNull {
 		return errors.AssertionFailedf("NULL sketch data")
 	}
-	if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
-		return err
-	}
-	if err := sketch.sketch.Merge(&tmpSketch); err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
+	if sketch.sketchNew != nil {
+		var tmpSketch hllNew.Sketch
+		if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
+			return err
+		}
+		if err := sketch.sketchNew.Merge(&tmpSketch); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
+		}
+	} else {
+		var tmpSketch hllOld.Sketch
+		if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
+			return err
+		}
+		if err := sketch.sketchOld.Merge(&tmpSketch); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
+		}
 	}
 	return nil
 }
@@ -611,7 +631,12 @@ func (s *sampleAggregator) getAvgSize(si *sketchInfo) int64 {
 // getDistinctCount returns the number of distinct values in the given sketch,
 // optionally including null values.
 func (s *sampleAggregator) getDistinctCount(si *sketchInfo, includeNulls bool) int64 {
-	distinctCount := int64(si.sketch.Estimate())
+	var distinctCount int64
+	if si.sketchNew != nil {
+		distinctCount = int64(si.sketchNew.Estimate())
+	} else {
+		distinctCount = int64(si.sketchOld.Estimate())
+	}
 	if si.numNulls > 0 && !includeNulls {
 		// Nulls are included in the estimate, so reduce the count by 1 if nulls are
 		// not requested.
