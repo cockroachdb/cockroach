@@ -89,7 +89,6 @@ func TestStreamContextCancel(t *testing.T) {
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Insecure: true, // Secure connection is not required for this test
 			Settings: cluster.MakeClusterSettings(),
 		},
 	}
@@ -105,9 +104,16 @@ func TestStreamContextCancel(t *testing.T) {
 	rawconn, err := drpcmigrate.DialWithHeader(ctx, "tcp", rpcAddr, drpcmigrate.DRPCHeader)
 	require.NoError(t, err)
 
-	conn := drpcconn.NewWithOptions(rawconn, drpcconn.Options{
+	cm, err := c.Server(0).RPCContext().GetCertificateManager()
+	require.NoError(t, err)
+	tlsCfg, err := cm.GetNodeClientTLSConfig()
+	require.NoError(t, err)
+	tlsCfg = tlsCfg.Clone()
+	tlsCfg.ServerName = "*.local"
+	tlsConn := tls.Client(rawconn, tlsCfg)
+	conn := drpcconn.NewWithOptions(tlsConn, drpcconn.Options{
 		Manager: drpcmanager.Options{
-			SoftCancel: true, // Don't close the transport when stream context is canceled
+			SoftCancel: true, // don't close the transport when stream context is canceled
 		},
 	})
 	defer func() {
