@@ -327,6 +327,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	texpr tree.TableExpr,
 	from tree.TableExprs,
 	where *tree.Where,
+	whereColRefs *opt.ColSet,
 	limit *tree.Limit,
 	orderBy tree.OrderBy,
 ) {
@@ -397,7 +398,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	}
 
 	// WHERE
-	mb.b.buildWhere(where, mb.outScope)
+	mb.b.buildWhere(where, mb.outScope, whereColRefs)
 
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
@@ -518,7 +519,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	}
 
 	// WHERE
-	mb.b.buildWhere(where, mb.outScope)
+	mb.b.buildWhere(where, mb.outScope, nil /* colRefs */)
 
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
@@ -865,7 +866,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 // to checkColIDs, which allows pruning normalization rules to remove the
 // unnecessary projected column.
 func (mb *mutationBuilder) addCheckConstraintCols(
-	isUpdate bool, policyCmdScope cat.PolicyCommandScope, includeSelectOnInsert bool,
+	isUpdate bool, policyCmdScope cat.PolicyCommandScope, includeSelectPolicies bool,
 ) {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
@@ -890,7 +891,7 @@ func (mb *mutationBuilder) addCheckConstraintCols(
 				seenRLSConstraint = true
 
 				var rlsScalar opt.ScalarExpr
-				rlsScalar, check = mb.buildRLSCheckConstraint(policyCmdScope, includeSelectOnInsert, referencedCols)
+				rlsScalar, check = mb.buildRLSCheckConstraint(policyCmdScope, includeSelectPolicies, referencedCols)
 				colName := scopeColName("").WithMetadataName("rls")
 				scopeCol = mb.b.synthesizeColumn(projectionsScope, colName, rlsScalar.DataType(), nil /* expr */, rlsScalar)
 			} else {
@@ -970,10 +971,10 @@ func (mb *mutationBuilder) addCheckConstraintCols(
 // buildRLSCheckConstraint returns a RLS specific check constraint that is used
 // to enforce the policies on write.
 func (mb *mutationBuilder) buildRLSCheckConstraint(
-	cmdScope cat.PolicyCommandScope, includeSelectOnInsert bool, referencedCols *opt.ColSet,
+	cmdScope cat.PolicyCommandScope, includeSelectPolicies bool, referencedCols *opt.ColSet,
 ) (opt.ScalarExpr, *rlsCheckConstraint) {
 	tabMeta := mb.md.TableMeta(mb.tabID)
-	scalar := mb.buildRLSCheckExpr(tabMeta, cmdScope, includeSelectOnInsert, referencedCols)
+	scalar := mb.buildRLSCheckExpr(tabMeta, cmdScope, includeSelectPolicies, referencedCols)
 
 	// Build a CheckConstraint so the caller knows what columns were referenced.
 	check := rlsCheckConstraint{
@@ -987,15 +988,22 @@ func (mb *mutationBuilder) buildRLSCheckConstraint(
 // security (RLS) policies via a synthetic check constraint. The resulting
 // expression is used during data mutation operations (e.g., INSERT, UPDATE, UPSERT).
 //
-// The includeSelectOnInsert flag indicates whether SELECT policies should also be
-// included in the constraint. This is necessary for certain INSERT scenarios
-// (e.g., INSERT ... RETURNING, INSERT ... ON CONFLICT DO NOTHING), where rows
-// may need to be read during execution, even if no updates occur. This behavior
-// aligns with postgres, which also enforces SELECT policies in these cases.
+// The includeSelectPolicies parameter controls whether SELECT policies are also
+// enforced in the check constraint:
+//   - For INSERT: if set, SELECT policies are applied to the newly inserted rows
+//     (e.g., for INSERT ... RETURNING to ensure returned rows are visible).
+//   - For UPDATE: if set, SELECT policies are applied if any SET clause, WHERE clause,
+//     or RETURNING clause references a column from the table (i.e., when existing
+//     rows need to be checked for visibility).
+//   - For UPSERT: this parameter is ignored because UPSERT enforces SELECT policies
+//     internally based on conflict detection.
+//
+// The referencedCols is updated to reflect the columns that are referenced in
+// all applied policy expressions.
 func (mb *mutationBuilder) buildRLSCheckExpr(
 	tabMeta *opt.TableMeta,
 	cmdScope cat.PolicyCommandScope,
-	includeSelectOnInsert bool,
+	includeSelectPolicies bool,
 	referencedCols *opt.ColSet,
 ) opt.ScalarExpr {
 	if mb.b.isExemptFromRLSPolicies(tabMeta, cmdScope) {
@@ -1005,23 +1013,26 @@ func (mb *mutationBuilder) buildRLSCheckExpr(
 	var scalar opt.ScalarExpr
 	switch cmdScope {
 	case cat.PolicyScopeInsert:
+		scalar = mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeInsert, referencedCols)
 		// Only apply select policies if requested.
-		var selectPolicyExpr opt.ScalarExpr = memo.TrueSingleton
-		if includeSelectOnInsert {
+		if includeSelectPolicies {
 			// Note: we use mb.outScope because we want the policies applied to the newly
 			// inserted rows. For example, INSERT ... RETURNING must ensure the returned
 			// rows are visible.
-			selectPolicyExpr = mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols)
+			scalar = mb.b.factory.ConstructAnd(
+				mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
+				scalar,
+			)
 		}
-		scalar = mb.b.factory.ConstructAnd(
-			selectPolicyExpr,
-			mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeInsert, referencedCols),
-		)
 	case cat.PolicyScopeUpdate:
-		scalar = mb.b.factory.ConstructAnd(
-			mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
-			mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeUpdate, referencedCols),
-		)
+		scalar = mb.genPolicyWithCheckExpr(tabMeta, cat.PolicyScopeUpdate, referencedCols)
+		// Only apply select policies if requested.
+		if includeSelectPolicies {
+			scalar = mb.b.factory.ConstructAnd(
+				mb.genPolicyUsingExpr(tabMeta, cat.PolicyScopeSelect, mb.outScope, referencedCols),
+				scalar,
+			)
+		}
 	case cat.PolicyScopeUpsert:
 		// For UPSERT, the applied RLS policies depend on whether the operation results in
 		// an INSERT or an UPDATE. We determine this by checking if the canary column is NULL:
