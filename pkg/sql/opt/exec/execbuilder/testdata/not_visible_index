@@ -615,7 +615,7 @@ CREATE VECTOR INDEX idx_partial_invisible ON t1 (a, v) WHERE a > 10 NOT VISIBLE
 
 # Check invisible vector partial index: ignored idx_partial_invisible.
 query T
-EXPLAIN SELECT * FROM t1 WHERE a > 10 ORDER BY v <-> '[3,1,2]' LIMIT 5;
+EXPLAIN SELECT * FROM t1 WHERE a IN (10, 20) ORDER BY v <-> '[3,1,2]' LIMIT 5;
 ----
 distribution: local
 vectorized: true
@@ -627,12 +627,38 @@ vectorized: true
 └── • render
     │
     └── • filter
-        │ filter: a > 10
+        │ filter: a IN (10, 20)
         │
         └── • scan
               missing stats
               table: t1@t1_pkey
               spans: FULL SCAN
+
+statement ok
+ALTER INDEX idx_partial_invisible VISIBLE
+
+# Partial index is now visible, so it should be chosen.
+query T
+EXPLAIN SELECT * FROM t1 WHERE a IN (20, 30) ORDER BY v <-> '[3,1,2]' LIMIT 5;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column9
+│ k: 5
+│
+└── • render
+    │
+    └── • lookup join
+        │ table: t1@t1_pkey
+        │ equality: (rowid) = (rowid)
+        │ equality cols are key
+        │
+        └── • vector search
+              table: t1@idx_partial_invisible (partial index)
+              target count: 5
+              prefix spans: [/20 - /20] [/30 - /30]
 
 statement ok
 DROP TABLE t1

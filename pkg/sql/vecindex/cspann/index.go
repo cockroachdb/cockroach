@@ -535,12 +535,6 @@ func (vi *Index) SearchForDelete(
 	return vi.searchForUpdateHelper(ctx, idxCtx, removeFunc, key, vi.options.MaxDeleteAttempts)
 }
 
-// SuspendFixups suspends background fixup processing until ProcessFixups is
-// explicitly called. It is used for testing.
-func (vi *Index) SuspendFixups() {
-	vi.fixups.Suspend()
-}
-
 // DiscardFixups drops all pending fixups. It is used for testing.
 func (vi *Index) DiscardFixups() {
 	vi.fixups.Process(true /* discard */)
