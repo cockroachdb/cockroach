@@ -965,7 +965,15 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if opc.gf.Initialized() {
 		planTop.instrumentation.planGist = opc.gf.PlanGist()
 	}
-	planTop.instrumentation.costEstimate = mem.RootExpr().Cost().C
+
+	cost := mem.RootExpr().Cost()
+	if cost.MaxCardinality() <= 1 {
+		// Use the row-by-row engine if the entire plan is guaranteed to operate
+		// on one row or less.
+		planTop.avoidVectorization = true
+	}
+	planTop.instrumentation.costEstimate = cost.C
+
 	available := mem.RootExpr().Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available
 	if available {
