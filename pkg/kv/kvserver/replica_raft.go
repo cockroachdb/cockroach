@@ -876,12 +876,12 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
-func (r *Replica) attachRaftEntriesMonitorRaftMuLocked() {
+func (r *replicaLogStorage) attachRaftEntriesMonitorRaftMuLocked() {
 	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(
 		r.store.metrics.RaftLoadedEntriesBytes)
 }
 
-func (r *Replica) detachRaftEntriesMonitorRaftMuLocked() {
+func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
 	// Return all the used bytes back to the limiter.
 	r.raftMu.bytesAccount.Clear()
 	// De-initialize the account so that log storage Entries() calls don't track
@@ -1067,11 +1067,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// from log storage, and ignores the in-memory unstable entries. Consider a
 		// more complete flow control mechanism here, and eliminating the plumbing
 		// hack with the bytesAccount.
-		r.attachRaftEntriesMonitorRaftMuLocked()
+		r.asLogStorage().attachRaftEntriesMonitorRaftMuLocked()
 		// We apply committed entries during this handleRaftReady, so it is ok to
 		// release the corresponding memory tokens at the end of this func. Next
 		// time we enter this function, the account will be empty again.
-		defer r.detachRaftEntriesMonitorRaftMuLocked()
+		defer r.asLogStorage().detachRaftEntriesMonitorRaftMuLocked()
 		if toApply, err = logSnapshot.Slice(
 			ready.Committed, r.store.cfg.RaftMaxCommittedSizePerReady,
 		); err != nil {
