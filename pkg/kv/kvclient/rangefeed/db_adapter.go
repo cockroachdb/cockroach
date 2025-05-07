@@ -118,6 +118,8 @@ func (dbc *dbAdapter) Scan(
 	if cfg.mon != nil {
 		acc = cfg.mon.MakeConcurrentBoundAccount()
 		defer acc.Close(ctx)
+	} else {
+		acc = mon.NewStandaloneUnlimitedConcurrentAccount()
 	}
 
 	// If we don't have parallelism configured, just scan each span in turn.
