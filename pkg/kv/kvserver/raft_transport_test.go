@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -111,6 +112,8 @@ type raftTransportTestContext struct {
 	nodeRPCContext *rpc.Context
 	gossip         *gossip.Gossip
 	st             *cluster.Settings
+
+	skipOnListenErr bool // if true, calls Skip on error from net.Listen
 }
 
 // clockWithManualSource is a pair of clocks: a manual clock and a clock that
@@ -202,8 +205,12 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		knobs,
 	)
 	rttc.transports[nodeID] = transport
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err != nil && rttc.skipOnListenErr {
+		skip.IgnoreLintf(rttc.t, "skipping test due to listen error: %s", err)
+	}
 	require.NoError(rttc.t, err)
+	require.NoError(rttc.t, netutil.ServeGRPC(stopper, grpcServer, ln))
 	return transport, ln.Addr()
 }
 
@@ -577,6 +584,11 @@ func TestReopenConnection(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
+
+	// We're re-listening on an old address here, but the port may be
+	// in use. In the very rare case of this happening, skip the test.
+	// See: https://github.com/cockroachdb/cockroach/issues/146175.
+	rttc.skipOnListenErr = true
 	serverTransport, serverAddr :=
 		rttc.AddNodeWithoutGossip(
 			serverReplica.NodeID,
