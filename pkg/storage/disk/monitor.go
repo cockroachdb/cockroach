@@ -6,15 +6,17 @@
 package disk
 
 import (
-	"fmt"
+	"context"
 	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
 
 var DefaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
@@ -28,7 +30,12 @@ type DeviceID struct {
 
 // String returns the string representation of the device ID.
 func (d DeviceID) String() string {
-	return fmt.Sprintf("%d:%d", d.major, d.minor)
+	return redact.StringWithoutMarkers(d)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (d DeviceID) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%d:%d", d.major, d.minor)
 }
 
 // MonitorManager provides observability into a pool of disks by sampling disk stats
@@ -128,7 +135,7 @@ func (m *MonitorManager) unrefDisk(disk *monitoredDisk) {
 }
 
 type statsCollector interface {
-	collect(disks []*monitoredDisk) error
+	collect(disks []*monitoredDisk, now time.Time) (countCollected int, err error)
 }
 
 // monitorDisks runs a loop collecting disk stats for all monitored disks.
@@ -137,9 +144,13 @@ type statsCollector interface {
 // race where the MonitorManager creates a new stop channel after unrefDisk sends a message
 // across the old stop channel.
 func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct{}) {
+	// TODO(jackson): Should we propagate a context here to replace the stop
+	// channel?
+	ctx := context.TODO()
 	ticker := time.NewTicker(DefaultDiskStatsPollingInterval)
 	defer ticker.Stop()
 
+	every := log.Every(5 * time.Minute)
 	for {
 		select {
 		case <-stop:
@@ -150,13 +161,27 @@ func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct
 			disks := m.mu.disks
 			m.mu.Unlock()
 
-			if err := collector.collect(disks); err != nil {
+			now := timeutil.Now()
+			countCollected, err := collector.collect(disks, now)
+			if err != nil {
 				for i := range disks {
 					disks[i].tracer.RecordEvent(traceEvent{
 						time:  timeutil.Now(),
 						stats: Stats{},
 						err:   err,
 					})
+				}
+			} else if countCollected != len(disks) && every.ShouldLog() {
+				// Log a warning if we collected fewer disk stats than expected.
+				log.Warningf(ctx, "collected %d disk stats, expected %d", countCollected, len(disks))
+				cutoff := now.Add(-10 * time.Second)
+				for i := range disks {
+					if lastEventTime := disks[i].tracer.LastEventTime(); lastEventTime.IsZero() {
+						log.Warningf(ctx, "disk %s has not recorded any stats", disks[i].deviceID)
+					} else if lastEventTime.Before(cutoff) {
+						log.Warningf(ctx, "disk %s has not recorded any stats since %s",
+							disks[i].deviceID, lastEventTime)
+					}
 				}
 			}
 		}
@@ -225,6 +250,11 @@ type Monitor struct {
 		// Tracks the time of the last invocation of IncrementalStats.
 		lastIncrementedAt time.Time
 	}
+}
+
+// DeviceID returns the device ID of the disk being monitored.
+func (m *Monitor) DeviceID() DeviceID {
+	return m.deviceID
 }
 
 // CumulativeStats returns the most-recent stats observed.

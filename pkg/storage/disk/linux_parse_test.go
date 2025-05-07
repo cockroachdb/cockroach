@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -59,7 +60,7 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				// resizing logic.
 				buf: make([]byte, 16),
 			}
-			err := s.collect(disks)
+			_, err := s.collect(disks, timeutil.Now())
 			if err != nil {
 				return err.Error()
 			}
