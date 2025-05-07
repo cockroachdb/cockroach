@@ -332,14 +332,12 @@
 (LeftJoin
     $left:*
     $right:* & (HasZeroRows $right)
-    $on:*
-    $private:*
 )
 =>
 (Project
     $left
-    (PassthroughCols $left)
     (MakeNullProjections $right)
+    (PassthroughCols $left)
 )
 
 # SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's
