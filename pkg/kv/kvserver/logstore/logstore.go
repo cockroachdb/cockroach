@@ -132,7 +132,6 @@ type LogStore struct {
 	Sideload    SideloadStorage
 	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
-	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 
 	DisableSyncLogWriteToss bool // for testing only
@@ -323,19 +322,6 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 			state.ByteSize = 0
 		}
 	}
-
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
-	//
-	// In the blocking log sync case, these entries are already durable. In the
-	// non-blocking case, these entries have been written to the pebble engine (so
-	// reads of the engine will see them), but they are not yet be durable. This
-	// means that the entry cache can lead the durable log. This is allowed by
-	// etcd/raft, which maintains its own tracking of entry durability by
-	// splitting its log into an unstable portion for entries that are not known
-	// to be durable and a stable portion for entries that are known to be
-	// durable.
-	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
 
 	return state, nil
 }
@@ -607,7 +593,7 @@ func LoadEntries(
 	ctx context.Context,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
+	eCache *raftentry.Cache, // TODO(#145562): this should be the caller's concern
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
 	maxBytes uint64,
