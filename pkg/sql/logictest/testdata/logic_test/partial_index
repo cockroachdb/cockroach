@@ -1364,7 +1364,6 @@ SELECT * FROM prune@idx WHERE c > 0
 1  2  3  7
 
 # Vector partial indexes.
-# TODO(andyk): Need more tests once insertion is possible.
 subtest vector
 
 statement ok
@@ -1397,6 +1396,142 @@ statement ok
 CREATE TABLE vec (id INT PRIMARY KEY, s STRING, v VECTOR(3));
 CREATE VECTOR INDEX ON vec (v) WHERE s IN ('foo', 'bar');
 DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (k INT PRIMARY KEY, v VECTOR(2), s STRING);
+CREATE VECTOR INDEX i ON vec (s, v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+# Only consider foo rows.
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Consider both foo and bar rows.
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+4  [5,6]  bar
+
+# Delete bar row and ensure it is not returned.
+statement ok
+DELETE FROM vec WHERE k = 4
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Update vector and ensure it is now returned.
+statement ok
+UPDATE vec SET v = '[6,6]' WHERE k = 1
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+1  [6,6]  foo
+
+# Update primary key and move row into partial index (baz => bar).
+statement ok
+UPDATE vec SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE vec SET s = 'bar' WHERE k = 3
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3   [5,6]  bar
+10  [6,6]  foo
+2   [3,4]  foo
+
+# Move row out of partial index (foo => baz).
+statement ok
+UPDATE vec SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [5,6]  bar
+2  [3,4]  foo
+
+# Overwrite value of row in partial index.
+statement ok
+UPSERT INTO vec VALUES (3, '[7, 8]', 'bar')
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'bar' ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [7,8]  bar
+
+statement error index "i" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM vec@i WHERE s = 'baz' ORDER BY v <-> '[5,5]' LIMIT 3
+
+statement ok
+DROP TABLE vec
+
+# Backfill a partial vector index.
+statement ok
+CREATE TABLE vec_b (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_b VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_b (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_b@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+DROP TABLE vec_b
+
+# Backfill a partial vector index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE vec_c (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_c VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_c (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_c@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE vec_c
 
 # Tests for partial indexes with predicates that reference virtual computed
 # columns.
