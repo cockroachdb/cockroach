@@ -237,6 +237,29 @@ INSERT INTO writer VALUES (3, 'three');
   size: 3 columns, 1 row
   policies: p_insert
 
+# The next two show that the SELECT policy is applied when using the RETURNING
+# clause, but only if it references the columns in the table.
+
+plan
+INSERT INTO writer VALUES (4, 'four') RETURNING *;
+----
+• insert fast path
+  into: writer(key, value)
+  auto commit
+  size: 3 columns, 1 row
+  policies: p_select, p_insert
+
+plan
+INSERT INTO writer VALUES (4, 'four') RETURNING 'foo'
+----
+• render
+│
+└── • insert fast path
+      into: writer(key, value)
+      auto commit
+      size: 3 columns, 1 row
+      policies: p_insert
+
 exec-ddl
 CREATE TABLE populator (key int not null primary key, value text);
 ----
