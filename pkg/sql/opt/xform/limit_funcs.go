@@ -466,7 +466,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
 	_ *physical.Required,
 	scanExpr *memo.ScanExpr,
-	filters memo.FiltersExpr,
+	originalFilters memo.FiltersExpr,
 	passthrough opt.ColSet,
 	vectorCol opt.ColumnID,
 	queryVector opt.ScalarExpr,
@@ -479,12 +479,12 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
 	optionalFilters := c.checkConstraintFilters(sp.Table)
-	computedColFilters := c.ComputedColFilters(sp, filters, optionalFilters)
+	computedColFilters := c.ComputedColFilters(sp, originalFilters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, filters, rejectNonVectorIndexes)
-	iter.ForEach(func(index cat.Index, _ memo.FiltersExpr, _ opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, originalFilters, rejectNonVectorIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, _ opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		if sp.Table.ColumnID(index.VectorColumn().Ordinal()) != vectorCol {
 			// This index is for a different vector column.
 			return
