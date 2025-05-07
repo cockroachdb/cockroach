@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -50,6 +51,9 @@ func TestDistSenderReplicaStall(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "clientTimeout", func(t *testing.T, clientTimeout bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer time.AfterFunc(29*time.Second, func() {
+			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
+		}).Stop()
 		defer cancel()
 
 		// The lease won't move unless we use expiration-based leases. We also
