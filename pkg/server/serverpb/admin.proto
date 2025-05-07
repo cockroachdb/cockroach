@@ -652,7 +652,7 @@ message HealthResponse {
 
 message RestartPlanBatch {
   repeated roachpb.NodeDescriptor batch = 1;
-  bool moreBatches = 2;
+  bool more_batches = 2;
 }
 
 // LivenessRequest requests liveness data for all nodes on the cluster.

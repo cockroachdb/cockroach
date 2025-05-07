@@ -592,15 +592,15 @@ func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// parse the capacityTarget
-	capacityTarget := 0.0
 	capTargetStr := r.URL.Query().Get("capacityTarget")
-	if capTargetStr != "" {
-		var err error
-		capacityTarget, err = strconv.ParseFloat(capTargetStr, 64)
-		if err != nil {
-			apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("invalid capacityTarget: %s", capTargetStr))
-			return
-		}
+	if capTargetStr == "" {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("missing capacityTarget query parameter"))
+		return
+	}
+	capacityTarget, err := strconv.ParseFloat(capTargetStr, 64)
+	if err != nil {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("invalid capacityTarget: %s", capTargetStr))
+		return
 	}
 
 	batch, moreBatches, err := planRollingRestart(ctx, doneNodes, capacityTarget, a.systemStatus)
@@ -645,9 +645,6 @@ func planRollingRestart(
 ) (batch []*roachpb.NodeDescriptor, moreBatches bool, err error) {
 	if capacityTarget >= 1.0 {
 		return nil, false, fmt.Errorf("capacity target must be less than 1.0")
-	}
-	if capacityTarget < 0.66 {
-		capacityTarget = 0.8
 	}
 
 	totalNodes := systemStatus.storePool.ClusterNodeCount()
