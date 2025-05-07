@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
@@ -171,7 +172,7 @@ func New(quantizer quantize.Quantizer, seed int64) *Store {
 	st := &Store{
 		dims:          quantizer.GetDims(),
 		seed:          seed,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
+		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims(), quantizer.GetDistanceMetric()),
 		quantizer:     quantizer,
 	}
 
@@ -676,8 +677,9 @@ func Load(data []byte) (*Store, error) {
 	inMemStore.mu.stats = storeProto.Stats
 	inMemStore.mu.pending.Init()
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(int(storeProto.Config.Dims), storeProto.Config.Seed)
-	unquantizer := quantize.NewUnQuantizer(int(storeProto.Config.Dims))
+	raBitQuantizer := quantize.NewRaBitQuantizer(
+		int(storeProto.Config.Dims), storeProto.Config.Seed, vecdist.L2Squared)
+	unquantizer := quantize.NewUnQuantizer(int(storeProto.Config.Dims), vecdist.L2Squared)
 
 	// Construct the Partition objects.
 	for i := range storeProto.Partitions {

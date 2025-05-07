@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +44,7 @@ func TestPartition(t *testing.T) {
 	valueBytes20b := ValueBytes{11, 12}
 
 	var workspace workspace.T
-	quantizer := quantize.NewUnQuantizer(2)
+	quantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 
 	// newTestPartition creates a partition with 2 vectors.
 	newTestPartition := func() *Partition {

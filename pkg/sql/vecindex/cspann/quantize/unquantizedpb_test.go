@@ -43,10 +43,6 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 	distances = testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 4)
 	require.Equal(t, []float32{3, 2.2361, 9.434, 6.7082}, distances)
 
-	// ComputeSquaredDistances on vectors.
-	quantizedSet.ComputeSquaredDistances(vector.T{-1, 1}, distances)
-	require.Equal(t, []float32{5, 25, 181, 113}, testutils.RoundFloats(distances, 4))
-
 	// Check that clone is unaffected.
 	require.Equal(t, []float32{4, 2}, cloned.Centroid)
 	require.Equal(t, []float32{10, 9.43, 4.12, 6.71}, testutils.RoundFloats(cloned.CentroidDistances, 2))

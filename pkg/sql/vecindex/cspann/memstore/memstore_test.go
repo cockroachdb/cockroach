@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -66,7 +67,7 @@ func TestMemStore(t *testing.T) {
 
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 
-	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 	testPKs := []cspann.KeyBytes{{11}, {12}}
@@ -109,7 +110,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	valueBytes1 := cspann.ValueBytes{1, 2}
 	valueBytes2 := cspann.ValueBytes{3, 4}
 
-	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42, vecdist.L2Squared)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
@@ -165,7 +166,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	quantizer := quantize.NewUnQuantizer(2)
+	quantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
@@ -241,8 +242,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42)
-	unquantizer := quantize.NewUnQuantizer(2)
+	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42, vecdist.L2Squared)
+	unquantizer := quantize.NewUnQuantizer(2, vecdist.L2Squared)
 	store := New(raBitQuantizer, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
 	centroid := []float32{4, 3}

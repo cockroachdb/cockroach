@@ -27,6 +27,7 @@ go_test(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/cspann/vecdist",
         "//pkg/sql/vecindex/cspann/workspace",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",

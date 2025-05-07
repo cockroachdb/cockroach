@@ -231,7 +231,7 @@ func NewIndex(
 	vi := &Index{
 		options:       *options,
 		store:         store,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
+		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims(), quantizer.GetDistanceMetric()),
 		quantizer:     quantizer,
 	}
 	if vi.options.MinPartitionSize == 0 {
