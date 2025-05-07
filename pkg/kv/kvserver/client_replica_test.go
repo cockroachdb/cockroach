@@ -2911,12 +2911,12 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
 }
 
-// TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable checks that if a range
-// lost its quorum, the remaining replicas in that range will have their
+// TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable checks that if a
+// range lost its quorum, the remaining replicas in that range will have their
 // leaderlessWatcher indicate that the range is unavailable. Also, it checks
 // that when the range regains quorum, the leaderlessWatcher will indicate that
 // the range is available.
-func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
+func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2947,6 +2947,12 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 				},
 			},
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Make sure that we don't depend on the consistency queue
+					// running. It could cause replicas to attempt to acquire the
+					// lease, which might unintentionally unquiesce replicas. See #146188.
+					DisableConsistencyQueue: true,
+				},
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: stickyVFSRegistry,
 				},
@@ -2967,6 +2973,16 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
+
+	// Make sure that the range is up and functional.
+	// Make sure that there is a fully functioning quorum before it introduce a
+	// temporary unavailability. This deflakes the test especially for epoch
+	// leases because the node that we haven't restarted is guaranteed to not be a
+	// learner, and therefore it can campaign and unquiesce the recently restarted
+	// node.
+	_, pErr := kv.SendWrapped(context.Background(),
+		tc.GetFirstStoreFromServer(t, 0).TestSender(), putArgs(key, []byte("init")))
+	require.NoError(t, pErr.GoError())
 
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
