@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
+	"golang.org/x/time/rate"
 )
 
 // Path variables.
@@ -572,6 +574,10 @@ func (a *apiV2Server) planDrain(w http.ResponseWriter, r *http.Request) {
 	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 }
 
+// planDrain requests are somewhat expensive, and there's no real reason to invoke it at a high rate, so we rate limit
+// it.
+var planDrainRateLimiter = rate.NewLimiter(rate.Every(time.Second), 10)
+
 func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
@@ -600,6 +606,12 @@ func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 	capacityTarget, err := strconv.ParseFloat(capTargetStr, 64)
 	if err != nil {
 		apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("invalid capacityTarget: %s", capTargetStr))
+		return
+	}
+
+	err = planDrainRateLimiter.Wait(ctx)
+	if err != nil {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusInternalServerError, err)
 		return
 	}
 
