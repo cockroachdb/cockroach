@@ -618,6 +618,7 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
         "@io_storj_drpc//drpcconn",
+        "@io_storj_drpc//drpcmanager",
         "@io_storj_drpc//drpcmigrate",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
