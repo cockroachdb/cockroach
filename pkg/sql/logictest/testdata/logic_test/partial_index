@@ -1367,14 +1367,35 @@ SELECT * FROM prune@idx WHERE c > 0
 subtest vector
 
 statement ok
-CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (id, v) WHERE id > 0);
+CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v) WHERE id > 0);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+query IT
+SELECT * FROM vec@primary WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+statement ok
 DROP TABLE vec;
 
 statement ok
 CREATE TABLE vec (
   id INT PRIMARY KEY,
   v VECTOR(3),
-  VECTOR INDEX (id, v) WHERE v <-> '[3,1,2]' < 1,
+  VECTOR INDEX (v) WHERE v <-> '[3,1,2]' >= 3,
   FAMILY (id, v)
 );
 
@@ -1385,9 +1406,28 @@ vec  CREATE TABLE public.vec (
        id INT8 NOT NULL,
        v VECTOR(3) NULL,
        CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
-       VECTOR INDEX vec_id_v_idx (id ASC, v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) < 1.0:::FLOAT8,
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
        FAMILY fam_0_id_v (id, v)
      );
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+query IT
+SELECT * FROM vec@primary WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
 
 statement ok
 DROP TABLE vec;
@@ -1395,6 +1435,27 @@ DROP TABLE vec;
 statement ok
 CREATE TABLE vec (id INT PRIMARY KEY, s STRING, v VECTOR(3));
 CREATE VECTOR INDEX ON vec (v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, 'foo', '[1,2,3]'),
+    (2, 'bar', '[4,5,6]'),
+    (3, 'baz', '[7,8,9]'),
+    (4, 'bar', '[10,11,12]')
+
+query ITT
+SELECT * FROM vec@vec_v_idx WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+query ITT
+SELECT * FROM vec@primary WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+statement ok
 DROP TABLE vec;
 
 statement ok
