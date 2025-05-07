@@ -1184,7 +1184,7 @@ func (r *Replica) ID() storage.FullReplicaID {
 // LogStorageRaftMuLocked returns the Replica's log storage.
 // raftMu must be held when using the returned object.
 func (r *Replica) LogStorageRaftMuLocked() *logstore.LogStore {
-	return r.raftMu.logStorage
+	return r.asLogStorage().raftMu.logStorage
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
@@ -1958,12 +1958,13 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// TruncatedState field is removed from ReplicaState. We can't do it right now
 	// because the ReplicaState is embedded into RangeInfo, and this confuses the
 	// proto compiler.
-	ri.TruncatedState = (protoutil.Clone(&r.shMu.raftTruncState)).(*kvserverpb.RaftTruncatedState)
+	ls := r.asLogStorage()
+	ri.TruncatedState = (protoutil.Clone(&ls.shMu.raftTruncState)).(*kvserverpb.RaftTruncatedState)
 
-	ri.LastIndex = r.shMu.lastIndexNotDurable
+	ri.LastIndex = ls.shMu.lastIndexNotDurable
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
-	ri.RaftLogSize = r.shMu.raftLogSize
-	ri.RaftLogSizeTrusted = r.shMu.raftLogSizeTrusted
+	ri.RaftLogSize = ls.shMu.raftLogSize
+	ri.RaftLogSizeTrusted = ls.shMu.raftLogSizeTrusted
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())
@@ -2010,9 +2011,9 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
 		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
-	} else if loaded, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
+	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
 		log.Fatalf(ctx, "%s", err)
-	} else if ts := r.shMu.raftTruncState; loaded != ts {
+	} else if ts := r.asLogStorage().shMu.raftTruncState; loaded != ts {
 		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}

@@ -695,14 +695,15 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		LastTerm:  truncState.Term,
 		ByteSize:  0, // the log is empty now
 	})
-	r.shMu.raftTruncState = truncState
+	ls := r.asLogStorage()
+	ls.shMu.raftTruncState = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	//
 	// TODO(pav-kv): does this assume that snapshots can contain log entries,
 	// which is no longer true? The comment needs an update, and the decision to
 	// set this flag to false revisited.
-	r.shMu.raftLogSizeTrusted = false
+	ls.shMu.raftLogSizeTrusted = false
 
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.shMu.state.Stats)
