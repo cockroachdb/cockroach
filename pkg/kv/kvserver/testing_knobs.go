@@ -37,17 +37,23 @@ import (
 // particular point is reached) or to change the behavior by returning
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
-	EvalKnobs               kvserverbase.BatchEvalTestingKnobs
-	IntentResolverKnobs     kvserverbase.IntentResolverTestingKnobs
-	TxnWaitKnobs            txnwait.TestingKnobs
-	ConsistencyTestingKnobs ConsistencyTestingKnobs
-	TenantRateKnobs         tenantrate.TestingKnobs
-	EngineKnobs             []storage.ConfigOption
-	AllocatorKnobs          *allocator.TestingKnobs
-	GossipTestingKnobs      StoreGossipTestingKnobs
-	ReplicaPlannerKnobs     plan.ReplicaPlannerTestingKnobs
-	StoreLivenessKnobs      *storeliveness.TestingKnobs
-	RaftTestingKnobs        *raft.TestingKnobs
+	EvalKnobs                kvserverbase.BatchEvalTestingKnobs
+	IntentResolverKnobs      kvserverbase.IntentResolverTestingKnobs
+	TxnWaitKnobs             txnwait.TestingKnobs
+	ConsistencyTestingKnobs  ConsistencyTestingKnobs
+	TenantRateKnobs          tenantrate.TestingKnobs
+	EngineKnobs              []storage.ConfigOption
+	AllocatorKnobs           *allocator.TestingKnobs
+	GossipTestingKnobs       StoreGossipTestingKnobs
+	ReplicaPlannerKnobs      plan.ReplicaPlannerTestingKnobs
+	StoreLivenessKnobs       *storeliveness.TestingKnobs
+	RaftTestingKnobs         *raft.TestingKnobs
+	RaftLogReadyRaftMuLocked func(
+		ctx context.Context,
+		rangeID roachpb.RangeID,
+		replID roachpb.ReplicaID,
+		rd raft.Ready,
+	) bool
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
 	// blocking in the filter will not block interfering requests. If it
