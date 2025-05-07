@@ -1322,9 +1322,9 @@ func cmdCPut(e *evalCtx) error {
 				Stats:                          e.ms,
 				ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 				MaxLockConflicts:               e.getMaxLockConflicts(),
-				OriginTimestamp:                originTimestamp,
 			},
 			AllowIfDoesNotExist: behavior,
+			OriginTimestamp:     originTimestamp,
 		}
 		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, opts)
 		if err != nil {
@@ -1348,12 +1348,6 @@ func cmdInitPut(e *evalCtx) error {
 	key := e.getKey()
 	val := e.getVal()
 	failOnTombstones := e.hasArg("failOnTombstones")
-
-	originTimestamp := hlc.Timestamp{}
-	if e.hasArg("origin_ts") {
-		originTimestamp = e.getTsWithName("origin_ts")
-	}
-
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("initput", func(rw storage.ReadWriter) error {
@@ -1363,7 +1357,6 @@ func cmdInitPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			OriginTimestamp:                originTimestamp,
 		}
 		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
 		if err != nil {
@@ -1384,14 +1377,7 @@ func cmdDelete(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(txn)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
-
-	originTimestamp := hlc.Timestamp{}
-	if e.hasArg("origin_ts") {
-		originTimestamp = e.getTsWithName("origin_ts")
-	}
-
 	resolve, resolveStatus := e.getResolve()
-
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
 			Txn:                            txn,
@@ -1399,7 +1385,6 @@ func cmdDelete(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			OriginTimestamp:                originTimestamp,
 		}
 		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
@@ -1431,11 +1416,6 @@ func cmdDeleteRange(e *evalCtx) error {
 		e.scanArg("max", &max)
 	}
 
-	originTimestamp := hlc.Timestamp{}
-	if e.hasArg("origin_ts") {
-		originTimestamp = e.getTsWithName("origin_ts")
-	}
-
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del_range", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCWriteOptions{
@@ -1444,7 +1424,6 @@ func cmdDeleteRange(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			OriginTimestamp:                originTimestamp,
 		}
 		deleted, resumeSpan, num, acqs, err := storage.MVCCDeleteRange(
 			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
@@ -1609,11 +1588,6 @@ func cmdIncrement(e *evalCtx) error {
 		inc = int64(incI)
 	}
 
-	originTimestamp := hlc.Timestamp{}
-	if e.hasArg("origin_ts") {
-		originTimestamp = e.getTsWithName("origin_ts")
-	}
-
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("increment", func(rw storage.ReadWriter) error {
@@ -1623,7 +1597,6 @@ func cmdIncrement(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			OriginTimestamp:                originTimestamp,
 		}
 		curVal, acq, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
@@ -1666,11 +1639,6 @@ func cmdPut(e *evalCtx) error {
 		e.scanArg("import_epoch", &importEpoch)
 	}
 
-	originTimestamp := hlc.Timestamp{}
-	if e.hasArg("origin_ts") {
-		originTimestamp = e.getTsWithName("origin_ts")
-	}
-
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
@@ -1681,7 +1649,6 @@ func cmdPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			OriginTimestamp:                originTimestamp,
 		}
 		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
 		if err != nil {
