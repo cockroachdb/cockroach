@@ -9,14 +9,15 @@ package disk
 
 import (
 	"io/fs"
+	"time"
 
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 type defaultCollector struct{}
 
-func (defaultCollector) collect([]*monitoredDisk) error {
-	return nil
+func (defaultCollector) collect(disks []*monitoredDisk, time time.Time) (int, error) {
+	return len(disks), nil
 }
 
 func newStatsCollector(fs vfs.FS) (*defaultCollector, error) {
