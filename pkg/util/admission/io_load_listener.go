@@ -1341,10 +1341,14 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		res.aux.perWorkTokensAux.intL0WriteLinearModel.multiplier,
 		ib(res.aux.perWorkTokensAux.intL0WriteLinearModel.constant),
 		res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant))
-	p.Printf("ingested-model %.2fx+%s (smoothed %.2fx+%s) + ",
+	p.Printf("l0-ingest-model %.2fx+%s (smoothed %.2fx+%s) + ",
 		res.aux.perWorkTokensAux.intL0IngestedLinearModel.multiplier,
 		ib(res.aux.perWorkTokensAux.intL0IngestedLinearModel.constant),
 		res.l0IngestLM.multiplier, ib(res.l0IngestLM.constant))
+	p.Printf("ingest-model %.2fx+%s (smoothed %.2fx+%s) + ",
+		res.aux.perWorkTokensAux.intIngestedLinearModel.multiplier,
+		ib(res.aux.perWorkTokensAux.intIngestedLinearModel.constant),
+		res.ingestLM.multiplier, ib(res.ingestLM.constant))
 	p.Printf("write-amp-model %.2fx+%s (smoothed %.2fx+%s) + ",
 		res.aux.perWorkTokensAux.intWriteAmpLinearModel.multiplier,
 		ib(res.aux.perWorkTokensAux.intWriteAmpLinearModel.constant),
