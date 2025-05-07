@@ -604,7 +604,7 @@ func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return toClientClosedTsPolicy(closedTimestampPolicy(r.descRLocked(),
-		r.cachedClosedTimestampPolicy.Load()))
+		*r.cachedClosedTimestampPolicy.Load()))
 }
 
 // TripBreaker synchronously trips the breaker.
