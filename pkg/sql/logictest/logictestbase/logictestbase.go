@@ -649,8 +649,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 
 	// Special alias for all testserver configs (for mixed-version testing).
 	"cockroach-go-testserver-configs": makeConfigSet(
-		// TODO(yuzefovich): when removing 24.3 version from here, ensure to
-		// use the alias in mixed_version_stats.
 		"cockroach-go-testserver-24.3",
 		"cockroach-go-testserver-25.1",
 	),
