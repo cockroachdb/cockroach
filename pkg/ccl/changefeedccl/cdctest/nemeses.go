@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
@@ -418,11 +419,16 @@ func RunNemesis(
 
 		defer queryGen.Close()
 		const numInserts = 100
+		const insertTimeout = 5 * time.Second
 		time := timeutil.Now()
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
 			log.Infof(ctx, "Executing query: %s", query)
-			_, err := db.Exec(query)
+			err := timeutil.RunWithTimeout(ctx, "nemeses populate table",
+				insertTimeout, func(ctx context.Context) error {
+					_, err := db.ExecContext(ctx, query)
+					return err
+				})
 			log.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
 			time = timeutil.Now()
 			if err != nil {
