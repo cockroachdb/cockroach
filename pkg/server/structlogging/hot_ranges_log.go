@@ -117,9 +117,7 @@ func StartHotRangesLoggingScheduler(
 // installation.
 func (s *hotRangesLoggingScheduler) startTask(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
-		if err := s.start(ctx, stopper); err != nil {
-			log.Warningf(ctx, "hot ranges stats logging scheduler stopped: %v", err)
-		}
+		s.start(ctx, stopper)
 	})
 }
 
@@ -134,7 +132,7 @@ func (s *hotRangesLoggingScheduler) startJob() error {
 	return nil
 }
 
-func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) error {
+func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		ci := CheckInterval
 		if s.multiTenant {
@@ -142,9 +140,9 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 		}
 		select {
 		case <-stopper.ShouldQuiesce():
-			return nil
+			return
 		case <-ctx.Done():
-			return nil
+			return
 		case <-time.After(ci):
 			s.maybeLogHotRanges(ctx, stopper)
 		case <-TestLoopChannel:
