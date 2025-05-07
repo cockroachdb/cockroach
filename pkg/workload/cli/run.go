@@ -709,17 +709,21 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 }
 
 func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file *os.File) {
+	log.Infof(ctx, "closing metrics exporter, if metricsExporter is nil, we will not close it")
 	if metricsExporter != nil {
+		log.Infof(ctx, "Metrics exporter is not nil, we will close it")
 		if err := metricsExporter.Close(func() error {
 			if file == nil {
 				log.Infof(ctx, "no file to close")
 				return nil
 			}
+			log.Infof(ctx, "Renaming temp file to final path file:histogram %s : %s", file.Name(), *histograms)
 			return renameTempFile(file, *histograms)
 		}); err != nil {
 			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
 		}
 	}
+	log.Infof(ctx, "Metrics exporter is nil, we will not close it")
 }
 
 func renameTempFile(file *os.File, finalPath string) error {
