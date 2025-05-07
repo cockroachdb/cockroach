@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"math"
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -27,6 +28,9 @@ import (
 // ErrDRPCDisabled is returned from hosts that in principle could but do not
 // have the DRPC server enabled.
 var ErrDRPCDisabled = errors.New("DRPC is not enabled")
+
+// Default idle connection timeout for DRPC connections in the pool.
+var defaultDRPCConnIdleTimeout = 5 * time.Minute
 
 type drpcServerI interface {
 	Serve(ctx context.Context, lis net.Listener) error
@@ -93,7 +97,9 @@ func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
 func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpool.Conn, error) {
 	return func(ctx context.Context, target string) (drpcpool.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
-		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{})
+		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
+			Expiration: defaultDRPCConnIdleTimeout,
+		})
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
 
