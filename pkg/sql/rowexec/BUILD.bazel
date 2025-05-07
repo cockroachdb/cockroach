@@ -115,6 +115,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/vector",
         "@com_github_axiomhq_hyperloglog//:hyperloglog",
+        "@com_github_axiomhq_hyperloglog_000//:000",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
