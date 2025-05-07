@@ -503,7 +503,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		logDetails.Printf(" excise=true")
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
-		var appliedAsWriteStr string
+		var appliedAsWriteStr redact.SafeString
 		if !applyAsIngest {
 			appliedAsWriteStr = "as write "
 		}
@@ -781,11 +781,13 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// consume. Without this, there would be a risk of errant snapshots being
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
-		ph, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, sr, subsumedNextReplicaID, RemoveOptions{
-			// The data was already destroyed by clearSubsumedReplicaDiskData.
-			DestroyData:       false,
-			InsertPlaceholder: true,
-		})
+		ph, err := r.store.removeInitializedReplicaRaftMuLocked(
+			ctx, sr, subsumedNextReplicaID, "subsumed by snapshot",
+			RemoveOptions{
+				// The data was already destroyed by clearSubsumedReplicaDiskData.
+				DestroyData:       false,
+				InsertPlaceholder: true,
+			})
 		if err != nil {
 			return nil, err
 		}

@@ -615,10 +615,12 @@ func (r *Replica) handleChangeReplicasResult(
 		r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
 	}
 
-	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
-		// We destroyed the data when the batch committed so don't destroy it again.
-		DestroyData: false,
-	}); err != nil {
+	if _, err := r.store.removeInitializedReplicaRaftMuLocked(
+		ctx, r, chng.NextReplicaID(), "applied self-removal",
+		RemoveOptions{
+			// We destroyed the data when the batch committed so don't destroy it again.
+			DestroyData: false,
+		}); err != nil {
 		log.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
 

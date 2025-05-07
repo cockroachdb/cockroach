@@ -641,7 +641,7 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
-				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, RemoveOptions{
+				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError", RemoveOptions{
 					DestroyData: true,
 				})
 			case *kvpb.RaftGroupDeletedError:
