@@ -29,7 +29,7 @@ var ReportTopHottestRanges int32 = 5
 
 // CheckInterval is the interval at which the system checks
 // whether or not to log the hot ranges.
-var CheckInterval = time.Second
+var CheckInterval = time.Minute
 
 // TestLoopChannel triggers the hot ranges logging loop to start again.
 // It's useful in the context of a test, where we don't want to wait
