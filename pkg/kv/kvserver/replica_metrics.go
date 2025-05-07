@@ -125,7 +125,7 @@ func (r *Replica) Metrics(
 		paused:                   r.mu.pausedFollowers,
 		pendingRaftProposalCount: r.numPendingProposalsRLocked(),
 		slowRaftProposalCount:    r.mu.slowProposalCount,
-		closedTimestampPolicy:    ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load()),
+		closedTimestampPolicy:    *r.cachedClosedTimestampPolicy.Load(),
 	}
 
 	r.mu.RUnlock()
