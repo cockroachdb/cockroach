@@ -33,6 +33,19 @@ func (r *Replica) asLogStorage() *replicaLogStorage {
 	return (*replicaLogStorage)(r)
 }
 
+func (r *replicaLogStorage) attachRaftEntriesMonitorRaftMuLocked() {
+	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(
+		r.store.metrics.RaftLoadedEntriesBytes)
+}
+
+func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
+	// Return all the used bytes back to the limiter.
+	r.raftMu.bytesAccount.Clear()
+	// De-initialize the account so that log storage Entries() calls don't track
+	// the entries anymore.
+	r.raftMu.bytesAccount = logstore.BytesAccount{}
+}
+
 // Entries implements the raft.LogStorage interface.
 //
 // NB: maxBytes is advisory, and this method returns at least one entry (unless

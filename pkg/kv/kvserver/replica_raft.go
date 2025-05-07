@@ -876,19 +876,6 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
-func (r *replicaLogStorage) attachRaftEntriesMonitorRaftMuLocked() {
-	r.raftMu.bytesAccount = r.store.cfg.RaftEntriesMonitor.NewAccount(
-		r.store.metrics.RaftLoadedEntriesBytes)
-}
-
-func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
-	// Return all the used bytes back to the limiter.
-	r.raftMu.bytesAccount.Clear()
-	// De-initialize the account so that log storage Entries() calls don't track
-	// the entries anymore.
-	r.raftMu.bytesAccount = logstore.BytesAccount{}
-}
-
 // handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
 // the replica's raftMu be held.
 //
