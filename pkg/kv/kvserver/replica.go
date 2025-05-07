@@ -1153,7 +1153,7 @@ type Replica struct {
 	// range. It is updated asynchronously by listening on span configuration
 	// changes, leaseholder changes, and periodically at the interval of
 	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
-	cachedClosedTimestampPolicy atomic.Int32
+	cachedClosedTimestampPolicy atomic.Pointer[ctpb.RangeClosedTimestampPolicy]
 }
 
 // String returns the string representation of the replica using an
@@ -1386,20 +1386,19 @@ func toClientClosedTsPolicy(
 	}
 }
 
-// closedTimestampPolicyRLocked returns the closed timestamp policy of the
-// range, which is updated asynchronously by listening on span configuration
-// changes, leaseholder changes, and periodically at the interval of
+// closedTimestampPolicy returns the closed timestamp policy of the range, which
+// is updated asynchronously by listening on span configuration changes,
+// leaseholder changes, and periodically at the interval of
 // kv.closed_timestamp.policy_refresh_interval.
 //
-// NOTE: an exported version of this method which does not require the replica
-// lock exists in helpers_test.go. Move here if needed.
-func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy {
-	// TODO(wenyi): try to remove the need for this key comparison under RLock.
-	// See more in #143648.
-	if r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+// NOTE: an exported version of this method exists in helpers_test.go.
+func closedTimestampPolicy(
+	desc *roachpb.RangeDescriptor, policy ctpb.RangeClosedTimestampPolicy,
+) ctpb.RangeClosedTimestampPolicy {
+	if desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	return policy
 }
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
@@ -1449,11 +1448,12 @@ func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 			closedts.PolicySwitchWhenLatencyExceedsBucketFraction.Get(&r.store.GetStoreConfig().Settings.SV),
 		)
 	}
-	oldPolicy := ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	oldPolicy := *r.cachedClosedTimestampPolicy.Load()
 	newPolicy := computeNewPolicy(oldPolicy)
 	if newPolicy != oldPolicy {
 		r.store.metrics.ClosedTimestampPolicyChange.Inc(1)
-		r.cachedClosedTimestampPolicy.Store(int32(newPolicy))
+		p := newPolicy
+		r.cachedClosedTimestampPolicy.Store(&p)
 	}
 }
 
@@ -1587,10 +1587,9 @@ func (r *Replica) Version() roachpb.Version {
 // GetRangeInfo atomically reads the range's current range info.
 func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	desc := r.descRLocked()
 	l, _ /* nextLease */ := r.getLeaseRLocked()
-	closedts := toClientClosedTsPolicy(r.closedTimestampPolicyRLocked())
+	r.mu.RUnlock()
 
 	// Sanity check the lease.
 	if !l.Empty() {
@@ -1606,6 +1605,8 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 		}
 	}
 
+	closedts := toClientClosedTsPolicy(
+		closedTimestampPolicy(desc, *r.cachedClosedTimestampPolicy.Load()))
 	return roachpb.RangeInfo{
 		Desc:                  *desc,
 		Lease:                 l,
@@ -1952,7 +1953,6 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.shMu.state)).(*kvserverpb.ReplicaState)
 	// TODO(#97613): add a dedicated TruncatedState field to RangeInfo when the
 	// TruncatedState field is removed from ReplicaState. We can't do it right now
@@ -1979,7 +1979,17 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
-	ri.ClosedTimestampPolicy = toClientClosedTsPolicy(r.closedTimestampPolicyRLocked())
+	ri.ClosedTimestampPolicy = toClientClosedTsPolicy(
+		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()))
+	if m := r.mu.pausedFollowers; len(m) > 0 {
+		var sl []roachpb.ReplicaID
+		for id := range m {
+			sl = append(sl, id)
+		}
+		slices.Sort(sl)
+		ri.PausedReplicas = sl
+	}
+	r.mu.RUnlock()
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
@@ -1990,14 +2000,6 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
 	if err := r.breaker.Signal().Err(); err != nil {
 		ri.CircuitBreakerError = err.Error()
-	}
-	if m := r.mu.pausedFollowers; len(m) > 0 {
-		var sl []roachpb.ReplicaID
-		for id := range m {
-			sl = append(sl, id)
-		}
-		slices.Sort(sl)
-		ri.PausedReplicas = sl
 	}
 	return ri
 }
@@ -2298,7 +2300,8 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, toClientClosedTsPolicy(r.closedTimestampPolicyRLocked()))
+		r.shMu.state.Lease, toClientClosedTsPolicy(closedTimestampPolicy(
+			desc, *r.cachedClosedTimestampPolicy.Load())))
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
@@ -2840,13 +2843,13 @@ func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 // SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
 // to be the given policy. It is a test-only helper method.
 func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
-	r.cachedClosedTimestampPolicy.Store(int32(policy))
+	r.cachedClosedTimestampPolicy.Store(&policy)
 }
 
 // GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
 // It is a test-only helper method.
 func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
-	return ctpb.RangeClosedTimestampPolicy(r.cachedClosedTimestampPolicy.Load())
+	return *r.cachedClosedTimestampPolicy.Load()
 }
 
 // RefreshLeaderlessWatcherUnavailableStateForTesting refreshes the replica's

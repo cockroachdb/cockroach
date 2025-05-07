@@ -292,10 +292,10 @@ func TestTxnWriteBufferBlindWritesIncludingOtherRequests(t *testing.T) {
 	// Expect 4 responses, even though only 2 KV requests were sent. Moreover,
 	// ensure that the responses are in the correct order.
 	require.Len(t, br.Responses, 4)
-	require.Equal(t, br.Responses[0].GetInner(), &kvpb.PutResponse{})
-	require.Equal(t, br.Responses[1].GetInner(), &kvpb.GetResponse{})
-	require.Equal(t, br.Responses[2].GetInner(), &kvpb.DeleteResponse{})
-	require.Equal(t, br.Responses[3].GetInner(), &kvpb.ScanResponse{})
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+	require.IsType(t, &kvpb.GetResponse{}, br.Responses[1].GetInner())
+	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[2].GetInner())
+	require.IsType(t, &kvpb.ScanResponse{}, br.Responses[3].GetInner())
 
 	// Verify the writes were buffered correctly.
 	expBufferedWrites := []bufferedWrite{

@@ -259,6 +259,10 @@ func TestEncoderEqualityRand(t *testing.T) {
 	ctx := context.Background()
 	s, db, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	// Increase the span config limit in case we're running with multiple
+	// tenants since the loop below might create more spans than the default
+	// limit of 5k.
+	s.SQLConn(t).QueryRow("SET CLUSTER SETTING spanconfig.tenant_limit = 50000")
 	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {

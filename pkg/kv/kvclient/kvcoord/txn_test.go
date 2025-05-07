@@ -42,14 +42,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkGetResults(t *testing.T, expected map[string][]byte, results ...kv.Result) {
-	for _, result := range results {
-		require.Equal(t, 1, len(result.Rows))
-		require.Equal(t, expected[string(result.Rows[0].Key)], result.Rows[0].ValueBytes())
-	}
-	require.Len(t, expected, len(results))
-}
-
 // TestTxnDBBasics verifies that a simple transaction can be run and
 // either committed or aborted. On commit, mutations are visible; on
 // abort, mutations are never visible. During the txn, verify that
@@ -2235,66 +2227,110 @@ func TestTxnBufferedWriteReadYourOwnWrites(t *testing.T) {
 	keyA := []byte("keyA")
 	keyB := []byte("keyB")
 	keyC := []byte("keyC")
+	keyD := []byte("keyD")
 
 	// Before the test begins, write a value to keyC.
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 	require.NoError(t, txn.Put(ctx, keyC, value3))
 	require.NoError(t, txn.Commit(ctx))
 
-	err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetBufferedWritesEnabled(true)
-
-		// Put transactional value at keyA.
-		if err := txn.Put(ctx, keyA, value1); err != nil {
-			return err
-		}
-
-		// Construct a batch that contains two Gets -- one on keyA, which will be
-		// served from the buffer, and another on keyC, which will be served by
-		// the server.
-		b := txn.NewBatch()
-		b.Get(keyA)
-		b.Get(keyC)
-		if err := txn.Run(ctx, b); err != nil {
-			return err
-		}
-		expected := map[string][]byte{
-			"keyA": value1,
-			"keyC": value3,
-		}
-		checkGetResults(t, expected, b.Results...)
-
-		// Next, construct a batch that contains both Puts and Gets to keyB. The Get
-		// should see the value written by the Put preceding it in the batch.
-		b = txn.NewBatch()
-		b.Get(keyB)
-		b.Put(keyB, value21)
-		b.Get(keyB)
-		b.Put(keyB, value22)
-		b.Get(keyB)
-
-		if err := txn.Run(ctx, b); err != nil {
-			return err
-		}
-		checkGetResults(t, map[string][]byte{
-			"keyB": nil,
+	for _, tc := range []struct {
+		makeBatch func() *kv.Batch
+		// A map from a result index to the expected results, represented as a map
+		// of keys and values.
+		expected map[int32]map[string][]byte
+	}{
+		// Before any test case runs, we have:
+		//  - keyC <- value3 (from a previous transaction), and
+		//  - keyA <- value1 (from the same transaction).
+		// Then we run the batch from each test case.
+		{
+			makeBatch: func() *kv.Batch {
+				b := txn.NewBatch()
+				b.Get(keyA)
+				b.Get(keyC)
+				return b
+			},
+			// The Get on keyA, should be served from the buffer, and the Get on keyC,
+			// should be served by the server.
+			expected: map[int32]map[string][]byte{
+				0: {"keyA": value1},
+				1: {"keyC": value3},
+			},
 		},
-			b.Results[0],
-		)
-		checkGetResults(t, map[string][]byte{
-			"keyB": value21,
+		{
+			makeBatch: func() *kv.Batch {
+				b := txn.NewBatch()
+				b.Scan(keyA, keyC)
+				b.Scan(keyB, keyD)
+				b.Scan(keyA, keyD)
+				return b
+			},
+			// The first Scan should be served from the buffer, the second Scan should
+			// be served by server, and the third scan should be served by both.
+			expected: map[int32]map[string][]byte{
+				0: {"keyA": value1},
+				1: {"keyC": value3},
+				2: {"keyA": value1, "keyC": value3},
+			},
 		},
-			b.Results[2],
-		)
-		checkGetResults(t, map[string][]byte{
-			"keyB": value22,
+		{
+			makeBatch: func() *kv.Batch {
+				b := txn.NewBatch()
+				b.Get(keyB)
+				b.Put(keyB, value21)
+				b.Get(keyB)
+				b.Put(keyB, value22)
+				b.Get(keyB)
+				return b
+			},
+			// The Gets should see the preceding values written in the same batch.
+			expected: map[int32]map[string][]byte{
+				0: {"keyB": nil},
+				2: {"keyB": value21},
+				4: {"keyB": value22},
+			},
 		},
-			b.Results[4],
-		)
+		{
+			makeBatch: func() *kv.Batch {
+				b := txn.NewBatch()
+				b.Scan(keyB, keyC)
+				b.Put(keyB, value3)
+				b.Scan(keyB, keyC)
+				return b
+			},
+			// The Scans should see the values written preceding in the same batch.
+			expected: map[int32]map[string][]byte{
+				0: {"keyB": value22},
+				2: {"keyB": value3},
+			},
+		},
+		// TODO(mira): See if we need more test coverage for other request types
+		// (e.g. deletes, reverse scans).
+	} {
+		err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetBufferedWritesEnabled(true)
 
-		return nil
-	})
-	require.NoError(t, err)
+			// Put transactional value at keyA.
+			if err := txn.Put(ctx, keyA, value1); err != nil {
+				return err
+			}
+
+			b := tc.makeBatch()
+			if err := txn.Run(ctx, b); err != nil {
+				return err
+			}
+			for i, expected := range tc.expected {
+				require.Equal(t, len(expected), len(b.Results[i].Rows))
+				for _, row := range b.Results[i].Rows {
+					require.Equal(t, expected[string(row.Key)], row.ValueBytes())
+				}
+			}
+
+			return nil
+		})
+		require.NoError(t, err)
+	}
 }
 
 // TestLeafTransactionAdmissionHeader tests that the admission control header is
