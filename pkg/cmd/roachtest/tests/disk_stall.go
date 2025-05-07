@@ -11,15 +11,18 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -385,6 +388,312 @@ func runDiskStalledDetection(
 	} else if ok && exit > 0 {
 		t.Fatal("no stall induced, but process exited")
 	}
+	// Wait for the workload to finish (if it hasn't already).
+	m.Wait()
+
+	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
+}
+
+// registerDiskStalledWALFailoverWithProgress registers a test that induces
+// WAL failover while the workload is running. This test is similar to
+// disk-stalled/wal-failover/among-stores, but allows some progress to be
+// made while are in failover. Specifically, we'll oscillate both the
+// workload and failover states in the following pattern with some jitter in
+// the timing of each operation:
+//
+// Time (minutes)    0    1    2    3    4    5    6    7    8    9    10   11   12   13    14    15
+// Workload          |----|----|----|       |----|----|----|      |----|----|----|    |----|----|----|
+// Disk Stalls         |----|----|----|    |----|----|----|  |----|----|----|
+//
+// Note that:
+// Every 4th run, the workload will run without any disk stalls.
+// Each workload and stall phase is 3m.
+// Each operation has a min 30s + random 0-2m wait after both operations finish.
+//
+// The workload run in this test is meant to ramp up to 50% disk bandwidth.
+// See: https://cloud.google.com/compute/docs/disks/performance for estimations on disk performance.
+// For a 100GB pd-ssd disk we get an estimated max performance of:
+// - 6K IOPS (3K baseline + 30 ops * 100GB disk).
+// - 288 MiB/s (240 MiB/s baseline + 0.48 * 100GB disk).
+func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:  "disk-stalled/wal-failover/among-stores/with-progress",
+		Owner: registry.OwnerStorage,
+		Cluster: r.MakeClusterSpec(4,
+			spec.CPU(16),
+			spec.WorkloadNode(),
+			spec.ReuseNone(),
+			spec.DisableLocalSSD(),
+			spec.GCEVolumeCount(2),
+			spec.GCEVolumeType("pd-ssd"),
+			spec.VolumeSize(100),
+		),
+		CompatibleClouds:    registry.OnlyGCE,
+		Suites:              registry.Suites(registry.Nightly),
+		Timeout:             2 * time.Hour,
+		SkipPostValidations: registry.PostValidationNoDeadNodes,
+		EncryptionSupport:   registry.EncryptionMetamorphic,
+		Leases:              registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runDiskStalledWALFailoverWithProgress(ctx, t, c)
+		},
+	})
+}
+
+func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const (
+		testDuration = 1 * time.Hour
+		// We'll issue short stalls every 10s to keep us in the failover state.
+		stallInterval = 5 * time.Second
+		shortStallDur = 200 * time.Millisecond
+		// For each loop, each operation will start after a random wait between [30s, 150s).
+		operationWaitBase = 30 * time.Second
+		waitJitterMax     = 2 * time.Minute
+		operationDur      = 3 * time.Minute
+		// QPS sampling parameters.
+		sampleInterval = 10 * time.Second
+		errorTolerance = 0.2 // 20% tolerance for throughput variation.
+	)
+
+	t.Status("setting up disk staller")
+	// Use CgroupDiskStaller with readsToo=false to only stall writes.
+	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */)
+	s.Setup(ctx)
+	defer s.Cleanup(ctx)
+
+	t.Status("starting cluster")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.WALFailover = "among-stores"
+	startOpts.RoachprodOpts.StoreCount = 2
+	startSettings := install.MakeClusterSettings()
+	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
+
+	// Open a SQL connection to n1, the node that will be stalled.
+	n1Conn := c.Conn(ctx, t.L(), 1)
+	defer n1Conn.Close()
+	require.NoError(t, n1Conn.PingContext(ctx))
+	// Wait for upreplication.
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n1Conn))
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
+	require.NoError(t, err)
+	adminURL := adminUIAddrs[0]
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	_, err = n1Conn.ExecContext(ctx, `USE kv;`)
+	require.NoError(t, err)
+
+	t.Status("starting oscillating workload and disk stall pattern")
+	testStartedAt := timeutil.Now()
+	m := c.NewMonitor(ctx, c.CRDBNodes())
+
+	// Setup stats collector.
+	promCfg := &prometheus.Config{}
+	promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
+		WithNodeExporter(c.CRDBNodes().InstallNodes()).
+		WithCluster(c.CRDBNodes().InstallNodes())
+	err = c.StartGrafana(ctx, t.L(), promCfg)
+	require.NoError(t, err)
+	cleanupFunc := func() {
+		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
+			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
+		}
+	}
+	defer cleanupFunc()
+
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+	require.NoError(t, err)
+	statCollector := clusterstats.NewStatsCollector(ctx, promClient)
+
+	// Track mean throughput for each iteration.
+	var iterationMeans []float64
+
+	iteration := 1
+	for timeutil.Since(testStartedAt) < testDuration {
+		if t.Failed() {
+			t.Fatalf("test failed, stopping further iterations")
+			return
+		}
+
+		workloadWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
+		t.Status("next workload run in ", workloadWaitDur)
+
+		// Channels to signal workload state.
+		workloadStarted := make(chan struct{})
+		workloadFinished := make(chan struct{})
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		m.Go(func(ctx context.Context) error {
+			defer wg.Done()
+
+			select {
+			case <-ctx.Done():
+				t.Fatalf("context done before workload started: %s", ctx.Err())
+			case <-time.After(workloadWaitDur):
+				t.Status("starting workload")
+				close(workloadStarted)
+				workloadCmd := `./cockroach workload run kv --read-percent 0 ` +
+					fmt.Sprintf(`--duration %s --concurrency 4096 --max-rate=2048 --tolerate-errors `, operationDur.String()) +
+					`--min-block-bytes=4096 --max-block-bytes=4096 --timeout 1s {pgurl:1-3}`
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
+				close(workloadFinished)
+				return nil
+			}
+			return nil
+		})
+
+		// Collecting QPS samples while the workload is running and verify
+		// that the throughput is within errorTolerance of the mean.
+		var samples []float64
+		wg.Add(1)
+		m.Go(func(ctx context.Context) error {
+			defer wg.Done()
+
+			// Wait for workload to start.
+			select {
+			case <-ctx.Done():
+				t.Fatalf("context done before workload started: %s", ctx.Err())
+			case <-workloadStarted:
+			}
+
+			// Wait 20s after workload starts before beginning sampling.
+			select {
+			case <-ctx.Done():
+				t.Fatalf("context done before workload started: %s", ctx.Err())
+			case <-time.After(20 * time.Second):
+				t.Status("starting QPS sampling")
+			}
+
+			// Calculate approx how many samples we can take before workload ends.
+			// We want to stop sampling 10s before workload ends to avoid sampling during shutdown.
+			samplingDuration := operationDur - 30*time.Second // 20s initial wait + 10s buffer at workload end
+			sampleCount := int(samplingDuration / sampleInterval)
+
+			sampleTimer := time.NewTicker(sampleInterval)
+			defer sampleTimer.Stop()
+
+			done := false
+			for i := 0; i < sampleCount && !done; i++ {
+				select {
+				case <-ctx.Done():
+					t.Fatalf("context done while sampling: %s", ctx.Err())
+				case <-workloadFinished:
+					done = true
+				case <-sampleTimer.C:
+					metric := `rate(sql_select_count[30s]) + rate(sql_insert_count[30s]) + rate(sql_update_count[30s])`
+					stats, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), metric)
+					if err != nil {
+						t.Errorf("failed to collect throughput stats: %v", err)
+						continue
+					}
+					var clusterQPS float64
+					if nodeStats, ok := stats["node"]; ok {
+						for _, stat := range nodeStats {
+							clusterQPS += stat.Value
+						}
+					} else {
+						t.Status("no node stats found for throughput metric ", metric)
+						continue
+					}
+					t.Status("sampled cluster QPS: ", clusterQPS)
+					samples = append(samples, clusterQPS)
+				}
+			}
+
+			t.Status(fmt.Sprintf("workload finished, %d samples collected", len(samples)))
+			return nil
+		})
+
+		// Every 4th iteration, we'll skip the disk stall phase.
+		if iteration%4 != 0 {
+			// Calculate next stall phase with jitter.
+			diskStallWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
+			t.Status("next stall phase in ", diskStallWaitDur)
+
+			wg.Add(1)
+			m.Go(func(ctx context.Context) error {
+				defer wg.Done()
+				select {
+				case <-ctx.Done():
+					t.Fatalf("context done before stall started: %s", ctx.Err())
+				case <-time.After(diskStallWaitDur):
+					t.Status("starting disk stall")
+				}
+				stallStart := timeutil.Now()
+				// Execute short 200ms stalls every 10s.
+				for timeutil.Since(stallStart) < operationDur {
+					select {
+					case <-ctx.Done():
+						t.Fatalf("context done while stall induced: %s", ctx.Err())
+					case <-time.After(stallInterval):
+						func() {
+							s.Stall(ctx, c.Node(1))
+							t.Status("short disk stall on n1")
+							defer func() {
+								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+								defer cancel()
+								s.Unstall(ctx, c.Node(1))
+							}()
+							select {
+							case <-ctx.Done():
+								t.Fatalf("context done while stall induced: %s", ctx.Err())
+							case <-time.After(shortStallDur):
+								return
+							}
+						}()
+					}
+				}
+
+				return nil
+			})
+		} else {
+			t.Status("skipping disk stall phase for this iteration")
+		}
+
+		// Wait for all goroutines to complete.
+		wg.Wait()
+
+		// Validate throughput samples are within tolerance.
+		meanThroughput := roachtestutil.GetMeanOverLastN(len(samples), samples)
+		t.Status("mean throughput for iteration", iteration, ": ", meanThroughput)
+		for _, sample := range samples {
+			require.InEpsilonf(t, meanThroughput, sample, errorTolerance,
+				"sample %f is not within tolerance of mean %f", sample, meanThroughput)
+		}
+		iterationMeans = append(iterationMeans, meanThroughput)
+		iteration++
+	}
+
+	t.Status("exited control loop")
+
+	time.Sleep(1 * time.Second)
+	exit, ok := getProcessExitMonotonic(ctx, t, c, 1)
+	if ok && exit > 0 {
+		t.Fatal("process exited unexpectedly")
+	}
+
+	// Validate overall throughput consistency across iterations.
+	overallMean := roachtestutil.GetMeanOverLastN(len(iterationMeans), iterationMeans)
+	for _, mean := range iterationMeans {
+		require.InEpsilonf(t, overallMean, mean, errorTolerance,
+			"iteration mean %f is not within tolerance of overall mean %f", mean, overallMean)
+	}
+
+	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,
+		testStartedAt.Add(5*time.Minute),
+		timeutil.Now().Add(-time.Minute),
+		[]tsQuery{
+			{name: "cr.store.storage.wal.failover.secondary.duration", queryType: total, sources: []string{"1"}},
+		})
+
+	// Over the course of the 1h test, we expect many short stalls. Assert that
+	// the total time spent writing to the secondary is at least 10m.
+	durInFailover := time.Duration(data.Results[0].Datapoints[len(data.Results[0].Datapoints)-1].Value)
+	t.L().PrintfCtx(ctx, "duration s1 spent writing to secondary %s", durInFailover)
+	if durInFailover < 10*time.Minute {
+		t.Errorf("expected s1 to spend at least 10m writing to secondary, but spent %s", durInFailover)
+	}
+
 	// Wait for the workload to finish (if it hasn't already).
 	m.Wait()
 
