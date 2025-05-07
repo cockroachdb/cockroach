@@ -622,7 +622,7 @@ func runDecommissionBench(
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
-		testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
+		testTimeout, roachtestutil.GetWorkloadHistogramString(t, c, nil, true), rampDuration, benchSpec.nodes)
 
 	// In the case that we want to simulate high read amplification, we use kv0
 	// to run a write-heavy workload known to be difficult for compactions to keep
@@ -631,7 +631,7 @@ func runDecommissionBench(
 		workloadCmd = fmt.Sprintf("./cockroach workload run kv --init --concurrency=%d --splits=1000 "+
 			"--read-percent=50 --min-block-bytes=8192 --max-block-bytes=8192 --duration=%s "+
 			"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", benchSpec.nodes*64,
-			testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
+			testTimeout, roachtestutil.GetWorkloadHistogramString(t, c, nil, true), rampDuration, benchSpec.nodes)
 	}
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
@@ -775,7 +775,7 @@ func runDecommissionBenchLong(
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
-		testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
+		testTimeout, roachtestutil.GetWorkloadHistogramString(t, c, nil, true), rampDuration, benchSpec.nodes)
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
