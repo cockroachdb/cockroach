@@ -452,7 +452,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`),
 			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate constraint name: *)`),
 			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate column name: *)`),
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: conflicting NULL/NOT NULL declarations for column: *)`),
+			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: conflicting NULL/NOT NULL declarations for column *)`),
 			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: table must contain at least*)`),
 		} {
 			actualB = re.ReplaceAll(actualB, []byte("$1$2"))
@@ -855,6 +855,8 @@ index 1b2d434683..d371fe3f63 100644
 	// pg_catalog.pg_am vtable.
 	// TODO(#123706): remove the patch to comment out a query against
 	// pg_catalog.pg_attribute vtable.
+	// TODO(#146255): remove the patch to include ORDER BY clause for the query
+	// with "Text conversion routines must be provided." comment in pg_regress.
 	{"type_sanity.sql", `diff --git a/src/test/regress/sql/type_sanity.sql b/src/test/regress/sql/type_sanity.sql
 index 79ec410a6c..417d3dcdb2 100644
 --- a/src/test/regress/sql/type_sanity.sql
@@ -879,7 +881,17 @@ index 79ec410a6c..417d3dcdb2 100644
 
  -- Look for "toastable" types that aren'"'"'t varlena.
 
-@@ -288,7 +290,8 @@ WHERE t1.typelem = t2.oid AND NOT
+@@ -91,7 +93,8 @@ WHERE t1.typtype = 'r' AND
+
+ SELECT t1.oid, t1.typname
+ FROM pg_type as t1
+-WHERE (t1.typinput = 0 OR t1.typoutput = 0);
++WHERE (t1.typinput = 0 OR t1.typoutput = 0)
++ORDER BY t1.oid;
+
+ -- Check for bogus typinput routines
+
+@@ -288,7 +291,8 @@ WHERE t1.typelem = t2.oid AND NOT
 
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
  FROM pg_type AS t1, pg_type AS t2
