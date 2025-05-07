@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-25.1
+# LogicTest: cockroach-go-testserver-configs
 
 # This is a regression test for #137386 which verifies the hyperloglog library
 # upgrade for the table stats. We want such a distributed table stats collection
