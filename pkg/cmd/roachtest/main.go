@@ -52,6 +52,8 @@ const (
 )
 
 func main() {
+	_ = roachprod.InitProviders()
+
 	cobra.EnableCommandSorting = false
 
 	var rootCmd = &cobra.Command{
