@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// getTargetByPolicy returns a range's closed timestamp policy and target
+// getTargetByPolicyRLocked returns a range's closed timestamp policy and target
 // timestamp.
-func (r *Replica) getTargetByPolicy(
+func (r *Replica) getTargetByPolicyRLocked(
 	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
 	policy := closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load())
@@ -87,7 +87,7 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy, target := r.getTargetByPolicy(targetByPolicy)
+	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.

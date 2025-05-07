@@ -1231,9 +1231,9 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 // 4. Replica tries to use a latency-based policy but the policy map from step 1
 // doesn't include it yet.
 //
-// The logic in replica.getTargetByPolicy handles this race condition by falling
-// back to no-latency based policies if no-latency based policies were included
-// from the map provided by the side transport sender.
+// The logic in replica.getTargetByPolicyRLocked handles this race condition by
+// falling back to no-latency based policies if no-latency based policies were
+// included from the map provided by the side transport sender.
 //
 // This test simulates a race condition by using a testing knob to allow the
 // policy refresher to use latency based policies on replicas while the rest of
