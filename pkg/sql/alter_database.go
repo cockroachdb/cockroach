@@ -287,7 +287,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 
 		params.p.BufferClientNotice(
 			params.ctx,
-			pgnotice.Newf("Rolling restart is recommended after adding a region to system database in order to propogate region information."),
+			pgnotice.Newf("Rolling restart is recommended after adding a region to system database in order to propagate region information."),
 		)
 	}
 
@@ -402,23 +402,22 @@ func (p *planner) AlterDatabaseDropRegion(
 
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
+	typeID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, err
+	}
+	typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
+	if err != nil {
+		return nil, err
+	}
+	regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionEnumDesc == nil {
+		return nil, errors.AssertionFailedf(
+			"expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
+	}
 	if dbDesc.RegionConfig.PrimaryRegion == catpb.RegionName(n.Region) {
 		removingPrimaryRegion = true
-
-		typeID, err := dbDesc.MultiRegionEnumID()
-		if err != nil {
-			return nil, err
-		}
-		typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
-		if err != nil {
-			return nil, err
-		}
-		regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
-		if regionEnumDesc == nil {
-			return nil, errors.AssertionFailedf(
-				"expected region enum type, not %s for type %q (%d)",
-				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
-		}
 
 		// Ensure that there's only 1 region on the multi-region enum (the primary
 		// region) as this can only be dropped once all other regions have been
@@ -502,7 +501,19 @@ func (p *planner) AlterDatabaseDropRegion(
 			        WHERE crdb_region = $1`, n.Region); err != nil {
 			return nil, err
 		}
-		if err := regionliveness.CleanupSystemTableForRegion(ctx, p.execCfg.Codec, n.Region.String(), p.txn); err != nil {
+
+		// Resolve the physical value for this region.
+		var physicalRep []byte
+		for i := 0; i < regionEnumDesc.NumEnumMembers(); i++ {
+			if regionEnumDesc.GetMemberLogicalRepresentation(i) == string(n.Region) {
+				physicalRep = regionEnumDesc.GetMemberPhysicalRepresentation(i)
+				break
+			}
+		}
+		if len(physicalRep) == 0 {
+			return nil, errors.AssertionFailedf("could not find physical representation for region %s", n.Region)
+		}
+		if err := regionliveness.CleanupSystemTableForRegion(ctx, p.execCfg.Codec, string(physicalRep), p.txn); err != nil {
 			return nil, err
 		}
 	}
