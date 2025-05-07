@@ -2511,6 +2511,40 @@ left-join (hash)
  └── filters
       └── y:2 = k:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
+
+# --------------------------------------------------
+# SimplifyLeftJoinWithZeroRowsRight
+# --------------------------------------------------
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a LEFT JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,8,9)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── NULL [as=x:8]
+      └── NULL [as=y:9]
+
+norm expect=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, vals.* FROM a LEFT JOIN (VALUES (1, 2) LIMIT 0) AS vals(x, y) ON a.k = vals.x
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,8,9)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── projections
+      ├── NULL [as=x:8]
+      └── NULL [as=y:9]
+
 # --------------------------------------------------
 # EliminateSemiJoin
 # --------------------------------------------------

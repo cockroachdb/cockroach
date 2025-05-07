@@ -161,6 +161,25 @@ func (c *CustomFuncs) OutputCols2(left, right memo.RelExpr) opt.ColSet {
 	return left.Relational().OutputCols.Union(right.Relational().OutputCols)
 }
 
+// MakeNullProjections creates a projection for each column in the right input,
+// producing NULL values for each column in the right input.
+func (c *CustomFuncs) MakeNullProjections(right memo.RelExpr) memo.ProjectionsExpr {
+	rightCols := right.Relational().OutputCols
+	projections := make(memo.ProjectionsExpr, 0, rightCols.Len())
+
+	for i, ok := rightCols.Next(0); ok; i, ok = rightCols.Next(i + 1) {
+		nullExpr := c.f.ConstructNull(c.mem.Metadata().ColumnMeta(i).Type)
+		projections = append(projections, c.f.ConstructProjectionsItem(nullExpr, i))
+	}
+
+	return projections
+}
+
+// PassthroughCols returns the set of columns from the left input to be passed through.
+func (c *CustomFuncs) PassthroughCols(left memo.RelExpr) opt.ColSet {
+	return left.Relational().OutputCols
+}
+
 // NotNullCols returns the set of columns returned by the input expression that
 // are guaranteed to never be NULL.
 func (c *CustomFuncs) NotNullCols(input memo.RelExpr) opt.ColSet {
