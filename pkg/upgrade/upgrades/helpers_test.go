@@ -121,6 +121,7 @@ func ValidateSchemaExists(
 	schemas []Schema,
 	expectExists bool,
 ) {
+	t.Helper()
 	// First validate by reading the columns and the index.
 	for _, stmt := range stmts {
 		_, err := sqlDB.Exec(stmt)

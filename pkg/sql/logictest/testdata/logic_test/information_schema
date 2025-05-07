@@ -2,7 +2,7 @@
 # the tenant table for tenants. Legacy schema changer is also skipped, because
 # some of the queries relating internal state will be impacted in terms of
 # descriptor versions, etc..
-# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer !local-mixed-25.1
+# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer
 
 # Verify information_schema database handles mutation statements correctly.
 
@@ -1252,7 +1252,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-24.3
+skipif config local-mixed-24.3 local-mixed-25.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1574,7 +1574,7 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
-skipif config local-mixed-24.3
+skipif config local-mixed-24.3 local-mixed-25.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -3466,6 +3466,7 @@ specific_catalog  specific_schema  specific_name  ordinal_position  parameter_mo
 test              pg_catalog       get_byte_854   1                 IN              NO         NO          NULL            bytea      NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  bytea     NULL           NULL          NULL        NULL                 1               NULL
 test              pg_catalog       get_byte_854   2                 IN              NO         NO          NULL            bigint     NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  int8      NULL           NULL          NULL        NULL                 2               NULL
 
+skipif config local-mixed-24.3 local-mixed-25.1 local-mixed-25.2
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
 ----
@@ -3476,36 +3477,42 @@ NULL     admin    system         public        eventlog    targetID     SELECT  
 NULL     admin    system         public        eventlog    reportingID  SELECT          NULL
 NULL     admin    system         public        eventlog    info         SELECT          NULL
 NULL     admin    system         public        eventlog    uniqueID     SELECT          NULL
+NULL     admin    system         public        eventlog    payload      SELECT          NULL
 NULL     admin    system         public        eventlog    timestamp    INSERT          NULL
 NULL     admin    system         public        eventlog    eventType    INSERT          NULL
 NULL     admin    system         public        eventlog    targetID     INSERT          NULL
 NULL     admin    system         public        eventlog    reportingID  INSERT          NULL
 NULL     admin    system         public        eventlog    info         INSERT          NULL
 NULL     admin    system         public        eventlog    uniqueID     INSERT          NULL
+NULL     admin    system         public        eventlog    payload      INSERT          NULL
 NULL     admin    system         public        eventlog    timestamp    UPDATE          NULL
 NULL     admin    system         public        eventlog    eventType    UPDATE          NULL
 NULL     admin    system         public        eventlog    targetID     UPDATE          NULL
 NULL     admin    system         public        eventlog    reportingID  UPDATE          NULL
 NULL     admin    system         public        eventlog    info         UPDATE          NULL
 NULL     admin    system         public        eventlog    uniqueID     UPDATE          NULL
+NULL     admin    system         public        eventlog    payload      UPDATE          NULL
 NULL     root     system         public        eventlog    timestamp    SELECT          NULL
 NULL     root     system         public        eventlog    eventType    SELECT          NULL
 NULL     root     system         public        eventlog    targetID     SELECT          NULL
 NULL     root     system         public        eventlog    reportingID  SELECT          NULL
 NULL     root     system         public        eventlog    info         SELECT          NULL
 NULL     root     system         public        eventlog    uniqueID     SELECT          NULL
+NULL     root     system         public        eventlog    payload      SELECT          NULL
 NULL     root     system         public        eventlog    timestamp    INSERT          NULL
 NULL     root     system         public        eventlog    eventType    INSERT          NULL
 NULL     root     system         public        eventlog    targetID     INSERT          NULL
 NULL     root     system         public        eventlog    reportingID  INSERT          NULL
 NULL     root     system         public        eventlog    info         INSERT          NULL
 NULL     root     system         public        eventlog    uniqueID     INSERT          NULL
+NULL     root     system         public        eventlog    payload      INSERT          NULL
 NULL     root     system         public        eventlog    timestamp    UPDATE          NULL
 NULL     root     system         public        eventlog    eventType    UPDATE          NULL
 NULL     root     system         public        eventlog    targetID     UPDATE          NULL
 NULL     root     system         public        eventlog    reportingID  UPDATE          NULL
 NULL     root     system         public        eventlog    info         UPDATE          NULL
 NULL     root     system         public        eventlog    uniqueID     UPDATE          NULL
+NULL     root     system         public        eventlog    payload      UPDATE          NULL
 
 # information_schema.administrable_role_authorizations
 
