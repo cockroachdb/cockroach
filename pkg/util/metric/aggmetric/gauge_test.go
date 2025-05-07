@@ -35,7 +35,7 @@ func TestSQLGaugeEviction(t *testing.T) {
 	g.mu.children = &UnorderedCacheWrapper{
 		cache: cacheStorage,
 	}
-	g.labelConfig.Store(LabelConfigAppAndDB)
+	g.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
 
 	for i := 0; i < cacheSize; i++ {
 		g.Update(1, "1", strconv.Itoa(i))
@@ -69,7 +69,7 @@ func TestSQLGaugeMethods(t *testing.T) {
 		cache: cacheStorage,
 	}
 	r.AddMetric(g)
-	g.labelConfig.Store(LabelConfigAppAndDB)
+	g.labelConfig.Store(uint64(metric.LabelConfigAppAndDB))
 
 	g.Update(10, "1", "1")
 	g.Update(10, "2", "2")
