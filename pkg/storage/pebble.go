@@ -431,10 +431,17 @@ func DefaultPebbleOptions() *pebble.Options {
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
-	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
-		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
-		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
-	}
+	opts.Experimental.SpanPolicyFunc = pebble.MakeStaticSpanPolicyFunc(
+		cockroachkvs.Compare,
+		pebble.KeyRange{
+			Start: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
+			End:   EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
+		},
+		pebble.SpanPolicy{
+			DisableValueSeparationBySuffix: true,
+			ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+		},
+	)
 	// Disable multi-level compaction heuristic for now. See #134423
 	// for why this was disabled, and what needs to be changed to reenable it.
 	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
