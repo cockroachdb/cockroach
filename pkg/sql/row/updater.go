@@ -120,15 +120,6 @@ func MakeUpdater(
 	// needsUpdate returns true if the given index may need to be updated for
 	// the current UPDATE mutation.
 	needsUpdate := func(index catalog.Index) bool {
-		// If the UPDATE is set to only update columns and not secondary
-		// indexes, return false.
-		if updateType == UpdaterOnlyColumns {
-			return false
-		}
-		// If the primary key changed, we need to update all secondary indexes.
-		if primaryKeyColChange {
-			return true
-		}
 		// If the index is a partial index, an update may be required even if
 		// the indexed columns aren't changing. For example, an index entry must
 		// be added when an update to a non-indexed column causes a row to
@@ -143,7 +134,7 @@ func MakeUpdater(
 		colIDs := index.CollectKeyColumnIDs()
 		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
-		for _, colID := range colIDs.Ordered() {
+		for colID, ok := colIDs.Next(0); ok; colID, ok = colIDs.Next(colID + 1) {
 			if _, ok := updateColIDtoRowIndex.Get(colID); ok {
 				return true
 			}
@@ -153,18 +144,24 @@ func MakeUpdater(
 
 	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
 	var deleteOnlyIndexes []catalog.Index
-	for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
-		if !needsUpdate(index) {
-			continue
-		}
-		if !index.DeleteOnly() {
-			includeIndexes = append(includeIndexes, index)
-		} else {
-			if deleteOnlyIndexes == nil {
-				// Allocate at most once.
-				deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
+	// If the UPDATE is set to only update columns, do not collect secondary
+	// indexes to update.
+	if updateType != UpdaterOnlyColumns {
+		for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
+			// If the primary key changed, we need to update all secondary
+			// indexes, regardless of what other columns are being updated.
+			if !primaryKeyColChange && !needsUpdate(index) {
+				continue
 			}
-			deleteOnlyIndexes = append(deleteOnlyIndexes, index)
+			if !index.DeleteOnly() {
+				includeIndexes = append(includeIndexes, index)
+			} else {
+				if deleteOnlyIndexes == nil {
+					// Allocate at most once.
+					deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
+				}
+				deleteOnlyIndexes = append(deleteOnlyIndexes, index)
+			}
 		}
 	}
 
