@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1444,4 +1445,43 @@ func TestTxnUpdateFromTxnRecordDoesNotOverwriteFields(t *testing.T) {
 
 	// OmitInRangefeeds is still true.
 	require.True(t, txn.GetOmitInRangefeeds())
+}
+
+// TestLeafTransactionAdmissionHeader tests that the admission control header is
+// correctly set for a new leaf txn.
+func TestLeafTransactionAdmissionHeader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := createTestDB(t)
+	defer s.Stop()
+	priorityOptions := []admissionpb.WorkPriority{
+		admissionpb.LowPri,
+		admissionpb.TTLLowPri,
+		admissionpb.UserLowPri,
+		admissionpb.BulkNormalPri,
+		admissionpb.NormalPri,
+		admissionpb.LockingNormalPri,
+		admissionpb.UserHighPri,
+		admissionpb.LockingUserHighPri,
+		admissionpb.HighPri,
+	}
+	rnd, _ := randutil.NewTestRand()
+	priority := priorityOptions[rnd.Intn(len(priorityOptions))]
+
+	ctx := context.Background()
+	rootTxn := kv.NewTxnWithAdmissionControl(
+		ctx, s.DB, 0 /* gatewayNodeID */, kvpb.AdmissionHeader_FROM_SQL, priority)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	require.NoError(t, err)
+
+	rootAdmissionHeader := rootTxn.AdmissionHeader()
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, &rootAdmissionHeader)
+	leafHeader := leafTxn.AdmissionHeader()
+	expectedLeafHeader := kvpb.AdmissionHeader{
+		Priority:   int32(priority),
+		CreateTime: rootAdmissionHeader.CreateTime,
+		Source:     kvpb.AdmissionHeader_FROM_SQL,
+	}
+	require.Equal(t, expectedLeafHeader, leafHeader)
 }
