@@ -923,7 +923,7 @@ force-split partition-key=2 parent-partition-key=1 steps=12
 • 1 (6.8, 4.2)
 │
 ├───• 2 (6.8, 4.2) [DeletingForSplitState:3,4]
-├───• 3 (-1, 2)
+├───• 3 (0.6667, 2.3333)
 │   │
 │   ├───• vec1 (1, 2)
 │   ├───• vec4 (-3, 2)
