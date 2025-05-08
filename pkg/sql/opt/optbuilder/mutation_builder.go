@@ -1673,6 +1673,39 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 		return
 	}
 
+	inScope, outScope := mb.maybeBuildReturningScopes(returning, nil /* colRefs */)
+	mb.b.constructProjectForScope(inScope, outScope)
+	mb.outScope = outScope
+}
+
+// completeBuildReturning finalizes the RETURNING clause by projecting the necessary
+// columns from the current output scope. It assumes that any scopes required for
+// RETURNING have already been created. If the statement has no RETURNING clause,
+// the provided scopes will be nil. Regardless, mb.outScope is updated before exiting.
+func (mb *mutationBuilder) completeBuildReturning(returningInScope, returningOutScope *scope) {
+	// No RETURNING clause present.
+	if returningInScope == nil {
+		expr := mb.outScope.expr
+		mb.outScope = mb.b.allocScope()
+		mb.outScope.expr = expr
+		return
+	}
+
+	// Update the RETURNING in-scope with the current expression, in case it has
+	// changed since the scope was first created.
+	returningInScope.expr = mb.outScope.expr
+
+	mb.b.constructProjectForScope(returningInScope, returningOutScope)
+	mb.outScope = returningOutScope
+}
+
+func (mb *mutationBuilder) maybeBuildReturningScopes(
+	returning *tree.ReturningExprs, colRefs *opt.ColSet,
+) (inScope, outScope *scope) {
+	if returning == nil {
+		return nil, nil
+	}
+
 	// Start out by constructing a scope containing one column for each non-
 	// mutation column in the target table, in the same order, and with the
 	// same names. These columns can be referenced by the RETURNING clause.
@@ -1682,7 +1715,7 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	//   3. Mark hidden columns.
 	//   4. Project columns in same order as defined in table schema.
 	//
-	inScope := mb.outScope.replace()
+	inScope = mb.outScope.replace()
 	inScope.expr = mb.outScope.expr
 	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
@@ -1694,11 +1727,10 @@ func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	inScope.appendColumns(mb.extraAccessibleCols)
 
 	// Construct the Project operator that projects the RETURNING expressions.
-	outScope := inScope.replace()
+	outScope = inScope.replace()
 	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
-	mb.b.buildProjectionList(inScope, outScope)
-	mb.b.constructProjectForScope(inScope, outScope)
-	mb.outScope = outScope
+	mb.b.buildProjectionList(inScope, outScope, colRefs)
+	return inScope, outScope
 }
 
 // checkNumCols raises an error if the expected number of columns does not match

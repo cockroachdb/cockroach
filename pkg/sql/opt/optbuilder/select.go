@@ -1250,7 +1250,7 @@ func (b *Builder) buildSelectClause(
 		having = b.buildHaving(havingExpr, fromScope)
 	}
 
-	b.buildProjectionList(fromScope, projectionsScope)
+	b.buildProjectionList(fromScope, projectionsScope, nil /* colRefs */)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 	b.buildLockArgs(fromScope, projectionsScope, lockScope)
