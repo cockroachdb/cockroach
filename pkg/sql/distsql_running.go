@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var settingDistSQLNumRunners = settings.RegisterIntSetting(
@@ -426,7 +427,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// In distributed plans populate some extra state.
 		setupReq.EvalContext = execinfrapb.MakeEvalContext(&evalCtx.Context)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
-			setupReq.JobTag = jobTag.ValueStr()
+			setupReq.JobTag = redact.SafeString(jobTag.ValueStr())
 		}
 	}
 	if evalCtx.SessionData().PropagateAdmissionHeaderToLeafTransactions && localState.Txn != nil {
