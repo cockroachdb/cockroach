@@ -98,6 +98,7 @@ func maybeStartCompactionJob(
 		execCfg.InternalDB,
 		user,
 	)
+
 	chain, _, _, _, err := getBackupChain(
 		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
 		triggerJob.EndTime, &kmsEnv,
@@ -108,8 +109,16 @@ func maybeStartCompactionJob(
 	if int64(len(chain)) < threshold {
 		return 0, nil
 	}
-	var backupStmt string
-	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+	if err != nil {
+		return 0, err
+	}
+	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
+	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+
+	var jobID jobspb.JobID
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, jobs.ScheduledJobTxn(txn), triggerJob.ScheduleID,
 		)
@@ -118,27 +127,20 @@ func maybeStartCompactionJob(
 				err, "failed to get scheduled backup execution args for schedule %d", triggerJob.ScheduleID,
 			)
 		}
-		backupStmt = args.BackupStatement
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
-	if err != nil {
-		return 0, err
-	}
-	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
-	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
-	var jobID jobspb.JobID
-	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context,
-		txn isql.Txn) error {
+		if args.CompactionJobID != 0 {
+			return errors.Newf(
+				"compaction job %d already running for schedule %d",
+				args.CompactionJobID, triggerJob.ScheduleID,
+			)
+		}
 		datums, err := txn.QueryRowEx(
 			ctx,
 			"start-compaction-job",
 			txn.KV(),
 			sessiondata.NoSessionDataOverride,
-			`SELECT crdb_internal.backup_compaction($1, $2, $3::DECIMAL, $4::DECIMAL)`,
-			backupStmt,
+			`SELECT crdb_internal.backup_compaction($1, $2, $3, $4::DECIMAL, $5::DECIMAL)`,
+			triggerJob.ScheduleID,
+			args.BackupStatement,
 			triggerJob.Destination.Subdir,
 			startTS.AsOfSystemTime(),
 			endTS.AsOfSystemTime(),
@@ -151,7 +153,23 @@ func maybeStartCompactionJob(
 			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
 		}
 		jobID = jobspb.JobID(idDatum)
-		return nil
+
+		scheduledJob := jobs.ScheduledJobTxn(txn)
+		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, scheduledJob, triggerJob.ScheduleID,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "unable to load backup schedule %d", triggerJob.ScheduleID)
+		}
+		args.CompactionJobID = jobID
+		any, err := types.MarshalAny(args)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		backupSchedule.SetExecutionDetails(
+			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
+		)
+		return scheduledJob.Update(ctx, backupSchedule)
 	})
 	return jobID, err
 }
@@ -164,6 +182,7 @@ func maybeStartCompactionJob(
 func StartCompactionJob(
 	ctx context.Context,
 	planner interface{},
+	scheduleID jobspb.ScheduleID,
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
@@ -174,8 +193,9 @@ func StartCompactionJob(
 		return 0, errors.New("missing job execution context")
 	}
 	details := jobspb.BackupDetails{
-		StartTime: start,
-		EndTime:   end,
+		ScheduleID: scheduleID,
+		StartTime:  start,
+		EndTime:    end,
 		Destination: jobspb.BackupDetails_Destination{
 			To:                 collectionURI,
 			IncrementalStorage: incrLoc,
@@ -190,6 +210,12 @@ func StartCompactionJob(
 	if err != nil {
 		return 0, err
 	}
+	// Note: We do not set the `CreatedBy` field in the job record to the schedule
+	// that created it because doing so creates a dependency between the record in
+	// `system.scheduled_jobs` and this compaction job. This dependency would mean
+	// that until the compaction job completes, the `system.scheduled_jobs` record
+	// for backup would not be marked ready, which would block all future
+	// scheduled backups until the compaction completes.
 	jobRecord := jobs.Record{
 		Description: description,
 		Details:     details,
@@ -401,6 +427,35 @@ func (b *backupResumer) ResumeCompaction(
 	return b.processScheduledBackupCompletion(ctx, jobs.StateSucceeded, execCtx, updatedDetails)
 }
 
+func (b *backupResumer) processCompactionCompletion(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	env scheduledjobs.JobSchedulerEnv,
+	details jobspb.BackupDetails,
+) error {
+	if details.ScheduleID == 0 {
+		return nil
+	}
+	return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		scheduledJob := jobs.ScheduledJobTxn(txn)
+		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, scheduledJob, details.ScheduleID,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "unable to load backup schedule %d", details.ScheduleID)
+		}
+		args.CompactionJobID = 0
+		any, err := types.MarshalAny(args)
+		if err != nil {
+			return errors.Wrap(err, "marshaling args")
+		}
+		backupSchedule.SetExecutionDetails(
+			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
+		)
+		return scheduledJob.Update(ctx, backupSchedule)
+	})
+}
+
 type compactionChain struct {
 	// backupChain is the linear chain of backups up to the end time required
 	// for a restore.
@@ -435,6 +490,11 @@ func newCompactionChain(
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 ) (compactionChain, error) {
+	if !manifests[0].StartTime.IsEmpty() {
+		return compactionChain{}, errors.AssertionFailedf(
+			"full backup must be passed in as the first backup in the chain",
+		)
+	}
 	// The start and end timestamps indicate a chain of incrementals and therefore should not
 	// include the full backup.
 	if start.Less(manifests[0].EndTime) {
@@ -443,7 +503,7 @@ func newCompactionChain(
 			start, manifests[0].EndTime,
 		)
 	}
-	var startIdx, endIdx int
+	startIdx, endIdx := -1, -1
 	for idx, m := range manifests {
 		if m.StartTime.Equal(start) {
 			startIdx = idx
@@ -452,12 +512,18 @@ func newCompactionChain(
 			endIdx = idx + 1
 		}
 	}
-	if startIdx == 0 {
+	if startIdx == -1 {
 		return compactionChain{}, errors.Newf(
 			"no incrementals found with the specified start time %s", start,
 		)
-	} else if endIdx == 0 {
+	} else if endIdx == -1 {
 		return compactionChain{}, errors.Newf("no incrementals found with the specified end time %s", end)
+	}
+
+	if startIdx >= endIdx {
+		return compactionChain{}, errors.AssertionFailedf(
+			"start index %d must be less than end index %d", startIdx, endIdx,
+		)
 	}
 
 	compactedIters := make(backupinfo.LayerToBackupManifestFileIterFactory)
@@ -520,6 +586,7 @@ func updateCompactionBackupDetails(
 		ResolvedTargets:     allDescsPb,
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
 		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
+		ScheduleID:          initialDetails.ScheduleID,
 		Compact:             true,
 	}
 	return compactedDetails, nil
