@@ -864,7 +864,10 @@ func (c *SyncedCluster) generateStartCmd(
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
 			"GOTRACEBACK=crash",
+			// N.B. disable telemetry (see `TelemetryOptOut`).
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+			// N.B. set crash reporting URL (see `crashReportURL()`) to the empty string to disable Sentry crash reports.
+			"COCKROACH_CRASH_REPORTS=",
 		}, c.Env...), getEnvVars()...),
 		Binary:              cockroachNodeBinary(c, node),
 		Args:                args,
