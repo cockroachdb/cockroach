@@ -39,4 +39,8 @@ message Config {
   // is set to true when the DeterministicFixupsSetting is true at index
   // creation time.
   bool is_deterministic = 6;
+  // RotAlgorithm specifies the type of random orthogonal transformation to
+  // apply to vectors before indexing and search. It must be one of the
+  // cspann.RotAlgorithm enum values.
+  int32 rot_algorithm = 7;
 }
