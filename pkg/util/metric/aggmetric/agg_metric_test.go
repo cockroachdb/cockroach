@@ -118,7 +118,8 @@ func TestAggMetric(t *testing.T) {
 
 	t.Run("basic", func(t *testing.T) {
 		c2.Inc(2)
-		c3.Inc(4)
+		c3.Update(3)
+		c3.Inc(1)
 		d2.Inc(123456.5)
 		d3.Inc(789089.5)
 		g2.Inc(2)
