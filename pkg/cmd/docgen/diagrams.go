@@ -576,6 +576,29 @@ var specs = []stmtSpec{
 		unlink:  []string{"view_name", "view_new_name"},
 	},
 	{
+		name:    "alter_virtual_cluster",
+		stmt:    "alter_virtual_cluster_stmt",
+		inline:  []string{"virtual_cluster", "replication_options_list", "alter_virtual_cluster_capability_stmt", "alter_virtual_cluster_replication_stmt", "alter_virtual_cluster_rename_stmt", "alter_virtual_cluster_service_stmt"},
+		replace: map[string]string{"'ON' d_expr": "'ON' physical_cluster", "d_expr": "virtual_cluster_spec", "a_expr": "timestamp"},
+		unlink:  []string{"physical_cluster", "virtual_cluster_spec", "timestamp"},
+	},
+	{
+		name: "alter_virtual_cluster_capability",
+		stmt: "alter_virtual_cluster_capability_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_replication",
+		stmt: "alter_virtual_cluster_replication_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_rename",
+		stmt: "alter_virtual_cluster_rename_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_service",
+		stmt: "alter_virtual_cluster_service_stmt",
+	},
+	{
 		name:    "alter_zone_database_stmt",
 		inline:  []string{"set_zone_config", "var_set_list"},
 		replace: map[string]string{"var_name": "variable", "var_value": "value"},

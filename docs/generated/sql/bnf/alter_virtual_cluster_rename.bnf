@@ -1,0 +1,2 @@
+alter_virtual_cluster_rename_stmt ::=
+	'ALTER' virtual_cluster virtual_cluster_spec 'RENAME' 'TO' d_expr
