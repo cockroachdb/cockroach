@@ -897,7 +897,7 @@ build
 INSERT INTO t1(c1) VALUES (10) RETURNING (select 1);
 ----
 project
- ├── columns: "?column?":15
+ ├── columns: "?column?":12
  ├── insert t1
  │    ├── columns: c1:1!null c2:2 c3:3 rowid:4!null
  │    ├── insert-mapping:
@@ -925,15 +925,15 @@ project
  │         └── projections
  │              └── char_length(c2_default:8) < 10 [as=rls:13]
  └── projections
-      └── subquery [as="?column?":15]
+      └── subquery [as="?column?":12]
            └── max1-row
-                ├── columns: "?column?":14!null
+                ├── columns: "?column?":11!null
                 └── project
-                     ├── columns: "?column?":14!null
+                     ├── columns: "?column?":11!null
                      ├── values
                      │    └── ()
                      └── projections
-                          └── 1 [as="?column?":14]
+                          └── 1 [as="?column?":11]
 
 exec-ddl
 DROP POLICY p_select on t1;
