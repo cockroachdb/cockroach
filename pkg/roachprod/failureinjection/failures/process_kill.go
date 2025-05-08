@@ -87,7 +87,7 @@ func (f *ProcessKillFailure) Inject(ctx context.Context, l *logger.Logger, args 
 	// WaitForFailureToPropagate. We run Stop in a goroutine to achieve this, although it
 	// does mean we will ignore all errors unless the user also calls WaitForFailureToPropagate.
 	// We make this tradeoff in order to avoid maintaining two different Stop implementations.
-	f.waitCh = runAsync(func() error {
+	f.waitCh = runAsync(ctx, l, func(ctx context.Context) error {
 		return f.c.WithNodes(nodes).Stop(ctx, l, int(signal), true, gracePeriod, label)
 	})
 	return nil

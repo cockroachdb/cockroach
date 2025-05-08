@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -284,10 +285,12 @@ func forEachNode(nodes install.Nodes, fn func(install.Nodes) error) error {
 	return nil
 }
 
-func runAsync(f func() error) <-chan error {
+func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) error) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
-		err := f()
+		err := roachprodutil.PanicAsError(ctx, l, func(context.Context) error {
+			return f(ctx)
+		})
 		errCh <- err
 		close(errCh)
 	}()
