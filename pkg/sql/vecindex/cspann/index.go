@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"math"
-	"math/rand"
 	"runtime"
 	"strconv"
 	"strings"
@@ -60,6 +59,9 @@ func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults i
 // well as default options for how it will be searched. A given search operation
 // can specify SearchOptions to override the default behavior.
 type IndexOptions struct {
+	// RotAlgorithm specifies the type of random orthogonal transformation to
+	// apply to vectors before indexing and search. See RotAlgorithm for details.
+	RotAlgorithm RotAlgorithm
 	// MinPartitionSize specifies the size below which a partition will be merged
 	// into other partitions at the same level.
 	MinPartitionSize int
@@ -206,9 +208,9 @@ type Index struct {
 	// stats maintains locally-cached statistics about the vector index that are
 	// used by adaptive search to improve search accuracy.
 	stats statsManager
-	// rot is a square dims x dims matrix that performs random orthogonal
-	// transformations on input vectors, in order to distribute skew more evenly.
-	rot num32.Matrix
+	// rot computes random orthogonal transformations on query and data vectors
+	// to more evenly distribute skew across dimensions.
+	rot randomOrthoTransformer
 }
 
 // NewIndex constructs a new vector index instance. Typically, only one Index
@@ -264,31 +266,8 @@ func NewIndex(
 			"QualitySamples option %d exceeds max allowed value", vi.options.QualitySamples)
 	}
 
-	rng := rand.New(rand.NewSource(seed))
-
-	// Generate dims x dims random orthogonal matrix to mitigate the impact of
-	// skewed input data distributions:
-	//
-	//   1. Set skew: some dimensions can have higher variance than others. For
-	//      example, perhaps all vectors in a set have similar values for one
-	//      dimension but widely differing values in another dimension.
-	//   2. Vector skew: Individual vectors can have internal skew, such that
-	//      values higher than the mean are more spread out than values lower
-	//      than the mean.
-	//
-	// Multiplying vectors by this matrix helps with both forms of skew. While
-	// total skew does not change, the skew is more evenly distributed across
-	// the dimensions. Now quantizing the vector will have more uniform
-	// information loss across dimensions. Critically, none of this impacts
-	// distance calculations, as orthogonal transformations do not change
-	// distances or angles between vectors.
-	//
-	// Ultimately, performing a random orthogonal transformation (ROT) means that
-	// the index will work more consistently across a diversity of input data
-	// sets, even those with skewed data distributions. In addition, the RaBitQ
-	// algorithm depends on the statistical properties that are granted by the
-	// ROT.
-	vi.rot = num32.MakeRandomOrthoMatrix(rng, quantizer.GetDims())
+	// Initialize the random orthogonal transformer.
+	vi.rot.Init(vi.options.RotAlgorithm, quantizer.GetDims(), seed)
 
 	// Initialize fixup processor.
 	var fixupSeed int64
@@ -344,7 +323,7 @@ func (vi *Index) FormatStats() string {
 // across vectors in a set. Distance and angle between any two vectors
 // remains unchanged, as long as the same ROT is applied to both.
 func (vi *Index) RandomizeVector(original vector.T, randomized vector.T) vector.T {
-	return num32.MulMatrixByVector(&vi.rot, original, randomized, num32.NoTranspose)
+	return vi.rot.RandomizeVector(original, randomized)
 }
 
 // UnRandomizeVector inverts the random orthogonal transformation performed by
@@ -352,7 +331,7 @@ func (vi *Index) RandomizeVector(original vector.T, randomized vector.T) vector.
 // form. The caller is responsible for allocating the original vector with
 // length equal to the index's dimensions.
 func (vi *Index) UnRandomizeVector(randomized vector.T, original vector.T) vector.T {
-	return num32.MulMatrixByVector(&vi.rot, randomized, original, num32.Transpose)
+	return vi.rot.UnRandomizeVector(randomized, original)
 }
 
 // Close shuts down any background fixup workers. While this also happens when
