@@ -15,12 +15,14 @@ func (m HealthCheckResult) String() string {
 }
 
 func (m HealthCheckResult) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeString("[")
 	for i, al := range m.Alerts {
 		if i > 0 {
 			s.SafeString(", ")
 		}
 		s.Print(al)
 	}
+	s.SafeString("]")
 }
 
 func (m HealthAlert) String() string {
@@ -28,9 +30,11 @@ func (m HealthAlert) String() string {
 }
 
 func (m HealthAlert) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeString("{name: \"")
 	s.Print(m.SafeDescription)
-	s.SafeString("[s")
-	s.Print(m.StoreID)
-	s.SafeString("]=")
+	s.SafeString("\", value: ")
 	s.SafeFloat(redact.SafeFloat(m.Value))
+	s.SafeString(", store: ")
+	s.Print(m.StoreID)
+	s.SafeString("}")
 }
