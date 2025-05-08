@@ -337,7 +337,7 @@
 (Project
     $left
     (MakeNullProjections $right)
-    (PassthroughCols $left)
+    (OutputCols $left)
 )
 
 # SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's

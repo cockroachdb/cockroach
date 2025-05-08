@@ -2545,6 +2545,34 @@ project
       ├── NULL [as=x:8]
       └── NULL [as=y:9]
 
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b_empty.* FROM a INNER JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:8!null y:9!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,8,9)
+
+norm expect-not=SimplifyLeftJoinWithZeroRowsRight
+SELECT a.*, b.* FROM a LEFT JOIN b ON a.k = b.x
+----
+left-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: x:8!null y:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
 # --------------------------------------------------
 # EliminateSemiJoin
 # --------------------------------------------------
