@@ -1168,9 +1168,16 @@ func (rr requestRecord) toResp(
 	case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
 		// These requests don't interact with buffered writes, so we simply
 		// let the response through unchanged.
+		ru = br
 
 	default:
 		return ru, kvpb.NewError(unsupportedMethodError(req.Method()))
+	}
+
+	if buildutil.CrdbTestBuild {
+		if ru.GetInner() == nil {
+			panic(errors.AssertionFailedf("expected response to be set for type %T", rr.origRequest))
+		}
 	}
 
 	return ru, nil
