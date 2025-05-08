@@ -384,7 +384,8 @@ func (ds *ServerImpl) setupFlow(
 
 	if !f.IsLocal() {
 		bld := logtags.BuildBuffer()
-		bld.Add("f", flowCtx.ID.Short().String())
+		// TODO(yuzefovich): consider using int32 representation instead of hexadecimal one.
+		bld.Add("f", redact.SafeString(flowCtx.ID.Short().String()))
 		if req.JobTag != "" {
 			bld.Add("job", req.JobTag)
 		}
