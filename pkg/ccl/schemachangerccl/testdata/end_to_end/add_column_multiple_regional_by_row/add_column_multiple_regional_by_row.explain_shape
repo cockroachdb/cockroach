@@ -2,25 +2,34 @@
 CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
 CREATE TABLE multiregion_db.public.table_regional_by_row (
   k INT PRIMARY KEY,
-  V STRING
+  V STRING,
+  m INT
 ) LOCALITY REGIONAL BY ROW;
 
 /* test */
-EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN j INT DEFAULT unique_rowid() UNIQUE, ADD COLUMN l INT DEFAULT unique_rowid() UNIQUE;
+EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT DEFAULT unique_rowid() UNIQUE, DROP COLUMN m, ADD COLUMN l INT DEFAULT unique_rowid() UNIQUE;
 ----
-Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT unique_rowid(), ADD COLUMN ‹l› INT8 UNIQUE DEFAULT unique_rowid();
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›, ADD COLUMN ‹j› INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN ‹m›, ADD COLUMN ‹l› INT8 UNIQUE DEFAULT unique_rowid();
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index table_regional_by_row_pkey- in relation table_regional_by_row
- │    └── into table_regional_by_row_pkey+ (k, crdb_region; v, j+, l+)
+ │    └── into table_regional_by_row_pkey~ (crdb_region, k; j+, m-, v-, l+)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
- │    └── from table_regional_by_row@[7] into table_regional_by_row_pkey+
+ │    └── from table_regional_by_row@[7] into table_regional_by_row_pkey~
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey~ in relation table_regional_by_row
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey~ in relation table_regional_by_row
+ │    └── into table_regional_by_row_pkey+ (k, crdb_region; j+, l+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[9] into table_regional_by_row_pkey+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey+ in relation table_regional_by_row
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index table_regional_by_row_pkey+ in relation table_regional_by_row
  │    ├── into table_regional_by_row_j_key+ (crdb_region, j+: k)
- │    └── into table_regional_by_row_l_key+ (crdb_region, l+: k)
+ │    └── into table_regional_by_row_l_key+ (l+, crdb_region: k)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
  │    ├── from table_regional_by_row@[3] into table_regional_by_row_j_key+
@@ -28,4 +37,4 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index table_regional_by_row_j_key+ in relation table_regional_by_row
  ├── validate UNIQUE constraint backed by index table_regional_by_row_l_key+ in relation table_regional_by_row
- └── execute 4 system table mutations transactions
+ └── execute 5 system table mutations transactions
