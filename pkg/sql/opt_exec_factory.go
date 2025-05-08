@@ -1401,6 +1401,25 @@ func ordinalsToIndexes(table cat.Table, ords cat.IndexOrdinals) []catalog.Index 
 	return retval
 }
 
+func ordinalsToIndexes2(
+	table cat.Table, a, b cat.IndexOrdinals,
+) ([]catalog.Index, []catalog.Index) {
+	lenA, lenB := len(a), len(b)
+	if lenA+lenB == 0 {
+		return nil, nil
+	}
+
+	indexes := make([]catalog.Index, lenA+lenB)
+	indexesA, indexesB := indexes[:lenA:lenA], indexes[lenA:]
+	for i, idx := range a {
+		indexesA[i] = table.Index(idx).(*optIndex).idx
+	}
+	for i, idx := range b {
+		indexesB[i] = table.Index(idx).(*optIndex).idx
+	}
+	return indexesA, indexesB
+}
+
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
@@ -1724,11 +1743,12 @@ func (ef *execFactory) constructUpdateRun(
 	fetchCols, updateCols := makeColList2(table, fetchColOrdSet, updateColOrdSet)
 
 	// Create the table updater.
+	tombstoneIdxs, lockIdxs := ordinalsToIndexes2(table, uniqueWithTombstoneIndexes, lockedIndexes)
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
-		ordinalsToIndexes(table, lockedIndexes),
+		tombstoneIdxs,
+		lockIdxs,
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1799,11 +1819,12 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table updater, which does the bulk of the update-related work.
+	tombstoneIdxs, lockIdxs := ordinalsToIndexes2(table, uniqueWithTombstoneIndexes, lockedIndexes)
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
-		ordinalsToIndexes(table, lockedIndexes),
+		tombstoneIdxs,
+		lockIdxs,
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
