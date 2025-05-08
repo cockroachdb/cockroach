@@ -116,7 +116,7 @@ func MakeUpdater(
 	}
 
 	updateColIDToRowIndex := ColIDtoRowIndexFromCols(updateCols)
-	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
+	var includeIndexes []catalog.Index
 	var deleteOnlyIndexes []catalog.Index
 	// If the UPDATE is set to only update columns, do not collect secondary
 	// indexes to update.
@@ -128,6 +128,9 @@ func MakeUpdater(
 				continue
 			}
 			if !index.DeleteOnly() {
+				if includeIndexes == nil {
+					includeIndexes = make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
+				}
 				includeIndexes = append(includeIndexes, index)
 			} else {
 				if deleteOnlyIndexes == nil {
