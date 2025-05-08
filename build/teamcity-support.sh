@@ -12,7 +12,8 @@ source "$root/build/teamcity-common-support.sh"
 source "$root/build/teamcity/util.sh"
 
 remove_files_on_exit() {
-  rm -f ~/.ssh/id_rsa{,.pub}
+  # Remove the ssh key on exit only on TeamCity agents, not on the local machine.
+  rm -f ~agent/.ssh/id_rsa{,.pub}
   common_support_remove_files_on_exit
 }
 trap remove_files_on_exit EXIT
