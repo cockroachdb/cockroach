@@ -1246,48 +1246,26 @@ SELECT (
 ----
 project
  ├── columns: "?column?":24(int)
- ├── stats: [rows=1e+06]
- ├── ensure-distinct-on
- │    ├── columns: t0.rowid:4(int!null) "?column?":23(int)
- │    ├── grouping columns: t0.rowid:4(int!null)
- │    ├── error: "more than one row returned by a subquery used as an expression"
- │    ├── stats: [rows=1e+06]
- │    ├── key: (4)
- │    ├── fd: (4)-->(23)
- │    ├── left-join-apply
- │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null) "?column?":23(int)
- │    │    ├── stats: [rows=1e+06]
- │    │    ├── fd: (4)-->(2)
- │    │    ├── scan table0 [as=t0]
- │    │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    ├── key: (4)
- │    │    │    └── fd: (4)-->(2)
- │    │    ├── project
- │    │    │    ├── columns: "?column?":23(int!null)
- │    │    │    ├── outer: (2)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    ├── fd: ()-->(23)
- │    │    │    ├── left-join (cross)
- │    │    │    │    ├── outer: (2)
- │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
- │    │    │    │    ├── scan table1
- │    │    │    │    │    └── stats: [rows=1000]
- │    │    │    │    ├── values
- │    │    │    │    │    ├── cardinality: [0 - 0]
- │    │    │    │    │    ├── stats: [rows=0]
- │    │    │    │    │    └── key: ()
- │    │    │    │    └── filters
- │    │    │    │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
- │    │    │    └── projections
- │    │    │         └── 1 [as="?column?":23, type=int]
- │    │    └── filters (true)
- │    └── aggregations
- │         └── const-agg [as="?column?":23, type=int, outer=(23)]
- │              └── "?column?":23 [type=int]
+ ├── stats: [rows=1000]
+ ├── scan table0 [as=t0]
+ │    └── stats: [rows=1000]
  └── projections
-      └── "?column?":23 [as="?column?":24, type=int, outer=(23)]
+      └── subquery [as="?column?":24, type=int, subquery]
+           └── max1-row
+                ├── columns: "?column?":23(int!null)
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1]
+                ├── key: ()
+                ├── fd: ()-->(23)
+                └── project
+                     ├── columns: "?column?":23(int!null)
+                     ├── stats: [rows=1000]
+                     ├── fd: ()-->(23)
+                     ├── scan table1
+                     │    └── stats: [rows=1000]
+                     └── projections
+                          └── 1 [as="?column?":23, type=int]
 
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
