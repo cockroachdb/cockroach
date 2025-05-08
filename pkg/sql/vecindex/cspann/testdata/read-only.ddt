@@ -37,7 +37,7 @@ vec4: 2 (centroid=1.25)
 vec10: 4 (centroid=1.75)
 vec5: 4 (centroid=2.02)
 vec8: 4 (centroid=2.25)
-13 leaf vectors, 16 vectors, 13 full vectors, 4 partitions
+13 leaf vectors, 16 vectors, 10 full vectors, 4 partitions
 
 format-tree
 ----

@@ -115,8 +115,8 @@ force-split partition-key=1
 search max-results=2 beam-size=1
 (1, 6)
 ----
-vec7: 5 (centroid=2.06)
-vec10: 10 (centroid=2.5)
+vec9: 5 (centroid=2.92)
+vec8: 13 (centroid=2.12)
 3 leaf vectors, 7 vectors, 3 full vectors, 3 partitions
 
 # Search for closest vectors with beam-size=2.
@@ -212,10 +212,10 @@ vec4: 41 (centroid=2.92)
 search max-results=6 skip-rerank
 (8, 9)
 ----
-vec1: 17.8042 ±10.12 (centroid=1.58)
-vec2: 28.1958 ±10.12 (centroid=1.58)
-vec3: 45.6359 ±15.23 (centroid=1.41)
-vec5: 74.3641 ±15.23 (centroid=1.41)
+vec1: 9.4346 ± 10.12 (centroid=1.58)
+vec2: 36.5654 ± 10.12 (centroid=1.58)
+vec3: 55.698 ± 15.23 (centroid=1.41)
+vec5: 64.302 ± 15.23 (centroid=1.41)
 4 leaf vectors, 7 vectors, 0 full vectors, 3 partitions
 
 # ----------------------------------------------------------------------
