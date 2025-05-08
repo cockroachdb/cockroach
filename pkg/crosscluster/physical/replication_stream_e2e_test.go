@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -27,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -1572,4 +1575,96 @@ FROM [SHOW VIRTUAL CLUSTER '%s' WITH REPLICATION STATUS]
 
 	require.Equal(t, expectedReaderTenantName, name)
 	require.Equal(t, "ready", status)
+}
+
+func TestUpgradeFail(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	initSettings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.V25_1.Version(),
+		clusterversion.V25_1.Version(),
+		true /* initializeVersion */)
+
+	args := base.TestServerArgs{
+		Settings:          initSettings,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	}
+
+	srv, sql, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sql)
+	sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", clusterversion.V25_2.Version()))
+
+}
+
+func TestUpgradeWorks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	}
+
+	args.Knobs.Server = &server.TestingKnobs{
+		ClusterVersionOverride:         clusterversion.V25_1.Version(),
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+	}
+
+	srv, sql, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sql)
+	sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", clusterversion.V25_2.Version()))
+
+}
+
+// TestReaderTenantUpgrade ensures the reader tenant cannot upgrade itself or
+// via the system tenant, rather the user needs to upgrade the host cluster, and
+// then recreate the reader tenant.
+func TestReaderTenantUpgrade(t *testing.T) {
+
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	args.InitSettings = cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.MinSupported.Version(),
+		clusterversion.MinSupported.Version(),
+		true, /* initializeVersion */
+	)
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	readerTenantID := stats.IngestionDetails.ReadTenantID
+
+	readerTenantName := fmt.Sprintf("%s-readonly", args.DestTenantName)
+	c.ConnectToReaderTenant(ctx, readerTenantID, readerTenantName)
+
+	latestVersion := clusterversion.PreviousRelease.Version().String()
+
+	c.ReaderTenantSQL.ExpectErr(t, "cannot execute SET CLUSTER SETTING in a read-only transaction", fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
+
+	// Ensure the reader tenant cannot upgrade itself even if we allow it to write.
+	c.ReaderTenantSQL.Exec(t, "SET SESSION bypass_pcr_reader_catalog_aost ='true'")
+	c.ReaderTenantSQL.ExpectErr(t, "reader virtual clusters cannot be upgraded", fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
+
+	c.DestSysSQL.ExpectErr(t, "cannot set 'version' for tenants", fmt.Sprintf("ALTER TENANT '%s' SET CLUSTER SETTING version = '%s'", readerTenantName, latestVersion))
+
+	c.DestSysSQL.Exec(t, fmt.Sprintf("SET CLUSTER SETTING version = '%s'", latestVersion))
+	c.DestSysSQL.Exec(t, fmt.Sprintf("DROP VIRTUAL CLUSTER %s", readerTenantName))
+	c.DestSysSQL.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s SET REPLICATION READ VIRTUAL CLUSTER", args.DestTenantName))
 }
