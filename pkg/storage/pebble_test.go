@@ -1300,7 +1300,7 @@ func TestIncompatibleVersion(t *testing.T) {
 	version := roachpb.Version{Major: 21, Minor: 1}
 	b, err := protoutil.Marshal(&version)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, safeWriteToUnencryptedFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())

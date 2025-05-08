@@ -7,7 +7,6 @@ go_library(
         "encryption_at_rest.go",
         "file_registry.go",
         "fs.go",
-        "safewrite.go",
         "sticky_vfs.go",
         "temp_dir.go",
         "test_utils.go",
@@ -42,7 +41,6 @@ go_test(
     name = "fs_test",
     srcs = [
         "file_registry_test.go",
-        "safewrite_test.go",
         "sticky_vfs_test.go",
         "temp_dir_test.go",
     ],
