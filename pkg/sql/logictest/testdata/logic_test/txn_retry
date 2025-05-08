@@ -1,3 +1,7 @@
+# TODO(#144278): remove this or adjust the test.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 # Check that we auto-retry pushed transactions which can't be refreshed - if
 # they're pushed while we can still auto-retry them.
 subtest autoretry-on-push-first-batch

@@ -1,5 +1,9 @@
 # LogicTest: !3node-tenant-default-configs !local-mixed-24.3
 
+# TODO(#144252): remove this.
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
 query T
 SHOW max_prepared_transactions
 ----

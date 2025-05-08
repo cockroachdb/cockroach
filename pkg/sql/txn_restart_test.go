@@ -452,10 +452,15 @@ func TestTxnAutoRetry(t *testing.T) {
 	defer aborter.Close(t)
 	params, cmdFilters := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// TODO(#146238): either remove this or leave a comment for why it's ok.
+	kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
 	{
-		pgURL, cleanup := s.ApplicationLayer().PGUrl(t,
+		pgURL, cleanup := s.PGUrl(t,
 			serverutils.CertsDirPrefix("TestTxnAutoRetry"), serverutils.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
@@ -632,10 +637,15 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	defer aborter.Close(t)
 	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// TODO(#146238): either remove this or leave a comment for why it's ok.
+	kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
 	{
-		pgURL, cleanup := s.ApplicationLayer().PGUrl(t,
+		pgURL, cleanup := s.PGUrl(t,
 			serverutils.CertsDirPrefix("TestAbortedTxnOnlyRetriedOnce"), serverutils.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
@@ -789,11 +799,15 @@ func TestTxnUserRestart(t *testing.T) {
 				defer aborter.Close(t)
 				params, cmdFilters := createTestServerParamsAllowTenants()
 				params.Knobs.SQLExecutor = aborter.executorKnobs()
-				s, sqlDB, _ := serverutils.StartServer(t, params)
-				defer s.Stopper().Stop(context.Background())
-				{
+				srv, sqlDB, _ := serverutils.StartServer(t, params)
+				defer srv.Stopper().Stop(context.Background())
+				s := srv.ApplicationLayer()
 
-					pgURL, cleanup := s.ApplicationLayer().PGUrl(t,
+				// TODO(#146238): either remove this or leave a comment for why it's ok.
+				kvcoord.BufferedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
+				{
+					pgURL, cleanup := s.PGUrl(t,
 						serverutils.CertsDirPrefix("TestTxnUserRestart"), serverutils.User(username.RootUser))
 					defer cleanup()
 					if err := aborter.Init(pgURL); err != nil {
