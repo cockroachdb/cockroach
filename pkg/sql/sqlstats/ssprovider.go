@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -93,6 +94,7 @@ type RecordedStmtStats struct {
 	EndTime                  time.Time
 	ExecStats                *execstats.QueryLevelStats
 	Indexes                  []string
+	QueryTags                []sqlcommenter.QueryTag
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

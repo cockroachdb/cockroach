@@ -144,8 +144,8 @@ func (p *planner) DeserializeSessionState(
 	}
 
 	for _, prepStmt := range m.PreparedStatements {
-		stmts, err := parser.ParseWithInt(
-			prepStmt.SQL, parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize),
+		stmts, err := parser.ParseWithOptions(
+			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
 		)
 		if err != nil {
 			return nil, err

@@ -8,6 +8,7 @@ package integration
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -195,6 +196,77 @@ func TestInsightsIntegration(t *testing.T) {
 		}
 
 		return nil
+	})
+}
+
+// TestRetainCommentsInInsights tests that when the sql.sqlcommenter.enabled
+// setting is enabled / disabled, querying crdb_internal.cluster_execution_insights and
+// crdb_internal.node_execution_insights will / won't return query tags, respectively.
+func TestRetainCommentsInInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the server.
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sv := &srv.ApplicationLayer().ClusterSettings().SV
+
+	// Set a low latency threshold to ensure our queries are captured
+	insights.LatencyThreshold.Override(ctx, sv, 10*time.Millisecond)
+
+	const queryWithComments = `SELECT pg_sleep(0.02)/* key='This is a test comment' */`
+
+	type Comment struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+
+	testutils.RunTrueAndFalse(t, "withComments", func(t *testing.T, withComments bool) {
+		appName := fmt.Sprintf("TestRetainCommentsInInsights_%t", withComments)
+		// Set the application name for our test
+		_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING sql.sqlcommenter.enabled = %t", withComments))
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, queryWithComments)
+		require.NoError(t, err)
+
+		// Verify that the comments are present in the cluster_execution_insights table
+		testutils.RunValues(t, "table", []string{"cluster_execution_insights", "node_execution_insights"}, func(t *testing.T, table string) {
+			query := fmt.Sprintf(`
+			SELECT query_tags
+			FROM crdb_internal.%s
+			WHERE query = 'SELECT pg_sleep(_)' AND app_name = $1
+		`, table)
+			testutils.SucceedsSoon(t, func() error {
+				var comments []Comment
+				var commentsRaw []byte
+				row := conn.QueryRowContext(ctx, query, appName)
+
+				if err := row.Scan(&commentsRaw); err != nil {
+					return err
+				}
+
+				if err := json.Unmarshal(commentsRaw, &comments); err != nil {
+					return err
+				}
+				if withComments {
+					if len(comments) != 1 || comments[0].Value != "This is a test comment" || comments[0].Name != "key" {
+						return fmt.Errorf("expected comment to contain `key='This is a test comment'`, but got: %s", comments)
+					}
+
+					return nil
+				} else {
+					if len(comments) == 1 {
+						return fmt.Errorf("expected no comments, but got: %s", comments)
+					}
+					return nil
+				}
+			})
+		})
 	})
 }
 

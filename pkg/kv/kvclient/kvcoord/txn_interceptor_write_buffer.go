@@ -266,7 +266,7 @@ func (twb *txnWriteBuffer) SendLocked(
 
 	br, pErr := twb.wrapped.SendLocked(ctx, transformedBa)
 	if pErr != nil {
-		return nil, twb.adjustError(ctx, transformedBa, rr, pErr)
+		return nil, twb.adjustError(ctx, rr, pErr)
 	}
 
 	return twb.mergeResponseWithRequestRecords(ctx, rr, br)
@@ -443,7 +443,7 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 // adjustError adjusts the provided error based on the transformations made by
 // the txnWriteBuffer to the batch request before sending it to KV.
 func (twb *txnWriteBuffer) adjustError(
-	ctx context.Context, ba *kvpb.BatchRequest, rr requestRecords, pErr *kvpb.Error,
+	ctx context.Context, rr requestRecords, pErr *kvpb.Error,
 ) *kvpb.Error {
 	// Fix the error index to hide the impact of any requests that were
 	// transformed.
@@ -453,39 +453,31 @@ func (twb *txnWriteBuffer) adjustError(
 		// therefore weren't sent to the KV layer. We can then adjust the error
 		// index accordingly.
 		numStripped := int32(0)
-		numOriginalRequests := len(ba.Requests) + len(rr)
 		baIdx := int32(0)
-		for i := range numOriginalRequests {
-			if len(rr) > 0 && rr[0].index == i {
-				curTs := rr[0]
-				rr = rr[1:]
-				if curTs.stripped {
-					numStripped++
-				} else {
-					// This is a transformed request (for example a LockingGet that was
-					// sent instead of a Del). In this case, the error might be a bit
-					// confusing to the client since the request that had an error isn't
-					// exactly the request the user sent.
-					//
-					// For now, we handle this by logging and removing the error index.
-					//
-					// [1] Get requests are always collected as transformations, but
-					// they're never transformed. Attributing an error to them shouldn't
-					// confuse the client.
-					if baIdx == pErr.Index.Index && curTs.origRequest.Method() != kvpb.Get {
-						log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
-						pErr.Index = nil
-						return pErr
-					}
+		// Note that all requests in the batch are guaranteed to be in the list of
+		// request records.
+		for _, record := range rr {
+			if record.stripped {
+				numStripped++
+			} else {
+				// If this is a transformed request (for example a LockingGet that was
+				// sent instead of a Del), the error might be a bit confusing to the
+				// client since the request that had an error isn't exactly the request
+				// the user sent.
+				//
+				// For now, we handle this by logging and removing the error index.
+				//
+				// For requests that were not transformed, attributing an error to them
+				// shouldn't confuse the client.
+				if baIdx == pErr.Index.Index && record.transformed {
+					log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					pErr.Index = nil
+					return pErr
+				} else if baIdx == pErr.Index.Index {
+					break
 				}
-				if curTs.origRequest.Method() != kvpb.Get {
-					continue
-				}
+				baIdx++
 			}
-			if baIdx == pErr.Index.Index {
-				break
-			}
-			baIdx++
 		}
 
 		pErr.Index.Index += numStripped
@@ -668,9 +660,8 @@ func (twb *txnWriteBuffer) applyTransformations(
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
 	// baRemote.Requests to the correct size by counting the number of Puts/Dels
-	// in ba.Requests. The same for the requestRecords slice. We could also
-	// allocate the right number of ResponseUnion, PutResponse, and DeleteResponse
-	// objects as well.
+	// in ba.Requests. We could also allocate the right number of ResponseUnion,
+	// PutResponse, and DeleteResponse objects as well.
 	baRemote.Requests = nil
 
 	rr := make(requestRecords, 0, len(ba.Requests))
@@ -1020,41 +1011,28 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 		return br, nil
 	}
 
-	// Figure out the length of the merged responses slice.
-	mergedRespsLen := len(br.Responses)
-	for _, t := range rr {
-		if t.stripped {
-			mergedRespsLen++
-		}
-	}
-	mergedResps := make([]kvpb.ResponseUnion, mergedRespsLen)
-	for i := range mergedResps {
-		if len(rr) > 0 && rr[0].index == i {
-			if !rr[0].stripped {
-				// If the transformation wasn't stripped from the batch we sent to KV,
-				// we received a response for it, which then needs to be combined with
-				// what's in the write buffer.
-				resp := br.Responses[0]
-				mergedResps[i], pErr = rr[0].toResp(ctx, twb, resp, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
-				br.Responses = br.Responses[1:]
-			} else {
-				mergedResps[i], pErr = rr[0].toResp(ctx, twb, kvpb.ResponseUnion{}, br.Txn)
-				if pErr != nil {
-					return nil, pErr
-				}
+	// All original requests are guaranteed to be in the list of requestRecords,
+	// so the length of the merged responses is the same length as rr.
+	mergedResps := make([]kvpb.ResponseUnion, 0, len(rr))
+	for _, record := range rr {
+		brResp := kvpb.ResponseUnion{}
+		if !record.stripped {
+			if len(br.Responses) == 0 {
+				log.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
-
-			rr = rr[1:]
-			continue
+			// If the request wasn't stripped from the batch we sent to KV, we
+			// received a response for it, which then needs to be combined with
+			// what's in the write buffer.
+			brResp = br.Responses[0]
+			br.Responses = br.Responses[1:]
 		}
-
-		// No transformation applies at this index. Copy over the response as is.
-		mergedResps[i] = br.Responses[0]
-		br.Responses = br.Responses[1:]
+		resp, pErr := record.toResp(ctx, twb, brResp, br.Txn)
+		if pErr != nil {
+			return nil, pErr
+		}
+		mergedResps = append(mergedResps, resp)
 	}
+
 	br.Responses = mergedResps
 	return br, nil
 }

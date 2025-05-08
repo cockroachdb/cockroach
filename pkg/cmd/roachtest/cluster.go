@@ -55,10 +55,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func init() {
-	_ = roachprod.InitProviders()
-}
-
 //go:embed tsdump-run.sh
 var tsdumpRunSh string
 
