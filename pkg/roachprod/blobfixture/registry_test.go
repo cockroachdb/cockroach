@@ -208,8 +208,10 @@ func TestFixtureRegistryURI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	registry := newTestRegistry(t, "nodelocal://1/roachprod/v25.1")
-	// The time is always 2024-06-01 12:23
-	registry.clock = func() time.Time { return time.Date(2024, 6, 1, 12, 23, 0, 0, time.UTC) }
+	// The time is always 2024-06-01 12:23:30.123 UTC
+	registry.clock = func() time.Time {
+		return time.Date(2024, 6, 1, 12, 23, 30, int(123*time.Millisecond), time.UTC)
+	}
 
 	handle, err := registry.Create(context.Background(), "test-kind", newLogger(t))
 	require.NoError(t, err)
@@ -218,12 +220,12 @@ func TestFixtureRegistryURI(t *testing.T) {
 
 	dataUri := registry.URI(meta.DataPath)
 	require.Equal(t,
-		"nodelocal://1/roachprod/v25.1/test-kind/20240601-1223",
+		"nodelocal://1/roachprod/v25.1/test-kind/20240601-122330.123",
 		dataUri.String())
 
 	metaUri := registry.URI(meta.MetadataPath)
 	require.Equal(t,
-		"nodelocal://1/roachprod/v25.1/metadata/test-kind/20240601-1223",
+		"nodelocal://1/roachprod/v25.1/metadata/test-kind/20240601-122330.123",
 		metaUri.String())
 }
 
