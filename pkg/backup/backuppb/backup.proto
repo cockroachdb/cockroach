@@ -200,6 +200,12 @@ message ScheduledBackupExecutionArgs {
   ];
 
   reserved 5;
+  // If an automated compaction is currently running on backups created by this
+  // schedule, this field will be set to the ID of the compaction job.
+  // A value of 0 indicates that there is no compaction job running.
+  int64 compaction_job_id = 9 [(gogoproto.customname) = "CompactionJobID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
+
+  // Next ID: 10
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back
