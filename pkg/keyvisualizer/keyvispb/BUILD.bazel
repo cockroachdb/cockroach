@@ -16,7 +16,10 @@ proto_library(
 
 go_proto_library(
     name = "keyvispb_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb",
     proto = ":keyvispb_proto",
     visibility = ["//visibility:public"],

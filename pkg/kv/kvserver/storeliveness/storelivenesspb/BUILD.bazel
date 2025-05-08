@@ -15,7 +15,10 @@ proto_library(
 
 go_proto_library(
     name = "storelivenesspb_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb",
     proto = ":storelivenesspb_proto",
     visibility = ["//visibility:public"],

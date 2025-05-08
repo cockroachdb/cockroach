@@ -15,7 +15,10 @@ proto_library(
 
 go_proto_library(
     name = "tracingservicepb_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb",
     proto = ":tracingservicepb_proto",
     visibility = ["//visibility:public"],
