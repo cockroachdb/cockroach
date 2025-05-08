@@ -2060,12 +2060,12 @@ func (p *Pebble) ApproximateDiskBytes(
 }
 
 // Compact implements the Engine interface.
-func (p *Pebble) Compact() error {
-	return p.db.Compact(context.TODO(), nil /* start */, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
+func (p *Pebble) Compact(ctx context.Context) error {
+	return p.db.Compact(ctx, nil /* start */, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
 }
 
 // CompactRange implements the Engine interface.
-func (p *Pebble) CompactRange(start, end roachpb.Key) error {
+func (p *Pebble) CompactRange(ctx context.Context, start, end roachpb.Key) error {
 	// TODO(jackson): Consider changing Engine.CompactRange's signature to take
 	// in EngineKeys so that it's unambiguous that the arguments have already
 	// been encoded as engine keys. We do need to encode these keys in protocol
@@ -2079,7 +2079,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	if ek, ok := DecodeEngineKey(end); !ok || ek.Validate() != nil {
 		return errors.Errorf("invalid end key: %q", end)
 	}
-	return p.db.Compact(context.TODO(), start, end, true /* parallel */)
+	return p.db.Compact(ctx, start, end, true /* parallel */)
 }
 
 // RegisterFlushCompletedCallback implements the Engine interface.

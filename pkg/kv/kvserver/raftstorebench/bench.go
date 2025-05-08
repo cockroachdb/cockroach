@@ -94,9 +94,9 @@ func Run(t T, cfg Config) Result {
 	lsmStatsToFile(t, cfg, "uncompacted", o.smEng.GetMetrics(), o.raftEng.GetMetrics())
 
 	logf(t, "compacting")
-	require.NoError(t, smEng.Compact())
+	require.NoError(t, smEng.Compact(context.Background()))
 	if !cfg.SingleEngine {
-		require.NoError(t, raftEng.Compact())
+		require.NoError(t, raftEng.Compact(context.Background()))
 	}
 	logf(t, "done compacting")
 

@@ -318,7 +318,7 @@ func TestMVCCHistories(t *testing.T) {
 
 		e := newEvalCtx(ctx, engine)
 		defer func() {
-			require.NoError(t, engine.Compact())
+			require.NoError(t, engine.Compact(ctx))
 			m := engine.GetMetrics().Metrics
 			if m.Keys.MissizedTombstonesCount > 0 {
 				// A missized tombstone is a Pebble DELSIZED tombstone that encodes
