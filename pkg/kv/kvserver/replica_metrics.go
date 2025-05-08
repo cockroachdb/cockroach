@@ -117,8 +117,8 @@ func (r *Replica) Metrics(
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.shMu.raftLogSize,
-		raftLogSizeTrusted:       r.shMu.raftLogSizeTrusted,
+		raftLogSize:              r.asLogStorage().shMu.size,
+		raftLogSizeTrusted:       r.asLogStorage().shMu.sizeTrusted,
 		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
@@ -393,18 +393,18 @@ func (r *Replica) needsMergeBySizeRLocked() bool {
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
-	// We don't want to check the Raft log for truncation on every write
-	// operation or even every operation which occurs after the Raft log exceeds
-	// RaftLogQueueStaleSize. The logic below queues the replica for possible
-	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
-	// have been written to the Raft log. Note that it does not matter if some
-	// of the bytes in raftLogLastCheckSize are already part of pending
-	// truncations since this comparison is looking at whether the raft log has
-	// grown sufficiently.
-	checkRaftLog := r.shMu.raftLogSize-r.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	// We don't want to check the Raft log for truncation on every write operation
+	// or even every operation which occurs after the Raft log exceeds
+	// RaftLogQueueStaleSize. The logic below queues the replica for possible Raft
+	// log truncation whenever an additional RaftLogQueueStaleSize bytes have been
+	// written to the Raft log. Note that it does not matter if some of the bytes
+	// in lastCheckSize are already part of pending truncations since this
+	// comparison is looking at whether the raft log has grown sufficiently.
+	ls := r.asLogStorage()
+	checkRaftLog := ls.shMu.size-ls.shMu.lastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.raftMu.AssertHeld()
-		r.shMu.raftLogLastCheckSize = r.shMu.raftLogSize
+		ls.shMu.lastCheckSize = ls.shMu.size
 	}
 	return checkRaftLog
 }

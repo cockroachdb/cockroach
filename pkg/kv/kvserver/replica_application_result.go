@@ -500,39 +500,47 @@ func (r *Replica) handleLeaseResult(
 
 // stagePendingTruncationRaftMuLocked installs the new RaftTruncatedState,
 // updates the log size, and truncates the raft log cache.
+// TODO(pav-kv): move the truncation functions to replicaLogStorage files.
 func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
+	r.asLogStorage().stagePendingTruncationRaftMuLocked(pt)
+}
+
+func (r *replicaLogStorage) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index can be zero if this proposal is from before
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.trunc.Index+1 == pt.expectedFirstIndex
 
-	r.mu.Lock()
-	r.shMu.raftTruncState = pt.RaftTruncatedState
-	// Ensure the raft log size is not negative since it isn't persisted between
-	// server restarts.
-	// TODO(pav-kv): should we distrust the log size if it goes negative?
-	r.shMu.raftLogSize = max(r.shMu.raftLogSize+pt.logDeltaBytes, 0)
-	r.shMu.raftLogLastCheckSize = max(r.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
-	if !pt.isDeltaTrusted {
-		r.shMu.raftLogSizeTrusted = false
-	}
-	r.mu.Unlock()
+	// TODO(pav-kv): move this logic to replicaLogStorage type.
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.shMu.trunc = pt.RaftTruncatedState
+		// Ensure the raft log size is not negative since it isn't persisted between
+		// server restarts.
+		// TODO(pav-kv): should we distrust the log size if it goes negative?
+		r.shMu.size = max(r.shMu.size+pt.logDeltaBytes, 0)
+		r.shMu.lastCheckSize = max(r.shMu.lastCheckSize+pt.logDeltaBytes, 0)
+		if !pt.isDeltaTrusted {
+			r.shMu.sizeTrusted = false
+		}
+	}()
 
 	// Clear entries in the raft log entry cache for this range up to and
 	// including the truncated index. Ordering this after updating the truncated
 	// state matters here. At this point, there can not be a concurrent reader of
 	// the raft log holding only Replica.mu that tries to read the entries below
 	// the new truncated index.
-	r.store.raftEntryCache.Clear(r.RangeID, pt.Index)
+	r.cache.Clear(r.ls.RangeID, pt.Index)
 }
 
 // finalizeTruncationRaftMuLocked is a post-apply handler for the raft log
 // truncation. It removes the obsolete sideloaded entries if any.
 func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	index := r.shMu.raftTruncState.Index
+	index := r.asLogStorage().shMu.trunc.Index
 	// Truncate the sideloaded storage. This is safe because the new truncated
 	// state is already synced. If it wasn't, a crash right after removing the
 	// sideloaded entries could result in missing entries in the log.
@@ -541,7 +549,7 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	// caller has this information available. Or better delegate deletions to an
 	// asynchronous job, that also makes sure to clean up dangling files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", index)
-	if err := r.raftMu.sideloaded.TruncateTo(ctx, index); err != nil {
+	if err := r.logStorage.ls.Sideload.TruncateTo(ctx, index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)

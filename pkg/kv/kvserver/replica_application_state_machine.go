@@ -149,7 +149,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
-	b.truncState = r.shMu.raftTruncState
+	b.truncState = r.asLogStorage().shMu.trunc
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter

@@ -45,9 +45,9 @@ import (
 // stateRaftMuLocked returns the current raft log storage state.
 func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 	return logstore.RaftState{
-		LastIndex: r.shMu.lastIndexNotDurable,
-		LastTerm:  r.shMu.lastTermNotDurable,
-		ByteSize:  r.shMu.raftLogSize,
+		LastIndex: r.shMu.last.Index,
+		LastTerm:  r.shMu.last.Term,
+		ByteSize:  r.shMu.size,
 	}
 }
 
@@ -56,9 +56,9 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 func (r *replicaLogStorage) appendRaftMuLocked(
 	ctx context.Context, app raft.StorageAppend, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
+	r.raftMu.AssertHeld()
 	state := r.stateRaftMuLocked()
-	cb := (*replicaSyncCallback)(r)
-	state, err := r.raftMu.logStorage.StoreEntries(ctx, state, app, cb, stats)
+	state, err := r.ls.StoreEntries(ctx, state, app, r.onSync, stats)
 	if err != nil {
 		return state, err
 	}
@@ -78,16 +78,16 @@ func (r *replicaLogStorage) appendRaftMuLocked(
 	// overwritten; after the write, append new entries to the cache. Currently,
 	// the cache can contain stale entries while storage is already updated, and
 	// the only hope is that nobody tries to read it under Replica.mu only.
-	r.store.raftEntryCache.Add(r.RangeID, app.Entries, true /* truncate */)
+	r.cache.Add(r.ls.RangeID, app.Entries, true /* truncate */)
 	return state, nil
 }
 
 // updateStateRaftMuLockedMuLocked updates the in-memory reflection of the raft
 // log storage state.
 func (r *replicaLogStorage) updateStateRaftMuLockedMuLocked(state logstore.RaftState) {
-	r.shMu.lastIndexNotDurable = state.LastIndex
-	r.shMu.lastTermNotDurable = state.LastTerm
-	r.shMu.raftLogSize = state.ByteSize
+	r.shMu.last.Index = state.LastIndex
+	r.shMu.last.Term = state.LastTerm
+	r.shMu.size = state.ByteSize
 }
 
 // updateLogSize recomputes the raft log size, and updates Replica's in-memory
@@ -101,14 +101,14 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 
-	size, err := r.raftMu.logStorage.ComputeSize(ctx)
+	size, err := r.ls.ComputeSize(ctx)
 	if err != nil {
 		return 0, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.shMu.raftLogSize = size
-	r.shMu.raftLogLastCheckSize = size
-	r.shMu.raftLogSizeTrusted = true
+	r.shMu.size = size
+	r.shMu.lastCheckSize = size
+	r.shMu.sizeTrusted = true
 	return size, nil
 }
