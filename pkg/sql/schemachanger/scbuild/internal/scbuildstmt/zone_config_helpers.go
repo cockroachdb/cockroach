@@ -1421,18 +1421,37 @@ func configureZoneConfigForNewIndexBackfill(
 		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
 			" on tableID %d that does not a zone config set", oldIndexID, tableID)
 	}
-	newIndex := getLatestPrimaryIndex(b, tableID)
-	tempIndex := findCorrespondingTemporaryIndexByID(b, tableID, newIndex.IndexID)
-	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
+	// Extract all the new indexes that exist in the primary index chain,
+	// which will all have the zone config applied.
+	chain := getPrimaryIndexChain(b, tableID)
+	var newIndexesForBackfill []catid.IndexID
+	for _, idxSpec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
+		// Skip the old primary index spec.
+		if idxSpec == &chain.oldSpec {
+			continue
+		}
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.IndexID)
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.TemporaryIndexID)
+	}
+
 	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
 	newSubzones := make([]zonepb.Subzone, 0)
 	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
+	// Track which subzones are already referenced.
+	indexesAlreadyMapped := make(map[uint32]struct{})
+	for _, subZone := range newZoneConfig.Subzones {
+		indexesAlreadyMapped[subZone.IndexID] = struct{}{}
+	}
 	// For the indexes we will use as a part of the backfill, ensure we copy
 	// over each subzone config from the old index to the backfill-related ones.
 	// NOTE: The subzones for the old index and temporary index will eventually
 	// be removed by the schema change GC job, but we need them to be present
 	// for the duration of this schema change.
 	for _, idxToAdd := range newIndexesForBackfill {
+		// Only update new subzone references.
+		if _, found := indexesAlreadyMapped[uint32(idxToAdd)]; found {
+			continue
+		}
 		for _, subzone := range newZoneConfig.Subzones {
 			if subzone.IndexID == uint32(oldIndexID) {
 				subzone.IndexID = uint32(idxToAdd)
