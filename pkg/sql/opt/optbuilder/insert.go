@@ -765,19 +765,25 @@ func (mb *mutationBuilder) buildInsert(
 	//   due to the conflict scan accessing existing data.
 	// - The RETURNING clause references any columns, which also necessitates
 	//   SELECT policies.
-	includeSelectPolicies := hasOnConflict
-	if mb.tab.IsRowLevelSecurityEnabled() && !includeSelectPolicies && returning != nil {
-		// RETURNING is constructed last and depends on the final scope, so we can’t
-		// build it early or move it. However, we can build temporary scopes to
-		// gather referenced columns (colRefs) just to determine if SELECT policies
-		// are needed. If policies are already required or RLS is not enabled, we skip
-		// this work.
-		var colRefs opt.ColSet
-		_, _ = mb.maybeBuildReturningScopes(returning, &colRefs)
-		// For INSERT, the RETURNING clause can only reference columns from the target table.
-		// So, it's sufficient to check whether any columns are referenced, rather than
-		// verifying if each one belongs to the table.
-		includeSelectPolicies = !colRefs.Empty()
+	//
+	// These checks only matter if the target table has RLS enabled, so we gate
+	// the logic behind that for performance reasons.
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() {
+		includeSelectPolicies = hasOnConflict
+		if !includeSelectPolicies && returning != nil {
+			// RETURNING is constructed last and depends on the final scope, so we can’t
+			// build it early or move it. However, we can build temporary scopes to
+			// gather referenced columns (colRefs) just to determine if SELECT policies
+			// are needed. If policies are already required or RLS is not enabled, we skip
+			// this work.
+			var colRefs opt.ColSet
+			_, _ = mb.maybeBuildReturningScopes(returning, &colRefs)
+			// For INSERT, the RETURNING clause can only reference columns from the target table.
+			// So, it's sufficient to check whether any columns are referenced, rather than
+			// verifying if each one belongs to the table.
+			includeSelectPolicies = !colRefs.Empty()
+		}
 	}
 
 	// Add any check constraint boolean columns to the input.
