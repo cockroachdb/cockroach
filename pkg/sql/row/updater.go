@@ -116,23 +116,26 @@ func MakeUpdater(
 	}
 
 	updateColIDToRowIndex := ColIDtoRowIndexFromCols(updateCols)
-	includeIndexes := make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes()))
+	var includeIndexes []catalog.Index
 	var deleteOnlyIndexes []catalog.Index
 	// If the UPDATE is set to only update columns, do not collect secondary
 	// indexes to update.
 	if updateType != UpdaterOnlyColumns {
-		for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
+		for i, index := range tableDesc.DeletableNonPrimaryIndexes() {
 			// If the primary key changed, we need to update all secondary
 			// indexes, regardless of what other columns are being updated.
 			if !primaryKeyColChange && !indexNeedsUpdate(index, updateColIDToRowIndex) {
 				continue
 			}
 			if !index.DeleteOnly() {
+				if includeIndexes == nil {
+					includeIndexes = make([]catalog.Index, 0, len(tableDesc.WritableNonPrimaryIndexes())-i)
+				}
 				includeIndexes = append(includeIndexes, index)
 			} else {
 				if deleteOnlyIndexes == nil {
 					// Allocate at most once.
-					deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
+					deleteOnlyIndexes = make([]catalog.Index, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes())-i)
 				}
 				deleteOnlyIndexes = append(deleteOnlyIndexes, index)
 			}
