@@ -384,7 +384,7 @@ func (ds *ServerImpl) setupFlow(
 
 	if !f.IsLocal() {
 		bld := logtags.BuildBuffer()
-		bld.Add("f", flowCtx.ID.Short().String())
+		bld.Add("f", flowCtx.ID.Short())
 		if req.JobTag != "" {
 			bld.Add("job", req.JobTag)
 		}
