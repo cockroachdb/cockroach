@@ -16,10 +16,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/envutil",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_redact//:redact",
     ] + select({
         "@io_bazel_rules_go//go/platform:android": [
             "//pkg/util/sysutil",
@@ -57,5 +59,13 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/timeutil",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/util/timeutil",
+        ],
+        "//conditions:default": [],
+    }),
 )

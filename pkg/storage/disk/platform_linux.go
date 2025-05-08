@@ -10,9 +10,9 @@ package disk
 import (
 	"io"
 	"io/fs"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/sys/unix"
@@ -26,15 +26,16 @@ type linuxStatsCollector struct {
 }
 
 // collect collects disk stats for the identified devices.
-func (s *linuxStatsCollector) collect(disks []*monitoredDisk) error {
+func (s *linuxStatsCollector) collect(
+	disks []*monitoredDisk, now time.Time,
+) (countCollected int, err error) {
 	var n int
-	var err error
 	for {
 		n, err = s.File.ReadAt(s.buf, 0)
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return err
+			return 0, err
 		}
 		// err == nil
 		//
@@ -48,7 +49,7 @@ func (s *linuxStatsCollector) collect(disks []*monitoredDisk) error {
 		// single read. Reallocate (doubling) the buffer and continue.
 		s.buf = make([]byte, len(s.buf)*2)
 	}
-	return parseDiskStats(s.buf[:n], disks, timeutil.Now())
+	return parseDiskStats(s.buf[:n], disks, now)
 }
 
 func newStatsCollector(fs vfs.FS) (*linuxStatsCollector, error) {
