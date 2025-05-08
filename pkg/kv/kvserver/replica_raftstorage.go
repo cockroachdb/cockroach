@@ -110,7 +110,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 // where it is important that all the data that goes into the snapshot comes
 // from a consistent view of the database, and not the replica's in-memory state
 // or via a reference to Replica.store.Engine().
-type replicaRaftStorage = replicaLogStorage
+type replicaRaftStorage Replica
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
 
@@ -135,6 +135,30 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	// NB: r.mu.state is guarded by both r.raftMu and r.mu.
 	cs := r.shMu.state.Desc.Replicas().ConfState()
 	return hs, cs, nil
+}
+
+// TODO(pav-kv): remove the adapter methods from Entries() to LogSnapshot() below.
+// One way to do it: eliminate raft.Storage interface in favour of separate
+// raft.LogStorage and raft.StateStorage, and pass both to the RawNode constructor.
+
+func (r *replicaRaftStorage) Entries(lo, hi, maxSize uint64) ([]raftpb.Entry, error) {
+	return (*Replica)(r).asLogStorage().Entries(lo, hi, maxSize)
+}
+
+func (r *replicaRaftStorage) Term(index uint64) (uint64, error) {
+	return (*Replica)(r).asLogStorage().Term(index)
+}
+
+func (r *replicaRaftStorage) LastIndex() uint64 {
+	return (*Replica)(r).asLogStorage().LastIndex()
+}
+
+func (r *replicaRaftStorage) Compacted() uint64 {
+	return (*Replica)(r).asLogStorage().Compacted()
+}
+
+func (r *replicaRaftStorage) LogSnapshot() raft.LogStorageSnapshot {
+	return (*Replica)(r).asLogStorage().LogSnapshot()
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
@@ -695,14 +719,15 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		LastTerm:  truncState.Term,
 		ByteSize:  0, // the log is empty now
 	})
-	r.shMu.raftTruncState = truncState
+	ls := r.asLogStorage()
+	ls.shMu.trunc = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	//
 	// TODO(pav-kv): does this assume that snapshots can contain log entries,
 	// which is no longer true? The comment needs an update, and the decision to
 	// set this flag to false revisited.
-	r.shMu.raftLogSizeTrusted = false
+	ls.shMu.sizeTrusted = false
 
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.shMu.state.Stats)
