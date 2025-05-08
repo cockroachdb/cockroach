@@ -133,7 +133,7 @@ func (s *instance) TokenBucketRequest(
 	metrics.totalWriteBatches.Update(int64(consumption.WriteBatches))
 	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
 	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
-	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodsCPUSeconds)
+	metrics.totalSQLPodsCPUSeconds.UpdateIfHigher(consumption.SQLPodsCPUSeconds)
 	metrics.totalPGWireEgressBytes.Update(int64(consumption.PGWireEgressBytes))
 	metrics.totalExternalIOEgressBytes.Update(int64(consumption.ExternalIOEgressBytes))
 	metrics.totalExternalIOIngressBytes.Update(int64(consumption.ExternalIOIngressBytes))
