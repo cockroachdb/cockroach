@@ -1701,8 +1701,7 @@ func (mb *mutationBuilder) buildReturningScopes(
 	//   3. Mark hidden columns.
 	//   4. Project columns in same order as defined in table schema.
 	//
-	// TODO(mgartner): This should be a fresh scope.
-	inScope = mb.outScope.replace()
+	inScope = mb.b.allocScope()
 	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
 	// extraAccessibleCols contains all the columns that the RETURNING
@@ -1713,7 +1712,7 @@ func (mb *mutationBuilder) buildReturningScopes(
 	inScope.appendColumns(mb.extraAccessibleCols)
 
 	// Build the projections of the RETURNING expressions.
-	outScope = inScope.replace()
+	outScope = mb.b.allocScope()
 	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
 	mb.b.buildProjectionList(inScope, outScope, colRefs)
 	return inScope, outScope
