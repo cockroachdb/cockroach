@@ -270,15 +270,21 @@ func TestTxnWriteBufferBlindWritesIncludingOtherRequests(t *testing.T) {
 	getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
 	delC := delArgs(keyC, txn.Sequence)
 	scanDE := &kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyD, EndKey: keyE}}
+	queryLocks := &kvpb.QueryLocksRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyE}, IncludeUncontended: true}
+	leaseInfo := &kvpb.LeaseInfoRequest{}
 	ba.Add(putA)
 	ba.Add(getB)
 	ba.Add(delC)
 	ba.Add(scanDE)
+	ba.Add(queryLocks)
+	ba.Add(leaseInfo)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 2)
+		require.Len(t, ba.Requests, 4)
 		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.QueryLocksRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.LeaseInfoRequest{}, ba.Requests[3].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -289,13 +295,15 @@ func TestTxnWriteBufferBlindWritesIncludingOtherRequests(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	// Expect 4 responses, even though only 2 KV requests were sent. Moreover,
-	// ensure that the responses are in the correct order.
-	require.Len(t, br.Responses, 4)
+	// Expect 6 responses, even though only 4 KV requests were sent. Moreover,
+	// ensure that the responses are in the correct order and non-nil.
+	require.Len(t, br.Responses, 6)
 	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
 	require.IsType(t, &kvpb.GetResponse{}, br.Responses[1].GetInner())
 	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[2].GetInner())
 	require.IsType(t, &kvpb.ScanResponse{}, br.Responses[3].GetInner())
+	require.IsType(t, &kvpb.QueryLocksResponse{}, br.Responses[4].GetInner())
+	require.IsType(t, &kvpb.LeaseInfoResponse{}, br.Responses[5].GetInner())
 
 	// Verify the writes were buffered correctly.
 	expBufferedWrites := []bufferedWrite{
