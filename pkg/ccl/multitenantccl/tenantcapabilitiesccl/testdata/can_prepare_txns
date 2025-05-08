@@ -3,6 +3,12 @@ SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_name = 'can_
 ----
 10 cluster-10 ready external can_prepare_txns false
 
+# TODO(#144252): remove this.
+exec-sql-tenant
+SET kv_transaction_buffered_writes_enabled = false
+----
+ok
+
 exec-sql-tenant
 CREATE TABLE t(a INT PRIMARY KEY)
 ----

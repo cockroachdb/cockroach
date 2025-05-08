@@ -404,7 +404,7 @@ func TestTenantCtx(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
-		getErr := make(chan error)
+		scanErr := make(chan error)
 		pushErr := make(chan error)
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
@@ -421,23 +421,23 @@ func TestTenantCtx(t *testing.T) {
 							return nil
 						}
 
-						var getReq *kvpb.GetRequest
+						var scanReq *kvpb.ScanRequest
 						var pushReq *kvpb.PushTxnRequest
-						if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.Get; isSingleGet {
-							getReq = ba.Requests[0].GetInner().(*kvpb.GetRequest)
+						if isSingleScan := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.Scan; isSingleScan {
+							scanReq = ba.Requests[0].GetInner().(*kvpb.ScanRequest)
 						}
 						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.PushTxn; isSinglePushTxn {
 							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
 
 						switch {
-						case getReq != nil:
+						case scanReq != nil:
 							var err error
 							if !isTenantRequest || tenID != tenantID {
-								err = errors.Newf("expected Get to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
+								err = errors.Newf("expected Scan to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
 									tenantID, isTenantRequest, tenID)
 							}
-							getErr <- err
+							scanErr <- err
 							return nil
 						case pushReq != nil:
 							// Check that the Push request no longer has the txn request; RPCs
@@ -475,7 +475,7 @@ func TestTenantCtx(t *testing.T) {
 			defer tsql.Close()
 		}
 
-		_, err := tsql.Exec("create table t (x int primary key)")
+		_, err := tsql.Exec("create table t (x int primary key, y int, family (x), family (y))")
 		require.NoError(t, err)
 		tx1, err := tsql.BeginTx(ctx, nil /* opts */)
 		require.NoError(t, err)
@@ -496,10 +496,10 @@ func TestTenantCtx(t *testing.T) {
 		// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
 		// to unblock tx2.
 		select {
-		case err := <-getErr:
+		case err := <-scanErr:
 			require.NoError(t, err)
 		case <-time.After(3 * time.Second):
-			t.Fatal("timed out waiting for Get")
+			t.Fatal("timed out waiting for Scan")
 		}
 		select {
 		case err := <-pushErr:
