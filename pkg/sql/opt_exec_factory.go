@@ -1586,8 +1586,7 @@ func (ef *execFactory) ConstructUpdate(
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	fetchCols := makeColList(table, fetchColOrdSet)
-	updateCols := makeColList(table, updateColOrdSet)
+	fetchCols, updateCols := makeColList2(table, fetchColOrdSet, updateColOrdSet)
 
 	// Create the table updater, which does the bulk of the work.
 	ru, err := row.MakeUpdater(
@@ -2380,6 +2379,27 @@ func makeColList(table cat.Table, cols exec.TableColumnOrdinalSet) []catalog.Col
 		ret = append(ret, tab.getCol(i))
 	}
 	return ret
+}
+
+// makeColList2 is similar to makeColList, but it takes two sets of ordinals and
+// allocates a single slice which is split into two.
+func makeColList2(
+	table cat.Table, a, b exec.TableColumnOrdinalSet,
+) ([]catalog.Column, []catalog.Column) {
+	tab := table.(optCatalogTableInterface)
+	lenA, lenB := a.Len(), b.Len()
+	cols := make([]catalog.Column, 0, lenA+lenB)
+	listA, listB := cols[:0:lenA], cols[lenA:lenA]
+	for i, n := 0, table.ColumnCount(); i < n; i++ {
+		col := tab.getCol(i)
+		if a.Contains(i) {
+			listA = append(listA, col)
+		}
+		if b.Contains(i) {
+			listB = append(listB, col)
+		}
+	}
+	return listA, listB
 }
 
 // makePublicToReturnColumnIndexMapping returns a map from the ordinals
