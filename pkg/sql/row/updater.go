@@ -164,18 +164,20 @@ func MakeUpdater(
 		// but no correctness issues.
 		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
 	}
+	numEntries := len(includeIndexes)
+	indexEntries := make([][]rowenc.IndexEntry, numEntries*2)
 	ru := Updater{
 		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sd, sv, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
 		UpdateCols:            updateCols,
-		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
+		UpdateColIDtoRowIndex: updateColIDToRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		primaryLocked:         primaryLocked,
 		secondaryLocked:       secondaryLocked,
-		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
-		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
+		oldIndexEntries:       indexEntries[:numEntries:numEntries],
+		newIndexEntries:       indexEntries[numEntries:],
 	}
 
 	if primaryKeyColChange {
