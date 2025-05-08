@@ -1169,7 +1169,8 @@ func (n *Node) startPeriodicLivenessCompaction(
 								}.Encode()
 
 							timeBeforeCompaction := timeutil.Now()
-							if err := store.StateEngine().CompactRange(startEngineKey, endEngineKey); err != nil {
+							if err := store.StateEngine().CompactRange(
+								context.Background(), startEngineKey, endEngineKey); err != nil {
 								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
 							}
 
