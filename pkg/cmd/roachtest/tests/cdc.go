@@ -813,7 +813,26 @@ type latencyTargets struct {
 	steadyLatency      time.Duration
 }
 
-func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
+type cdcBankConfig struct {
+	kafkaChaos         bool
+	forceCheckpointing bool
+}
+
+func (c cdcBankConfig) String() string {
+	var b strings.Builder
+	maybeWrite := func(opt bool, name string) {
+		if !opt {
+			return
+		}
+		b.WriteString("/")
+		b.WriteString(name)
+	}
+	maybeWrite(c.kafkaChaos, "kafka-chaos")
+	maybeWrite(c.forceCheckpointing, "force-checkpointing")
+	return b.String()
+}
+
+func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBankConfig) {
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, option.WithNodes(c.All()), `mkdir -p logs`)
@@ -837,9 +856,20 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
+	if cfg.forceCheckpointing {
+		for _, stmt := range []string{
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.lag_threshold = '1us'`,
+		} {
+			if _, err := db.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
 	options := map[string]string{
 		"updated":  "",
-		"resolved": "",
+		"resolved": "'1s'",
 		// we need to set a min_checkpoint_frequency here because if we
 		// use the default 30s duration, the test will likely not be able
 		// to finish within 30 minutes
@@ -873,7 +903,16 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	var doneAtomic int64
 	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
 	const requestedResolved = 100
-
+	if cfg.kafkaChaos {
+		m.Go(func(ctx context.Context) error {
+			period, downTime := time.Minute, 10*time.Second
+			err := kafka.chaosLoop(ctx, period, downTime, nil)
+			if atomic.LoadInt64(&doneAtomic) > 0 {
+				return nil
+			}
+			return errors.Wrap(err, "kafka chaos loop failed")
+		})
+	}
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(workloadNode), `./cockroach workload run bank {pgurl:1} --max-rate=10`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
@@ -2287,18 +2326,26 @@ func registerCDC(r registry.Registry) {
 			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/bank",
-		Owner:            `cdc`,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          60 * time.Minute,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCBank(ctx, t, c)
-		},
-	})
+	for _, kafkaChaos := range []bool{false, true} {
+		for _, forceCheckpointing := range []bool{false, true} {
+			cfg := cdcBankConfig{
+				kafkaChaos:         kafkaChaos,
+				forceCheckpointing: forceCheckpointing,
+			}
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("cdc/bank%s", cfg),
+				Owner:            registry.OwnerCDC,
+				Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
+				Leases:           registry.MetamorphicLeases,
+				CompatibleClouds: registry.AllClouds.NoAWS(),
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          60 * time.Minute,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runCDCBank(ctx, t, c, cfg)
+				},
+			})
+		}
+	}
 	r.Add(registry.TestSpec{
 		Name:             "cdc/schemareg",
 		Owner:            `cdc`,
