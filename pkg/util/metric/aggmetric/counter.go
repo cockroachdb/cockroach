@@ -245,9 +245,14 @@ func (g *CounterFloat64) Inc(i float64) {
 }
 
 // UpdateIfHigher sets the counter's value only if it's higher
-// than the currently set one. It's assumed the caller holds
+// than the currently set one.
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	g.value.UpdateIfHigher(i)
+	delta := i - g.value.Count()
+	if delta <= 0 {
+		return
+	}
+	g.parent.g.Inc(delta)
+	g.value.Inc(delta)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will
