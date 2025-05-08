@@ -333,11 +333,6 @@
 (LeftJoin
     $left:*
     $right:* & (HasZeroRows $right)
-    $on:[
-        ...
-        $item:* & ^(IsContradiction $item)
-        ...
-    ]
 )
 =>
 (Project

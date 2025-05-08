@@ -1055,27 +1055,13 @@ values
 norm
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join (cross)
+values
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(2)
- └── filters (true)
+ └── (1, NULL) [type=tuple{int, int}]
 
 norm
 SELECT * FROM (SELECT 1) RIGHT JOIN (SELECT 1 WHERE false) ON true
@@ -1090,27 +1076,13 @@ values
 norm
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join (cross)
+values
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(2)
- └── filters (true)
+ └── (1, NULL) [type=tuple{int, int}]
 
 norm
 SELECT * FROM (SELECT 1 WHERE false) JOIN (SELECT 1) ON true
@@ -1135,52 +1107,24 @@ values
 norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
-left-join (cross)
+values
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── key: ()
- │    ├── fd: ()-->(2)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── filters (true)
+ └── (1, NULL) [type=tuple{int, int}]
 
 norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
-left-join (cross)
+values
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
- │    ├── key: ()
- │    ├── fd: ()-->(2)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── filters (true)
+ └── (1, NULL) [type=tuple{int, int}]
 
 norm
 SELECT * FROM (SELECT 1 UNION SELECT 2) FULL JOIN (VALUES (1), (2)) ON true
@@ -1270,27 +1214,13 @@ project
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
 ----
-left-join (cross)
+values
  ├── columns: x:1(int!null) x:2(int)
  ├── cardinality: [1 - 1]
- ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: "?column?":2(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0, distinct(2)=0, null(2)=0]
- │    ├── key: ()
- │    └── fd: ()-->(2)
- └── filters (true)
+ └── (1, NULL) [type=tuple{int, int}]
 
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));

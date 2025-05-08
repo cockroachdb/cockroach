@@ -3261,41 +3261,21 @@ GROUP BY
 ----
 project
  ├── columns: "?column?":33(unknown) "?column?":34(int!null)
- ├── immutable
+ ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
+ ├── key: ()
  ├── fd: ()-->(33,34)
- ├── distinct-on
- │    ├── columns: col2:3(box2d)
- │    ├── grouping columns: col2:3(box2d)
- │    ├── immutable
- │    ├── stats: [rows=1, distinct(3)=1, null(3)=1]
- │    ├── key: (3)
- │    └── left-join (cross)
- │         ├── columns: col2:3(box2d) crdb_internal_mvcc_timestamp:7(decimal)
- │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │         ├── immutable
- │         ├── stats: [rows=1000, distinct(3)=1, null(3)=1000]
- │         ├── scan t84478
- │         │    ├── computed column expressions
- │         │    │    └── col4:29
- │         │    │         └── CAST(NULL AS FLOAT8) [type=float]
- │         │    └── stats: [rows=1000]
- │         ├── select
- │         │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
- │         │    ├── cardinality: [0 - 0]
- │         │    ├── immutable
- │         │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
- │         │    ├── key: ()
- │         │    ├── fd: ()-->(3,7)
- │         │    ├── values
- │         │    │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
- │         │    │    ├── cardinality: [0 - 0]
- │         │    │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
- │         │    │    ├── key: ()
- │         │    │    └── fd: ()-->(3,7)
- │         │    └── filters
- │         │         └── isnan(crdb_internal_mvcc_timestamp:7) [type=bool, outer=(7), immutable, constraints=(/7: (/NULL - ])]
- │         └── filters (true)
+ ├── limit
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── scan t84478
+ │    │    ├── computed column expressions
+ │    │    │    └── col4:29
+ │    │    │         └── CAST(NULL AS FLOAT8) [type=float]
+ │    │    ├── stats: [rows=1000]
+ │    │    └── limit hint: 1.00
+ │    └── 1 [type=int]
  └── projections
       ├── NULL [as="?column?":33, type=unknown]
       └── 1 [as="?column?":34, type=int]

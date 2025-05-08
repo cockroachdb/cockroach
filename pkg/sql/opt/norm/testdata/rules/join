@@ -267,21 +267,17 @@ inner-join (cross)
 norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
 SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 # --------------------------------------------------
 # DetectJoinContradiction
@@ -299,21 +295,17 @@ values
 norm expect=DetectJoinContradiction
 SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
-left-join (cross)
+project
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: (1)-->(2-5,8,9)
+ ├── fd: ()-->(8,9), (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── values
- │    ├── columns: x:8!null y:9!null
- │    ├── cardinality: [0 - 0]
- │    ├── key: ()
- │    └── fd: ()-->(8,9)
- └── filters (true)
+ └── projections
+      ├── CAST(NULL AS INT8) [as=x:8]
+      └── CAST(NULL AS INT8) [as=y:9]
 
 norm expect=DetectJoinContradiction
 SELECT * FROM a INNER JOIN xy ON NULL
