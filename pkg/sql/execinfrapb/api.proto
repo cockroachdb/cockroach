@@ -26,7 +26,8 @@ message SetupFlowRequest {
   reserved 1, 2;
 
   optional util.tracing.tracingpb.TraceInfo trace_info = 11;
-  optional string job_tag = 13 [(gogoproto.nullable) = false];
+  optional string job_tag = 13 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/redact.SafeString"];
 
   // LeafTxnInputState is the input parameter for the *kv.Txn needed for
   // executing the flow.
