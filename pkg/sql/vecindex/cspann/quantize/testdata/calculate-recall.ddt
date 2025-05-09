@@ -31,7 +31,7 @@ Cosine: 78.00% recall@10
 # material difference.
 calculate-recall dataset=random-20d-1k randomize
 ----
-Euclidean: 91.50% recall@10
+Euclidean: 91.00% recall@10
 InnerProduct: 89.00% recall@10
 Cosine: 81.00% recall@10
 
