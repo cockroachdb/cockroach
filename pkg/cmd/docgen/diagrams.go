@@ -915,6 +915,10 @@ var specs = []stmtSpec{
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 	},
 	{
+		name:   "declare_cursor_stmt",
+		inline: []string{"opt_hold"},
+	},
+	{
 		name: "default_value_column_level",
 		stmt: "stmt_block",
 		replace: map[string]string{
