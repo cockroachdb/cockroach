@@ -66,19 +66,42 @@ type DRPCBatchClient interface {
 	BatchStream(ctx context.Context) (DRPCBatch_BatchStreamClient, error)
 }
 
+/*
+Option-2
+	type DRPCBatchClientNew interface {
+		Invoke(context.Context, *BatchRequest, middleware...) (*BatchResponse, error)
+		NewStream(DRPCBatch_BatchStreamServer, middleware...) error
+	}
+*/
+
 type drpcBatchClient struct {
 	cc drpc.Conn
 }
 
+// Option-1: Use the same client and extend it to have invoke, newStream with dialOptions param.
+
 func NewDRPCBatchClient(cc drpc.Conn) DRPCBatchClient {
 	return &drpcBatchClient{cc}
 }
+
+// Option-3
+/*
+type DRPCBatchClientNew struct {
+	 drpcBatchClient
+	 *middlewares
+ }
+
+type DRPCWithMiddlewareInterface interface {
+
+}
+*/
 
 func (c *drpcBatchClient) DRPCConn() drpc.Conn { return c.cc }
 
 func (c *drpcBatchClient) Batch(ctx context.Context, in *BatchRequest) (*BatchResponse, error) {
 	out := new(BatchResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.kv.kvpb.Batch/Batch", drpcEncoding_File_api_proto{}, in, out)
+	// Check presence of interceptors and invoke them.
 	if err != nil {
 		return nil, err
 	}

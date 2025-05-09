@@ -244,6 +244,8 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 		peers:              &rpcCtx.peers,
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
 			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
+			// Dialer shoudl take list of interceptors, and create a connection with dialOpts which behind the scenes invokes th
+			// these inteceptors. This will override handler methods of actual connections.
 			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
 		},

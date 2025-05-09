@@ -122,6 +122,7 @@ func NewServerEx(
 	// The last element will wrap the actual handler. The first interceptor
 	// guards RPC endpoints for use after Stopper.Drain() by handling the RPC
 	// inside a stopper task.
+	// When node is drained, we drain the stopper. Does this mean Stopper.OnQuiesce().
 	var unaryInterceptor []grpc.UnaryServerInterceptor
 	var streamInterceptor []grpc.StreamServerInterceptor
 	unaryInterceptor = append(unaryInterceptor, func(
@@ -168,7 +169,7 @@ func NewServerEx(
 		) (interface{}, error) {
 			if err := o.interceptor(info.FullMethod); err != nil {
 				return nil, err
-			}
+			} // check from caller, what o.interceptors are? Probably for fault injection
 			return handler(ctx, req)
 		})
 

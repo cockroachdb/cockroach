@@ -330,7 +330,7 @@ func (s *Stopper) startRegion(ctx context.Context, taskName string) region {
 	if !trace.IsEnabled() {
 		return noopRegion{}
 	}
-	return trace.StartRegion(ctx, taskName)
+	return trace.StartRegion(ctx, taskName) // go runtime trace.
 }
 
 // RunTaskWithErr is like RunTask(), but takes in a callback that can return an
@@ -343,7 +343,7 @@ func (s *Stopper) RunTaskWithErr(
 	}
 
 	// Call f.
-	defer s.recover(ctx)
+	defer s.recover(ctx) // What all functionality is given by Stopper?
 	defer s.runPostlude()
 	defer s.startRegion(ctx, taskName).End()
 
