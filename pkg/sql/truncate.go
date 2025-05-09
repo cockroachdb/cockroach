@@ -209,24 +209,30 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		}
 	}
 
-	// Create new ID's for all of the indexes in the table.
-	{
-		version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-		// Temporarily empty the mutation jobs slice otherwise the descriptor
-		// validation performed by AllocateIDs will fail: the Mutations slice
-		// has been emptied but MutationJobs only gets emptied later on.
-		mutationJobs := tableDesc.MutationJobs
-		tableDesc.MutationJobs = nil
-		if err := tableDesc.AllocateIDs(ctx, version); err != nil {
-			return err
-		}
-		tableDesc.MutationJobs = mutationJobs
+	// Allocate new IDs for all indexes in the table descriptor. We use the
+	// AllocateIDsWithoutValidation variant because some DependedOnBy references
+	// may still point to the old index IDs, which we haven't remapped yet.
+	// Full validation will occur later when writeSchemaChange is called.
+	if err := tableDesc.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
+		return err
 	}
 
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
 	for _, idx := range tableDesc.ActiveIndexes() {
 		indexIDMapping[oldIndexes[idx.Ordinal()].ID] = idx.GetID()
+	}
+
+	// Remap index IDs in the DependedOnBy references using the new index ID mapping.
+	for i := range tableDesc.DependedOnBy {
+		ref := &tableDesc.DependedOnBy[i]
+		if ref.IndexID != 0 {
+			var ok bool
+			ref.IndexID, ok = indexIDMapping[ref.IndexID]
+			if !ok {
+				return errors.AssertionFailedf("could not find index ID %d in mapping", ref.IndexID)
+			}
+		}
 	}
 
 	// Create schema change GC jobs for all of the indexes.
