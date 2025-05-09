@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -592,7 +591,6 @@ func LoadEntries(
 	ctx context.Context,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache, // TODO(#145562): this should be the caller's concern
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
 	pol *SizePolicy,
@@ -614,9 +612,7 @@ func LoadEntries(
 		if typ, _, err := raftlog.EncodingOf(ent); err != nil {
 			return err
 		} else if typ.IsSideloaded() {
-			if ent, err = MaybeInlineSideloadedRaftCommand(
-				ctx, rangeID, ent, sideloaded, eCache,
-			); err != nil {
+			if ent, err = MaybeInlineSideloadedRaftCommand(ctx, ent, sideloaded); err != nil {
 				return err
 			}
 		}

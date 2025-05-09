@@ -192,7 +192,7 @@ func (r *replicaLogStorage) entriesShMuLocked(
 		// This might be unnecessary because typically we only need to load a prefix
 		// or a suffix.
 		loaded, size, err := logstore.LoadEntries(
-			r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
+			r.ctx, r.ls.Engine, r.ls.RangeID, r.ls.Sideload,
 			lo, kvpb.RaftIndex(entries[0].Index), &pol, entries,
 		)
 		r.metrics.RaftStorageReadBytes.Inc(int64(size))
@@ -235,7 +235,7 @@ func (r *replicaLogStorage) entriesShMuLocked(
 	// Load the missing suffix of entries and cache it.
 	prefix := len(entries)
 	entries, size, err := logstore.LoadEntries(
-		r.ctx, r.ls.Engine, r.ls.RangeID, r.cache, r.ls.Sideload,
+		r.ctx, r.ls.Engine, r.ls.RangeID, r.ls.Sideload,
 		nextIndex, hi, &pol, entries,
 	)
 	r.metrics.RaftStorageReadBytes.Inc(int64(size))

@@ -194,8 +194,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		if typ, _, _ := raftlog.EncodingOf(ents[idx]); !typ.IsSideloaded() {
 			continue
 		}
-		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx],
-			tc.repl.logStorage.ls.Sideload, tc.store.raftEntryCache)
+		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, ents[idx], tc.repl.logStorage.ls.Sideload)
 		require.NoError(t, err)
 		sst, err := tc.repl.logStorage.ls.Sideload.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
 		require.NoError(t, err)
