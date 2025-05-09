@@ -27,18 +27,6 @@ docker run --rm -i ${tty-} -v $this_dir/build-and-publish-patched-go:/bootstrap 
        us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:focal /bootstrap/impl.sh
 tc_end_block "Build Go toolchains"
 
-tc_start_block "Build FIPS Go toolchains (linux/amd64)"
-# UBI 9 image with Go toolchain installed. The same image Red Hat uses for their CI.
-UBI_DOCKER_IMAGE=registry.access.redhat.com/ubi9/go-toolset:1.18
-# FIPS Go toolchain version has a 'fips' suffix, so there should be no name collision
-docker run --rm -i ${tty-} -v "$this_dir/build-and-publish-patched-go:/bootstrap" \
-  -v "${toplevel}"/artifacts:/artifacts \
-  --user root \
-  --platform linux/amd64 \
-  $UBI_DOCKER_IMAGE \
-  /bootstrap/impl-fips.sh
-tc_end_block "Build FIPS Go toolchains (linux/amd64)"
-
 tc_start_block "Publish artifacts"
 loc=$(date +%Y%m%d-%H%M%S)
 echo $loc > "${toplevel}"/artifacts/TIMESTAMP.txt

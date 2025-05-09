@@ -247,24 +247,6 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		if err := scanner.Err(); err != nil {
 			return err
 		}
-
-		cmd = exec.Command("bazel", "run", "@go_sdk//:bin/go", "--", "tool", "nm", binaryName)
-		cmd.Dir = pkgDir
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		stdoutBytes, err = opts.ExecFn.Run(cmd)
-		if err != nil {
-			log.Fatalf("%s %s: out=%s err=%v", cmd.Env, cmd.Args, string(stdoutBytes), err)
-		}
-		out := string(stdoutBytes)
-		if platform == PlatformLinuxFIPS && !strings.Contains(out, "golang-fips") {
-			log.Print("`go nm tool` does not contain `golang-fips` in its output")
-			log.Fatalf("%s %s: out=%s", cmd.Env, cmd.Args, out)
-		}
-		if platform == PlatformLinux && strings.Contains(out, "golang-fips") {
-			log.Print("`go nm tool` contains `golang-fips` in its output")
-			log.Fatalf("%s %s: out=%s", cmd.Env, cmd.Args, out)
-		}
 	}
 	return nil
 }
