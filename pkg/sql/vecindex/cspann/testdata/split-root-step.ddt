@@ -201,21 +201,21 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=4
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4.3333, 4)
+├───• 3 (4, 3)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 8)
+│   ├───• vec9 (-2, 7)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-1.3333, -1)
+└───• 5 (-2, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-5, -5)
+    └───• vec2 (-7, -5)
 ----
 Loaded 9 vectors.
 
@@ -229,32 +229,33 @@ force-split partition-key=1 steps=1
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4.3333, 4)
+├───• 3 (4, 3)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 8)
+│   ├───• vec9 (-2, 7)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-1.3333, -1)
+└───• 5 (-2, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-5, -5)
+    └───• vec2 (-7, -5)
 
 # Search the tree without triggering fixups.
-# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
+# NOTE: vec4 and vec9 are extra results (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 13 vectors, 9 full vectors, 5 partitions
 
 # Move to the DrainingForSplit state, where sub-partition #6 has vectors.
@@ -267,47 +268,48 @@ force-split partition-key=1 steps=4
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 3 (4.3333, 4)
+├───• 3 (4, 3)
 │   │
 │   ├───• vec3 (4, 3)
 │   └───• vec4 (4, 3)
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 8)
+│   ├───• vec9 (-2, 7)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-1.3333, -1)
+└───• 5 (-2, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-5, -5)
+    └───• vec2 (-7, -5)
 
 format-tree root=6
 ----
-• 6 (-1.1667, 2.5) [Updating:1]
+• 6 (-1.5, 2.5) [Updating:1]
 │
 ├───• 4 (-1, 6)
 │   │
-│   ├───• vec9 (-2, 8)
+│   ├───• vec9 (-2, 7)
 │   └───• vec8 (0, 4)
 │
-└───• 5 (-1.3333, -1)
+└───• 5 (-2, -1)
     │
     ├───• vec7 (0, 0)
     ├───• vec1 (1, 2)
-    └───• vec2 (-5, -5)
+    └───• vec2 (-7, -5)
 
 # Search the tree, ensure that duplicates are not returned.
-# NOTE: vec4 is an extra duplicate zero (within error bound of zero).
+# NOTE: vec4 and vec9 are extra results (within error bound of zero).
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Move to the point where partition #1 children have been cleared.
@@ -319,11 +321,12 @@ force-split partition-key=1 steps=2
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to the AddingLevel state, where root partition's level has increased.
@@ -335,11 +338,12 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
 
 # Move to point where sub-partitions #6 and #7 have been added to the root.
@@ -347,27 +351,27 @@ force-split partition-key=1 steps=4
 ----
 • 1 (7.25, 4.75) [AddingLevel:6,7]
 │
-├───• 6 (-1.1667, 2.5)
+├───• 6 (-1.5, 2.5)
 │   │
 │   ├───• 4 (-1, 6)
 │   │   │
-│   │   ├───• vec9 (-2, 8)
+│   │   ├───• vec9 (-2, 7)
 │   │   └───• vec8 (0, 4)
 │   │
-│   └───• 5 (-1.3333, -1)
+│   └───• 5 (-2, -1)
 │       │
 │       ├───• vec7 (0, 0)
 │       ├───• vec1 (1, 2)
-│       └───• vec2 (-5, -5)
+│       └───• vec2 (-7, -5)
 │
-└───• 7 (7.6666, 5)
+└───• 7 (7.5, 4.5)
     │
     ├───• 2 (11, 6)
     │   │
     │   ├───• vec6 (14, 1)
     │   └───• vec5 (8, 11)
     │
-    └───• 3 (4.3333, 4)
+    └───• 3 (4, 3)
         │
         ├───• vec3 (4, 3)
         └───• vec4 (4, 3)
@@ -376,11 +380,12 @@ force-split partition-key=1 steps=4
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # Finish the split.
@@ -388,27 +393,27 @@ force-split partition-key=1 steps=1
 ----
 • 1 (7.25, 4.75)
 │
-├───• 6 (-1.1667, 2.5)
+├───• 6 (-1.5, 2.5)
 │   │
 │   ├───• 4 (-1, 6)
 │   │   │
-│   │   ├───• vec9 (-2, 8)
+│   │   ├───• vec9 (-2, 7)
 │   │   └───• vec8 (0, 4)
 │   │
-│   └───• 5 (-1.3333, -1)
+│   └───• 5 (-2, -1)
 │       │
 │       ├───• vec7 (0, 0)
 │       ├───• vec1 (1, 2)
-│       └───• vec2 (-5, -5)
+│       └───• vec2 (-7, -5)
 │
-└───• 7 (7.6666, 5)
+└───• 7 (7.5, 4.5)
     │
     ├───• 2 (11, 6)
     │   │
     │   ├───• vec6 (14, 1)
     │   └───• vec5 (8, 11)
     │
-    └───• 3 (4.3333, 4)
+    └───• 3 (4, 3)
         │
         ├───• vec3 (4, 3)
         └───• vec4 (4, 3)
@@ -417,11 +422,12 @@ force-split partition-key=1 steps=1
 search max-results=4 discard-fixups
 (-1, 2)
 ----
-vec1: 4 (centroid=3.8)
-vec7: 5 (centroid=1.67)
+vec1: 4 (centroid=4.24)
+vec7: 5 (centroid=2.24)
 vec8: 5 (centroid=2.24)
-vec3: 26 (centroid=1.05)
-vec4: 26 (centroid=1.05)
+vec3: 26 (centroid=0)
+vec4: 26 (centroid=0)
+vec9: 26 (centroid=1.41)
 9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
 
 # ----------------------------------------------------------------------
