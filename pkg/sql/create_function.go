@@ -130,7 +130,7 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+	if err := setFuncOptions(params, udfDesc, n.cf.Options, n.planDeps); err != nil {
 		return err
 	}
 
@@ -269,7 +269,7 @@ func (n *createFunctionNode) replaceFunction(
 	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
 		return err
 	}
-	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+	if err := setFuncOptions(params, udfDesc, n.cf.Options, n.planDeps); err != nil {
 		return err
 	}
 
@@ -538,7 +538,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 }
 
 func setFuncOptions(
-	params runParams, udfDesc *funcdesc.Mutable, options tree.RoutineOptions,
+	params runParams, udfDesc *funcdesc.Mutable, options tree.RoutineOptions, deps planDependencies,
 ) error {
 	var err error
 	var body string
@@ -595,6 +595,11 @@ func setFuncOptions(
 			// Replace any UDT names in the function body with IDs.
 			body, err = serializeUserDefinedTypesLang(
 				params.ctx, params.p.SemaCtx(), body, true /* multiStmt */, "UDFs", lang)
+			if err != nil {
+				return err
+			}
+			body, err = serializeUserDefinedFunctionsLang(
+				params.ctx, params.p.SemaCtx(), body, deps, true /* multiStmt */, lang)
 			if err != nil {
 				return err
 			}
