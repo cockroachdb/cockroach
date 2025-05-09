@@ -2624,6 +2624,30 @@ func (c *clusterImpl) Install(
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
 }
 
+// InstallGoVersion installs a specific go version onto the node(s). If a version is
+// not specified, it defaults to the go version supported by cockroach, i.e. the one
+// in go.mod.
+func (c *clusterImpl) InstallGoVersion(
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, version ...string,
+) error {
+	var v string
+	var err error
+	switch len(version) {
+	case 0:
+		v, err = roachtestutil.GetCockroachGoVersion()
+		if err != nil {
+			return errors.Wrap(err, "Error running cluster.InstallGoVersion: unable to parse go version from go.mod")
+		}
+		l.Printf("installing go version %s", v)
+	case 1:
+		v = version[0]
+	default:
+		return errors.New("Error running cluster.InstallGoVersion: more than one version passed")
+	}
+
+	return errors.Wrap(roachprod.InstallGoVersion(ctx, l, c.MakeNodes(nodes), v), "cluster.InstallGoVersion")
+}
+
 // PopulatesEtcHosts populates the cluster's /etc/hosts file with the private IP
 // addresses of the nodes in the cluster.
 func (c *clusterImpl) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {

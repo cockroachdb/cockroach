@@ -158,6 +158,10 @@ type Cluster interface {
 	Install(
 		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, software ...string,
 	) error
+	InstallGoVersion(
+		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, version ...string,
+	) error
+
 	PopulateEtcHosts(ctx context.Context, l *logger.Logger) error
 
 	// Methods whose inclusion on this interface is purely historical.

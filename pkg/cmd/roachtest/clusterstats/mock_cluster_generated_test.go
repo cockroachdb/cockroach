@@ -411,6 +411,25 @@ func (mr *MockClusterMockRecorder) Install(arg0, arg1, arg2 interface{}, arg3 ..
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Install", reflect.TypeOf((*MockCluster)(nil).Install), varargs...)
 }
 
+// InstallGoVersion mocks base method.
+func (m *MockCluster) InstallGoVersion(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...string) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "InstallGoVersion", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InstallGoVersion indicates an expected call of InstallGoVersion.
+func (mr *MockClusterMockRecorder) InstallGoVersion(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstallGoVersion", reflect.TypeOf((*MockCluster)(nil).InstallGoVersion), varargs...)
+}
+
 // InternalAddr mocks base method.
 func (m *MockCluster) InternalAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()

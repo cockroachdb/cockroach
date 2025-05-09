@@ -8,11 +8,14 @@ package roachtestutil
 import (
 	"context"
 	gosql "database/sql"
+	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -296,4 +299,40 @@ func GetFailer(
 	fr *failures.FailureRegistry, c cluster.Cluster, failureModeName string, l *logger.Logger,
 ) (*failures.Failer, error) {
 	return fr.GetFailer(c.MakeNodes(c.CRDBNodes()), failureModeName, l, c.IsSecure())
+}
+
+var cockroachGoVersion string
+var goVersionRegexp = regexp.MustCompile(`^go1\.\d+\.\d+$`)
+
+// GetCockroachGoVersion returns the current Go version supported by
+// cockroach, i.e. the version in go.mod. If there is no go.mod file,
+// it falls back to using the runtime go version.
+func GetCockroachGoVersion() (string, error) {
+	if cockroachGoVersion == "" {
+		cmd := exec.Command("go", "mod edit -json | jq -r '.Go'")
+		res, err := cmd.Output()
+		if err != nil {
+			// go mod edit may fail if we are not running in the cockroach directory,
+			// fall back to using the runtime go version.
+			cockroachGoVersion, err = getRuntimeGoVersion()
+			if err != nil {
+				return "", err
+			}
+		} else {
+			cockroachGoVersion = strings.TrimSpace(string(res))
+		}
+	}
+
+	return cockroachGoVersion, nil
+}
+
+// getRuntimeGoVersion returns the go version of the current runtime
+// (roachtest runner). This is used as a fallback to figuring out the
+// go.mod go version of cockroach.
+func getRuntimeGoVersion() (string, error) {
+	version := runtime.Version()
+	if !goVersionRegexp.MatchString(version) {
+		return "", errors.Newf("unexpected Go version: %s", version)
+	}
+	return strings.TrimPrefix(version, "go"), nil
 }
