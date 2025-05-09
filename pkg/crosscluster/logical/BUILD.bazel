@@ -119,6 +119,7 @@ go_library(
 go_test(
     name = "logical_test",
     srcs = [
+        "batch_handler_test.go",
         "create_logical_replication_stmt_test.go",
         "dead_letter_queue_test.go",
         "logical_replication_job_test.go",
@@ -153,6 +154,7 @@ go_test(
         "//pkg/crosscluster/streamclient/randclient",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
@@ -171,6 +173,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/resolver",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
@@ -199,6 +202,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
