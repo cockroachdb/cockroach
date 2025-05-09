@@ -540,10 +540,8 @@ func (fw *fixupWorker) computeSplitCentroids(
 
 	default:
 		// Compute centroids using K-means.
-		tempOffsets := fw.workspace.AllocUint64s(vectors.Count)
-		defer fw.workspace.FreeUint64s(tempOffsets)
 		kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
-		kmeans.ComputeCentroids(vectors, leftCentroid, rightCentroid, pinLeftCentroid, tempOffsets)
+		kmeans.ComputeCentroids(vectors, leftCentroid, rightCentroid, pinLeftCentroid)
 	}
 }
 

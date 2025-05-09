@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
-	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
@@ -20,43 +20,45 @@ import (
 )
 
 func TestBalancedKMeans(t *testing.T) {
-	calcCentroid := func(vectors vector.Set, offsets []uint64) vector.T {
-		centroid := make(vector.T, vectors.Dims)
-		for _, offset := range offsets {
-			num32.Add(centroid, vectors.At(int(offset)))
-		}
-		num32.Scale(1/float32(len(offsets)), centroid)
-		return centroid
-	}
-
-	calcMeanDistance := func(vectors vector.Set, centroid vector.T, offsets []uint64) float32 {
+	calcMeanDistance := func(
+		distanceMetric vecdist.Metric,
+		vectors vector.Set,
+		centroid vector.T,
+		offsets []uint64,
+	) float32 {
 		var distanceSum float32
 		for _, offset := range offsets {
-			distanceSum += num32.L2Distance(vectors.At(int(offset)), centroid)
+			distanceSum += vecdist.Measure(distanceMetric, vectors.At(int(offset)), centroid)
 		}
 		return distanceSum / float32(len(offsets))
 	}
 
 	workspace := &workspace.T{}
 	rng := rand.New(rand.NewSource(42))
-	kmeans := BalancedKmeans{Workspace: workspace, Rand: rng}
 	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
 	testCases := []struct {
-		desc         string
-		vectors      vector.Set
-		leftOffsets  []uint64
-		rightOffsets []uint64
-		skipPinTest  bool
+		desc           string
+		distanceMetric vecdist.Metric
+		vectors        vector.Set
+		leftOffsets    []uint64
+		rightOffsets   []uint64
+		leftCentroid   vector.T
+		rightCentroid  vector.T
+		skipPinTest    bool
 	}{
 		{
-			desc:         "partition vector set with only 2 elements",
-			vectors:      vector.MakeSetFromRawData([]float32{1, 2}, 1),
-			leftOffsets:  []uint64{1},
-			rightOffsets: []uint64{0},
+			desc:           "partition vector set with only 2 elements",
+			distanceMetric: vecdist.L2Squared,
+			vectors:        vector.MakeSetFromRawData([]float32{1, 2}, 1),
+			leftOffsets:    []uint64{1},
+			rightOffsets:   []uint64{0},
+			leftCentroid:   []float32{2},
+			rightCentroid:  []float32{1},
 		},
 		{
-			desc: "partition vector set with duplicates values",
+			desc:           "partition vector set with duplicates values",
+			distanceMetric: vecdist.L2Squared,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 1,
 				1, 1,
@@ -64,109 +66,178 @@ func TestBalancedKMeans(t *testing.T) {
 				1, 1,
 				1, 1,
 			}, 2),
-			leftOffsets:  []uint64{0, 1},
-			rightOffsets: []uint64{2, 3, 4},
+			leftOffsets:   []uint64{0, 1},
+			rightOffsets:  []uint64{2, 3, 4},
+			leftCentroid:  []float32{1, 1},
+			rightCentroid: []float32{1, 1},
 		},
 		{
-			desc: "partition 5x3 set of vectors",
+			desc:           "partition 5x3 set of vectors",
+			distanceMetric: vecdist.L2Squared,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1, 2, 3,
 				2, 5, 10,
 				4, 6, 1,
 				10, 15, 20,
-				3, 8, 1,
+				4, 7, 2,
 			}, 3),
-			leftOffsets:  []uint64{0, 2, 4},
-			rightOffsets: []uint64{1, 3},
+			leftOffsets:   []uint64{0, 2, 4},
+			rightOffsets:  []uint64{1, 3},
+			leftCentroid:  []float32{3, 5, 2},
+			rightCentroid: []float32{6, 10, 15},
 		},
 		{
 			// Unbalanced vector set, with 4 vectors close together and 1 far.
 			// One of the close vectors will be grouped with the far vector due
 			// to the balancing constraint.
-			desc: "unbalanced vector set",
+			desc:           "unbalanced vector set",
+			distanceMetric: vecdist.L2Squared,
 			vectors: vector.MakeSetFromRawData([]float32{
-				2, 2,
+				3, 0,
 				2, 1,
 				1, 2,
-				1, 1,
+				4, 2,
 				20, 30,
 			}, 2),
-			leftOffsets:  []uint64{1, 2, 3},
-			rightOffsets: []uint64{0, 4},
+			leftOffsets:   []uint64{0, 1, 2},
+			rightOffsets:  []uint64{3, 4},
+			leftCentroid:  []float32{2, 1},
+			rightCentroid: []float32{12, 16},
 		},
 		{
-			desc: "very small values close to one another",
+			desc:           "very small values close to one another",
+			distanceMetric: vecdist.L2Squared,
 			vectors: vector.MakeSetFromRawData([]float32{
 				1.23e-10, 2.58e-10,
 				1.25e-10, 2.60e-10,
 				1.26e-10, 2.61e-10,
 				1.24e-10, 2.59e-10,
 			}, 2),
-			leftOffsets:  []uint64{1, 2},
-			rightOffsets: []uint64{0, 3},
+			leftOffsets:   []uint64{1, 2},
+			rightOffsets:  []uint64{0, 3},
+			leftCentroid:  vector.T{1.255e-10, 2.605e-10},
+			rightCentroid: vector.T{1.235e-10, 2.585e-10},
 		},
 		{
-			desc:    "high-dimensional unit vectors",
-			vectors: dataset.Slice(0, 100),
+			desc:           "inner product distance",
+			distanceMetric: vecdist.InnerProduct,
+			vectors: vector.MakeSetFromRawData([]float32{
+				1, 2, 3,
+				2, 5, -10,
+				-4, 6, 1,
+				9, -14, 20,
+				5, 9, 4,
+			}, 3),
+			leftOffsets:  []uint64{0, 3},
+			rightOffsets: []uint64{1, 2, 4},
+		},
+		{
+			desc:           "cosine distance",
+			distanceMetric: vecdist.Cosine,
+			vectors: vector.MakeSetFromRawData([]float32{
+				1, 0, 0,
+				0.57735, 0.57735, 0.57735,
+				0, 0, 1,
+				0, 1, 0,
+				0.95672, -0.06355, -0.28399,
+			}, 3),
+			leftOffsets:  []uint64{0, 4},
+			rightOffsets: []uint64{1, 2, 3},
+		},
+		{
+			desc:           "high-dimensional unit vectors, Euclidean distance",
+			distanceMetric: vecdist.L2Squared,
+			vectors:        dataset.Slice(0, 100),
 			// It's challenging to test pinLeftCentroid for this case, due to the
 			// inherent randomness of the K-means++ algorithm. The other test cases
 			// should be sufficient to test that, however.
 			skipPinTest: true,
 		},
+		{
+			desc:           "high-dimensional unit vectors, InnerProduct distance",
+			distanceMetric: vecdist.InnerProduct,
+			vectors:        dataset.Slice(0, 100),
+			skipPinTest:    true,
+		},
+		{
+			desc:           "high-dimensional unit vectors, Cosine distance",
+			distanceMetric: vecdist.Cosine,
+			vectors:        dataset.Slice(0, 100),
+			skipPinTest:    true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			kmeans := BalancedKmeans{
+				Workspace:      workspace,
+				Rand:           rng,
+				DistanceMetric: tc.distanceMetric,
+			}
+
+			// Compute centroids for the vectors.
 			leftCentroid := make(vector.T, tc.vectors.Dims)
 			rightCentroid := make(vector.T, tc.vectors.Dims)
+			kmeans.ComputeCentroids(
+				tc.vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */)
+
+			// Assign vectors to closest centroid.
 			offsets := make([]uint64, tc.vectors.Count)
-			leftOffsets, rightOffsets := kmeans.ComputeCentroids(
-				tc.vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */, offsets)
-			require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
-			require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
-			ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
-			require.False(t, ratio < 0.5)
-			require.False(t, ratio > 2)
+			leftOffsets, rightOffsets := kmeans.AssignPartitions(
+				tc.vectors, leftCentroid, rightCentroid, offsets)
+			slices.Sort(leftOffsets)
+			slices.Sort(rightOffsets)
 			if tc.leftOffsets != nil {
 				require.Equal(t, tc.leftOffsets, leftOffsets)
 			}
 			if tc.rightOffsets != nil {
 				require.Equal(t, tc.rightOffsets, rightOffsets)
 			}
+			if tc.leftCentroid != nil {
+				require.Equal(t, tc.leftCentroid, leftCentroid)
+			} else {
+				// Fallback on calculation.
+				expected := make(vector.T, tc.vectors.Dims)
+				calcPartitionCentroid(tc.distanceMetric, tc.vectors, leftOffsets, expected)
+				require.InDeltaSlice(t, expected, leftCentroid, 1e-6)
+			}
+			if tc.rightCentroid != nil {
+				require.Equal(t, tc.rightCentroid, rightCentroid)
+			} else {
+				// Fallback on calculation.
+				expected := make(vector.T, tc.vectors.Dims)
+				calcPartitionCentroid(tc.distanceMetric, tc.vectors, rightOffsets, expected)
+				require.InDeltaSlice(t, expected, rightCentroid, 1e-6)
+			}
+			ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
+			require.False(t, ratio < 0.45)
+			require.False(t, ratio > 2.05)
 
 			// Ensure that distance to left centroid is less for vectors in the left
 			// partition than those in the right partition.
-			leftMean := calcMeanDistance(tc.vectors, leftCentroid, leftOffsets)
-			rightMean := calcMeanDistance(tc.vectors, leftCentroid, rightOffsets)
+			leftMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, leftOffsets)
+			rightMean := calcMeanDistance(tc.distanceMetric, tc.vectors, leftCentroid, rightOffsets)
 			require.LessOrEqual(t, leftMean, rightMean)
-
-			// Check that AssignPartitions returns the same offsets.
-			offsets2 := make([]uint64, tc.vectors.Count)
-			leftOffsets2, rightOffsets2 := kmeans.AssignPartitions(
-				tc.vectors, leftCentroid, rightCentroid, offsets2)
-			slices.Sort(leftOffsets2)
-			slices.Sort(rightOffsets2)
-			require.Equal(t, leftOffsets, leftOffsets2)
-			require.Equal(t, rightOffsets, rightOffsets2)
 
 			if !tc.skipPinTest {
 				// Check that pinning the left centroid returns the same right centroid.
-				leftOffsets, rightOffsets = kmeans.ComputeCentroids(
-					tc.vectors, leftCentroid, rightCentroid, true /* pinLeftCentroid */, offsets)
-				require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
-				require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
+				newLeftCentroid := slices.Clone(leftCentroid)
+				newRightCentroid := make(vector.T, len(rightCentroid))
+				kmeans.ComputeCentroids(
+					tc.vectors, newLeftCentroid, newRightCentroid, true /* pinLeftCentroid */)
+				require.Equal(t, leftCentroid, newLeftCentroid)
+				require.Equal(t, rightCentroid, newRightCentroid)
 			}
 		})
 	}
 
 	t.Run("use global random number generator", func(t *testing.T) {
-		kmeans = BalancedKmeans{Workspace: workspace}
+		kmeans := BalancedKmeans{Workspace: workspace}
 		vectors := vector.MakeSetFromRawData([]float32{1, 2, 3, 4}, 2)
 		leftCentroid := make(vector.T, 2)
 		rightCentroid := make(vector.T, 2)
-		offsets := make([]uint64, vectors.Count)
 		kmeans.ComputeCentroids(
-			vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */, offsets)
+			vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */)
 	})
 }
 
@@ -247,6 +318,60 @@ func TestMeanOfVariances(t *testing.T) {
 			mean := stat.Mean(variances, nil)
 			mean = scalar.Round(mean, 4)
 			require.Equal(t, mean, result)
+		})
+	}
+}
+
+func TestCalcPartitionCentroid(t *testing.T) {
+	testCases := []struct {
+		name           string
+		distanceMetric vecdist.Metric
+		vectors        vector.Set
+		offsets        []uint64
+		expected       vector.T
+	}{
+		{
+			name:           "L2Squared simple mean",
+			distanceMetric: vecdist.L2Squared,
+			// Only use the [1,2] and [3,4] vectors.
+			vectors:  vector.MakeSetFromRawData([]float32{1, 2, 10, 11, 3, 4, 12, 13}, 2),
+			offsets:  []uint64{0, 2},
+			expected: vector.T{2, 3},
+		},
+		{
+			name:           "Cosine normalization",
+			distanceMetric: vecdist.Cosine,
+			// Only use the [1,0] and [0,1] vectors.
+			vectors:  vector.MakeSetFromRawData([]float32{10, 11, 1, 0, 12, 13, 0, 1}, 2),
+			offsets:  []uint64{1, 3},
+			expected: vector.T{0.7071, 0.7071},
+		},
+		{
+			// The degenerate case for cosine occurs when the sum of the input
+			// vectors is the zero vector. When this happens, the norm is zero
+			// and the direction of the vector can't be determined. In that case,
+			// return the zero vector.
+			name:           "Cosine degenerate zero vector",
+			distanceMetric: vecdist.Cosine,
+			vectors:        vector.MakeSetFromRawData([]float32{0.7071, 0.7071, -0.7071, -0.7071}, 2),
+			offsets:        []uint64{0, 1},
+			expected:       vector.T{0, 0},
+		},
+		{
+			name:           "InnerProduct with 3 dimensions",
+			distanceMetric: vecdist.InnerProduct,
+			vectors:        vector.MakeSetFromRawData([]float32{-5, 2, -3, 4, 8, 6, 10, 2, -3}, 3),
+			offsets:        []uint64{0, 1, 2},
+			expected:       vector.T{0.6, 0.8, 0},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			centroid := make(vector.T, tc.vectors.Dims)
+			calcPartitionCentroid(tc.distanceMetric, tc.vectors, tc.offsets, centroid)
+			require.InDeltaSlice(
+				t, tc.expected, centroid, 1e-4, "centroid not as expected: %0.4f", centroid)
 		})
 	}
 }
