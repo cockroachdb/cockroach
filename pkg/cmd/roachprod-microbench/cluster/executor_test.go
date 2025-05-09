@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/quick"
+	"time"
 
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -141,4 +142,122 @@ func TestExecutionScheduling(t *testing.T) {
 			}))
 		})
 	}
+}
+
+// TestCancelGroupsBeforeExecution tests that upcoming commands in a group that
+// has been cancelled will not execute.
+func TestCancelGroupsBeforeExecution(t *testing.T) {
+	commands := make([][]RemoteCommand, 0)
+	addCommand := func(command RemoteCommand) {
+		commands = append(commands, []RemoteCommand{command})
+	}
+
+	// Use a checkpoint to synchronize the execution of cmd4. This ensures that the
+	// error response for cmd2 is received before cmd4 is executed.
+	checkpoint := make(chan struct{})
+
+	addCommand(RemoteCommand{Args: []string{"cmd1"}, GroupID: "A"})
+	addCommand(RemoteCommand{Args: []string{"cmd2"}, GroupID: "A"})
+	addCommand(RemoteCommand{Args: []string{"cmd3"}, GroupID: "B"})
+	addCommand(RemoteCommand{Args: []string{"cmd4"}, GroupID: "B"})
+	addCommand(RemoteCommand{Args: []string{"cmd5"}, GroupID: "A"})
+	addCommand(RemoteCommand{Args: []string{"cmd6"}, GroupID: "A"})
+
+	// `execFunc` is a mock function that simulates the execution of a command.
+	execFunc := func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName, SSHOptions, processTag string,
+		secure bool,
+		cmdArray []string,
+		options install.RunOptions,
+	) ([]install.RunResultDetails, error) {
+		// Simulate a an error for cmd2. This should cancel the group.
+		if cmdArray[0] == "cmd2" {
+			return []install.RunResultDetails{
+				{Err: errors.New("error")},
+			}, nil
+		}
+		// Wait for cmd3's response to be received (checkpoint).
+		if cmdArray[0] == "cmd4" {
+			<-checkpoint
+		}
+		// Command succeeded.
+		return []install.RunResultDetails{
+			{},
+		}, nil
+	}
+
+	group1Count := 0
+	group2Count := 0
+	callback := func(response RemoteResponse) {
+		switch response.GroupID {
+		case "A":
+			group1Count++
+		case "B":
+			group2Count++
+		}
+		// Signal that cmd3's response has been received (checkpoint).
+		if response.Args[0] == "cmd3" {
+			checkpoint <- struct{}{}
+		}
+	}
+
+	err := ExecuteRemoteCommands(nil, execFunc, "test", commands, 1, false, install.DefaultRunOptions(), callback)
+	require.NoError(t, err)
+
+	// The first error will cause the other commands in Group A to be cancelled,
+	// thus we expect only 2 commands to be executed for Group A.
+	require.Equal(t, 2, group1Count, "expected 2 commands to be executed for group A")
+	require.Equal(t, 2, group2Count, "expected 1 command to be executed for group B")
+}
+
+func TestCancelGroupsInFlight(t *testing.T) {
+	commands := make([][]RemoteCommand, 0)
+	addCommand := func(command RemoteCommand) {
+		commands = append(commands, []RemoteCommand{command})
+	}
+
+	addCommand(RemoteCommand{Args: []string{"cmd1"}, GroupID: "A"})
+	addCommand(RemoteCommand{Args: []string{"cmd2"}, GroupID: "A"})
+
+	// `execFunc` is a mock function that simulates the execution of a command.
+	execFunc := func(
+		ctx context.Context,
+		l *logger.Logger,
+		clusterName, SSHOptions, processTag string,
+		secure bool,
+		cmdArray []string,
+		options install.RunOptions,
+	) ([]install.RunResultDetails, error) {
+		// Simulate a an error for cmd2. This should cancel the group.
+		if cmdArray[0] == "cmd2" {
+			return []install.RunResultDetails{
+				{Err: errors.New("error")},
+			}, nil
+		}
+		// Simulate a long running command.
+		for {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				time.Sleep(1 * time.Millisecond)
+			}
+		}
+	}
+
+	errors := 0
+	callback := func(response RemoteResponse) {
+		if response.Err != nil {
+			errors++
+		}
+	}
+
+	err := ExecuteRemoteCommands(nil, execFunc, "test", commands, 2, false, install.DefaultRunOptions(), callback)
+	require.NoError(t, err)
+
+	// The first error will cause the other in-flight command to be cancelled,
+	// therefore we expect only one error.
+	require.Equal(t, 1, errors, "expected only one error")
 }
