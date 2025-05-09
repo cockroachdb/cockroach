@@ -78,6 +78,7 @@ func TestSearcher(t *testing.T) {
 	require.NoError(t, err)
 
 	options := cspann.IndexOptions{
+		RotAlgorithm:     cspann.RotGivens,
 		MinPartitionSize: 2,
 		MaxPartitionSize: 4,
 		BaseBeamSize:     1,

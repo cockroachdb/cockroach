@@ -17,7 +17,6 @@ go_library(
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/vecdist",
         "//pkg/sql/vecindex/cspann/workspace",
-        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/container/list",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",

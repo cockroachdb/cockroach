@@ -443,6 +443,7 @@ func newVectorProvider(
 		MinPartitionSize: minPartitionSize,
 		MaxPartitionSize: maxPartitionSize,
 		BaseBeamSize:     *flagBeamSize,
+		RotAlgorithm:     cspann.RotGivens,
 	}
 
 	if *flagMemStore {

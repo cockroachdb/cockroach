@@ -82,6 +82,7 @@ func buildTestTable(tableID catid.DescID, tableName string) catalog.MutableTable
 					MaxPartitionSize: 8,
 					BuildBeamSize:    4,
 					IsDeterministic:  true,
+					RotAlgorithm:     int32(cspann.RotGivens),
 				},
 			},
 		},

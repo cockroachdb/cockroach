@@ -62,11 +62,19 @@ func CheckEnabled(sv *settings.Values) error {
 	return nil
 }
 
-// MakeVecConfig constructs a new VecConfig with Dims and Seed set.
+// MakeVecConfig constructs a new VecConfig that's compatible with the given
+// type.
 func MakeVecConfig(evalCtx *eval.Context, typ *types.T) vecpb.Config {
+	// Dimensions are derived from the vector type. By default, use Givens
+	// rotations to mix input vectors.
+	config := vecpb.Config{Dims: typ.Width(), RotAlgorithm: int32(cspann.RotGivens)}
 	if DeterministicFixupsSetting.Get(&evalCtx.Settings.SV) {
-		// Create index with well-known seed and deterministic fixups.
-		return vecpb.Config{Dims: typ.Width(), Seed: 42, IsDeterministic: true}
+		// Set well-known seed and deterministic fixups.
+		config.Seed = 42
+		config.IsDeterministic = true
+	} else {
+		// Use random seed.
+		config.Seed = evalCtx.GetRNG().Int63()
 	}
-	return vecpb.Config{Dims: typ.Width(), Seed: evalCtx.GetRNG().Int63()}
+	return config
 }

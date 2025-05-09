@@ -237,7 +237,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		result := &results[i]
 		var errorBound string
 		if result.ErrorBound != 0 {
-			errorBound = fmt.Sprintf("±%s ", utils.FormatFloat(result.ErrorBound, 2))
+			errorBound = fmt.Sprintf("± %s ", utils.FormatFloat(result.ErrorBound, 2))
 		}
 		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
 			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QuerySquaredDistance, 4),
@@ -634,12 +634,26 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	var err error
 	dims := 2
 	s.Options = cspann.IndexOptions{
+		RotAlgorithm:    cspann.RotGivens,
 		IsDeterministic: true,
 		// Disable stalled op timeout, since it can interfere with stepping tests.
 		StalledOpTimeout: func() time.Duration { return 0 },
 	}
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
+		case "rot-algorithm":
+			require.Len(s.T, arg.Vals, 1)
+			switch strings.ToLower(arg.Vals[0]) {
+			case "matrix":
+				s.Options.RotAlgorithm = cspann.RotMatrix
+			case "givens":
+				s.Options.RotAlgorithm = cspann.RotGivens
+			case "none":
+				s.Options.RotAlgorithm = cspann.RotNone
+			default:
+				require.Failf(s.T, "unrecognized rot algorithm %s", arg.Vals[0])
+			}
+
 		case "min-partition-size":
 			s.Options.MinPartitionSize = s.parseInt(arg)
 
@@ -888,6 +902,8 @@ func TestRandomizeVector(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	// Use the rotMatrix algorithm for this test; other algorithms are tested by
+	// TestRandomOrthoTransformer.
 	const dims = 97
 	const count = 5
 	quantizer := quantize.NewRaBitQuantizer(dims, 46, vecdist.L2Squared)
@@ -949,9 +965,9 @@ func TestIndexConcurrency(t *testing.T) {
 	const featureCount = 128
 	features := testutils.LoadFeatures(t, featureCount)
 
-	// Trim feature dimensions from 512 to 4, in order to make the test run
+	// Trim feature dimensions from 512 to 64, in order to make the test run
 	// faster and hit more interesting concurrency combinations.
-	const dims = 4
+	const dims = 64
 	vectors := vector.MakeSet(dims)
 
 	primaryKeys := make([]cspann.KeyBytes, features.Count)
@@ -974,6 +990,7 @@ func TestIndexConcurrency(t *testing.T) {
 		var expectedKeys syncutil.Set[string]
 
 		options := cspann.IndexOptions{
+			RotAlgorithm:     cspann.RotGivens,
 			MinPartitionSize: 2,
 			MaxPartitionSize: 4,
 			BaseBeamSize:     2,
