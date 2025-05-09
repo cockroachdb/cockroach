@@ -462,6 +462,17 @@ func (ctx *FmtCtx) WithoutConstantRedaction(fn func()) {
 	fn()
 }
 
+// WithAnnotations modifies FmtCtx to use the provided Annotations, calls fn,
+// then restores the original ones.
+func (ctx *FmtCtx) WithAnnotations(ann *Annotations, fn func()) {
+	defer func(oldAnn *Annotations) {
+		ctx.ann = oldAnn
+	}(ctx.ann)
+	ctx.ann = ann
+
+	fn()
+}
+
 // HasFlags returns true iff all of the given flags are set in the formatter
 // context.
 func (ctx *FmtCtx) HasFlags(f FmtFlags) bool {
