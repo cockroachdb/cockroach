@@ -65,7 +65,7 @@ type initialValuesFactoryFn = func(opts InitialValuesOpts) (
 var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 	clusterversion.Latest: buildLatestInitialValues,
 
-	clusterversion.V25_2: hardCodedInitialValues{
+  clusterversion.V25_2: hardCodedInitialValues{
 		system:        v25_2_system_keys,
 		systemHash:    v25_2_system_sha256,
 		nonSystem:     v25_2_tenant_keys,

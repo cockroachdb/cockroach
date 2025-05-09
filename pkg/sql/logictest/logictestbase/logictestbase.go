@@ -533,6 +533,14 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:                 3,
 	},
 	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v25.2.
+		Name:                     "cockroach-go-testserver-25.2",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V25_2,
+		NumNodes:                 3,
+	},
+	{
 		Name:                     "local-schema-locked",
 		NumNodes:                 1,
 		OverrideDistSQLMode:      "off",
@@ -661,6 +669,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 	"cockroach-go-testserver-configs": makeConfigSet(
 		"cockroach-go-testserver-24.3",
 		"cockroach-go-testserver-25.1",
+		"cockroach-go-testserver-25.2",
 	),
 }
 
