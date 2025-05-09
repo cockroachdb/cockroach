@@ -150,6 +150,7 @@ type LoadSplitterMetrics struct {
 // incoming requests to find potential split keys and checks if sampled
 // candidate split keys satisfy certain requirements.
 type Decider struct {
+	rangeId             roachpb.RangeID      // supplied to Init
 	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
 	config              LoadSplitConfig      // supplied to Init
 
@@ -181,10 +182,12 @@ type Decider struct {
 // may exist in the system at any given point in time.
 func Init(
 	lbs *Decider,
+	rangeId roachpb.RangeID,
 	config LoadSplitConfig,
 	loadSplitterMetrics *LoadSplitterMetrics,
 	objective SplitObjective,
 ) {
+	lbs.rangeId = rangeId
 	lbs.loadSplitterMetrics = loadSplitterMetrics
 	lbs.config = config
 	lbs.mu.objective = objective
@@ -269,8 +272,8 @@ func (d *Decider) recordLocked(
 		if d.mu.splitFinder.Ready(now) &&
 			now.Sub(d.mu.lastSplitSuggestion) > minSplitSuggestionInterval {
 			if splitKey := d.mu.splitFinder.Key(); splitKey != nil {
-				log.KvDistribution.VEventf(ctx, 3, "suggesting split key %v splitter_state=%v",
-					splitKey, (*lockedDecider)(d))
+				log.KvDistribution.VEventf(ctx, 3, "range %d, suggesting split key %v splitter_state=%v",
+					d.rangeId, splitKey, (*lockedDecider)(d))
 				d.mu.lastSplitSuggestion = now
 				d.mu.suggestionsMade++
 				return true
@@ -279,16 +282,16 @@ func (d *Decider) recordLocked(
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
 						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
-						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
-							causeMsg, int(popularKeyFrequency*100))
-						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
+						log.KvDistribution.Infof(ctx, "range %d, %s, most popular key occurs in %d%% of samples",
+							d.rangeId, causeMsg, int(popularKeyFrequency*100))
+						log.KvDistribution.VInfof(ctx, 3, "range %d, splitter_state=%v", d.rangeId, (*lockedDecider)(d))
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
 						accessDirection := d.mu.splitFinder.AccessDirection()
 						direction := directionStr(accessDirection)
-						log.KvDistribution.Infof(ctx, "%s, access balance between left and right for sampled keys: %s-biased %d%%",
-							causeMsg, direction, int(math.Abs(accessDirection)*100))
+						log.KvDistribution.Infof(ctx, "range %d, %s, access balance between left and right for sampled keys: %s-biased %d%%",
+							d.rangeId, causeMsg, redact.SafeString(direction), int(math.Abs(accessDirection)*100))
 						if math.Abs(accessDirection) >= clearDirectionThreshold {
 							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
 						}

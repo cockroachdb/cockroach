@@ -186,6 +186,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 		split.Init(
 			&r.loadBasedSplitter,
+			r.RangeID,
 			newReplicaSplitConfig(store.ClusterSettings()),
 			store.metrics.LoadSplitterMetrics,
 			store.rebalanceObjManager.Objective().ToSplitObjective(),

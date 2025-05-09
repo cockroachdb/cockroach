@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +86,7 @@ func TestDecider(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, newSplitterMetrics(),
+	Init(&d, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(),
 		SplitQPS,
 	)
 
@@ -247,7 +249,7 @@ func TestDecider_MaxStat(t *testing.T) {
 	}
 
 	var d Decider
-	Init(&d, &loadSplitConfig, newSplitterMetrics(), SplitQPS)
+	Init(&d, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitQPS)
 
 	assertMaxStat := func(i int, expMaxStat float64, expOK bool) {
 		t.Helper()
@@ -410,7 +412,7 @@ func TestSplitStatisticsGeneral(t *testing.T) {
 				statThreshold: 1,
 			}
 
-			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+			Init(&decider, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 			for i := 1; i <= 1000; i++ {
 				k := i
@@ -461,7 +463,7 @@ func TestSplitStatisticsPopularKey(t *testing.T) {
 				statThreshold: 1,
 			}
 
-			Init(&decider, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+			Init(&decider, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 			for i := 1; i <= 1000; i++ {
 				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
@@ -487,7 +489,7 @@ func TestDeciderMetrics(t *testing.T) {
 		statThreshold: 1,
 	}
 
-	Init(&dPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dPopular, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 	// No split key, popular key, clear direction
 	for i := 0; i < 20; i++ {
@@ -507,7 +509,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	// No split key, not popular key, clear direction
 	var dNotPopular Decider
-	Init(&dNotPopular, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dNotPopular, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 
 	for i := 0; i < 20; i++ {
 		dNotPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
@@ -526,7 +528,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	// no split key, no popular key, no clear direction
 	var dNoClearDirection Decider
-	Init(&dNoClearDirection, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dNoClearDirection, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 	for i := 0; i < 20; i++ {
 		dNoClearDirection.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i))}
@@ -544,7 +546,7 @@ func TestDeciderMetrics(t *testing.T) {
 
 	// No split key, all insufficient counters
 	var dAllInsufficientCounters Decider
-	Init(&dAllInsufficientCounters, &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+	Init(&dAllInsufficientCounters, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
 	for i := 0; i < 20; i++ {
 		dAllInsufficientCounters.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
 			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
@@ -560,4 +562,38 @@ func TestDeciderMetrics(t *testing.T) {
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
 	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.ClearDirectionCount.Count(), int64(0))
 
+}
+
+func TestDeciderLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng := rand.New(rand.NewPCG(11, 11))
+	timeStart := 1000
+	spy := logtestutils.NewLogSpy(t, logtestutils.MatchesF("no split key found"))
+	defer log.InterceptWith(context.Background(), spy)()
+
+	var dPopular Decider
+	loadSplitConfig := testLoadSplitConfig{
+		randSource:    rng,
+		useWeighted:   false,
+		statRetention: time.Second,
+		statThreshold: 1,
+	}
+
+	Init(&dPopular, roachpb.RangeID(123), &loadSplitConfig, newSplitterMetrics(), SplitCPU)
+
+	// No split key, popular key, clear direction
+	for i := 0; i < 20; i++ {
+		dPopular.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+	for i := 1; i <= 2000; i++ {
+		dPopular.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+
+	assert.True(t, spy.Has(logtestutils.MatchesF("access balance between left and right for sampled keys: right-biased 100%")))
+	assert.True(t, spy.Has(logtestutils.MatchesF("most popular key occurs in 100% of samples")))
+	assert.True(t, spy.Has(logtestutils.MatchesF("range 123")))
 }

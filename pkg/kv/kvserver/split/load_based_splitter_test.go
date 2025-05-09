@@ -325,7 +325,7 @@ func (dc deciderConfig) makeDecider(randSource rand.Source) *Decider {
 		statThreshold: dc.threshold,
 	}
 
-	Init(d, &loadSplitConfig, newSplitterMetrics(), dc.objective)
+	Init(d, roachpb.RangeID(0), &loadSplitConfig, newSplitterMetrics(), dc.objective)
 	return d
 }
 
