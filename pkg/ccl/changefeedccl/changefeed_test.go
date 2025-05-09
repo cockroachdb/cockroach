@@ -6651,7 +6651,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
-	badHostErrRE := "client has run out of available brokers"
+	badHostErrRE := "(no such host|connection refused|network is unreachable)"
 	if KafkaV2Enabled.Get(&s.ClusterSettings().SV) {
 		badHostErrRE = "(unable to dial|unable to open connection to broker|lookup .* on .*: server misbehaving|connection refused)"
 	}
@@ -6659,7 +6659,7 @@ func TestChangefeedErrors(t *testing.T) {
 	// Check unavailable kafka - bad dns.
 	longTimeoutSQLDB.ExpectErrWithTimeout(
 		t, badHostErrRE,
-		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope:9999'`,
 	)
 
 	// Check unavailable kafka - not running.
@@ -6671,14 +6671,14 @@ func TestChangefeedErrors(t *testing.T) {
 	// Test that a well-formed URI gets as far as unavailable kafka error.
 	longTimeoutSQLDB.ExpectErrWithTimeout(
 		t, badHostErrRE,
-		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope:9999/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
 	// kafka_topic_prefix was referenced by an old version of the RFC, it's
 	// "topic_prefix" now.
 	sqlDB.ExpectErrWithTimeout(
 		t, unknownParams(`kafka`, `kafka_topic_prefix`),
-		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?kafka_topic_prefix=foo`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope:9999/?kafka_topic_prefix=foo`,
 	)
 
 	// topic_name is only honored for kafka sinks
@@ -6786,7 +6786,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, badHostErrRE,
-		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope:9999/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
 	sqlDB.ExpectErrWithTimeout(
 		t, `this sink is incompatible with option webhook_client_timeout`,
