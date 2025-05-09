@@ -58,6 +58,11 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	typeDeps typeDependencies
+
+	// funcDeps tracks which user-defined functions the view being created
+	// depends on. This is collected during the construction of
+	// the view query's logical plan.
+	funcDeps functionDependencies
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -293,6 +298,14 @@ func (n *createViewNode) startExec(params runParams) error {
 					orderedTypeDeps.Add(backrefID)
 				}
 				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
+
+				// Collect all functions this view depends on.
+				orderedFuncDeps := catalog.DescriptorIDSet{}
+				for backrefID := range n.funcDeps {
+					orderedFuncDeps.Add(backrefID)
+				}
+				desc.DependsOnFunctions = append(desc.DependsOnFunctions, orderedFuncDeps.Ordered()...)
+
 				newDesc = &desc
 
 				if err = params.p.createDescriptor(

@@ -1974,7 +1974,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, _, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
+	planDeps, typeDepSet, funcDepSet, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
 	if err != nil {
 		return nil, err
 	}
@@ -1986,6 +1986,7 @@ func (ef *execFactory) ConstructCreateView(
 		columns:    columns,
 		planDeps:   planDeps,
 		typeDeps:   typeDepSet,
+		funcDeps:   funcDepSet,
 	}, nil
 }
 
