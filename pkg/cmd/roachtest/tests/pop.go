@@ -50,7 +50,9 @@ func registerPop(r registry.Registry) {
 		t.L().Printf("Latest pop release is %s.", latestTag)
 		t.L().Printf("Supported pop release is %s.", popSupportedTag)
 
-		installGolang(ctx, t, c, node)
+		if err = c.InstallGoVersion(ctx, t.L(), node, ormGoVersion); err != nil {
+			t.Fatal(err)
+		}
 
 		const (
 			popPath = "/mnt/data1/pop/"

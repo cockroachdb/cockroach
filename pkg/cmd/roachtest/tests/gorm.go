@@ -49,7 +49,9 @@ func registerGORM(r registry.Registry) {
 		t.L().Printf("Latest gorm release is %s.", latestTag)
 		t.L().Printf("Supported gorm release is %s.", gormSupportedTag)
 
-		installGolang(ctx, t, c, node)
+		if err = c.InstallGoVersion(ctx, t.L(), node, ormGoVersion); err != nil {
+			t.Fatal(err)
+		}
 
 		const (
 			gormRepo     = "github.com/go-gorm/gorm"
