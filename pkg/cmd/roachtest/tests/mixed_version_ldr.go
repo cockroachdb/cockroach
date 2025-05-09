@@ -461,7 +461,7 @@ func (lm *ldrMixed) WaitForReplicatedTime(
 		if !(replicatedTime.Valid && replicatedTime.Time.After(targetTime)) {
 			return errors.Newf("replicated time %s not yet at %s", replicatedTime, targetTime)
 		}
-		lm.t.L().Printf("replicated time is now %s, past %s", replicatedTime, targetTime)
+		lm.t.L().Printf("replicated time is now %+v, past %+v", replicatedTime, targetTime)
 
 		return nil
 	}, timeout)
