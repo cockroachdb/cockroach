@@ -9,7 +9,7 @@
 set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=12327118900b0833266189a293cba8ad674901c1
+GO_FIPS_COMMIT=495095e7a12b6ce4cb63f32b9c2677efc298e9e9
 GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 
 # Install build dependencies

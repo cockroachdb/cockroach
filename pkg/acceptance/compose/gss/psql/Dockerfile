@@ -1,5 +1,5 @@
 # Build the test binary in a multistage build.
-FROM golang:1.23 AS builder
+FROM golang:1.24 AS builder
 WORKDIR /workspace
 COPY . .
 RUN go test -v -c -tags gss_compose -o gss.test
