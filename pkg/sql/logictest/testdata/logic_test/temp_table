@@ -483,7 +483,7 @@ DROP DATABASE database_108751 CASCADE
 subtest end
 
 # Verify that a good error message is returned for temporary types.
-subtest temp_type
+subtest pg_temp_type
 
 statement ok
 CREATE DATABASE database_142780
@@ -509,6 +509,98 @@ RESET database
 
 statement ok
 DROP DATABASE database_142780
+
+subtest end
+
+# Test that views can be created in the temporary schema directly.
+subtest pg_temp_view
+
+statement ok
+CREATE DATABASE database_145438
+
+statement ok
+USE database_145438
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement ok
+CREATE VIEW pg_temp.temp_view AS SELECT 1;
+
+query I
+SELECT * FROM pg_temp.temp_view
+----
+1
+
+statement error cannot create temporary relation in non-temporary schema
+CREATE TEMP VIEW public.bad_temp_view AS SELECT 1;
+
+statement ok
+RESET database
+
+statement ok
+DROP DATABASE database_145438
+
+subtest end
+
+# Test that sequences can be created in the temporary schema directly.
+subtest pg_temp_sequence
+
+statement ok
+CREATE DATABASE database_145438
+
+statement ok
+USE database_145438
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement ok
+CREATE SEQUENCE pg_temp.temp_seq;
+
+query I
+SELECT nextval('pg_temp.temp_seq');
+----
+1
+
+statement error cannot create temporary relation in non-temporary schema
+CREATE TEMP SEQUENCE public.bad_temp_seq;
+
+statement ok
+RESET database
+
+statement ok
+DROP DATABASE database_145438
+
+subtest end
+
+# Test that UDFs cannot be created in the temporary schema directly.
+subtest pg_temp_udf
+
+statement ok
+CREATE DATABASE database_142783
+
+statement ok
+USE database_142783
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement error cannot create user-defined functions under a temporary schema
+CREATE FUNCTION pg_temp.temp_func() RETURNS int AS $$SELECT 1$$ LANGUAGE SQL;
+
+# Verify the error message after creating a temporary table.
+statement ok
+CREATE TEMP TABLE temp_table_142783 (a int primary key);
+
+statement error cannot create user-defined functions under a temporary schema
+CREATE FUNCTION pg_temp.temp_func() RETURNS int AS $$SELECT 1$$ LANGUAGE SQL;
+
+statement ok
+RESET database
+
+statement ok
+DROP DATABASE database_142783
 
 subtest end
 
