@@ -222,7 +222,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 	drainEndTimestamp := timeutil.Now()
 	actualDrainDuration := drainEndTimestamp.Sub(drainStartTimestamp)
 
-	t.L().Printf("the draining lasted %f seconds", actualDrainDuration)
+	t.L().Printf("the draining lasted %f seconds", actualDrainDuration.Seconds())
 
 	totalWaitDuration := drainWaitDuration + connectionWaitDuration + queryWaitDuration
 	if actualDrainDuration >= totalWaitDuration-10*time.Second {
