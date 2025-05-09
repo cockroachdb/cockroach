@@ -261,7 +261,9 @@ const (
 	ShowTenantFingerprint = AsOf
 )
 
-// DatumToHLC performs the conversion from a Datum to an HLC timestamp.
+// DatumToHLC performs the conversion from a Datum to an HLC timestamp. If the
+// timestamp is used for 'AS OF SYSTEM TIME', it ensures the timestamp is not in
+// the future.
 func DatumToHLC(
 	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum, usage DatumToHLCUsage,
 ) (hlc.Timestamp, error) {
@@ -291,6 +293,8 @@ func DatumToHLC(
 		if iv, err := tree.ParseIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), s, types.DefaultIntervalTypeMetadata); err == nil {
 			if (iv == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
+			} else if (usage == AsOf && iv.Compare(duration.Duration{}) > 0) {
+				convErr = errors.Errorf("interval value %v is in the future", d)
 			} else if (usage == Split && iv.Compare(duration.Duration{}) < 0) {
 				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
@@ -309,6 +313,8 @@ func DatumToHLC(
 	case *tree.DInterval:
 		if (usage == Split && d.Duration.Compare(duration.Duration{}) < 0) {
 			convErr = errors.Errorf("interval value %v too small, SPLIT interval must be >= %v", d, time.Microsecond)
+		} else if (usage == AsOf && d.Duration.Compare(duration.Duration{}) > 0) {
+			convErr = errors.Errorf("interval value %v is in the future", d)
 		}
 		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()
 	default:
@@ -324,6 +330,16 @@ func DatumToHLC(
 		return ts, errors.Errorf("zero timestamp is invalid")
 	} else if ts.Less(zero) {
 		return ts, errors.Errorf("timestamp before 1970-01-01T00:00:00Z is invalid")
+	} else if usage == AsOf {
+		// Check that the timestamp is not in the future. For fixed timestamps (not
+		// intervals), allow a small future tolerance due to clock skew. If the
+		// timestamp exceeds this grace period, return an error. We use a constant
+		// threshold (500ms) for consistency, as MaxOffset() isn't always accessible.
+		const clockSkewUncertainty = 500 * time.Millisecond
+		if ts.WallTime > stmtTimestamp.Add(clockSkewUncertainty).UnixNano() {
+			return ts, errors.Errorf("timestamp %v is in the future", d)
+		}
 	}
+
 	return ts, nil
 }

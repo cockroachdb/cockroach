@@ -50,11 +50,14 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME now()
 
-statement error pq: request timestamp .* too far in future
+statement error pq: AS OF SYSTEM TIME: interval value '10s' is in the future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
 
-query I
+statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
 SELECT * FROM t AS OF SYSTEM TIME interval '1 microsecond'
+
+query I
+SELECT * FROM t AS OF SYSTEM TIME '-1μs'
 ----
 2
 
@@ -192,3 +195,34 @@ WITH x AS (UPDATE t SET i = 3 WHERE i = 2 RETURNING i) SELECT * FROM x AS OF SYS
 
 statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 SELECT * FROM t AS OF SYSTEM TIME '-1ms' FOR UPDATE
+
+subtest as_of_future
+
+statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
+REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME ('1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
+REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
+REFRESH MATERIALIZED VIEW nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
+
+statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
+CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME ('1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
+CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
+CREATE TABLE wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
+
+statement error pq: AS OF SYSTEM TIME: interval value '1 microsecond' is in the future
+CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME ('1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' is in the future
+CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME (INTERVAL '1 microsecond')
+
+statement error pq: AS OF SYSTEM TIME: timestamp '2090-05-08 12:00:00' is in the future
+CREATE VIEW wontcreate AS SELECT * FROM nonexistent AS OF SYSTEM TIME '2090-05-08 12:00:00'
+
+subtest end
