@@ -51,6 +51,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	defer s.Close(t)
 	defer s.SetupSingleFileLogging()()
 
+	skip.WithIssue(t, 146387)
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderRace(t, "expensive tests")
 
