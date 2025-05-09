@@ -436,7 +436,7 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 					// Dump json payload for debugging.
 					jsonBytes, err := json.Marshal(vm)
 					if err != nil {
-						l.Printf("Error encoding JSON:", err)
+						l.Printf("Error encoding JSON: %+v", err)
 					}
 					l.Printf(string(jsonBytes))
 
