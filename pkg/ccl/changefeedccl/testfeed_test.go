@@ -1732,6 +1732,10 @@ func (c *fakeKafkaClient) Close() error {
 	return nil
 }
 
+func (c *fakeKafkaClient) LeastLoadedBroker() *sarama.Broker {
+	return nil
+}
+
 func (c *fakeKafkaClient) Config() *sarama.Config {
 	return c.config
 }
