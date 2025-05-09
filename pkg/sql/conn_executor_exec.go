@@ -4101,6 +4101,8 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 			traceKV = true
 		case "cluster":
 			recordingType = tracingpb.RecordingVerbose
+		case "compact":
+			// compact modifies the output format.
 		default:
 			return pgerror.Newf(pgcode.Syntax,
 				"set tracing: unknown mode %q", s)
