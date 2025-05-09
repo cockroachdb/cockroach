@@ -1,6 +1,6 @@
 dep
 ----
-debug declarative-print-rules 1000025.1 dep
+debug declarative-print-rules 1000025.2 dep
 deprules
 ----
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -16,12 +16,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
@@ -37,12 +37,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
@@ -58,12 +58,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->VALIDATED'
@@ -79,12 +79,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
@@ -100,12 +100,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED_WRITE_ONLY_TRANSIENT_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -122,12 +122,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -143,12 +143,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -164,12 +164,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -185,12 +185,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -206,12 +206,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
@@ -227,12 +227,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_ABSENT'
@@ -248,12 +248,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $next-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -270,12 +270,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -291,12 +291,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -312,12 +312,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -333,12 +333,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
@@ -354,12 +354,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
@@ -375,12 +375,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY'
@@ -396,12 +396,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
@@ -417,12 +417,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
@@ -438,12 +438,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -459,12 +459,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
@@ -480,12 +480,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -502,12 +502,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -523,12 +523,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -544,12 +544,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -565,12 +565,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: Computed column expression is dropped before the column it depends on
@@ -794,12 +794,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
@@ -815,12 +815,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -837,12 +837,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -858,12 +858,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -879,12 +879,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -900,12 +900,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: New primary index for alter column type should go public in the same stage as dropped column
@@ -964,12 +964,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
@@ -985,12 +985,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = BACKFILL_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -1006,12 +1006,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_DELETE_ONLY_BACKFILLED_TRANSIENT_BACKFILLED_BACKFILL_ONLY_TRANSIENT_BACKFILL_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1028,12 +1028,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
@@ -1049,12 +1049,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = MERGE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -1070,12 +1070,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
@@ -1091,12 +1091,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->DELETE_ONLY'
@@ -1112,12 +1112,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->DELETE_ONLY'
@@ -1133,12 +1133,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_BACKFILL_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
@@ -1154,12 +1154,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGED->WRITE_ONLY'
@@ -1175,12 +1175,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->WRITE_ONLY'
@@ -1196,12 +1196,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_MERGE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
@@ -1217,12 +1217,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->WRITE_ONLY'
@@ -1238,12 +1238,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
@@ -1259,12 +1259,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1281,12 +1281,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_MERGE_ONLY_MERGED_TRANSIENT_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1303,12 +1303,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = BACKFILL_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -1324,12 +1324,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
@@ -1345,12 +1345,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = BACKFILL_ONLY
     - $next-Node[CurrentStatus] = BACKFILLED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
@@ -1366,12 +1366,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = MERGE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
@@ -1387,12 +1387,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
@@ -1408,12 +1408,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = MERGE_ONLY
     - $next-Node[CurrentStatus] = MERGED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -1429,12 +1429,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -1450,12 +1450,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
@@ -1471,12 +1471,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = BACKFILL_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -1492,12 +1492,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
@@ -1513,12 +1513,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = BACKFILL_ONLY
     - $next-Node[CurrentStatus] = BACKFILLED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
@@ -1534,12 +1534,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = MERGE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
@@ -1555,12 +1555,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGE_ONLY->MERGED'
@@ -1576,12 +1576,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = MERGE_ONLY
     - $next-Node[CurrentStatus] = MERGED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
@@ -1597,12 +1597,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->TRANSIENT_DELETE_ONLY'
@@ -1618,12 +1618,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_BACKFILLED
     - $next-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->TRANSIENT_DELETE_ONLY'
@@ -1639,12 +1639,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_BACKFILL_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
@@ -1660,12 +1660,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_BACKFILLED_TRANSIENT_BACKFILL_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1682,12 +1682,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_MERGED
     - $next-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->TRANSIENT_WRITE_ONLY'
@@ -1703,12 +1703,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_MERGE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY'
@@ -1724,12 +1724,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $next-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->TRANSIENT_DELETE_ONLY'
@@ -1745,12 +1745,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED_TRANSIENT_MERGE_ONLY_TRANSIENT_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1767,12 +1767,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -1788,12 +1788,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -1809,12 +1809,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
@@ -1830,12 +1830,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = BACKFILL_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -1851,12 +1851,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_BACKFILLED_BACKFILL_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1873,12 +1873,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
@@ -1894,12 +1894,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = MERGE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -1915,12 +1915,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
@@ -1936,12 +1936,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
@@ -1957,12 +1957,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_VALIDATED_MERGE_ONLY_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -1979,12 +1979,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = BACKFILL_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -2000,12 +2000,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = BACKFILLED
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
@@ -2021,12 +2021,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = BACKFILL_ONLY
     - $next-Node[CurrentStatus] = BACKFILLED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
@@ -2042,12 +2042,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = MERGE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
@@ -2063,12 +2063,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = MERGED
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
@@ -2084,12 +2084,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = MERGE_ONLY
     - $next-Node[CurrentStatus] = MERGED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -2105,12 +2105,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -2126,12 +2126,118 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'TableSchemaLocked transitions to ABSENT uphold 2-version invariant: PUBLIC->ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.TableSchemaLocked'
+    - $next[Type] = '*scpb.TableSchemaLocked'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = ABSENT
+    - descriptorIsNotBeingDropped-25.2($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-25.2($descID)
+    - nodeNotExistsWithStatusIn_TRANSIENT_PUBLIC($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'TableSchemaLocked transitions to ABSENT uphold 2-version invariant: TRANSIENT_PUBLIC->PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.TableSchemaLocked'
+    - $next[Type] = '*scpb.TableSchemaLocked'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $next-Node[CurrentStatus] = PUBLIC
+    - descriptorIsNotBeingDropped-25.2($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-25.2($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'TableSchemaLocked transitions to PUBLIC uphold 2-version invariant: ABSENT->PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.TableSchemaLocked'
+    - $next[Type] = '*scpb.TableSchemaLocked'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = PUBLIC
+    - descriptorIsNotBeingDropped-25.2($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-25.2($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'TableSchemaLocked transitions to TRANSIENT_PUBLIC uphold 2-version invariant: ABSENT->TRANSIENT_PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.TableSchemaLocked'
+    - $next[Type] = '*scpb.TableSchemaLocked'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_PUBLIC
+    - $prev-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - descriptorIsNotBeingDropped-25.2($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-25.2($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'TableSchemaLocked transitions to TRANSIENT_PUBLIC uphold 2-version invariant: PUBLIC->ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.TableSchemaLocked'
+    - $next[Type] = '*scpb.TableSchemaLocked'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_PUBLIC
+    - $prev-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = ABSENT
+    - descriptorIsNotBeingDropped-25.2($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -2147,12 +2253,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_TRANSIENT_DELETE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -2169,12 +2275,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
@@ -2190,12 +2296,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
@@ -2211,12 +2317,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY'
@@ -2232,12 +2338,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
@@ -2253,12 +2359,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = DELETE_ONLY
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
@@ -2274,12 +2380,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY'
@@ -2295,12 +2401,12 @@ deprules
     - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -2316,12 +2422,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = PUBLIC
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
@@ -2337,12 +2443,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = ABSENT
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
@@ -2359,12 +2465,12 @@ deprules
     - $prev-Target[TargetStatus] = ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -2380,12 +2486,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = ABSENT
     - $next-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
@@ -2401,12 +2507,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = VALIDATED
     - $next-Node[CurrentStatus] = PUBLIC
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -2422,12 +2528,12 @@ deprules
     - $prev-Target[TargetStatus] = PUBLIC
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
-    - descriptorIsNotBeingDropped-25.1($prev)
+    - descriptorIsNotBeingDropped-25.2($prev)
     - $descriptor-data[Type] = '*scpb.TableData'
     - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
-    - descriptorIsDataNotBeingAdded-25.1($descID)
+    - descriptorIsDataNotBeingAdded-25.2($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: adding a transient column compute expression moves to 'absent' after PK validation to ensures it's there for the backfill
@@ -2746,7 +2852,7 @@ deprules
   to: column-Node
   query:
     - $column-type[Type] = '*scpb.ColumnType'
-    - descriptorIsNotBeingDropped-25.1($column-type)
+    - descriptorIsNotBeingDropped-25.2($column-type)
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-type, $column, $table-id, $col-id)
     - toAbsent($column-type-Target, $column-Target)
@@ -3001,7 +3107,7 @@ deprules
   to: dependent-Node
   query:
     - $policy[Type] = '*scpb.Policy'
-    - $dependent[Type] = '*scpb.PolicyName'
+    - $dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
     - joinOnPolicyID($policy, $dependent, $table-id, $policy-id)
     - ToPublicOrTransient($policy-Target, $dependent-Target)
     - $policy-Node[CurrentStatus] = PUBLIC
@@ -3013,7 +3119,7 @@ deprules
   kind: Precedence
   to: relation-Node
   query:
-    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyName', '*scpb.PrimaryIndex', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
+    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
     - $relation[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
     - joinOnDescID($dependent, $relation, $relation-id)
     - ToPublicOrTransient($dependent-Target, $relation-Target)
@@ -3188,7 +3294,7 @@ deprules
   kind: SameStagePrecedence
   to: policy-Node
   query:
-    - $dependent[Type] = '*scpb.PolicyName'
+    - $dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
     - $policy[Type] = '*scpb.Policy'
     - joinOnPolicyID($dependent, $policy, $table-id, $policy-id)
     - toAbsent($dependent-Target, $policy-Target)
@@ -3201,7 +3307,7 @@ deprules
   kind: SameStagePrecedence
   to: policy-Node
   query:
-    - $dependent[Type] = '*scpb.PolicyName'
+    - $dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
     - $policy[Type] = '*scpb.Policy'
     - joinOnPolicyID($dependent, $policy, $table-id, $policy-id)
     - transient($dependent-Target, $policy-Target)
@@ -3214,7 +3320,7 @@ deprules
   kind: SameStagePrecedence
   to: policy-Node
   query:
-    - $dependent[Type] = '*scpb.PolicyName'
+    - $dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
     - $policy[Type] = '*scpb.Policy'
     - joinOnPolicyID($dependent, $policy, $table-id, $policy-id)
     - $dependent-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -3228,7 +3334,7 @@ deprules
   kind: SameStagePrecedence
   to: policy-Node
   query:
-    - $dependent[Type] = '*scpb.PolicyName'
+    - $dependent[Type] IN ['*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr']
     - $policy[Type] = '*scpb.Policy'
     - joinOnPolicyID($dependent, $policy, $table-id, $policy-id)
     - $dependent-Target[TargetStatus] = ABSENT
@@ -3311,7 +3417,7 @@ deprules
   to: referencing-via-attr-Node
   query:
     - $referenced-descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
-    - $referencing-via-attr[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyName', '*scpb.RowLevelTTL', '*scpb.SchemaComment', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
+    - $referencing-via-attr[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.SchemaComment', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
     - joinReferencedDescID($referencing-via-attr, $referenced-descriptor, $desc-id)
     - toAbsent($referenced-descriptor-Target, $referencing-via-attr-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
@@ -3326,7 +3432,7 @@ deprules
     - $referenced-descriptor[Type] = '*scpb.Sequence'
     - $referenced-descriptor[DescID] = $seqID
     - $referencing-via-expr[ReferencedSequenceIDs] CONTAINS $seqID
-    - $referencing-via-expr[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.SecondaryIndexPartial']
+    - $referencing-via-expr[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.SecondaryIndexPartial']
     - toAbsent($referenced-descriptor-Target, $referencing-via-expr-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-expr-Node[CurrentStatus] = ABSENT
@@ -3340,7 +3446,7 @@ deprules
     - $referenced-descriptor[Type] = '*scpb.Function'
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-function[ReferencedFunctionIDs] CONTAINS $fromDescID
-    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.SecondaryIndexPartial']
+    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.SecondaryIndexPartial']
     - toAbsent($referenced-descriptor-Target, $referencing-via-function-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-function-Node[CurrentStatus] = ABSENT
@@ -3354,8 +3460,8 @@ deprules
     - $referenced-descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.EnumType']
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-type[ReferencedTypeIDs] CONTAINS $fromDescID
-    - descriptorIsNotBeingDropped-25.1($referencing-via-type)
-    - $referencing-via-type[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.SecondaryIndexPartial']
+    - descriptorIsNotBeingDropped-25.2($referencing-via-type)
+    - $referencing-via-type[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.SecondaryIndexPartial']
     - toAbsent($referenced-descriptor-Target, $referencing-via-type-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-type-Node[CurrentStatus] = ABSENT
@@ -3367,7 +3473,7 @@ deprules
   to: dependent-Node
   query:
     - $descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
-    - $dependent[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyName', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
+    - $dependent[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
     - joinOnDescID($descriptor, $dependent, $desc-id)
     - toAbsent($descriptor-Target, $dependent-Target)
     - $descriptor-Node[CurrentStatus] = DROPPED
@@ -3406,7 +3512,7 @@ deprules
   to: dependent-Node
   query:
     - $relation[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
-    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyName', '*scpb.PrimaryIndex', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
+    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
     - joinOnDescID($relation, $dependent, $relation-id)
     - ToPublicOrTransient($relation-Target, $dependent-Target)
     - $relation-Node[CurrentStatus] = DESCRIPTOR_ADDED
@@ -3482,6 +3588,84 @@ deprules
     - SmallerColumnIDFirst(*scpb.Column, *scpb.Column)($later-column, $earlier-column)
     - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - joinTargetNode($earlier-column, $earlier-column-Target, $earlier-column-Node)
+- name: ensure database zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.DatabaseZoneConfig, *scpb.DatabaseZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure index zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.IndexZoneConfig, *scpb.IndexZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure named range zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.NamedRangeZoneConfig, *scpb.NamedRangeZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure partition zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - joinOnPartitionName($later-seqNum, $earlier-seqNum, $table-id, $index-id, $partition-name)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure table zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.TableZoneConfig, *scpb.TableZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: function name should be set before parent ids
   from: function-name-Node
   kind: Precedence
@@ -3495,6 +3679,22 @@ deprules
     - $function-parent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($function-name, $function-name-Target, $function-name-Node)
     - joinTargetNode($function-parent, $function-parent-Target, $function-parent-Node)
+- name: handle default column expression swaps
+  from: old-column-expression-Node
+  kind: Precedence
+  to: new-column-expression-Node
+  query:
+    - $old-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $new-column-expression[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $old-column-expression[Type] = $same-type
+    - $new-column-expression[Type] = $same-type
+    - joinOnColumnID($old-column-expression, $new-column-expression, $table-id, $col-id)
+    - $old-column-expression-Target[TargetStatus] = ABSENT
+    - $old-column-expression-Node[CurrentStatus] = ABSENT
+    - $new-column-expression-Target[TargetStatus] = PUBLIC
+    - $new-column-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-column-expression, $old-column-expression-Target, $old-column-expression-Node)
+    - joinTargetNode($new-column-expression, $new-column-expression-Target, $new-column-expression-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence
@@ -3816,7 +4016,7 @@ deprules
     - $column[Type] = '*scpb.Column'
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - descriptorIsNotBeingDropped-25.1($index-column)
+    - descriptorIsNotBeingDropped-25.2($index-column)
     - toAbsent($index-Target, $column-Target)
     - $index-Node[CurrentStatus] = ABSENT
     - $column-Node[CurrentStatus] = ABSENT
@@ -3831,7 +4031,7 @@ deprules
     - $column[Type] = '*scpb.Column'
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - descriptorIsNotBeingDropped-25.1($index-column)
+    - descriptorIsNotBeingDropped-25.2($index-column)
     - transient($index-Target, $column-Target)
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
@@ -3846,7 +4046,7 @@ deprules
     - $column[Type] = '*scpb.Column'
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - descriptorIsNotBeingDropped-25.1($index-column)
+    - descriptorIsNotBeingDropped-25.2($index-column)
     - $index-Target[TargetStatus] = TRANSIENT_ABSENT
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-Target[TargetStatus] = ABSENT
@@ -3862,7 +4062,7 @@ deprules
     - $column[Type] = '*scpb.Column'
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - descriptorIsNotBeingDropped-25.1($index-column)
+    - descriptorIsNotBeingDropped-25.2($index-column)
     - $index-Target[TargetStatus] = ABSENT
     - $index-Node[CurrentStatus] = ABSENT
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -3887,7 +4087,7 @@ deprules
   kind: Precedence
   to: descriptor-Node
   query:
-    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyName', '*scpb.PrimaryIndex', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
+    - $dependent[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.DatabaseComment', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableSchemaLocked', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges']
     - $descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
     - joinOnDescID($dependent, $descriptor, $desc-id)
     - toAbsent($dependent-Target, $descriptor-Target)
@@ -3921,7 +4121,7 @@ deprules
   to: index-Node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
-    - descriptorIsNotBeingDropped-25.1($partial-predicate)
+    - descriptorIsNotBeingDropped-25.2($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
     - toAbsent($partial-predicate-Target, $index-Target)
@@ -3935,7 +4135,7 @@ deprules
   to: index-Node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
-    - descriptorIsNotBeingDropped-25.1($partial-predicate)
+    - descriptorIsNotBeingDropped-25.2($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
     - transient($partial-predicate-Target, $index-Target)
@@ -3949,7 +4149,7 @@ deprules
   to: index-Node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
-    - descriptorIsNotBeingDropped-25.1($partial-predicate)
+    - descriptorIsNotBeingDropped-25.2($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
     - $partial-predicate-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -3964,7 +4164,7 @@ deprules
   to: index-Node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
-    - descriptorIsNotBeingDropped-25.1($partial-predicate)
+    - descriptorIsNotBeingDropped-25.2($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
     - $partial-predicate-Target[TargetStatus] = ABSENT
@@ -4034,21 +4234,6 @@ deprules
     - $old-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
     - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
-- name: primary index with new columns should exist before secondary indexes
-  from: primary-index-Node
-  kind: Precedence
-  to: secondary-index-Node
-  query:
-    - $primary-index[Type] = '*scpb.PrimaryIndex'
-    - $secondary-index[Type] = '*scpb.SecondaryIndex'
-    - joinOnDescID($primary-index, $secondary-index, $table-id)
-    - $primary-index[IndexID] = $primary-index-id
-    - $secondary-index[SourceIndexID] = $primary-index-id
-    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
-    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
-    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
-    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: primary index with new columns should exist before temp indexes
   from: primary-index-Node
   kind: Precedence
@@ -4060,10 +4245,25 @@ deprules
     - $primary-index[IndexID] = $primary-index-id
     - $temp-index[SourceIndexID] = $primary-index-id
     - ToPublicOrTransient($primary-index-Target, $temp-index-Target)
-    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - $primary-index-Node[CurrentStatus] = VALIDATED
     - $temp-index-Node[CurrentStatus] = DELETE_ONLY
     - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
     - joinTargetNode($temp-index, $temp-index-Target, $temp-index-Node)
+- name: primary index with new columns should validated before secondary indexes
+  from: primary-index-Node
+  kind: Precedence
+  to: secondary-index-Node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - joinOnDescID($primary-index, $secondary-index, $table-id)
+    - $primary-index[IndexID] = $primary-index-id
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - ToPublicOrTransient($primary-index-Target, $secondary-index-Target)
+    - $primary-index-Node[CurrentStatus] = VALIDATED
+    - $secondary-index-Node[CurrentStatus] = BACKFILL_ONLY
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
 - name: relation dropped before dependent column
   from: descriptor-Node
   kind: Precedence
@@ -4234,6 +4434,56 @@ deprules
     - $data-b-Node[CurrentStatus] = TRANSIENT_DROPPED
     - joinTargetNode($data-a, $data-a-Target, $data-a-Node)
     - joinTargetNode($data-b, $data-b-Target, $data-b-Node)
+- name: schema locked is set after all other operations (add)
+  from: descriptor-element-Node
+  kind: PreviousTransactionPrecedence
+  to: schema-locked-Node
+  query:
+    - $descriptor-element[Type] IN ['*scpb.AliasType', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.Database', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumType', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.Function', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.Schema', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.Sequence', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.Table', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges', '*scpb.View']
+    - $schema-locked[Type] = '*scpb.TableSchemaLocked'
+    - joinOnDescID($descriptor-element, $schema-locked, $descID)
+    - toPublicToTransientPublicUntyped($descriptor-element-Target, $schema-locked-Target)
+    - $schema-locked-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $descriptor-element-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($descriptor-element, $descriptor-element-Target, $descriptor-element-Node)
+    - joinTargetNode($schema-locked, $schema-locked-Target, $schema-locked-Node)
+- name: schema locked is set after all other operations (drop)
+  from: descriptor-element-Node
+  kind: PreviousTransactionPrecedence
+  to: schema-locked-Node
+  query:
+    - $descriptor-element[Type] IN ['*scpb.AliasType', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.Database', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumType', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.Function', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.Schema', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.Sequence', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.Table', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges', '*scpb.View']
+    - $schema-locked[Type] = '*scpb.TableSchemaLocked'
+    - joinOnDescID($descriptor-element, $schema-locked, $descID)
+    - toDropToTransientPublicUntyped($descriptor-element-Target, $schema-locked-Target)
+    - $schema-locked-Node[CurrentStatus] = TRANSIENT_PUBLIC
+    - $descriptor-element-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($descriptor-element, $descriptor-element-Target, $descriptor-element-Node)
+    - joinTargetNode($schema-locked, $schema-locked-Target, $schema-locked-Node)
+- name: schema locked is unset before any operation (add)
+  from: schema-locked-Node
+  kind: Precedence
+  to: descriptor-element-Node
+  query:
+    - $schema-locked[Type] = '*scpb.TableSchemaLocked'
+    - $descriptor-element[Type] IN ['*scpb.AliasType', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.Database', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumType', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.Function', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.Schema', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.Sequence', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.Table', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges', '*scpb.View']
+    - joinOnDescID($schema-locked, $descriptor-element, $descID)
+    - toPublicToTransientPublicUntyped($descriptor-element-Target, $schema-locked-Target)
+    - $schema-locked-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($schema-locked, $schema-locked-Target, $schema-locked-Node)
+    - joinTargetNode($descriptor-element, $descriptor-element-Target, $descriptor-element-Node)
+- name: schema locked is unset before any operation (drop)
+  from: schema-locked-Node
+  kind: Precedence
+  to: descriptor-element-Node
+  query:
+    - $schema-locked[Type] = '*scpb.TableSchemaLocked'
+    - $descriptor-element[Type] IN ['*scpb.AliasType', '*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.Column', '*scpb.ColumnComment', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnFamily', '*scpb.ColumnName', '*scpb.ColumnNotNull', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.CompositeType', '*scpb.CompositeTypeAttrName', '*scpb.CompositeTypeAttrType', '*scpb.ConstraintComment', '*scpb.ConstraintWithoutIndexName', '*scpb.Database', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseZoneConfig', '*scpb.EnumType', '*scpb.EnumTypeValue', '*scpb.ForeignKeyConstraint', '*scpb.ForeignKeyConstraintUnvalidated', '*scpb.Function', '*scpb.FunctionBody', '*scpb.FunctionLeakProof', '*scpb.FunctionName', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionSecurity', '*scpb.FunctionVolatility', '*scpb.IndexColumn', '*scpb.IndexComment', '*scpb.IndexData', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexZoneConfig', '*scpb.LDRJobIDs', '*scpb.NamedRangeZoneConfig', '*scpb.Namespace', '*scpb.Owner', '*scpb.PartitionZoneConfig', '*scpb.Policy', '*scpb.PolicyDeps', '*scpb.PolicyName', '*scpb.PolicyRole', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.PrimaryIndex', '*scpb.RowLevelSecurityEnabled', '*scpb.RowLevelSecurityForced', '*scpb.RowLevelTTL', '*scpb.Schema', '*scpb.SchemaChild', '*scpb.SchemaComment', '*scpb.SchemaParent', '*scpb.SecondaryIndex', '*scpb.SecondaryIndexPartial', '*scpb.Sequence', '*scpb.SequenceOption', '*scpb.SequenceOwner', '*scpb.Table', '*scpb.TableComment', '*scpb.TableData', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion', '*scpb.TablePartitioning', '*scpb.TableZoneConfig', '*scpb.TemporaryIndex', '*scpb.Trigger', '*scpb.TriggerDeps', '*scpb.TriggerEnabled', '*scpb.TriggerEvents', '*scpb.TriggerFunctionCall', '*scpb.TriggerName', '*scpb.TriggerTiming', '*scpb.TriggerTransition', '*scpb.TriggerWhen', '*scpb.TypeComment', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated', '*scpb.UserPrivileges', '*scpb.View']
+    - joinOnDescID($schema-locked, $descriptor-element, $descID)
+    - toDropToTransientPublicUntyped($descriptor-element-Target, $schema-locked-Target)
+    - $schema-locked-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($schema-locked, $schema-locked-Target, $schema-locked-Node)
+    - joinTargetNode($descriptor-element, $descriptor-element-Target, $descriptor-element-Node)
 - name: secondary index named before public (with index swap)
   from: index-Node
   kind: Precedence
@@ -4279,7 +4529,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndex'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndex, *scpb.Column)($secondary-partial-index, $column)
     - toAbsent($secondary-partial-index-Target, $column-Target)
     - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
@@ -4294,7 +4544,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndex'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndex, *scpb.Column)($secondary-partial-index, $column)
     - transient($secondary-partial-index-Target, $column-Target)
     - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
@@ -4309,7 +4559,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndex'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndex, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = TRANSIENT_ABSENT
     - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
@@ -4325,7 +4575,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndex'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndex, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = ABSENT
     - $secondary-partial-index-Node[CurrentStatus] = DELETE_ONLY
@@ -4341,7 +4591,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndexPartial'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - toAbsent($secondary-partial-index-Target, $column-Target)
     - $secondary-partial-index-Node[CurrentStatus] = ABSENT
@@ -4356,7 +4606,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndexPartial'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - transient($secondary-partial-index-Target, $column-Target)
     - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
@@ -4371,7 +4621,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndexPartial'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = TRANSIENT_ABSENT
     - $secondary-partial-index-Node[CurrentStatus] = TRANSIENT_ABSENT
@@ -4387,7 +4637,7 @@ deprules
     - $secondary-partial-index[Type] = '*scpb.SecondaryIndexPartial'
     - $column[Type] = '*scpb.Column'
     - joinOnDescID($secondary-partial-index, $column, $table-id)
-    - descriptorIsNotBeingDropped-25.1($secondary-partial-index)
+    - descriptorIsNotBeingDropped-25.2($secondary-partial-index)
     - secondaryIndexReferencesColumn(*scpb.SecondaryIndexPartial, *scpb.Column)($secondary-partial-index, $column)
     - $secondary-partial-index-Target[TargetStatus] = ABSENT
     - $secondary-partial-index-Node[CurrentStatus] = ABSENT
@@ -4461,10 +4711,25 @@ deprules
     - toAbsent($index-Target, $column-Target)
     - $index-Node[CurrentStatus] = VALIDATED
     - $column-Node[CurrentStatus] = WRITE_ONLY
-    - descriptorIsNotBeingDropped-25.1($index-column)
+    - descriptorIsNotBeingDropped-25.2($index-column)
     - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: secondary indexes should be in a validated state before primary indexes can go public
+  from: secondary-index-Node
+  kind: Precedence
+  to: primary-index-Node
+  query:
+    - $secondary-index[Type] = '*scpb.SecondaryIndex'
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - joinOnDescID($secondary-index, $primary-index, $table-id)
+    - $secondary-index[SourceIndexID] = $primary-index-id
+    - $primary-index[IndexID] = $primary-index-id
+    - ToPublicOrTransient($secondary-index-Target, $primary-index-Target)
+    - $secondary-index-Node[CurrentStatus] = VALIDATED
+    - $primary-index-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
+    - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
 - name: simple constraint public right before its dependents
   from: simple-constraint-Node
   kind: SameStagePrecedence

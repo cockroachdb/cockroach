@@ -136,16 +136,16 @@ func TestLogic_mixed_version_upgrade_preserve_ttl(
 	runLogicTest(t, "mixed_version_upgrade_preserve_ttl")
 }
 
+func TestLogic_mixed_version_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_vector_index")
+}
+
 func TestLogic_upgrade(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upgrade")
-}
-
-func TestLogic_vector_index_mixed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vector_index_mixed")
 }
