@@ -122,6 +122,15 @@ type benchQuery struct {
 var schemas = []string{
 	`CREATE TABLE kv (k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`,
 	`
+	CREATE TABLE sbtest (
+		id INT8 PRIMARY KEY,
+		k INT8 NOT NULL DEFAULT 0,
+		c CHAR(120) NOT NULL DEFAULT '',
+		pad CHAR(60) NOT NULL DEFAULT '',
+		INDEX (k)
+	)
+	`,
+	`
 	CREATE TABLE customer
 	(
 		c_id           integer        not null,
@@ -387,6 +396,18 @@ var queries = [...]benchQuery{
 		name:  "kv-read-const",
 		query: `SELECT k, v FROM kv WHERE k IN (1)`,
 		args:  []interface{}{},
+	},
+
+	{
+		name:  "sysbench-update-index",
+		query: `UPDATE sbtest SET k=k+1 WHERE id=$1`,
+		args:  []interface{}{10},
+	},
+
+	{
+		name:  "sysbench-update-non-index",
+		query: `UPDATE sbtest SET c=$2 WHERE id=$1`,
+		args:  []interface{}{10, "foo"},
 	},
 
 	// 1. Table with many columns.
