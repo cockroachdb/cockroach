@@ -5126,6 +5126,70 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	})
 }
 
+func TestChangefeedSplitColumnFamiliesOutputTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sinks := []string{"kafka", "gcpubsub"}
+	testutils.RunTrueAndFalse(t, "withTopicPrefix", func(t *testing.T, withTopicPrefix bool) {
+		testutils.RunTrueAndFalse(t, "withTopicName", func(t *testing.T, withTopicName bool) {
+			testutils.RunValues(t, "sink", sinks, func(t *testing.T, sink string) {
+				cluster, _, cleanup := startTestCluster(t)
+				defer cleanup()
+				s := cluster.Server(1)
+
+				pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+				defer cleanup()
+				pgBase, err := pq.NewConnector(pgURL.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				var actual string
+				connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+					actual = n.Message
+				})
+
+				dbWithHandler := gosql.OpenDB(connector)
+				defer dbWithHandler.Close()
+
+				sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+				sqlDB.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY, s string, FAMILY "a" (i), FAMILY "b" (s))`)
+				sqlDB.Exec(t, `INSERT INTO t VALUES (0, '1')`)
+
+				var queryString string
+				topicNameStr := "t"
+				if withTopicName {
+					topicNameStr = "topic"
+					queryString = fmt.Sprintf("?topic_name=%s", topicNameStr)
+				}
+
+				topicPrefixStr := ""
+				if withTopicPrefix && sink != "gcpubsub" {
+					topicPrefixStr = "prefix_"
+					if withTopicName {
+						queryString += fmt.Sprintf("&topic_prefix=%s", topicPrefixStr)
+					} else {
+						queryString = fmt.Sprintf("?topic_prefix=%s", topicPrefixStr)
+					}
+				}
+
+				actual = "(no notice)"
+				f := func() cdctest.TestFeedFactory {
+					if sink == "kafka" {
+						return makeKafkaFeedFactory(t, s, dbWithHandler)
+					} else {
+						return makePubsubFeedFactory(s, dbWithHandler)
+					}
+				}()
+
+				testFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR t INTO '%s://does.not.matter%s' with split_column_families`, sink, queryString))
+				defer closeFeed(t, testFeed)
+				require.Equal(t, fmt.Sprintf(`changefeed will emit to topic %s%s.%s`, topicPrefixStr, topicNameStr, familyPlaceholder), actual)
+			})
+		})
+	})
+}
+
 // requireErrorSoon polls for the test feed for an error and asserts that
 // the error matches the provided regex.
 func requireErrorSoon(
