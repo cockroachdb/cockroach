@@ -6,10 +6,10 @@
 package cliccl
 
 import (
+	"crypto/fips140"
 	"os"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
@@ -42,7 +42,7 @@ func (f *requireFipsFlag) Set(s string) error {
 	// this behavior globally (PersistentPreRun functions don't help because
 	// they are inherited across different levels of the command hierarchy only
 	// if that level does not have its own hook).
-	if v && !fipsccl.IsFIPSReady() {
+	if v && fips140.Enabled() {
 		err := errors.WithHint(errors.New("FIPS readiness checks failed"), "Run `cockroach debug enterprise-check-fips` for details")
 		clierror.OutputError(os.Stderr, err, true, false)
 		exit.WithCode(exit.UnspecifiedError())
