@@ -1007,5 +1007,41 @@ CREATE TABLE public.a (
 	CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
 )
 
+subtest udf_in_views
+
+statement ok
+CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
+
+statement ok
+CREATE VIEW v_builtin AS SELECT lower('hello');
+
+statement ok
+CREATE VIEW v_udf AS SELECT test_vf_f();
+
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW v_udf];
+----
+
+# Verify that the UDF reference in the view descriptor is by ID.
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->>'viewQuery'
+FROM system.descriptor
+WHERE id = 'v_udf'::regclass::oid
+----
+SELECT [FUNCTION 100106]()
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_vf_f];
+----
+CREATE FUNCTION public.test_vf_f()
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT lower('hello':::STRING);
+$$
 
 subtest end
