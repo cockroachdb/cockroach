@@ -2123,8 +2123,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := fs.SafeWriteToFile(
-			p.cfg.env, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
+		if err := safeWriteToUnencryptedFile(
+			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,
 		); err != nil {
