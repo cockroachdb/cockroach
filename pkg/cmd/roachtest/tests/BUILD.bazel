@@ -19,6 +19,7 @@ go_library(
         "admission_control_index_backfill.go",
         "admission_control_index_overload.go",
         "admission_control_intent_resolution.go",
+        "admission_control_multi_store_index_backfill.go",
         "admission_control_multi_store_overload.go",
         "admission_control_multitenant_fairness.go",
         "admission_control_row_level_ttl.go",

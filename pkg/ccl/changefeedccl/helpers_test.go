@@ -282,6 +282,10 @@ func assertPayloadsBaseErr(
 	sourceAssertion func(map[string]any),
 	envelopeType changefeedbase.EnvelopeType,
 ) error {
+	if log.V(1) {
+		log.Infof(ctx, "expected messages: \n%s", strings.Join(expected, "\n"))
+	}
+
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err

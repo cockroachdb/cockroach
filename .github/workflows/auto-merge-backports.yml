@@ -63,7 +63,7 @@ jobs:
               const approved = pr.reviews.nodes.some(
                 r =>
                   r.state === 'APPROVED' &&
-                  r.author?.login === 'blathers-crl[bot]'
+                  r.author?.login === 'blathers-crl'
               );
 
               if (!approved) {
