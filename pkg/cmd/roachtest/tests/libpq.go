@@ -49,7 +49,9 @@ func registerLibPQ(r registry.Registry) {
 		t.L().Printf("Latest lib/pq release is %s.", latestTag)
 		t.L().Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
-		installGolang(ctx, t, c, node)
+		if err = c.InstallGoVersion(ctx, t.L(), node, ormGoVersion); err != nil {
+			t.Fatal(err)
+		}
 
 		const (
 			libPQRepo   = "github.com/lib/pq"

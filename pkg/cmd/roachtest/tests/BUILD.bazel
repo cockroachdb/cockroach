@@ -76,7 +76,6 @@ go_library(
         "failure_injection.go",
         "fixtures.go",
         "follower_reads.go",
-        "go_helpers.go",
         "gopg.go",
         "gopg_blocklist.go",
         "gorm.go",

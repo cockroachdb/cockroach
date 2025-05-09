@@ -228,3 +228,9 @@ func (r *ormTestsResults) summarizeFailed(
 		)
 	}
 }
+
+const (
+	goPath = `/mnt/data1/go`
+	// The go version that ORM roachtests are tested against.
+	ormGoVersion = "1.21.3"
+)

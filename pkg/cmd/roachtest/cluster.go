@@ -2624,6 +2624,12 @@ func (c *clusterImpl) Install(
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
 }
 
+func (c *clusterImpl) InstallGoVersion(
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, version string,
+) error {
+	return errors.Wrap(roachprod.InstallGoVersion(ctx, l, c.MakeNodes(nodes), version), "cluster.InstallGoVersion")
+}
+
 // PopulatesEtcHosts populates the cluster's /etc/hosts file with the private IP
 // addresses of the nodes in the cluster.
 func (c *clusterImpl) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {

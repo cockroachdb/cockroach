@@ -74,7 +74,9 @@ func registerGopg(r registry.Registry) {
 		t.L().Printf("Latest gopg release is %s.", gopgLatestTag)
 		t.L().Printf("Supported gopg release is %s.", gopgSupportedTag)
 
-		installGolang(ctx, t, c, node)
+		if err = c.InstallGoVersion(ctx, t.L(), node, ormGoVersion); err != nil {
+			t.Fatal(err)
+		}
 
 		if err := repeatRunE(
 			ctx, t, c, node, "remove old gopg",

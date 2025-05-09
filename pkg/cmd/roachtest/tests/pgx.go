@@ -49,7 +49,9 @@ func registerPgx(r registry.Registry) {
 		}
 
 		t.Status("setting up go")
-		installGolang(ctx, t, c, node)
+		if err = c.InstallGoVersion(ctx, t.L(), node, ormGoVersion); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("getting pgx")
 		if err := repeatGitCloneE(

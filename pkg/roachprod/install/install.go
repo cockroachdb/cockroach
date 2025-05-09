@@ -15,6 +15,7 @@ import (
 
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 var installCmds = map[string]string{
@@ -156,5 +157,71 @@ func InstallTool(
 		return rperrors.TransientFailure(err, "install_flake")
 	}
 
+	return nil
+}
+
+// Mapping of binary name to sha256 checksum for the Go tarballs. Used as optional validation in
+// InstallGoVersion, but must be manually entered below.
+var goBinarySha = map[string]string{
+	"go1.21.3.linux-amd64.tar.gz": "1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8",
+	"go1.21.3.linux-arm64.tar.gz": "fc90fa48ae97ba6368eecb914343590bbb61b388089510d0c56c2dde52987ef3",
+	"go1.21.3.linux-s390x.tar.gz": "4c78e2e6f4c684a3d5a9bdc97202729053f44eb7be188206f0627ef3e18716b6",
+	"go1.22.2.linux-amd64.tar.gz": "5901c52b7a78002aeff14a21f93e0f064f74ce1360fce51c6ee68cd471216a17",
+	"go1.22.2.linux-arm64.tar.gz": "36e720b2d564980c162a48c7e97da2e407dfcc4239e1e58d98082dfa2486a0c1",
+	"go1.22.2.linux-s390x.tar.gz": "2b39019481c28c560d65e9811a478ae10e3ef765e0f59af362031d386a71bfef",
+	"go1.23.7.linux-amd64.tar.gz": "4741525e69841f2e22f9992af25df0c1112b07501f61f741c12c6389fcb119f3",
+	"go1.23.7.linux-arm64.tar.gz": "597acbd0505250d4d98c4c83adf201562a8c812cbcd7b341689a07087a87a541",
+	"go1.23.7.linux-s390x.tar.gz": "af1d4c5d01e32c2cf6e3cc00e44cb240e1a6cef539b28a64389b2b9ca284ac6c",
+}
+
+func InstallGoVersion(ctx context.Context, l *logger.Logger, c *SyncedCluster, v string) error {
+	retryRunOpts := WithNodes(c.Nodes).WithRetryOpts(*DefaultRetryOpt)
+
+	if err := c.Run(
+		ctx, l, l.Stdout, l.Stderr, retryRunOpts, "update apt-get", `sudo apt-get -qq update`,
+	); err != nil {
+		return err
+	}
+
+	if err := c.Run(
+		ctx, l, l.Stdout, l.Stderr, retryRunOpts, "install dependencies (go uses C bindings)", `sudo apt-get -qq install build-essential`,
+	); err != nil {
+		return err
+	}
+
+	arch := c.VMs[0].CPUArch
+	binary := fmt.Sprintf("go%s.linux-%s.tar.gz", v, arch)
+
+	if err := c.Run(
+		ctx, l, l.Stdout, l.Stderr, retryRunOpts, fmt.Sprintf("installing go version: %s", v), fmt.Sprintf(`curl -fsSL https://go.dev/dl/%s > /tmp/go.tgz`, binary),
+	); err != nil {
+		return errors.Wrapf(err, "failed to download binary %s", binary)
+	}
+
+	if sha, ok := goBinarySha[binary]; !ok {
+		// Encourage users to add the sha256 to the map above, but don't error because of it.
+		// We log a warning with the sha instead so manual verification can be done as a fallback.
+		l.Printf("WARN: no sha found for %s, skipping tarball verification of %s", binary, sha)
+	} else {
+		if err := c.Run(
+			ctx, l, l.Stdout, l.Stderr, retryRunOpts, "verify tarball", fmt.Sprintf(`sha256sum -c - <<EOF
+%s /tmp/go.tgz
+EOF`, sha),
+		); err != nil {
+			return err
+		}
+	}
+
+	if err := c.Run(
+		ctx, l, l.Stdout, l.Stderr, retryRunOpts, "extract go", `sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz`,
+	); err != nil {
+		return err
+	}
+
+	if err := c.Run(
+		ctx, l, l.Stdout, l.Stderr, retryRunOpts, "force symlink go", "sudo ln -sf /usr/local/go/bin/go /usr/bin",
+	); err != nil {
+		return err
+	}
 	return nil
 }
