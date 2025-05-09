@@ -780,7 +780,12 @@ func (mb *mutationBuilder) buildInsert(
 		// ON CONFLICT clause that automatically requires SELECT policies.
 		var colRefs opt.ColSet
 		returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
-		includeSelectPolicies = !colRefs.Empty()
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			if colRefs.Contains(mb.tabID.ColumnID(i)) {
+				includeSelectPolicies = true
+				break
+			}
+		}
 	} else {
 		returningInScope, returningOutScope = mb.buildReturningScopes(returning, nil /* colRefs */)
 	}
