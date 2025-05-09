@@ -689,7 +689,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 			}
 			for _, status := range statuses {
 				if status.Err != nil {
-					config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Err.Error())
+					config.Logger.Printf("  %2d: %s\n", status.NodeID, status.Err.Error())
 				} else if !status.Running {
 					// TODO(irfansharif): Surface the staged version here?
 					config.Logger.Printf("  %2d: not running\n", status.NodeID)
