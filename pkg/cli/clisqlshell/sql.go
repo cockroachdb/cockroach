@@ -2169,8 +2169,12 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			// shell.
 		} else {
 			traceType := ""
+			compact := ""
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
+			}
+			if strings.Contains(c.iCtx.autoTrace, "compact") {
+				compact = "COMPACT"
 			}
 			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 				defer c.maybeFlushOutput()
@@ -2179,7 +2183,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 					c.iCtx.queryOutput, // query output
 					c.iCtx.stdout,      // timings
 					c.iCtx.stderr,      // errors
-					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s %s TRACE FOR SESSION", compact, traceType)))
 			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
