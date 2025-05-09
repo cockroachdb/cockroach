@@ -61,6 +61,11 @@ func setShortGCTTLInSystemZoneConfig(
 		return err
 	}
 
+	// Ensure the system database has a longer TTL interval, which is needed to avoid
+	// flakes on system database queries for upgrades.
+	if err := h.Exec(r, "ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds=60;"); err != nil {
+		return err
+	}
 	return h.Exec(r, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 }
 
