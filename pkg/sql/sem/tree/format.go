@@ -675,7 +675,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 // number of characters to be printed.
 func (ctx *FmtCtx) formatLimitLength(n NodeFormatter, maxLength int) {
 	temp := NewFmtCtx(ctx.flags)
-	temp.FormatNodeSummary(n)
+	temp.formatNodeSummary(n)
 	s := temp.CloseAndGetString()
 	if len(s) > maxLength {
 		truncated := s[:maxLength] + "..."
@@ -731,7 +731,7 @@ func (ctx *FmtCtx) formatSummaryInsert(node *Insert) {
 	expr := rows.Select
 	if _, ok := expr.(*SelectClause); ok {
 		ctx.WriteByte(' ')
-		ctx.FormatNodeSummary(rows)
+		ctx.formatNodeSummary(rows)
 	} else if node.Columns != nil {
 		ctx.WriteByte('(')
 		ctx.formatLimitLength(&node.Columns, ColumnLimit)
@@ -754,8 +754,8 @@ func (ctx *FmtCtx) formatSummaryUpdate(node *Update) {
 	}
 }
 
-// FormatNodeSummary recurses into a node for pretty-printing a summarized version.
-func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
+// formatNodeSummary recurses into a node for pretty-printing a summarized version.
+func (ctx *FmtCtx) formatNodeSummary(n NodeFormatter) {
 	switch node := n.(type) {
 	case *Insert:
 		ctx.formatSummaryInsert(node)
@@ -775,7 +775,7 @@ func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
 	ctx := NewFmtCtx(fl, opts...)
 	if fl.HasFlags(FmtSummary) {
-		ctx.FormatNodeSummary(n)
+		ctx.formatNodeSummary(n)
 	} else {
 		ctx.FormatNode(n)
 	}
