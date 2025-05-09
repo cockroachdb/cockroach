@@ -8,6 +8,7 @@ package engineccl
 import (
 	"bytes"
 	"context"
+	"crypto/fips140"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -343,7 +343,7 @@ func TestFileCipherStreamCreator(t *testing.T) {
 // ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v
 // $PWD/fipsbin:/fipsbin -it redhat/ubi9 /fipsbin/pkg/ccl/storageccl/engineccl/bin/engineccl_test -test.run '^$' -test.bench FileCipherStream
 func BenchmarkFileCipherStream(b *testing.B) {
-	isFips := fipsccl.IsFIPSReady()
+	isFips := fips140.Enabled()
 	for _, impl := range []string{"v1", "v2"} {
 		for _, seq := range []bool{false, true} {
 			for _, keySize := range []int{128, 192, 256} {
