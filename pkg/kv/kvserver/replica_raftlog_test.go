@@ -225,7 +225,7 @@ func (rt *replicaLogStorageTest) read(rng *rand.Rand) {
 	require.Equalf(rt.t, ref, entries, "(%d,%d]", prev, last)
 }
 
-func (rt *replicaLogStorageTest) termAt(index uint64) uint64 {
+func (rt *replicaLogStorageTest) termLocked(index uint64) uint64 {
 	ref, err := rt.ms.Term(index)
 	require.NoError(rt.t, err)
 	term, err := rt.ls.Term(index)
@@ -269,21 +269,21 @@ func (rt *replicaLogStorageTest) genAppend(rng *rand.Rand) raft.StorageAppend {
 func (rt *replicaLogStorageTest) genTruncate(
 	rng *rand.Rand,
 ) (prev, next kvserverpb.RaftTruncatedState) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
 	// We can only truncate entries <= committed index.
-	rt.mu.RLock()
 	committed := rt.mu.committed
 	comp := uint64(rt.ls.shMu.trunc.Index)
-	rt.mu.RUnlock()
-
 	require.Equal(rt.t, rt.ms.Compacted(), comp)
 	index := comp + rng.Uint64N(committed-comp+1)
 
 	return kvserverpb.RaftTruncatedState{
 			Index: kvpb.RaftIndex(comp),
-			Term:  kvpb.RaftTerm(rt.termAt(comp)),
+			Term:  kvpb.RaftTerm(rt.termLocked(comp)),
 		}, kvserverpb.RaftTruncatedState{
 			Index: kvpb.RaftIndex(index),
-			Term:  kvpb.RaftTerm(rt.termAt(index)),
+			Term:  kvpb.RaftTerm(rt.termLocked(index)),
 		}
 }
 
