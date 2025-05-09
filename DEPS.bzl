@@ -1895,10 +1895,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "53c42d716abfd28d2cb189e3b0f4dfc4c54a5394f475d5eac395085344945b9c",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250506020002-afff98cbf8be",
+        sha256 = "72efefdcd4de09edf917d9c1082d3335210fafb50940f9daaebac9fa4fbd58ba",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20250508154524-817e58ed46d7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250506020002-afff98cbf8be.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20250508154524-817e58ed46d7.zip",
         ],
     )
     go_repository(
@@ -6649,10 +6649,10 @@ def go_deps():
         name = "com_github_minio_minlz",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/minio/minlz",
-        sha256 = "fe8a654f4e82f2ddbf69429293aa0a7cb541ab87c8e8e4b7ebaec18bdaf7fe43",
-        strip_prefix = "github.com/minio/minlz@v1.0.0",
+        sha256 = "eebf4da3a42da834d650af4e620e879f35b3a4aabb5c41dce417a0bbe6bac859",
+        strip_prefix = "github.com/minio/minlz@v1.0.1-0.20250507153514-87eb42fe8882",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.1-0.20250507153514-87eb42fe8882.zip",
         ],
     )
     go_repository(
