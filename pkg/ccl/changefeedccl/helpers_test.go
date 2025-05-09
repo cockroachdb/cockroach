@@ -207,6 +207,10 @@ func assertPayloadsBase(
 func assertPayloadsBaseErr(
 	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) error {
+	if log.V(1) {
+		log.Infof(ctx, "expected messages: \n%s", strings.Join(expected, "\n"))
+	}
+
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err
