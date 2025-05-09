@@ -843,7 +843,7 @@ func (rd *replicationDriver) onFingerprintMismatch(
 		endTime)
 	// Before failing on this error, back up the source and destination tenants.
 	if fingerprintBisectErr != nil {
-		rd.t.L().Printf("fingerprint bisect error", fingerprintBisectErr)
+		rd.t.L().Printf("fingerprint bisect error %+v", fingerprintBisectErr)
 	} else {
 		rd.t.L().Printf("table level fingerprints seem to match")
 	}
