@@ -17,12 +17,14 @@ import (
 var useFastRetry = envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
+const maxBackoff = 1 * time.Minute
+
 // getRetry returns retry object for changefeed.
 func getRetry(ctx context.Context) Retry {
 	opts := retry.Options{
-		InitialBackoff: 5 * time.Second,
+		InitialBackoff: 500 * time.Millisecond,
 		Multiplier:     2,
-		MaxBackoff:     10 * time.Minute,
+		MaxBackoff:     maxBackoff,
 	}
 
 	if useFastRetry {
@@ -45,7 +47,7 @@ func testingUseFastRetry() func() {
 
 // reset retry state after changefeed ran for that much time
 // without errors.
-const resetRetryAfter = 10 * time.Minute
+const resetRetryAfter = maxBackoff
 
 // Retry is a thin wrapper around retry.Retry which
 // resets retry state if changefeed been running for sufficiently
