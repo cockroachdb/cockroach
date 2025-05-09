@@ -5,7 +5,7 @@
 //
 //go:build !boringcrypto
 
-package fipsccl
+package fipscclbase
 
 import "github.com/cockroachdb/errors"
 
