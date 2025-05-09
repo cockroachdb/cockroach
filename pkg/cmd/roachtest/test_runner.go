@@ -960,15 +960,26 @@ func (r *testRunner) runWorker(
 				// Apply metamorphic settings not explicitly defined by the test.
 				// These settings should only be applied to non-benchmark tests.
 				if !testSpec.Benchmark {
-					// 50% chance of enabling the rangefeed buffered sender. Disabled by
-					// default. Disabled for mixed-version tests since this cluster setting
-					// is only supported in >= v25.2.
-					useBufferedSender := prng.Intn(2) == 0
-					if !t.spec.Suites.Contains(registry.MixedVersion) && useBufferedSender {
-						c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+					// 50% chance of enabling the rangefeed buffered sender.
+					// 50% change of enabling buffered writes.
+					//
+					// Disabled by default. Disabled for mixed-version tests
+					// since these cluster settings are not supported in all
+					// versions.
+					for _, tc := range []struct {
+						setting string
+						label   string
+					}{
+						{setting: "kv.rangefeed.buffered_sender.enabled", label: "metamorphicBufferedSender"},
+						{setting: "kv.transaction.write_buffering.enabled", label: "metamorphicWriteBuffering"},
+					} {
+						enable := prng.Intn(2) == 0
+						if !t.spec.Suites.Contains(registry.MixedVersion) && enable {
+							c.clusterSettings[tc.setting] = "true"
+							c.status(fmt.Sprintf("metamorphically setting %q to 'true'", tc.setting))
+							t.AddParam(tc.label, fmt.Sprint(enable))
+						}
 					}
-					c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
-					t.AddParam("metamorphicBufferedSender", fmt.Sprint(useBufferedSender))
 				}
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
