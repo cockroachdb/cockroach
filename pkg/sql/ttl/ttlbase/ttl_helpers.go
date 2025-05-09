@@ -76,6 +76,14 @@ var (
 		false,
 		settings.WithPublic,
 	)
+	processorConcurrencyOverride = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"sql.ttl.processor_concurrency",
+		"override for the TTL job processor concurrency (0 means use default based on GOMAXPROCS, "+
+			"and any value greater than GOMAXPROCS will be capped at GOMAXPROCS)",
+		0,
+		settings.NonNegativeInt,
+	)
 )
 
 var (
@@ -158,6 +166,18 @@ func GetChangefeedReplicationDisabled(
 		return true
 	}
 	return changefeedReplicationDisabled.Get(settingsValues)
+}
+
+// GetProcessorConcurrency returns the concurrency to use for TTL job processors.
+// If the cluster setting is 0 (default), it will return the provided default value.
+// If the cluster setting is greater than 0, it will return the minimum of the
+// cluster setting and the default value.
+func GetProcessorConcurrency(settingsValues *settings.Values, defaultConcurrency int64) int64 {
+	override := processorConcurrencyOverride.Get(settingsValues)
+	if override > 0 {
+		return min(override, defaultConcurrency)
+	}
+	return defaultConcurrency
 }
 
 // BuildScheduleLabel returns a string value intended for use as the
