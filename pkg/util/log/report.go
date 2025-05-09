@@ -31,7 +31,7 @@ import (
 // Therefore, to avoid a nil reference in the event that our own package's `init()`
 // needs to use reportOrPanic, we provide this default definition.
 var reportOrPanic = func(ctx context.Context, sv *settings.Values, format string, reportables ...interface{}) {
-	err := errors.Newf("%s", fmt.Sprintf(format, reportables))
+	err := errors.Newf("%s", fmt.Sprintf(format, reportables...))
 	panic(err)
 }
 
