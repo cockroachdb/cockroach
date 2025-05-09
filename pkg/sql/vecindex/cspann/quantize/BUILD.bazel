@@ -56,9 +56,10 @@ go_test(
         "unquantizedpb_test.go",
         "unquantizer_test.go",
     ],
-    data = glob(["testdata/**"]) + ["//pkg/sql/vecindex/cspann:features_10000"],
+    data = glob(["testdata/**"]) + ["//pkg/sql/vecindex/cspann:datasets"],
     embed = [":quantize"],
     deps = [
+        "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/testutils",
         "//pkg/sql/vecindex/cspann/utils",
         "//pkg/sql/vecindex/cspann/vecdist",

@@ -184,11 +184,12 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 	var workspace workspace.T
 	defer require.True(t, workspace.IsClear())
 
-	features := testutils.LoadFeatures(t, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
+	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
+	dataset = dataset.Slice(0, 100)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
 	require.Equal(t, 512, quantizer.GetDims())
 
-	quantizedSet := quantizer.Quantize(&workspace, features)
+	quantizedSet := quantizer.Quantize(&workspace, dataset)
 	require.Equal(t, 100, quantizedSet.GetCount())
 
 	centroid := quantizedSet.GetCentroid()
@@ -201,7 +202,7 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 	require.InDelta(t, 0.7345806, centroidDistances[0], 0.0000001)
 	require.InDelta(t, 0.7328457, centroidDistances[99], 0.0000001)
 
-	queryVector := features.At(0)
+	queryVector := dataset.At(0)
 	squaredDistances := make([]float32, quantizedSet.GetCount())
 	errorBounds := make([]float32, quantizedSet.GetCount())
 	quantizer.EstimateDistances(
@@ -217,24 +218,26 @@ func TestRaBitQuantizeEmbeddings(t *testing.T) {
 // Benchmark quantization of 100 vectors.
 func BenchmarkQuantize(b *testing.B) {
 	var workspace workspace.T
-	features := testutils.LoadFeatures(b, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
+	dataset := testutils.LoadDataset(b, testutils.ImagesDataset)
+	dataset = dataset.Slice(0, 100)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		quantizer.Quantize(&workspace, features)
+		quantizer.Quantize(&workspace, dataset)
 	}
 }
 
 // Benchmark distance estimation of 100 vectors.
 func BenchmarkEstimateSquaredDistances(b *testing.B) {
 	var workspace workspace.T
-	features := testutils.LoadFeatures(b, 100)
-	quantizer := NewRaBitQuantizer(features.Dims, 42, vecdist.L2Squared)
-	quantizedSet := quantizer.Quantize(&workspace, features)
+	dataset := testutils.LoadDataset(b, testutils.ImagesDataset)
+	dataset = dataset.Slice(0, 100)
+	quantizer := NewRaBitQuantizer(dataset.Dims, 42, vecdist.L2Squared)
+	quantizedSet := quantizer.Quantize(&workspace, dataset)
 
-	queryVector := features.At(0)
+	queryVector := dataset.At(0)
 	squaredDistances := make([]float32, quantizedSet.GetCount())
 	errorBounds := make([]float32, quantizedSet.GetCount())
 

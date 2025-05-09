@@ -40,6 +40,7 @@ func TestBalancedKMeans(t *testing.T) {
 	workspace := &workspace.T{}
 	rng := rand.New(rand.NewSource(42))
 	kmeans := BalancedKmeans{Workspace: workspace, Rand: rng}
+	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
 	testCases := []struct {
 		desc         string
@@ -106,7 +107,7 @@ func TestBalancedKMeans(t *testing.T) {
 		},
 		{
 			desc:    "high-dimensional unit vectors",
-			vectors: testutils.LoadFeatures(t, 100),
+			vectors: dataset.Slice(0, 100),
 			// It's challenging to test pinLeftCentroid for this case, due to the
 			// inherent randomness of the K-means++ algorithm. The other test cases
 			// should be sufficient to test that, however.
