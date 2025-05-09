@@ -39,8 +39,10 @@ filegroup(
     visibility = [
         "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-24.3:__pkg__",
         "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.1:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.2:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-24.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.1:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-25.2:__pkg__",
     ],
 )
 
