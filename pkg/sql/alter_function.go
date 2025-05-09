@@ -217,14 +217,12 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 	if len(dependentObjects) > 0 {
-		// TODO(#146475): once functions are rewritten to use ID references, we can
-		// allow renames for views.
 		return errors.UnimplementedErrorf(
 			errors.IssueLink{
 				IssueURL: build.MakeIssueURL(83233),
 				Detail:   "renames are disallowed because references are by name",
 			},
-			"cannot rename function %q because other functions or views ([%v]) still depend on it",
+			"cannot rename function %q because other functions ([%v]) still depend on it",
 			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}
 
@@ -386,7 +384,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 				Detail: "set schema is disallowed because there are references from " +
 					"other objects by name",
 			},
-			"cannot set schema for function %q because other functions or views ([%v]) still depend on it",
+			"cannot set schema for function %q because other functions ([%v]) still depend on it",
 			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}
 
@@ -535,17 +533,7 @@ func getFuncRefsDisallowingAlter(
 		if err != nil {
 			return nil, err
 		}
-		switch t := desc.(type) {
-		case catalog.TableDescriptor:
-			if !t.IsView() {
-				continue
-			}
-			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(
-				params.ctx, int64(dep.ID), tree.ResolveAnyTableKind)
-			if err != nil {
-				return nil, err
-			}
-			dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
+		switch desc.(type) {
 		case catalog.FunctionDescriptor:
 			fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
 			if err != nil {
