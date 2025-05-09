@@ -57,9 +57,20 @@ type ScheduledProcessor struct {
 
 	requestQueue chan request
 	eventC       chan *event
-	// If true, processor is not processing data anymore and waiting for registrations
-	// to be complete.
-	stopping bool
+
+	// stopping, when true, indicates that a stop request has been processed.
+	// After this is set, all subsequent registration requests will fail fast and
+	// any events will be ignored. This is only ever set via stopInternal, but it
+	// is an atomic to allow it to be read outside this processor. This is used in
+	// the replica to handle the case where we have stopped ourselves but are
+	// still attached to the replica. It should be preferred over stoppedC for all
+	// uses other than unblocking request waiters since stoppedC is not closed
+	// until the processsor is fully closed up.
+	stopping atomic.Bool
+	// stoppedC is closed during the final steps of processor shutdown. This is
+	// used to unblock anyone who might be waiting on a response. Callsites that
+	// need to decide whether or not to process a request should consult stopping
+	// instead.
 	stoppedC chan struct{}
 
 	// stopper passed by start that is used for firing up async work from scheduler.
@@ -185,7 +196,7 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 	for max := len(p.eventC); max > 0; max-- {
 		select {
 		case e := <-p.eventC:
-			if !p.stopping {
+			if !p.stopping.Load() {
 				// If we are stopping, there's no need to forward any remaining
 				// data since registrations already have errors set.
 				p.consumeEvent(ctx, e)
@@ -255,10 +266,6 @@ func (p *ScheduledProcessor) cleanup() {
 	p.taskCancel()
 	close(p.stoppedC)
 	p.MemBudget.Close(ctx)
-	if p.UnregisterFromReplica != nil {
-		p.UnregisterFromReplica(p)
-	}
-
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
@@ -276,6 +283,10 @@ func (p *ScheduledProcessor) StopWithErr(pErr *kvpb.Error) {
 	p.syncEventC()
 	// Send the processor a stop signal.
 	p.sendStop(pErr)
+}
+
+func (p *ScheduledProcessor) Stopping() bool {
+	return p.stopping.Load()
 }
 
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
@@ -299,7 +310,7 @@ func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error)
 	p.reg.DisconnectAllOnShutdown(ctx, pErr)
 	// First set stopping flag to ensure that once all registrations are removed
 	// processor should stop.
-	p.stopping = true
+	p.stopping.Store(true)
 	p.scheduler.StopProcessor()
 }
 
@@ -349,7 +360,7 @@ func (p *ScheduledProcessor) Register(
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
-		if p.stopping {
+		if p.stopping.Load() {
 			return nil
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
