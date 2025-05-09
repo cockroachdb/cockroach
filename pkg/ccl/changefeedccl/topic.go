@@ -185,7 +185,7 @@ func (tn *TopicNamer) makeName(s changefeedbase.Target, td TopicDescriptor) (str
 		return tn.nameFromComponents(s.StatementTimeName, s.FamilyName), nil
 	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
 		if td == nil {
-			return tn.nameFromComponents(s.StatementTimeName, familyPlaceholder), nil
+			return tn.nameFromComponents(s.StatementTimeName) + string(tn.join) + familyPlaceholder, nil
 		}
 		name, components := td.GetNameComponents()
 		return tn.nameFromComponents(name, components...), nil
