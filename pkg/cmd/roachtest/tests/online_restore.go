@@ -579,13 +579,6 @@ func runRestore(
 			return errors.Wrapf(err, "failed to add some empty tables")
 		}
 		restoreStartTime = timeutil.Now()
-		if runOnline && sp.linkPhaseTimeout != 0 {
-			timer := time.AfterFunc(sp.linkPhaseTimeout, func() {
-				c.CaptureSideEyeSnapshot(ctx)
-			})
-			defer timer.Stop()
-		}
-
 		restoreCmd := rd.restoreCmd(fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)
 		t.L().Printf("Running %s", restoreCmd)
 		if _, err = db.ExecContext(ctx, restoreCmd); err != nil {

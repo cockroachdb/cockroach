@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -2565,68 +2564,6 @@ func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string
 	return opentelemetry.Stop(ctx, l, c)
 }
 
-// StartSideEyeAgents starts the Side-Eye agent on all the nodes in the given
-// cluster.
-//
-// envName is the name of the Side-Eye environment that the agents will register
-// with.
-//
-// apiToken is the token that the agents will use to identify their organization
-// (i.e. usually cockroachlabs.com) to the Side-Eye service.
-//
-// See CaptureSideEyeSnapshot() for using these agents to capture cluster
-// snapshots.
-func StartSideEyeAgents(
-	ctx context.Context, l *logger.Logger, clusterName string, envName string, apiToken string,
-) error {
-	c, err := GetClusterFromCache(l, clusterName)
-	if err != nil {
-		return err
-	}
-
-	// Note that this command is similar to the one used by `roachprod install
-	// side-eye`. We could use that through install.InstallTool(), but that code
-	// looks up the API token in `gcloud secrets`; we already know the token, so
-	// let's just use it directly.
-	cmd := fmt.Sprintf(
-		`curl https://sh.side-eye.io/ | SIDE_EYE_API_TOKEN="%s" SIDE_EYE_ENVIRONMENT="%s" sh`,
-		apiToken, envName)
-	allNodes := c.TargetNodes()
-	err = c.Run(
-		ctx, l, l.Stdout, l.Stderr, install.WithNodes(allNodes), "installing Side-Eye agent", cmd)
-	if err != nil {
-		return err
-	}
-
-	l.PrintfCtx(ctx, "installed the Side-Eye agent on all nodes. Access this cluster at https://app.side-eye.io")
-	return nil
-}
-
-// UpdateSideEyeEnvironmentName updates the environment name used by the
-// Side-Eye agents running on the given cluster.
-func UpdateSideEyeEnvironmentName(
-	ctx context.Context, l *logger.Logger, clusterName string, newEnvName string,
-) error {
-	c, err := GetClusterFromCache(l, clusterName)
-	if err != nil {
-		return err
-	}
-
-	cmd := fmt.Sprintf(
-		`sudo snap set side-eye-agent environment='%s' && sudo snap restart side-eye-agent`,
-		newEnvName)
-	allNodes := c.TargetNodes()
-	err = c.Run(
-		ctx, l, l.Stdout, l.Stderr, install.WithNodes(allNodes),
-		"updating Side-Eye agents with new environment name", cmd)
-	if err != nil {
-		return err
-	}
-
-	l.PrintfCtx(ctx, "updated Side-Eye environment name to %q", newEnvName)
-	return nil
-}
-
 // DestroyDNS destroys the DNS records for the given cluster.
 func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
 	c, err := GetClusterFromCache(l, clusterName)
@@ -3025,77 +2962,6 @@ func Deploy(
 		}
 	}
 	return nil
-}
-
-var sideEyeEnvToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
-
-// GetSideEyeTokenFromEnv returns the Side-Eye API token from either an
-// environment variable or gcloud secrets. The second return value is false if
-// the key is not found in either place.
-func GetSideEyeTokenFromEnv() (string, bool) {
-	sideEyeToken := sideEyeEnvToken
-	if sideEyeToken == "" {
-		sideEyeToken = install.GetGcloudSideEyeSecret()
-	}
-	if sideEyeToken == "" {
-		return "", false
-	}
-	return sideEyeToken, true
-}
-
-// CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
-// cockroach processes of the specified cluster/environment. All errors are
-// logged and swallowed. The agents must previously have been installed
-// through StartSideEyeAgents().
-//
-// sideEyeEnv should generally be the cluster name, unless the agents have been
-// explicitly configured to use a different name.
-//
-// If client is specified, it will be used to communicate with the Side-Eye
-// service. If nil, a client is created and initialized based on the API key
-// form the environment; if the key is not found in the environment, the call is
-// a no-op.
-//
-// On success returns <the snapshot URL>, true. On failure returns "", false.
-func CaptureSideEyeSnapshot(
-	ctx context.Context, l *logger.Logger, sideEyeEnv string, client *sideeyeclient.SideEyeClient,
-) (string, bool) {
-	if client == nil {
-		sideEyeToken, ok := GetSideEyeTokenFromEnv()
-		if !ok {
-			l.Printf("Side-Eye token is not configured via SIDE_EYE_API_TOKEN or gcloud secret, skipping snapshot")
-			return "", false
-		}
-
-		var err error
-		client, err = sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(sideEyeToken))
-		if err != nil {
-			l.Errorf("failed to create Side-Eye client: %s", err)
-			return "", false
-		}
-		defer client.Close()
-	}
-
-	// Protect against the snapshot taking too long.
-	snapCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	snapRes, err := client.CaptureSnapshot(snapCtx, sideEyeEnv)
-	if err != nil {
-		msg := "failed to capture cluster snapshot"
-		if errors.Is(err, sideeyeclient.NoProcessesError{}) {
-			msg += "; is cockroach running?"
-		}
-		l.PrintfCtx(ctx, "Side-Eye failed to capture cluster snapshot: %s", msg)
-		return "", false
-	}
-
-	// Handle partial errors.
-	for _, pe := range snapRes.ProcessErrors {
-		l.PrintfCtx(ctx, "partial failure: error snapshotting one of the processes: %s: %s (%d): %s",
-			pe.Hostname, pe.Program, pe.Pid, pe.Error)
-	}
-
-	return snapRes.SnapshotURL, true
 }
 
 // GetClusterFromCache finds and returns a SyncedCluster from
