@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl/fipscclbase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,7 +119,7 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 		}
 	}
 
-	return &tls.Config{
+	baseCfg := &tls.Config{
 		RootCAs: certPool,
 
 		VerifyPeerCertificate: makeOCSPVerifier(settings),
@@ -126,5 +127,14 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 		CipherSuites: RecommendedCipherSuites(),
 
 		MinVersion: tls.VersionTLS12,
-	}, nil
+	}
+
+	// If the binary is compiled in FIPS mode, Go will refuse to use the
+	// default X25519 curve. We switch to a FIPS-friendly curve in this
+	// mode.
+	if fipscclbase.IsCompileTimeFIPSReady() {
+		baseCfg.CurvePreferences = []tls.CurveID{tls.CurveP256}
+	}
+
+	return baseCfg, nil
 }

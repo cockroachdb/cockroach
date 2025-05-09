@@ -5,7 +5,7 @@
 //
 //go:build boringcrypto
 
-package fipsccl
+package fipscclbase
 
 /*
 #include <openssl/ossl_typ.h>

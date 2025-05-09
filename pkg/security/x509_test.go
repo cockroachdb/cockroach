@@ -34,7 +34,7 @@ func timesFuzzyEqual(a, b time.Time) bool {
 func TestGenerateCertLifetime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testKey, err := rsa.GenerateKey(rand.Reader, 512)
+	testKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
