@@ -210,7 +210,7 @@ type Index struct {
 	stats statsManager
 	// rot computes random orthogonal transformations on query and data vectors
 	// to more evenly distribute skew across dimensions.
-	rot randomOrthoTransformer
+	rot RandomOrthoTransformer
 }
 
 // NewIndex constructs a new vector index instance. Typically, only one Index
