@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const defaultDataset = "unsplash-512-euclidean"
+const defaultDataset = "dbpedia-openai-100k-angular"
 const minPartitionSize = 16
 const maxPartitionSize = 128
 

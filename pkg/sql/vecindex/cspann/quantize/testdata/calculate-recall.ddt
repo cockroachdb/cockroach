@@ -1,0 +1,85 @@
+# These tests evaluate the effectiveness of RaBitQ quantization by measuring
+# the average recall@10, which is the percentage of the 10 true nearest
+# neighbors that are correctly identified by the RaBitQ algorithm.
+
+# ----------------------------------------------------------------------
+# Calculate average recall on OpenAI image embeddings with 512 dimensions.
+# ----------------------------------------------------------------------
+calculate-recall dataset=images-512d-10k
+----
+Euclidean: 69.50% recall@10
+Cosine: 69.50% recall@10
+InnerProduct: 69.50% recall@10
+
+# Repeat, but with randomized rotations to "mix" the vectors.
+calculate-recall dataset=images-512d-10k randomize
+----
+Euclidean: 81.50% recall@10
+Cosine: 81.50% recall@10
+InnerProduct: 81.50% recall@10
+
+# ----------------------------------------------------------------------
+# Calculate average recall on random vectors with 20 dimensions.
+# ----------------------------------------------------------------------
+calculate-recall dataset=random-20d-1k
+----
+Euclidean: 88.00% recall@10
+Cosine: 93.00% recall@10
+InnerProduct: 93.00% recall@10
+
+# Repeat with randomization. Since these are already random, there should be no
+# material difference.
+calculate-recall dataset=random-20d-1k randomize
+----
+Euclidean: 91.50% recall@10
+Cosine: 90.50% recall@10
+InnerProduct: 90.50% recall@10
+
+# ----------------------------------------------------------------------
+# Calculate average recall on 28x28 greyscale pixel images (flattened to 784
+# dimensions).
+# ----------------------------------------------------------------------
+calculate-recall dataset=fashion-784d-1k
+----
+Euclidean: 77.00% recall@10
+Cosine: 75.50% recall@10
+InnerProduct: 75.50% recall@10
+
+# Repeat with randomization.
+calculate-recall dataset=fashion-784d-1k randomize
+----
+Euclidean: 87.00% recall@10
+Cosine: 88.00% recall@10
+InnerProduct: 88.00% recall@10
+
+# ----------------------------------------------------------------------
+# Calculate average recall on Laion image embeddings with 768 dimensions.
+# ----------------------------------------------------------------------
+calculate-recall dataset=laion-768d-1k
+----
+Euclidean: 73.00% recall@10
+Cosine: 74.00% recall@10
+InnerProduct: 74.00% recall@10
+
+# Repeat with randomization.
+calculate-recall dataset=laion-768d-1k randomize
+----
+Euclidean: 79.50% recall@10
+Cosine: 79.50% recall@10
+InnerProduct: 79.50% recall@10
+
+# ----------------------------------------------------------------------
+# Calculate average recall on DBpedia text embeddings with 1536 dimensions.
+# ----------------------------------------------------------------------
+calculate-recall dataset=dbpedia-1536d-1k
+----
+Euclidean: 80.50% recall@10
+Cosine: 80.50% recall@10
+InnerProduct: 80.50% recall@10
+
+# Repeat with randomization.
+calculate-recall dataset=dbpedia-1536d-1k randomize
+----
+Euclidean: 85.00% recall@10
+Cosine: 85.00% recall@10
+InnerProduct: 85.00% recall@10

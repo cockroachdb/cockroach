@@ -3,15 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package quantize
+package quantize_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
@@ -28,11 +32,17 @@ func TestQuantizers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	state := testState{T: t, Ctx: ctx}
+
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "estimate-distances":
-				return testDistanceEstimation(t, d)
+				return state.estimateDistances(t, d)
+
+			case "calculate-recall":
+				return state.calculateRecall(t, d)
 
 			default:
 				t.Fatalf("unknown cmd: %s", d.Cmd)
@@ -43,8 +53,13 @@ func TestQuantizers(t *testing.T) {
 	})
 }
 
-func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
-	var workspace workspace.T
+type testState struct {
+	T         *testing.T
+	Ctx       context.Context
+	Workspace workspace.T
+}
+
+func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) string {
 	var queryVector vector.T
 	var err error
 	var vectors vector.Set
@@ -68,15 +83,6 @@ func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
 				vectors.Add(vec)
 			}
 
-		case "query-feature":
-			// Load the first 10 input vectors and use the requested input vector
-			// as the query vector.
-			vectors = testutils.LoadFeatures(t, 10)
-			require.Len(t, arg.Vals, 1)
-			val, err := strconv.Atoi(arg.Vals[0])
-			require.NoError(t, err)
-			queryVector = vectors.At(val)
-
 		default:
 			t.Fatalf("unknown arg: %s", arg.Key)
 		}
@@ -84,21 +90,21 @@ func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
 
 	var buf bytes.Buffer
 	doTest := func(metric vecdist.Metric) {
-		unquantizer := NewUnQuantizer(len(queryVector), metric)
-		unQuantizedSet := unquantizer.Quantize(&workspace, vectors)
+		unquantizer := quantize.NewUnQuantizer(len(queryVector), metric)
+		unQuantizedSet := unquantizer.Quantize(&s.Workspace, vectors)
 		exact := make([]float32, unQuantizedSet.GetCount())
 		errorBounds := make([]float32, unQuantizedSet.GetCount())
 		unquantizer.EstimateDistances(
-			&workspace, unQuantizedSet, queryVector, exact, errorBounds)
+			&s.Workspace, unQuantizedSet, queryVector, exact, errorBounds)
 		for _, error := range errorBounds {
 			require.Zero(t, error)
 		}
 
-		rabitQ := NewRaBitQuantizer(len(queryVector), 42, metric)
-		rabitQSet := rabitQ.Quantize(&workspace, vectors)
+		rabitQ := quantize.NewRaBitQuantizer(len(queryVector), 42, metric)
+		rabitQSet := rabitQ.Quantize(&s.Workspace, vectors)
 		estimated := make([]float32, rabitQSet.GetCount())
 		rabitQ.EstimateDistances(
-			&workspace, rabitQSet, queryVector, estimated, errorBounds)
+			&s.Workspace, rabitQSet, queryVector, estimated, errorBounds)
 
 		for i := range vectors.Count {
 			var errorBound string
@@ -130,6 +136,95 @@ func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
 
 	buf.WriteString("Cosine\n")
 	doTest(vecdist.Cosine)
+
+	return buf.String()
+}
+
+func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string {
+	var datasetName string
+	randomize := false
+	topK := 10
+	count := 1000
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "dataset":
+			require.Len(t, arg.Vals, 1)
+			datasetName = arg.Vals[0]
+
+		case "top-k":
+			require.Len(t, arg.Vals, 1)
+			val, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			topK = val
+
+		case "randomize":
+			require.Len(t, arg.Vals, 0)
+			randomize = true
+
+		case "count":
+			require.Len(t, arg.Vals, 1)
+			val, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			count = val
+		}
+	}
+
+	// Use the first 98% of the vectors as data vectors and the other 2% as query
+	// vectors.
+	dataset := testutils.LoadDataset(t, datasetName+".gob")
+	dataVectors := dataset.Slice(0, count*98/100)
+	queryVectors := dataset.Slice(dataVectors.Count, count-dataVectors.Count)
+	dataKeys := make([]int, dataVectors.Count)
+	for i := range dataVectors.Count {
+		dataKeys[i] = i
+	}
+
+	if randomize {
+		var transform cspann.RandomOrthoTransformer
+		transform.Init(cspann.RotGivens, dataset.Dims, 42)
+		for i := range queryVectors.Count {
+			transform.RandomizeVector(queryVectors.At(i), queryVectors.At(i))
+		}
+		for i := range dataVectors.Count {
+			transform.RandomizeVector(dataVectors.At(i), dataVectors.At(i))
+		}
+	}
+
+	calculateAvgRecall := func(metric vecdist.Metric) float64 {
+		var recallSum float64
+		var workspace workspace.T
+		rabitQ := quantize.NewRaBitQuantizer(dataset.Dims, 42, metric)
+		for i := range queryVectors.Count {
+			query := queryVectors.At(i)
+			rabitQSet := rabitQ.Quantize(&workspace, dataVectors)
+			estimated := make([]float32, rabitQSet.GetCount())
+			errorBounds := make([]float32, rabitQSet.GetCount())
+			rabitQ.EstimateDistances(
+				&workspace, rabitQSet, query, estimated, errorBounds)
+
+			prediction := make([]int, len(estimated))
+			for i := range prediction {
+				prediction[i] = i
+			}
+			sort.Slice(prediction, func(i, j int) bool {
+				return estimated[prediction[i]] < estimated[prediction[j]]
+			})
+			prediction = prediction[:topK]
+			truth := testutils.CalculateTruth(topK, metric, query, dataVectors, dataKeys)
+			recallSum += testutils.CalculateRecall(prediction, truth)
+		}
+		return recallSum / float64(queryVectors.Count)
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Euclidean: %.2f%% recall@%d\n",
+		calculateAvgRecall(vecdist.L2Squared)*100, topK)
+
+	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
+		calculateAvgRecall(vecdist.Cosine)*100, topK)
+
+	fmt.Fprintf(&buf, "InnerProduct: %.2f%% recall@%d\n",
+		calculateAvgRecall(vecdist.InnerProduct)*100, topK)
 
 	return buf.String()
 }
