@@ -267,7 +267,7 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
-	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
+	bd.t.L().Printf("creating backup schedule %d", bd.sp.fixture.WorkloadWarehouses)
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	if bd.sp.fixture.CompactionThreshold > 0 {
@@ -564,7 +564,7 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 	case spec.GCE, spec.Local:
 		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
 		require.NoError(t, err)
-		t.L().Printf("using GCE account", account)
+		t.L().Printf("using GCE account %s", account)
 
 		uri = url.URL{
 			Scheme:   "gs",

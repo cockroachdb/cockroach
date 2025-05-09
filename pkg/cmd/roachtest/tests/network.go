@@ -215,7 +215,7 @@ SELECT $1::INT = ALL (
 					"--url", url, "--certs-dir", certsDir, "-e", "'SELECT 1'")
 
 				// Report the results of execution.
-				t.L().Printf("server %d, attempt %d, result:\n%s\n", server, attempt, b)
+				t.L().Printf("server %d, attempt %d, result:\n%+v\n", server, attempt, b)
 				// Indicate, to the main goroutine, that we have at least one connection
 				// attempt completed.
 				atomic.AddUint32(&numConns, 1)

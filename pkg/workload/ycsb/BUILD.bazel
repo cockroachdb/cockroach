@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "ycsb",
@@ -28,11 +28,4 @@ go_library(
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_spf13_pflag//:pflag",
     ],
-)
-
-go_test(
-    name = "ycsb_test",
-    size = "medium",
-    srcs = ["main_test.go"],
-    shard_count = 16,
 )
