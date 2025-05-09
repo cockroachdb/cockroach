@@ -479,3 +479,32 @@ query II
 SELECT pk,v FROM t5 WHERE pk = 1
 ----
 1  1
+
+subtest tracing
+
+statement ok
+CREATE TABLE t6 (pk INT PRIMARY KEY, v INT, FAMILY (pk, v), INDEX (v), INDEX ((v+5)))
+
+statement ok
+BEGIN
+
+statement ok
+SET TRACING = "on"
+
+statement ok
+INSERT INTO t6 VALUES (1,1)
+
+# This assertion depends on write buffering not being disabled because
+# of the version or transaction isolation level. Skip configurations
+# that result in buffered writes being disabled.
+skipif config local-read-committed local-repeatable-read local-mixed-24.3 local-mixed-25.1
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE location LIKE '%write_buffer.go%'
+----
+txn write buffer modified the batch; fully buffered: Put:2; transformed: ConditionalPut:1
+
+statement ok
+SET TRACING = "off"
+
+statement ok
+COMMIT
