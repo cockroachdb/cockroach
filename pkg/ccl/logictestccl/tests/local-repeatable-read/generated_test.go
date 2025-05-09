@@ -2344,20 +2344,6 @@ func TestRepeatableReadLogic_udf_fk(
 	runLogicTest(t, "udf_fk")
 }
 
-func TestRepeatableReadLogic_udf_in_column_defaults(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_in_column_defaults")
-}
-
-func TestRepeatableReadLogic_udf_in_constraints(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_in_constraints")
-}
-
 func TestRepeatableReadLogic_udf_insert(
 	t *testing.T,
 ) {
@@ -2433,6 +2419,13 @@ func TestRepeatableReadLogic_udf_record(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_record")
+}
+
+func TestRepeatableReadLogic_udf_referenced_by(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_referenced_by")
 }
 
 func TestRepeatableReadLogic_udf_regressions(
