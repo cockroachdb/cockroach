@@ -27,7 +27,7 @@ ALTER TABLE db.t1 SET (exclude_data_from_backup = true)
 
 translate database=db
 ----
-/Table/10{6-7}                             exclude_data_from_backup=true
+/Table/10{6-7}                             voter_constraints=[] exclude_data_from_backup=true
 /Table/10{7-8}                             range default
 
 # Translating the tables in the database individually should result in the same
@@ -35,7 +35,7 @@ translate database=db
 
 translate database=db table=t1
 ----
-/Table/10{6-7}                             exclude_data_from_backup=true
+/Table/10{6-7}                             voter_constraints=[] exclude_data_from_backup=true
 
 translate database=db table=t2
 ----
@@ -56,8 +56,8 @@ descs 104
 # `ignore_if_excluded_from_backup` for the record written by the backup only.
 translate database=db
 ----
-/Table/10{6-7}                             protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}] exclude_data_from_backup=true
-/Table/10{7-8}                             protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}]
+/Table/10{6-7}                             voter_constraints=[] protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}] exclude_data_from_backup=true
+/Table/10{7-8}                             voter_constraints=[] protection_policies=[{ts: 1,ignore_if_excluded_from_backup: true} {ts: 2}]
 
 # Alter table t1 to unmark its data ephemeral.
 exec-sql
@@ -69,5 +69,5 @@ release record-id=1
 
 translate database=db
 ----
-/Table/10{6-7}                             protection_policies=[{ts: 2}]
-/Table/10{7-8}                             protection_policies=[{ts: 2}]
+/Table/10{6-7}                             voter_constraints=[] protection_policies=[{ts: 2}]
+/Table/10{7-8}                             voter_constraints=[] protection_policies=[{ts: 2}]
