@@ -44,6 +44,9 @@ var requireConstFmt = map[string]bool{
 	"(*log.Logger).Panicf": true,
 	"(*log.Logger).Printf": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Fatalf":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Warningf": true,
+
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Eventf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.vEventf":         true,
