@@ -206,6 +206,7 @@ type Memo struct {
 	useInsertFastPath                          bool
 	internal                                   bool
 	usePre_25_2VariadicBuiltins                bool
+	useExistsFilterHoistRule                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -309,6 +310,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useInsertFastPath:                          evalCtx.SessionData().InsertFastPath,
 		internal:                                   evalCtx.SessionData().Internal,
 		usePre_25_2VariadicBuiltins:                evalCtx.SessionData().UsePre_25_2VariadicBuiltins,
+		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -485,6 +487,7 @@ func (m *Memo) IsStale(
 		m.useInsertFastPath != evalCtx.SessionData().InsertFastPath ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.usePre_25_2VariadicBuiltins != evalCtx.SessionData().UsePre_25_2VariadicBuiltins ||
+		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
