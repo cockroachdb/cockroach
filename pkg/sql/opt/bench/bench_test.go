@@ -1141,6 +1141,8 @@ func BenchmarkEndToEnd(b *testing.B) {
 	sr.Exec(b, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	sr.Exec(b, `SET CLUSTER SETTING sql.stats.flush.enabled = false`)
 	sr.Exec(b, `SET CLUSTER SETTING sql.metrics.statement_details.enabled = false`)
+	sr.Exec(b, `SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false`)
+	sr.Exec(b, `SET plan_cache_mode = force_custom_plan`)
 	sr.Exec(b, `CREATE DATABASE bench`)
 	for _, schema := range schemas {
 		sr.Exec(b, schema)
