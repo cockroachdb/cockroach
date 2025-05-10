@@ -304,6 +304,23 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
 		Skip:                benchSpec.skip,
+		PostProcessPerfMetrics: func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			aggregatedPerfMetrics := roachtestutil.AggregatedPerfMetrics{}
+			for _, histogram := range histograms.Summaries {
+				if histogram.Name == decommissionMetric || histogram.Name == estimatedMetric || histogram.Name == upreplicateMetric {
+					totalElapsed := float64(histogram.TotalElapsed)
+
+					aggregatedPerfMetrics = append(aggregatedPerfMetrics, &roachtestutil.AggregatedMetric{
+						Name:             fmt.Sprintf("%s_%s", testName, histogram.Name),
+						Value:            roachtestutil.MetricPoint(totalElapsed / 60000),
+						Unit:             "min",
+						IsHigherBetter:   false,
+						AdditionalLabels: nil,
+					})
+				}
+			}
+			return aggregatedPerfMetrics, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if benchSpec.duration > 0 {
 				runDecommissionBenchLong(ctx, t, c, benchSpec, timeout)
@@ -488,60 +505,36 @@ func trackBytesUsed(
 	}
 }
 
-// uploadPerfArtifacts puts the contents of perfBuf onto the pinned node so
+// uploadPerfArtifacts puts the contents of perfBuf onto the workload node so
 // that the results will be picked up by Roachperf. If there is a workload
 // running, it will also get the perf artifacts from the workload node and
 // concatenate them with the decommission perf artifacts so that the effects
 // of the decommission on foreground traffic can also be visualized.
 func uploadPerfArtifacts(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	benchSpec decommissionBenchSpec,
-	pinnedNode, workloadNode int,
-	perfBuf *bytes.Buffer,
+	ctx context.Context, t test.Test, c cluster.Cluster, workloadNode int, perfBuf *bytes.Buffer,
 ) {
-	// Store the perf artifacts on the pinned node so that the test
-	// runner copies it into an appropriate directory path.
-
-	err := roachtestutil.UploadPerfStats(ctx, t, c, perfBuf, c.Node(pinnedNode), "")
+	decommissionFileNamePrefix := "decommission_"
+	// Store the perf artifacts on the workload node with a different name.
+	err := roachtestutil.UploadPerfStats(ctx, t, c, perfBuf, c.Node(workloadNode), decommissionFileNamePrefix)
 	if err != nil {
 		t.L().Errorf("error creating perf stats file: %s", err)
 		return
 	}
-	destFileName := roachtestutil.GetBenchmarkMetricsFileName(t)
-	dest := filepath.Join(t.PerfArtifactsDir(), destFileName)
 
-	// Get the workload perf artifacts and move them to the pinned node, so that
-	// they can be used to display the workload operation rates during decommission.
-	if !benchSpec.noLoad {
-		workloadStatsSrc := filepath.Join(t.PerfArtifactsDir(), destFileName)
-		localWorkloadStatsPath := filepath.Join(t.ArtifactsDir(), "workload_"+destFileName)
-		workloadStatsDest := filepath.Join(t.PerfArtifactsDir(), "workload_"+destFileName)
-		if err := c.Get(
-			ctx, t.L(), workloadStatsSrc, localWorkloadStatsPath, c.Node(workloadNode),
-		); err != nil {
-			t.L().Errorf(
-				"failed to download workload perf artifacts from workload node: %s", err.Error(),
-			)
-		}
+	statsFileName := roachtestutil.GetBenchmarkMetricsFileName(t)
+	dest := filepath.Join(t.PerfArtifactsDir(), statsFileName)
+	decommissionFilePath := filepath.Join(t.PerfArtifactsDir(), decommissionFileNamePrefix+statsFileName)
 
-		if err := c.PutE(ctx, t.L(), localWorkloadStatsPath, workloadStatsDest,
-			c.Node(pinnedNode)); err != nil {
-			t.L().Errorf("failed to upload workload perf artifacts to node: %s", err.Error())
-		}
+	if err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)),
+		fmt.Sprintf("cat %s >> %s", decommissionFilePath, dest)); err != nil {
+		t.L().Errorf("failed to concatenate workload perf artifacts with "+
+			"decommission perf artifacts: %s", err.Error())
+	}
 
-		if err := c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)),
-			fmt.Sprintf("cat %s >> %s", workloadStatsDest, dest)); err != nil {
-			t.L().Errorf("failed to concatenate workload perf artifacts with "+
-				"decommission perf artifacts: %s", err.Error())
-		}
-
-		if err := c.RunE(
-			ctx, option.WithNodes(c.Node(pinnedNode)), fmt.Sprintf("rm %s", workloadStatsDest),
-		); err != nil {
-			t.L().Errorf("failed to cleanup workload perf artifacts: %s", err.Error())
-		}
+	if err := c.RunE(
+		ctx, option.WithNodes(c.Node(workloadNode)), fmt.Sprintf("rm %s", decommissionFilePath),
+	); err != nil {
+		t.L().Errorf("failed to cleanup workload perf artifacts: %s", err.Error())
 	}
 }
 
@@ -678,7 +671,7 @@ func runDecommissionBench(
 
 	defer func() {
 		if err := exporter.Close(func() error {
-			uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+			uploadPerfArtifacts(ctx, t, c, workloadNode, perfBuf)
 			return nil
 		}); err != nil {
 			t.Errorf("error closing perf exporter: %s", err)
@@ -817,7 +810,7 @@ func runDecommissionBenchLong(
 
 	defer func() {
 		if err := exporter.Close(func() error {
-			uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+			uploadPerfArtifacts(ctx, t, c, workloadNode, perfBuf)
 			return nil
 		}); err != nil {
 			t.Errorf("error closing perf exporter: %s", err)
