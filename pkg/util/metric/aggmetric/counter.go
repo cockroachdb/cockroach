@@ -129,6 +129,12 @@ func (g *Counter) Inc(i int64) {
 	atomic.AddInt64(&g.value, i)
 }
 
+// Update updates the AggCounter's value.
+func (g *Counter) Update(i int64) {
+	delta := i - atomic.LoadInt64(&g.value)
+	g.Inc(delta)
+}
+
 // AggCounterFloat64 maintains a value as the sum of its children. The counter will
 // report to crdb-internal time series only the aggregate sum of all of its
 // children, while its children are additionally exported to prometheus via the
@@ -239,9 +245,14 @@ func (g *CounterFloat64) Inc(i float64) {
 }
 
 // UpdateIfHigher sets the counter's value only if it's higher
-// than the currently set one. It's assumed the caller holds
+// than the currently set one.
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	g.value.UpdateIfHigher(i)
+	delta := i - g.value.Count()
+	if delta <= 0 {
+		return
+	}
+	g.parent.g.Inc(delta)
+	g.value.Inc(delta)
 }
 
 // SQLCounter maintains a value as the sum of its children. The counter will
