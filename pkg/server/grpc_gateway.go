@@ -69,6 +69,7 @@ func configureGRPCGateway(
 		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 		gwruntime.WithOutgoingHeaderMatcher(authserver.AuthenticationHeaderMatcher),
 		gwruntime.WithMetadata(authserver.TranslateHTTPAuthInfoToGRPCMetadata),
+		gwruntime.WithMetadata(rpc.MarkGatewayRequest),
 	)
 	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
 	stopper.AddCloser(stop.CloserFn(gwCancel))

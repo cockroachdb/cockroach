@@ -2378,3 +2378,71 @@ func TestMetricsInterceptor(t *testing.T) {
 		reflect.ValueOf(interceptor).Pointer(),
 		reflect.ValueOf(serverInterceptors.UnaryInterceptors[1]).Pointer())
 }
+
+func TestGatewayRequestRecoveryInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// With gateway metadata - should recover from panic
+	t.Run("with gateway metadata", func(t *testing.T) {
+		// Create a context with the gateway metadata
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		ctx := metadata.NewIncomingContext(context.Background(), md)
+
+		// Create a handler that panics
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			panic("test panic")
+		}
+
+		// Call the interceptor
+		resp, err := gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
+
+		// Verify the panic was recovered and converted to an error
+		require.Nil(t, resp)
+		require.ErrorContains(t, err, "test panic")
+	})
+
+	// Without gateway metadata - should not recover from panic
+	t.Run("without gateway metadata", func(t *testing.T) {
+		// Create a context without the gateway metadata
+		ctx := context.Background()
+
+		// Create a handler that panics
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			panic("test panic")
+		}
+
+		// Call the interceptor and expect it to panic
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic to propagate, got none")
+			}
+		}()
+
+		_, _ = gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
+	})
+
+	// With gateway metadata but no panic - should pass through normally
+	t.Run("with gateway metadata no panic", func(t *testing.T) {
+		// Create a context with the gateway metadata
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		ctx := metadata.NewIncomingContext(context.Background(), md)
+
+		// Create a handler that returns normally
+		expectedResp := "success"
+		expectedErr := errors.New("expected error")
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return expectedResp, expectedErr
+		}
+
+		// Call the interceptor
+		resp, err := gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
+
+		// Verify the response and error were passed through unchanged
+		require.Equal(t, expectedResp, resp)
+		require.ErrorIs(t, err, expectedErr)
+	})
+}
