@@ -140,14 +140,13 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteByte(' ')
 			}
-			oldAnn := ctx.ann
-			ctx.ann = node.BodyAnnotations[i]
-			ctx.FormatNode(stmt)
-			if !isPLpgSQL {
-				// PL/pgSQL statements handle printing semicolons themselves.
-				ctx.WriteByte(';')
-			}
-			ctx.ann = oldAnn
+			ctx.WithAnnotations(node.BodyAnnotations[i], func() {
+				ctx.FormatNode(stmt)
+				if !isPLpgSQL {
+					// PL/pgSQL statements handle printing semicolons themselves.
+					ctx.WriteByte(';')
+				}
+			})
 		}
 		ctx.WriteString("$$")
 	} else if node.RoutineBody != nil {

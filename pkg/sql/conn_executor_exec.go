@@ -635,6 +635,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
+	if buildutil.CrdbTestBuild {
+		// Ensure that each statement is formatted regardless of logging
+		// settings.
+		_ = p.FormatAstAsRedactableString(stmt.AST, p.extendedEvalCtx.Annotations)
+	}
+
 	// This flag informs logging decisions.
 	// Some statements are not dispatched to the execution engine and need
 	// some special plan initialization for logging.
@@ -1629,6 +1635,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	if buildutil.CrdbTestBuild {
+		// Ensure that each statement is formatted regardless of logging
+		// settings.
+		_ = p.FormatAstAsRedactableString(vars.stmt.AST, p.extendedEvalCtx.Annotations)
+	}
 
 	// This flag informs logging decisions.
 	// Some statements are not dispatched to the execution engine and need
