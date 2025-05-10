@@ -540,7 +540,7 @@ SHOW CREATE empty
 empty  CREATE TABLE public.empty (
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
          CONSTRAINT empty_pkey PRIMARY KEY (rowid ASC)
-       )
+       );
 
 query T
 SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = $a_id

@@ -493,7 +493,7 @@ CREATE TABLE public.sw (
   fc STRING(3) COLLATE en NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 statement ok
 INSERT INTO sw VALUES (
@@ -607,7 +607,7 @@ CREATE TABLE public.t29494 (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 # Check that the new column is not usable in RETURNING.
 statement error column "y" does not exist
@@ -651,7 +651,7 @@ CREATE TABLE public.t32759 (
   z INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC)
-)
+);
 
 # Check that values cannot be inserted into the dropped column.
 statement error column "y" does not exist

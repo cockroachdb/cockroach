@@ -58,7 +58,7 @@ simple  CREATE TABLE public.simple (
           VECTOR INDEX simple_vec1_idx2 (vec1 vector_l2_ops),
           VECTOR INDEX simple_vec1_idx3 (vec1 vector_l2_ops),
           FAMILY fam_0_a_vec1_b (a, vec1, b)
-        )
+        );
 
 statement ok
 SHOW INDEX FROM simple
@@ -94,7 +94,7 @@ alt_syntax  CREATE TABLE public.alt_syntax (
               VECTOR INDEX vec_idx (vec1 vector_l2_ops),
               VECTOR INDEX another_index (vec1 vector_l2_ops),
               FAMILY fam_0_a_vec1 (a, vec1)
-            )
+            );
 
 statement ok
 DROP TABLE alt_syntax
@@ -121,7 +121,7 @@ multiple_indexes  CREATE TABLE public.multiple_indexes (
                     VECTOR INDEX multiple_indexes_vec1_idx (vec1 vector_l2_ops),
                     VECTOR INDEX multiple_indexes_vec2_idx (vec2 vector_l2_ops),
                     FAMILY fam_0_a_vec1_vec2 (a, vec1, vec2)
-                  )
+                  );
 
 statement ok
 DROP INDEX multiple_indexes_vec1_idx;
@@ -158,7 +158,7 @@ prefix_cols  CREATE TABLE public.prefix_cols (
                VECTOR INDEX prefix_cols_c_b_vec1_idx (c DESC, b ASC, vec1 vector_l2_ops),
                VECTOR INDEX another_index (b ASC, c DESC, vec1 vector_l2_ops),
                FAMILY fam_0_a_b_c_vec1 (a, b, c, vec1)
-             )
+             );
 
 statement ok
 DROP TABLE prefix_cols
@@ -199,7 +199,7 @@ storage_params  CREATE TABLE public.storage_params (
                   VECTOR INDEX storage_params_v_idx (v vector_l2_ops) WITH (build_beam_size=16),
                   VECTOR INDEX storage_params_v_idx1 (v vector_l2_ops) WITH (min_partition_size=8, max_partition_size=64),
                   FAMILY fam_0_a_v (a, v)
-                )
+                );
 
 statement ok
 DROP TABLE storage_params
@@ -371,7 +371,7 @@ alter_test  CREATE TABLE public.alter_test (
               VECTOR INDEX alter_test_vec1_idx (vec1 vector_l2_ops),
               UNIQUE INDEX alter_test_a_key (a ASC),
               FAMILY fam_0_a_b_vec1 (a, b, vec1)
-            )
+            );
 
 statement ok
 DROP TABLE alter_test

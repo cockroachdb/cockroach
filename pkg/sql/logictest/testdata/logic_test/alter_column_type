@@ -78,7 +78,7 @@ t           CREATE TABLE public.t (
               i INT8 NULL,
               CONSTRAINT t_pkey PRIMARY KEY (a ASC),
               INDEX idx2 (i ASC)
-            )
+            );
 
 statement ok
 ALTER TABLE t RENAME COLUMN i TO b
@@ -235,7 +235,7 @@ t3          CREATE TABLE public.t3 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (id3, id2, id, rowid)
-            )
+            );
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -321,7 +321,7 @@ t8  CREATE TABLE public.t8 (
       x STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
-    )
+    );
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
 statement ok
@@ -420,7 +420,7 @@ t17         CREATE TABLE public.t17 (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (x, y, rowid)
-            )
+            );
 
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
@@ -526,7 +526,7 @@ t24         CREATE TABLE public.t24 (
               x STRING NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
-            )
+            );
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
 # to the new type of the column.
@@ -758,7 +758,7 @@ t_with_hidden  CREATE TABLE public.t_with_hidden (
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT t_with_hidden_pkey PRIMARY KEY (rowid ASC),
                  FAMILY f1 (vis1, hid1, rowid)
-               )
+               );
 
 statement ok
 DROP TABLE t_with_hidden;
@@ -824,7 +824,7 @@ t_with_on_update  CREATE TABLE public.t_with_on_update (
                     b STRING NULL ON UPDATE 3:::INT8,
                     CONSTRAINT t_with_on_update_pkey PRIMARY KEY (a ASC),
                     FAMILY f1 (a, b)
-                  )
+                  );
 
 statement ok
 DROP TABLE t_with_on_update;
@@ -861,7 +861,7 @@ t_with_default  CREATE TABLE public.t_with_default (
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT t_with_default_pkey PRIMARY KEY (rowid ASC),
                   FAMILY f1 (rowid, c1)
-                )
+                );
 
 statement ok
 DROP TABLE t_with_default;
@@ -1016,7 +1016,7 @@ t_bytes     CREATE TABLE public.t_bytes (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t_bytes_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
-            )
+            );
 
 statement ok
 DROP TABLE t_bytes;
@@ -1084,7 +1084,7 @@ t_decimal   CREATE TABLE public.t_decimal (
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
               FAMILY f1 (c1, c2, c3, rowid)
-            )
+            );
 
 statement ok
 DROP TABLE t_decimal;
@@ -1381,7 +1381,7 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT8 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1412,7 +1412,7 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT4 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
 query II
 SELECT * FROM stored1 ORDER BY A;
@@ -1448,7 +1448,7 @@ stored1  CREATE TABLE public.stored1 (
            comp1 INT2 NOT NULL AS (a) STORED,
            CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
            FAMILY f1 (a, comp1)
-         )
+         );
 
 skipif config local-mixed-24.3
 query II
@@ -1493,11 +1493,11 @@ SELECT * from virt1 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt1;
 ----
-virt1      CREATE TABLE public.virt1 (
-             c1 INT8 NOT NULL,
-             v1 INT4 NOT NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-           )
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT4 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
@@ -1520,11 +1520,11 @@ SELECT * from virt1 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt1;
 ----
-virt1      CREATE TABLE public.virt1 (
-             c1 INT8 NOT NULL,
-             v1 INT2 NOT NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
-           )
+virt1  CREATE TABLE public.virt1 (
+         c1 INT8 NOT NULL,
+         v1 INT2 NOT NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
@@ -1559,11 +1559,11 @@ SELECT * FROM virt2 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt2;
 ----
-virt2      CREATE TABLE public.virt2 (
-             c1 TIMESTAMP(6) NOT NULL,
-             v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-           )
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(5);
@@ -1576,11 +1576,11 @@ SELECT * FROM virt2 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt2;
 ----
-virt2      CREATE TABLE public.virt2 (
-             c1 TIMESTAMP(6) NOT NULL,
-             v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
-           )
+virt2  CREATE TABLE public.virt2 (
+         c1 TIMESTAMP(6) NOT NULL,
+         v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 DROP TABLE virt2;
@@ -1613,11 +1613,11 @@ SELECT * FROM virt3 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt3;
 ----
-virt3      CREATE TABLE public.virt3 (
-             c1 DECIMAL(6,3) NOT NULL,
-             v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-           )
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
@@ -1635,11 +1635,11 @@ SELECT * FROM virt3 ORDER BY c1;
 query TT
 SHOW CREATE TABLE virt3;
 ----
-virt3      CREATE TABLE public.virt3 (
-             c1 DECIMAL(6,3) NOT NULL,
-             v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
-             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
-           )
+virt3  CREATE TABLE public.virt3 (
+         c1 DECIMAL(6,3) NOT NULL,
+         v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
+         CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+       );
 
 statement ok
 DROP TABLE virt3;
@@ -1677,11 +1677,11 @@ RESET autocommit_before_ddl
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
-t_droppedcol CREATE TABLE public.t_droppedcol (
-               dropme INT8 NULL,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-             )
+t_droppedcol  CREATE TABLE public.t_droppedcol (
+                dropme INT8 NULL,
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+              );
 
 statement ok
 DROP TABLE t_droppedcol;
@@ -1740,14 +1740,14 @@ skipif config local-mixed-24.3
 query TT colnames
 show create table t_multi_alter
 ----
-table_name  create_statement
-t_multi_alter   CREATE TABLE public.t_multi_alter (
-              c1 INT8 NOT NULL,
-              c2 INT8 NOT NULL,
-              c3 DATE NULL,
-              CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
-              FAMILY f1 (c1, c2, c3)
-            )
+table_name     create_statement
+t_multi_alter  CREATE TABLE public.t_multi_alter (
+                 c1 INT8 NOT NULL,
+                 c2 INT8 NOT NULL,
+                 c3 DATE NULL,
+                 CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
+                 FAMILY f1 (c1, c2, c3)
+               );
 
 statement ok
 drop table t_multi_alter;

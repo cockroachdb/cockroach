@@ -242,7 +242,7 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT check_y_z CHECK ((y + z) > 0:::INT8),
       CONSTRAINT check_y_z1 CHECK ((y + z) = 0:::INT8),
       CONSTRAINT named_constraint CHECK (z = 1:::INT8)
-    )
+    );
 
 query TT
 SHOW CREATE TABLE t7 WITH REDACT
@@ -258,7 +258,7 @@ t7  CREATE TABLE public.t7 (
       CONSTRAINT check_y_z CHECK ((y + z) > ‹×›:::INT8),
       CONSTRAINT check_y_z1 CHECK ((y + z) = ‹×›:::INT8),
       CONSTRAINT named_constraint CHECK (z = ‹×›:::INT8)
-    )
+    );
 
 # Check that table references are dequalified in their stored representation.
 
@@ -292,7 +292,7 @@ t8  CREATE TABLE public.t8 (
       CONSTRAINT check_a CHECK (a > 0:::INT8),
       CONSTRAINT check_a1 CHECK (a > 0:::INT8),
       CONSTRAINT check_a2 CHECK (a > 0:::INT8)
-    )
+    );
 
 statement ok
 CREATE DATABASE test2

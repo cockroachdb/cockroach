@@ -118,6 +118,7 @@ CREATE TABLE public.t_to_be_hashed (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 statement ok
 CREATE INDEX ON t_to_be_hashed (c) USING HASH;
@@ -138,6 +139,7 @@ CREATE TABLE public.t_to_be_hashed (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 statement ok
@@ -160,6 +162,7 @@ CREATE TABLE public.t_to_be_hashed (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 statement ok
@@ -183,6 +186,7 @@ CREATE TABLE public.t_to_be_hashed (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 statement ok
@@ -214,6 +218,7 @@ CREATE TABLE public.t_idx_pk_hashed_1 (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 statement ok
@@ -246,6 +251,7 @@ CREATE TABLE public.t_idx_pk_hashed_2 (
   PARTITION us_east VALUES IN (('new york'))
 )
 -- Warning: Partitioned table with no zone configurations.
+;
 
 
 subtest test_presplit_with_partitioning

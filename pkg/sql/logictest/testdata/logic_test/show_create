@@ -41,7 +41,7 @@ c           CREATE TABLE public.c (
             );
             COMMENT ON TABLE public.c IS 'table';
             COMMENT ON COLUMN public.c.a IS 'column';
-            COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+            COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
 statement ok
 ALTER TABLE c ADD CONSTRAINT check_b CHECK (b IN (1, 2, 3)) NOT VALID;
@@ -71,7 +71,7 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
 statement ok
 ALTER TABLE c VALIDATE CONSTRAINT check_b;
@@ -111,7 +111,7 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
 query TT
 SHOW CREATE c WITH REDACT
@@ -134,7 +134,7 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
 query TT
 SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
@@ -156,7 +156,7 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
 
 subtest alter_column_type_not_break_show_create
 
@@ -178,7 +178,7 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment'
+COMMENT ON COLUMN public.t.c IS 'first comment';
 
 # Skipping in legacy mode, as it does not support altering column types that
 # require a backfill. Subsequent column type alterations are also skipped for
@@ -196,7 +196,7 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment'
+COMMENT ON COLUMN public.t.c IS 'first comment';
 
 skipif config local-legacy-schema-changer
 query T
@@ -207,7 +207,7 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment'
+COMMENT ON COLUMN public.t.c IS 'first comment';
 
 
 statement ok
@@ -263,7 +263,7 @@ CREATE TABLE public.t_with_comps (
   sc2 sc2.comp1 NULL,
   CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
   FAMILY f1 (c1, sc1, sc2)
-)
+);
 
 statement ok
 DROP TABLE T_WITH_COMPS;
@@ -290,7 +290,7 @@ CREATE TABLE public.roaches (
   CONSTRAINT roaches_pkey PRIMARY KEY (id ASC),
   INVERTED INDEX roaches_x_y_idx (x ASC, y gin_trgm_ops),
   FAMILY f1 (id, x, y)
-)
+);
 
 
 subtest end

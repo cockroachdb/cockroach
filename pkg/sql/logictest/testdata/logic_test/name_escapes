@@ -37,7 +37,7 @@ SHOW CREATE TABLE ";--notbetter"
                 CREATE TABLE unused3(x INT, y INT, FAMILY woo " (x, y, "welp INT); -- concerning much
                 DROP USER dumpty;
                 CREATE TABLE unused (x ")
-                )
+                );
 
 # Check that view creates handle strange things properly.
 statement ok
@@ -49,7 +49,7 @@ SHOW CREATE VIEW ";--alsoconcerning"
 ";--alsoconcerning"  CREATE VIEW public.";--alsoconcerning" (
                        a,
                        b
-                     ) AS SELECT x AS a, y AS b FROM test.public.";--notbetter"
+                     ) AS SELECT x AS a, y AS b FROM test.public.";--notbetter";
 
 # Check that "create table as" handles strange things properly.
 statement ok
@@ -63,4 +63,4 @@ SHOW CREATE TABLE ";--dontask"
                 b INT8 NULL,
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT ";--dontask_pkey" PRIMARY KEY (rowid ASC)
-              )
+              );

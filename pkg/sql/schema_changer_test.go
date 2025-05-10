@@ -2164,7 +2164,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (x ASC),
 	INDEX i (z ASC)
-)`
+);`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
 	}
@@ -2185,7 +2185,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
 	INDEX i (z ASC),
 	UNIQUE INDEX test_x_key (x ASC)
-)`
+);`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
 	}
@@ -3361,7 +3361,7 @@ ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 	length INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
 	INDEX v_idx (v ASC)
-)`
+);`
 	if create != expect {
 		t.Fatalf("got: %s\nexpected: %s", create, expect)
 	}
@@ -6833,7 +6833,7 @@ func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
 	id STRING NOT NULL,
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-)`
+);`
 
 		createTTLExpireAfterTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours');`
@@ -6842,7 +6842,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL)`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL);`
 
 		createTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');`
@@ -6850,7 +6850,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	id STRING NOT NULL,
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at')`
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');`
 
 		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
@@ -6859,7 +6859,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration')`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');`
 	)
 
 	testCases := []struct {
