@@ -313,7 +313,7 @@ func registerTPCE(r registry.Registry) {
 	})
 }
 
-type tpceMetrics struct {
+type TpceMetrics struct {
 	AvgLatency  string `json:"AvgLatency"`
 	P50Latency  string `json:"p50Latency"`
 	P90Latency  string `json:"p90Latency"`
@@ -352,7 +352,7 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 			return s
 		}
 
-		metrics := tpceMetrics{
+		metrics := TpceMetrics{
 			AvgLatency:  removeUnits(fields[8]),
 			P50Latency:  removeUnits(fields[9]),
 			P90Latency:  removeUnits(fields[10]),
@@ -368,7 +368,7 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 				"workload": "tpce",
 			}
 			labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
-			metricBytes = GetTpceOpenmetricsBytes(metrics, fields[5], labelString)
+			metricBytes = GetTpceOpenmetricsBytes(metrics, fields[5], labelString, timeutil.Now().Unix())
 		} else {
 			metricBytes, err = json.Marshal(metrics)
 		}
@@ -390,11 +390,10 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 }
 
 func GetTpceOpenmetricsBytes(
-	metrics tpceMetrics, countOfLatencies string, labelString string,
+	metrics TpceMetrics, countOfLatencies string, labelString string, now int64,
 ) []byte {
 
 	var buffer bytes.Buffer
-	now := timeutil.Now().Unix()
 
 	buffer.WriteString("# TYPE tpce_latency summary\n")
 	buffer.WriteString("# HELP tpce_latency Latency metrics for TPC-E transactions\n")
