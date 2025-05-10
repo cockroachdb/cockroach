@@ -137,6 +137,14 @@ func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
 	return false
 }
 
+func (c *CustomFuncs) IsTuple(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.TupleFamily
+}
+
+func (c *CustomFuncs) IdenticalTypes(left, right *types.T) bool {
+	return left.Equal(right)
+}
+
 // IsFloatDatum returns true if the given tree.Datum is a DFloat.
 func (c *CustomFuncs) IsFloatDatum(datum tree.Datum) bool {
 	_, ok := datum.(*tree.DFloat)
