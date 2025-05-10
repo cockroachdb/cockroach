@@ -434,7 +434,7 @@ var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaReg
 var CloudStorageValidOptions = makeStringSet(OptCompression)
 
 // WebhookValidOptions is options exclusive to webhook sink
-var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression)
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
@@ -1033,17 +1033,12 @@ type WebhookSinkOptions struct {
 	JSONConfig    SinkSpecificJSONConfig
 	AuthHeader    string
 	ClientTimeout *time.Duration
-	Compression   string
 }
 
 // GetWebhookSinkOptions includes arbitrary json to be interpreted
 // by the webhook sink.
 func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
-	o := WebhookSinkOptions{
-		JSONConfig:  s.getJSONValue(OptWebhookSinkConfig),
-		AuthHeader:  s.m[OptWebhookAuthHeader],
-		Compression: s.m[OptCompression],
-	}
+	o := WebhookSinkOptions{JSONConfig: s.getJSONValue(OptWebhookSinkConfig), AuthHeader: s.m[OptWebhookAuthHeader]}
 	timeout, err := s.getDurationValue(OptWebhookClientTimeout)
 	if err != nil {
 		return o, err

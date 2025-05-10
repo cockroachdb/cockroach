@@ -7032,8 +7032,8 @@ func TestChangefeedErrors(t *testing.T) {
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `unknown compression: invalid, valid values are 'gzip' and 'zstd'`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='invalid'`,
+		t, `this sink is incompatible with option compression`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
 		`webhook-https://fake-host`,
 	)
 	sqlDB.ExpectErrWithTimeout(
@@ -7075,12 +7075,6 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
-		`kafka://nope`)
-
-	// Sanity check for options compatibility validation.
-	sqlDB.ExpectErrWithTimeout(
-		t, `this sink is incompatible with option compression`,
-		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
 		`kafka://nope`)
 
 	sqlDB.ExpectErrWithTimeout(
@@ -11545,4 +11539,57 @@ func TestChangefeedAsSelectForEmptyTable(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
+}
+
+func TestWebhookCloudstorageParallelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numFeedsEach = 10
+
+	cert, _, err := cdctest.NewCACertBase64Encoded()
+	require.NoError(t, err)
+	webhookDest, err := cdctest.StartMockWebhookSink(cert)
+	require.NoError(t, err)
+	defer webhookDest.Close()
+	webhookURI := fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", webhookDest.URL())
+
+	testutils.RunValues(t, "compression", []string{"zstd", "gzip"}, func(t *testing.T, compression string) {
+		s, cleanup := makeServer(t)
+		defer cleanup()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT);`)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 10000);`)
+
+		t.Logf("inserted into table")
+
+		var jobIDs []int
+		for i := range numFeedsEach {
+			var jobID int
+			sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'nodelocal://1/%d-testout' WITH compression='%s', initial_scan='only';`, i, compression)).Scan(&jobID)
+			jobIDs = append(jobIDs, jobID)
+		}
+
+		t.Logf("created changefeeds")
+
+		for range numFeedsEach {
+			var jobID int
+			sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO '%s' WITH compression='%s', initial_scan='only';`, webhookURI, compression)).Scan(&jobID)
+			jobIDs = append(jobIDs, jobID)
+		}
+
+		// Wait for completion.
+		testutils.SucceedsSoon(t, func() error {
+			for _, jobID := range jobIDs {
+				var status string
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT status FROM [SHOW JOBS] WHERE job_id = %d`, jobID)).Scan(&status)
+				t.Logf("job %d status: %s", jobID, status)
+				if status != "succeeded" {
+					return errors.New("job not completed")
+				}
+			}
+			return nil
+		})
+	})
 }
