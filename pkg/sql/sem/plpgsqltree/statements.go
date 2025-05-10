@@ -183,9 +183,10 @@ func (s *Declaration) WalkStmt(visitor StatementVisitor) Statement {
 
 type CursorDeclaration struct {
 	StatementImpl
-	Name   Variable
-	Scroll tree.CursorScrollOption
-	Query  tree.Statement
+	Name        Variable
+	Scroll      tree.CursorScrollOption
+	Query       tree.Statement
+	Annotations *tree.Annotations
 }
 
 func (s *CursorDeclaration) CopyNode() *CursorDeclaration {
@@ -194,16 +195,18 @@ func (s *CursorDeclaration) CopyNode() *CursorDeclaration {
 }
 
 func (s *CursorDeclaration) Format(ctx *tree.FmtCtx) {
-	ctx.FormatNode(&s.Name)
-	switch s.Scroll {
-	case tree.Scroll:
-		ctx.WriteString(" SCROLL")
-	case tree.NoScroll:
-		ctx.WriteString(" NO SCROLL")
-	}
-	ctx.WriteString(" CURSOR FOR ")
-	ctx.FormatNode(s.Query)
-	ctx.WriteString(";\n")
+	ctx.WithAnnotations(s.Annotations, func() {
+		ctx.FormatNode(&s.Name)
+		switch s.Scroll {
+		case tree.Scroll:
+			ctx.WriteString(" SCROLL")
+		case tree.NoScroll:
+			ctx.WriteString(" NO SCROLL")
+		}
+		ctx.WriteString(" CURSOR FOR ")
+		ctx.FormatNode(s.Query)
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *CursorDeclaration) PlpgSQLStatementTag() string {
@@ -852,7 +855,8 @@ func (s *ReturnNext) WalkStmt(visitor StatementVisitor) Statement {
 
 type ReturnQuery struct {
 	StatementImpl
-	SqlStmt tree.Statement
+	SqlStmt     tree.Statement
+	Annotations *tree.Annotations
 }
 
 func (s *ReturnQuery) CopyNode() *ReturnQuery {
@@ -861,12 +865,14 @@ func (s *ReturnQuery) CopyNode() *ReturnQuery {
 }
 
 func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("RETURN QUERY")
-	if s.SqlStmt != nil {
-		ctx.WriteByte(' ')
-		ctx.FormatNode(s.SqlStmt)
-	}
-	ctx.WriteString(";\n")
+	ctx.WithAnnotations(s.Annotations, func() {
+		ctx.WriteString("RETURN QUERY")
+		if s.SqlStmt != nil {
+			ctx.WriteByte(' ')
+			ctx.FormatNode(s.SqlStmt)
+		}
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *ReturnQuery) PlpgSQLStatementTag() string {
@@ -977,9 +983,10 @@ func (s *Assert) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_execsql
 type Execute struct {
 	StatementImpl
-	SqlStmt tree.Statement
-	Strict  bool // INTO STRICT flag
-	Target  []Variable
+	SqlStmt     tree.Statement
+	Strict      bool // INTO STRICT flag
+	Target      []Variable
+	Annotations *tree.Annotations
 }
 
 func (s *Execute) CopyNode() *Execute {
@@ -989,20 +996,22 @@ func (s *Execute) CopyNode() *Execute {
 }
 
 func (s *Execute) Format(ctx *tree.FmtCtx) {
-	ctx.FormatNode(s.SqlStmt)
-	if s.Target != nil {
-		ctx.WriteString(" INTO ")
-		if s.Strict {
-			ctx.WriteString("STRICT ")
-		}
-		for i := range s.Target {
-			if i > 0 {
-				ctx.WriteString(", ")
+	ctx.WithAnnotations(s.Annotations, func() {
+		ctx.FormatNode(s.SqlStmt)
+		if s.Target != nil {
+			ctx.WriteString(" INTO ")
+			if s.Strict {
+				ctx.WriteString("STRICT ")
 			}
-			ctx.FormatNode(&s.Target[i])
+			for i := range s.Target {
+				if i > 0 {
+					ctx.WriteString(", ")
+				}
+				ctx.FormatNode(&s.Target[i])
+			}
 		}
-	}
-	ctx.WriteString(";\n")
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *Execute) PlpgSQLStatementTag() string {
@@ -1206,9 +1215,10 @@ func (s *GetDiagnostics) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_open
 type Open struct {
 	StatementImpl
-	CurVar Variable
-	Scroll tree.CursorScrollOption
-	Query  tree.Statement
+	CurVar      Variable
+	Scroll      tree.CursorScrollOption
+	Query       tree.Statement
+	Annotations *tree.Annotations
 }
 
 func (s *Open) CopyNode() *Open {
@@ -1217,19 +1227,21 @@ func (s *Open) CopyNode() *Open {
 }
 
 func (s *Open) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("OPEN ")
-	ctx.FormatNode(&s.CurVar)
-	switch s.Scroll {
-	case tree.Scroll:
-		ctx.WriteString(" SCROLL")
-	case tree.NoScroll:
-		ctx.WriteString(" NO SCROLL")
-	}
-	if s.Query != nil {
-		ctx.WriteString(" FOR ")
-		ctx.FormatNode(s.Query)
-	}
-	ctx.WriteString(";\n")
+	ctx.WithAnnotations(s.Annotations, func() {
+		ctx.WriteString("OPEN ")
+		ctx.FormatNode(&s.CurVar)
+		switch s.Scroll {
+		case tree.Scroll:
+			ctx.WriteString(" SCROLL")
+		case tree.NoScroll:
+			ctx.WriteString(" NO SCROLL")
+		}
+		if s.Query != nil {
+			ctx.WriteString(" FOR ")
+			ctx.FormatNode(s.Query)
+		}
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *Open) PlpgSQLStatementTag() string {
@@ -1245,37 +1257,40 @@ func (s *Open) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_move (where IsMove = true)
 type Fetch struct {
 	StatementImpl
-	Cursor tree.CursorStmt
-	Target []Variable
-	IsMove bool
+	Cursor      tree.CursorStmt
+	Target      []Variable
+	IsMove      bool
+	Annotations *tree.Annotations
 }
 
 func (s *Fetch) Format(ctx *tree.FmtCtx) {
-	if s.IsMove {
-		ctx.WriteString("MOVE ")
-	} else {
-		ctx.WriteString("FETCH ")
-	}
-	if dir := s.Cursor.FetchType.String(); dir != "" {
-		ctx.WriteString(dir)
-		ctx.WriteString(" ")
-	}
-	if s.Cursor.FetchType.HasCount() {
-		ctx.WriteString(strconv.Itoa(int(s.Cursor.Count)))
-		ctx.WriteString(" ")
-	}
-	ctx.WriteString("FROM ")
-	ctx.FormatName(string(s.Cursor.Name))
-	if s.Target != nil {
-		ctx.WriteString(" INTO ")
-		for i := range s.Target {
-			if i > 0 {
-				ctx.WriteString(", ")
-			}
-			ctx.FormatNode(&s.Target[i])
+	ctx.WithAnnotations(s.Annotations, func() {
+		if s.IsMove {
+			ctx.WriteString("MOVE ")
+		} else {
+			ctx.WriteString("FETCH ")
 		}
-	}
-	ctx.WriteString(";\n")
+		if dir := s.Cursor.FetchType.String(); dir != "" {
+			ctx.WriteString(dir)
+			ctx.WriteString(" ")
+		}
+		if s.Cursor.FetchType.HasCount() {
+			ctx.WriteString(strconv.Itoa(int(s.Cursor.Count)))
+			ctx.WriteString(" ")
+		}
+		ctx.WriteString("FROM ")
+		ctx.FormatName(string(s.Cursor.Name))
+		if s.Target != nil {
+			ctx.WriteString(" INTO ")
+			for i := range s.Target {
+				if i > 0 {
+					ctx.WriteString(", ")
+				}
+				ctx.FormatNode(&s.Target[i])
+			}
+		}
+		ctx.WriteString(";\n")
+	})
 }
 
 func (s *Fetch) PlpgSQLStatementTag() string {
