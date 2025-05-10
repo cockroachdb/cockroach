@@ -90,6 +90,10 @@ func New(
 	metrics *Metrics,
 	tolerances changefeedbase.CanHandle,
 ) SchemaFeed {
+	_ = targets.EachTarget(func(target changefeedbase.Target) error {
+		fmt.Println("each target", target.FamilyName, target.Type)
+		return nil
+	})
 	m := &schemaFeed{
 		filter:          schemaChangeEventFilters[events],
 		db:              cfg.DB,
