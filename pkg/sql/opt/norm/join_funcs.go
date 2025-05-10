@@ -919,3 +919,17 @@ func getJoinKeyAndEquijoinCols(
 	}
 	return opt.ColSet{}, opt.ColList{}, opt.ColList{}, false
 }
+
+// MakeNullProjections creates a projection for each column in the right input,
+// producing NULL values for each column in the right input.
+func (c *CustomFuncs) MakeNullProjections(right memo.RelExpr) memo.ProjectionsExpr {
+	rightCols := right.Relational().OutputCols
+	projections := make(memo.ProjectionsExpr, 0, rightCols.Len())
+
+	for i, ok := rightCols.Next(0); ok; i, ok = rightCols.Next(i + 1) {
+		nullExpr := c.f.ConstructNull(c.mem.Metadata().ColumnMeta(i).Type)
+		projections = append(projections, c.f.ConstructProjectionsItem(nullExpr, i))
+	}
+
+	return projections
+}
