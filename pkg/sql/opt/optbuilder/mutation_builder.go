@@ -1663,43 +1663,29 @@ func (mb *mutationBuilder) mapToReturnColID(tabOrd int) opt.ColumnID {
 }
 
 // buildReturning wraps the input expression with a Project operator that
-// projects the given RETURNING expressions.
-func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
+// projects the given RETURNING expressions. The inScope and outScope parameters
+// should be built with buildReturningScopes.
+func (mb *mutationBuilder) buildReturning(
+	returning *tree.ReturningExprs, inScope, outScope *scope,
+) {
 	// Handle case of no RETURNING clause.
 	if returning == nil {
+		// Create an empty scope and add the built expression to it.
 		expr := mb.outScope.expr
 		mb.outScope = mb.b.allocScope()
 		mb.outScope.expr = expr
 		return
 	}
 
-	inScope, outScope := mb.maybeBuildReturningScopes(returning, nil /* colRefs */)
+	// Construct the Project operator that projects the RETURNING expressions.
+	inScope.expr = mb.outScope.expr
 	mb.b.constructProjectForScope(inScope, outScope)
 	mb.outScope = outScope
 }
 
-// completeBuildReturning finalizes the RETURNING clause by projecting the necessary
-// columns from the current output scope. It assumes that any scopes required for
-// RETURNING have already been created. If the statement has no RETURNING clause,
-// the provided scopes will be nil. Regardless, mb.outScope is updated before exiting.
-func (mb *mutationBuilder) completeBuildReturning(returningInScope, returningOutScope *scope) {
-	// No RETURNING clause present.
-	if returningInScope == nil {
-		expr := mb.outScope.expr
-		mb.outScope = mb.b.allocScope()
-		mb.outScope.expr = expr
-		return
-	}
-
-	// Update the RETURNING in-scope with the current expression, in case it has
-	// changed since the scope was first created.
-	returningInScope.expr = mb.outScope.expr
-
-	mb.b.constructProjectForScope(returningInScope, returningOutScope)
-	mb.outScope = returningOutScope
-}
-
-func (mb *mutationBuilder) maybeBuildReturningScopes(
+// buildReturningScopes builds the input and output scopes for the RETURNING
+// clause. If the RETURNING clause is nil, both returned scopes are nil.
+func (mb *mutationBuilder) buildReturningScopes(
 	returning *tree.ReturningExprs, colRefs *opt.ColSet,
 ) (inScope, outScope *scope) {
 	if returning == nil {
@@ -1716,7 +1702,6 @@ func (mb *mutationBuilder) maybeBuildReturningScopes(
 	//   4. Project columns in same order as defined in table schema.
 	//
 	inScope = mb.outScope.replace()
-	inScope.expr = mb.outScope.expr
 	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
 	// extraAccessibleCols contains all the columns that the RETURNING
@@ -1726,7 +1711,7 @@ func (mb *mutationBuilder) maybeBuildReturningScopes(
 	// clause, respectively.
 	inScope.appendColumns(mb.extraAccessibleCols)
 
-	// Construct the Project operator that projects the RETURNING expressions.
+	// Build the projections of the RETURNING expressions.
 	outScope = inScope.replace()
 	mb.b.analyzeReturningList(returning, nil /* desiredTypes */, inScope, outScope)
 	mb.b.buildProjectionList(inScope, outScope, colRefs)

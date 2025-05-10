@@ -760,24 +760,34 @@ func (mb *mutationBuilder) buildInsert(
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Apply SELECT policies if:
+	// Build the scopes for the RETURNING clause early (if present). The
+	// returning expression is built later on, but for RLS we need to build the
+	// scopes and collect column references in order to determine whether SELECT
+	// policies should be applied as check constraints, which are built prior to
+	// the returning expression. RLS SELECT policies are applied as check
+	// constraints if the RETURNING clause references columns in the target
+	// table.
+	//
+	// RLS SELECT policies are applied as check constraints if:
 	// - There is an ON CONFLICT clause, which always requires SELECT policies
 	//   due to the conflict scan accessing existing data.
 	// - The RETURNING clause references any columns, which also necessitates
 	//   SELECT policies.
+	var returningInScope, returningOutScope *scope
 	includeSelectPolicies := hasOnConflict
-	if mb.tab.IsRowLevelSecurityEnabled() && !includeSelectPolicies && returning != nil {
-		// RETURNING is constructed last and depends on the final scope, so we can’t
-		// build it early or move it. However, we can build temporary scopes to
-		// gather referenced columns (colRefs) just to determine if SELECT policies
-		// are needed. If policies are already required or RLS is not enabled, we skip
-		// this work.
+	if mb.tab.IsRowLevelSecurityEnabled() && !includeSelectPolicies {
+		// Only track column references if RLS is enabled and there is no
+		// ON CONFLICT clause that automatically requires SELECT policies.
 		var colRefs opt.ColSet
-		_, _ = mb.maybeBuildReturningScopes(returning, &colRefs)
-		// For INSERT, the RETURNING clause can only reference columns from the target table.
-		// So, it's sufficient to check whether any columns are referenced, rather than
-		// verifying if each one belongs to the table.
-		includeSelectPolicies = !colRefs.Empty()
+		returningInScope, returningOutScope = mb.buildReturningScopes(returning, &colRefs)
+		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+			if colRefs.Contains(mb.tabID.ColumnID(i)) {
+				includeSelectPolicies = true
+				break
+			}
+		}
+	} else {
+		returningInScope, returningOutScope = mb.buildReturningScopes(returning, nil /* colRefs */)
 	}
 
 	// Add any check constraint boolean columns to the input.
@@ -800,7 +810,7 @@ func (mb *mutationBuilder) buildInsert(
 		mb.outScope.expr, mb.uniqueChecks, mb.fastPathUniqueChecks, mb.fkChecks, private,
 	)
 
-	mb.buildReturning(returning)
+	mb.buildReturning(returning, returningInScope, returningOutScope)
 }
 
 // buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
@@ -1021,7 +1031,8 @@ func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
 
-	mb.buildReturning(returning)
+	returningInScope, returningOutScope := mb.buildReturningScopes(returning, nil /* colRefs */)
+	mb.buildReturning(returning, returningInScope, returningOutScope)
 }
 
 // projectUpsertColumns projects a set of merged columns that will be either
