@@ -9,11 +9,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
+	"io"
+	math "math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,9 +38,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
@@ -75,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -6250,7 +6259,8 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 
 func TestMergeReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	// Test Setup:
 	//
@@ -6288,9 +6298,82 @@ func TestMergeReplicatesLocks(t *testing.T) {
 					Settings: st,
 				},
 			})
+			defer tc.Stopper().Stop(ctx)
+
+			visit := func(w io.Writer, eng storage.Engine, r *kvserver.Replica) error {
+				put := func(format string, args ...interface{}) {
+					_, _ = fmt.Fprintf(w, format, args...)
+					_, _ = fmt.Fprintln(w)
+				}
+				rsl := logstore.NewStateLoader(r.RangeID)
+
+				r.RaftLock()
+				defer r.RaftUnlock()
+
+				state := r.State(ctx)
+				lo, hi := state.TruncatedState.Index+1, state.LastIndex
+				if lo >= hi {
+					return nil // nothing to do
+				}
+				const maxBytes = math.MaxInt
+				ents, _, _, err := logstore.LoadEntries(
+					ctx, rsl, eng, r.RangeID, raftentry.NewCache(1),
+					r.SideloadedRaftMuLocked(),
+					lo, hi, maxBytes, &logstore.BytesAccount{})
+				if err != nil {
+					return err
+				}
+				for _, ent := range ents {
+					put("****** index %d ******", ent.Index)
+					e, err := raftlog.NewEntry(ent)
+					if err != nil {
+						put("%s", err)
+						continue
+					}
+					wb := e.Cmd.WriteBatch
+					e.Cmd.WriteBatch = nil
+
+					// NB: I spent way too much time trying to find a way to output the
+					// struct recursively but while omitting zero values. This is the
+					// closest I got without putting in significant amounts of work (like
+					// adjusting dozens of gogoproto moretags or writing custom
+					// formatters).
+					put("RaftCommand: %+v", proto.CompactTextString(&e.Cmd))
+
+					s, err := print.DecodeWriteBatch(wb)
+					if err != nil {
+						put("%s", err)
+						continue
+					}
+					put("%s", strings.TrimSpace(s))
+				}
+				return nil
+			}
+
+			defer func(dir string) {
+				if !t.Failed() {
+					return
+				}
+				_ = os.MkdirAll(dir, 0755)
+				t.Logf("dumping raft logs to %s", dir)
+				require.NoError(t, tc.Servers[0].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+					s.VisitReplicas(func(repl *kvserver.Replica) (wantMore bool) {
+						path := filepath.Join(dir, "r"+repl.RangeID.String()+".txt")
+						f, err := os.Create(path)
+						require.NoError(t, err)
+						defer f.Close()
+						if err := visit(f, s.LogEngine(), repl); err != nil {
+							_, _ = fmt.Fprintf(f, "error on %s: %s", repl, err)
+						}
+						return true
+					})
+					return nil
+				}))
+			}(filepath.Join(scope.GetDirectory(), "raftlog"))
+
+			defer t.Fatalf("oops")
 
 			sql := tc.ServerConn(0)
-			defer tc.Stopper().Stop(ctx)
 			scratch := tc.ScratchRange(t)
 			mkKey := func(s string) roachpb.Key {
 				prefix := scratch.Clone()
