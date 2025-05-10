@@ -50,3 +50,55 @@
 (Lock $rows:* & (HasZeroRows $rows))
 =>
 $rows
+
+# UseSwapMutation converts an Update or a Delete to an UpdateSwap or a
+# DeleteSwap, respectively. It also replaces the input Scan with Values,
+# possibly wrapped in a Select.
+[UseSwapMutation, Normalize]
+(Update | Delete
+    $sel:(Select (Scan $scanPrivate:*) $filters:*) &
+        (HasZeroOrOneRow $sel)
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let
+            ($input $ok):(BuildSwapMutationInput
+                $filters
+                $scanPrivate
+            )
+            $ok
+        )
+)
+=>
+((OpName) $input [] [] (UseSwapMutation $mutationPrivate))
+
+# UseSwapMutationWithProjection is similar to UseSwapMutation but matches when
+# there is a projection after the filtered scan.
+[UseSwapMutationWithProjection, Normalize]
+(Update | Delete
+    (Project
+        $sel:(Select (Scan $scanPrivate:*) $filters:*) &
+            (HasZeroOrOneRow $sel)
+        $projections:*
+        $passthrough:*
+    )
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let
+            ($input $ok):(BuildSwapMutationInput
+                $filters
+                $scanPrivate
+            )
+            $ok
+        )
+)
+=>
+((OpName)
+    (Project $input $projections $passthrough)
+    []
+    []
+    (UseSwapMutation $mutationPrivate)
+)

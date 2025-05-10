@@ -1414,6 +1414,23 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
 }
 
+func (e *distSQLSpecExecFactory) ConstructUpdateSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.TableColumnOrdinalSet,
+	updateCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(
+		47473, "experimental opt-driven distsql planning: update swap",
+	)
+}
+
 func (e *distSQLSpecExecFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
@@ -1442,6 +1459,20 @@ func (e *distSQLSpecExecFactory) ConstructDelete(
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete")
+}
+
+func (e *distSQLSpecExecFactory) ConstructDeleteSwap(
+	input exec.Node,
+	table cat.Table,
+	fetchCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(
+		47473, "experimental opt-driven distsql planning: delete swap",
+	)
 }
 
 func (e *distSQLSpecExecFactory) ConstructDeleteRange(
