@@ -133,6 +133,7 @@ func (u *updateSwapNode) BatchedValues(rowIdx int) tree.Datums {
 }
 
 func (u *updateSwapNode) Close(ctx context.Context) {
+	u.input.Close(ctx)
 	u.run.tu.close(ctx)
 	*u = updateSwapNode{}
 	updateSwapNodePool.Put(u)
@@ -140,4 +141,8 @@ func (u *updateSwapNode) Close(ctx context.Context) {
 
 func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.tu.rowsWritten
+}
+
+func (u *updateSwapNode) enableAutoCommit() {
+	u.run.tu.enableAutoCommit()
 }
