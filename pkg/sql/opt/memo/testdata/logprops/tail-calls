@@ -747,22 +747,18 @@ values
                                                    │                        │                        └── const: 1
                                                    │                        └── subquery
                                                    │                             ├── tail-call
-                                                   │                             └── values
-                                                   │                                  └── tuple
-                                                   │                                       └── subquery
+                                                   │                             └── project
+                                                   │                                  ├── values
+                                                   │                                  │    └── tuple
+                                                   │                                  │         └── plus
+                                                   │                                  │              ├── variable: i
+                                                   │                                  │              └── const: 1
+                                                   │                                  └── projections
+                                                   │                                       └── udf: stmt_loop_5
                                                    │                                            ├── tail-call
-                                                   │                                            └── project
-                                                   │                                                 ├── values
-                                                   │                                                 │    └── tuple
-                                                   │                                                 │         └── plus
-                                                   │                                                 │              ├── variable: i
-                                                   │                                                 │              └── const: 1
-                                                   │                                                 └── projections
-                                                   │                                                      └── udf: stmt_loop_5
-                                                   │                                                           ├── tail-call
-                                                   │                                                           ├── args
-                                                   │                                                           │    └── variable: i
-                                                   │                                                           └── recursive-call
+                                                   │                                            ├── args
+                                                   │                                            │    └── variable: i
+                                                   │                                            └── recursive-call
                                                    └── udf: loop_exit_1
                                                         ├── tail-call
                                                         ├── args
