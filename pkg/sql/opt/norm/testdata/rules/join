@@ -392,7 +392,7 @@ left-join (hash)
       └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # Semi-join case.
-norm expect=PushFilterIntoJoinLeft
+norm expect=PushFilterIntoJoinLeft disable=HoistUnboundFilterFromExistsSubquery
 SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k AND s='foo')
 ----
 semi-join (hash)
@@ -1201,7 +1201,7 @@ inner-join (cross)
 
 # Regression for issue 28818. Try to trigger undetectable cycle between the
 # PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
-norm
+norm disable=HoistUnboundJoinFilterFromExistsSubquery
 SELECT 1
 FROM a
 WHERE EXISTS (

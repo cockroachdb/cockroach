@@ -4124,6 +4124,10 @@ func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val b
 	m.data.PropagateAdmissionHeaderToLeafTransactions = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
+	m.data.OptimizerUseExistsFilterHoistRule = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

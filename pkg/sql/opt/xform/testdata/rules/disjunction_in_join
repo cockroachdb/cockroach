@@ -2715,46 +2715,68 @@ opt expect=SplitDisjunctionOfJoinTerms
 SELECT a1,a2,a3,c.* FROM a,c
        WHERE a2 = c2 AND EXISTS (SELECT * FROM b WHERE (a1 = b1 OR a1 = a2) AND (a1 = c1 OR c1 = c2))
 ----
-project
+inner-join (hash)
  ├── columns: a1:1!null a2:2!null a3:3!null c1:7!null c2:8!null c3:9 c4:10
  ├── fd: (2)==(8), (8)==(2)
- └── group-by (hash)
-      ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null
-      ├── grouping columns: a1:1!null a3:3!null a4:4!null c.rowid:11!null
-      ├── key: (1,3,4,11)
-      ├── fd: (11)-->(7-10), (1,3,4,11)-->(2,7-10), (2)==(8), (8)==(2)
-      ├── inner-join (cross)
-      │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null b1:14
-      │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
-      │    ├── scan b
-      │    │    └── columns: b1:14
-      │    ├── inner-join (hash)
-      │    │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null
-      │    │    ├── key: (1,3,4,11)
-      │    │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
-      │    │    ├── scan a
-      │    │    │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
-      │    │    │    └── key: (1-4)
-      │    │    ├── scan c
-      │    │    │    ├── columns: c1:7 c2:8 c3:9 c4:10 c.rowid:11!null
-      │    │    │    ├── key: (11)
-      │    │    │    └── fd: (11)-->(7-10)
-      │    │    └── filters
-      │    │         ├── (a1:1 = c1:7) OR (c1:7 = c2:8) [outer=(1,7,8), constraints=(/7: (/NULL - ])]
-      │    │         └── a2:2 = c2:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │    └── filters
-      │         └── (a1:1 = b1:14) OR (a1:1 = a2:2) [outer=(1,2,14), constraints=(/1: (/NULL - ])]
-      └── aggregations
-           ├── const-agg [as=c1:7, outer=(7)]
-           │    └── c1:7
-           ├── const-agg [as=c2:8, outer=(8)]
-           │    └── c2:8
-           ├── const-agg [as=c3:9, outer=(9)]
-           │    └── c3:9
-           ├── const-agg [as=c4:10, outer=(10)]
-           │    └── c4:10
-           └── const-agg [as=a2:2, outer=(2)]
-                └── a2:2
+ ├── project
+ │    ├── columns: a1:1!null a2:2!null a3:3!null
+ │    └── distinct-on
+ │         ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+ │         ├── grouping columns: a1:1!null a2:2!null a3:3!null a4:4!null
+ │         ├── key: (1-4)
+ │         └── union-all
+ │              ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
+ │              ├── left columns: a1:22 a2:23 a3:24 a4:25
+ │              ├── right columns: a1:35 a2:36 a3:37 a4:38
+ │              ├── project
+ │              │    ├── columns: a1:22!null a2:23!null a3:24!null a4:25!null
+ │              │    ├── key: (22-25)
+ │              │    └── inner-join (merge)
+ │              │         ├── columns: a1:22!null a2:23!null a3:24!null a4:25!null b1:28!null
+ │              │         ├── left ordering: +22
+ │              │         ├── right ordering: +28
+ │              │         ├── key: (23-25,28)
+ │              │         ├── fd: (22)==(28), (28)==(22)
+ │              │         ├── scan a
+ │              │         │    ├── columns: a1:22!null a2:23!null a3:24!null a4:25!null
+ │              │         │    ├── key: (22-25)
+ │              │         │    └── ordering: +22
+ │              │         ├── distinct-on
+ │              │         │    ├── columns: b1:28
+ │              │         │    ├── grouping columns: b1:28
+ │              │         │    ├── key: (28)
+ │              │         │    ├── ordering: +28
+ │              │         │    └── scan b@b_b1_b2_idx
+ │              │         │         ├── columns: b1:28
+ │              │         │         └── ordering: +28
+ │              │         └── filters (true)
+ │              └── project
+ │                   ├── columns: a1:35!null a2:36!null a3:37!null a4:38!null
+ │                   ├── key: (36-38)
+ │                   ├── fd: (35)==(36), (36)==(35)
+ │                   └── inner-join (cross)
+ │                        ├── columns: a1:35!null a2:36!null a3:37!null a4:38!null
+ │                        ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │                        ├── key: (36-38)
+ │                        ├── fd: (35)==(36), (36)==(35)
+ │                        ├── select
+ │                        │    ├── columns: a1:35!null a2:36!null a3:37!null a4:38!null
+ │                        │    ├── key: (36-38)
+ │                        │    ├── fd: (35)==(36), (36)==(35)
+ │                        │    ├── scan a
+ │                        │    │    ├── columns: a1:35!null a2:36!null a3:37!null a4:38!null
+ │                        │    │    └── key: (35-38)
+ │                        │    └── filters
+ │                        │         └── a1:35 = a2:36 [outer=(35,36), constraints=(/35: (/NULL - ]; /36: (/NULL - ]), fd=(35)==(36), (36)==(35)]
+ │                        ├── scan b
+ │                        │    ├── limit: 1
+ │                        │    └── key: ()
+ │                        └── filters (true)
+ ├── scan c
+ │    └── columns: c1:7 c2:8 c3:9 c4:10
+ └── filters
+      ├── (a1:1 = c1:7) OR (c1:7 = c2:8) [outer=(1,7,8), constraints=(/7: (/NULL - ])]
+      └── a2:2 = c2:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 opt expect=SplitDisjunctionOfJoinTerms
 SELECT a1,a2,a3,c.* FROM a,c
@@ -2842,46 +2864,23 @@ opt expect=SplitDisjunctionOfJoinTerms
 SELECT a1,a2,a3,c.* FROM a,c
        WHERE a2 = c2 AND EXISTS (SELECT * FROM b WHERE (a1 = b1 OR a1 = b3) AND (a1 = c1 OR a1 = c3))
 ----
-project
+semi-join (cross)
  ├── columns: a1:1!null a2:2!null a3:3!null c1:7 c2:8!null c3:9 c4:10
  ├── fd: (2)==(8), (8)==(2)
- └── group-by (hash)
-      ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7 c2:8!null c3:9 c4:10 c.rowid:11!null
-      ├── grouping columns: a1:1!null a3:3!null a4:4!null c.rowid:11!null
-      ├── key: (1,3,4,11)
-      ├── fd: (11)-->(7-10), (1,3,4,11)-->(2,7-10), (2)==(8), (8)==(2)
-      ├── inner-join (cross)
-      │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7 c2:8!null c3:9 c4:10 c.rowid:11!null b1:14 b3:16
-      │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
-      │    ├── scan b
-      │    │    └── columns: b1:14 b3:16
-      │    ├── inner-join (hash)
-      │    │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7 c2:8!null c3:9 c4:10 c.rowid:11!null
-      │    │    ├── key: (1,3,4,11)
-      │    │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
-      │    │    ├── scan a
-      │    │    │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null
-      │    │    │    └── key: (1-4)
-      │    │    ├── scan c
-      │    │    │    ├── columns: c1:7 c2:8 c3:9 c4:10 c.rowid:11!null
-      │    │    │    ├── key: (11)
-      │    │    │    └── fd: (11)-->(7-10)
-      │    │    └── filters
-      │    │         ├── (a1:1 = c1:7) OR (a1:1 = c3:9) [outer=(1,7,9), constraints=(/1: (/NULL - ])]
-      │    │         └── a2:2 = c2:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │    └── filters
-      │         └── (a1:1 = b1:14) OR (a1:1 = b3:16) [outer=(1,14,16), constraints=(/1: (/NULL - ])]
-      └── aggregations
-           ├── const-agg [as=c1:7, outer=(7)]
-           │    └── c1:7
-           ├── const-agg [as=c2:8, outer=(8)]
-           │    └── c2:8
-           ├── const-agg [as=c3:9, outer=(9)]
-           │    └── c3:9
-           ├── const-agg [as=c4:10, outer=(10)]
-           │    └── c4:10
-           └── const-agg [as=a2:2, outer=(2)]
-                └── a2:2
+ ├── inner-join (hash)
+ │    ├── columns: a1:1!null a2:2!null a3:3!null c1:7 c2:8!null c3:9 c4:10
+ │    ├── fd: (2)==(8), (8)==(2)
+ │    ├── scan a
+ │    │    └── columns: a1:1!null a2:2!null a3:3!null
+ │    ├── scan c
+ │    │    └── columns: c1:7 c2:8 c3:9 c4:10
+ │    └── filters
+ │         ├── (a1:1 = c1:7) OR (a1:1 = c3:9) [outer=(1,7,9), constraints=(/1: (/NULL - ])]
+ │         └── a2:2 = c2:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ ├── scan b
+ │    └── columns: b1:14 b3:16
+ └── filters
+      └── (a1:1 = b1:14) OR (a1:1 = b3:16) [outer=(1,14,16), constraints=(/1: (/NULL - ])]
 
 # Nested EXISTS
 opt expect=SplitDisjunctionOfJoinTerms
