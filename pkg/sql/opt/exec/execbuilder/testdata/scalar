@@ -358,7 +358,7 @@ vectorized: true
 ·
 • render
 │ columns: (r)
-│ render r: a IS NOT DISTINCT FROM b
+│ render r: a = b
 │
 └── • scan
       columns: (a, b)

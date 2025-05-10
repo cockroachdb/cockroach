@@ -175,7 +175,7 @@ inner-join (cross)
  └── filters (true)
 
 # Inner join case. Simplify is False.
-norm expect=SimplifyJoinFilters
+norm expect=NormalizeIsToEq expect-not=SimplifyJoinFilters
 SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS False
 ----
 inner-join (cross)
@@ -3146,7 +3146,7 @@ inner-join-apply
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality
 # --------------------------------------------------
-norm expect=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
+norm expect=NormalizeIsToEq expect-not=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS True
 ----
 inner-join (hash)
@@ -3165,7 +3165,7 @@ inner-join (hash)
  └── filters
       └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
-norm expect=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
+norm expect=NormalizeIsToEq expect-not=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS False
 ----
 inner-join (cross)

@@ -281,3 +281,13 @@ $left
 (Ne $left:* (False))
 =>
 $left
+
+# NormalizeIsToEq replaces x IS NOT DISTINCT FROM y with x = y 
+# when it can be proved that neither x nor y is NULL and x and y have identical types.
+[NormalizeIsToEq, Normalize, LowPriority]
+(Is
+    $left:* & ^(IsNullScalar $left) & ^(IsTupleScalar $left)
+    $right:* & ^(IsNullScalar $right) & ^(IsTupleScalar $right) & (IdenticalTypes $left $right)
+)
+=> 
+(Eq $left $right)

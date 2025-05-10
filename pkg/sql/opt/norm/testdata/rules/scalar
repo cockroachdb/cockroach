@@ -50,7 +50,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: r:8 s:9 t:10!null u:11!null v:12 w:13 x:14 y:15 z:16
+ ├── columns: r:8 s:9 t:10 u:11!null v:12 w:13 x:14 y:15 z:16
  ├── immutable
  ├── scan a
  │    ├── columns: k:1!null i:2
@@ -59,7 +59,7 @@ project
  └── projections
       ├── k:1 = (i:2 + 1) [as=r:8, outer=(1,2), immutable]
       ├── i:2 != (2 - k:1) [as=s:9, outer=(1,2), immutable]
-      ├── k:1 IS NOT DISTINCT FROM (i:2 + 1) [as=t:10, outer=(1,2), immutable]
+      ├── k:1 = (i:2 + 1) [as=t:10, outer=(1,2), immutable]
       ├── k:1 IS DISTINCT FROM (i:2 - 1) [as=u:11, outer=(1,2), immutable]
       ├── k:1 + (i:2 * 2) [as=v:12, outer=(1,2), immutable]
       ├── k:1 * (i:2 + 2) [as=w:13, outer=(1,2), immutable]
@@ -94,7 +94,7 @@ project
  └── projections
       ├── (i:2 + k:1) = 4 [as=r:8, outer=(1,2), immutable]
       ├── (i:2 * 2) != 3 [as=s:9, outer=(2), immutable]
-      ├── (1 - k:1) IS NOT DISTINCT FROM 5 [as=t:10, outer=(1), immutable]
+      ├── k:1 = -4 [as=t:10, outer=(1)]
       ├── k:1 IS DISTINCT FROM 11 [as=u:11, outer=(1)]
       ├── f:3 + 1.0 [as=v:12, outer=(3), immutable]
       ├── (i:2 * i:2) * 15 [as=w:13, outer=(2), immutable]
