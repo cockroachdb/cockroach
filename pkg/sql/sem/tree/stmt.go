@@ -209,18 +209,6 @@ func ReturnsAtMostOneRow(stmt Statement) bool {
 
 }
 
-// UnwrapExplain returns the inner statement if the outer statement is an EXPLAIN
-// or EXPLAIN ANALYZE statement. Otherwise, it just returns the original statemnt.
-func UnwrapExplain(stmt Statement) Statement {
-	switch t := stmt.(type) {
-	case *Explain:
-		return t.Statement
-	case *ExplainAnalyze:
-		return t.Statement
-	}
-	return stmt
-}
-
 // HiddenFromShowQueries is a pseudo-interface to be implemented
 // by statements that should not show up in SHOW QUERIES (and are hence
 // not cancellable using CANCEL QUERIES either). Usually implemented by
