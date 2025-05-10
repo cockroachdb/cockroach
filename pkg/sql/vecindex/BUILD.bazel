@@ -49,7 +49,7 @@ go_test(
         "searcher_test.go",
         "vecindex_test.go",
     ],
-    data = ["//pkg/sql/vecindex/cspann:features_10000"],
+    data = ["//pkg/sql/vecindex/cspann:datasets"],
     embed = [":vecindex"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
