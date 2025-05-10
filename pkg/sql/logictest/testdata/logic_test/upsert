@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 subtest strict
 
 statement ok

@@ -37,6 +37,7 @@ CREATE TABLE foo (
     FAMILY "primary" (i, j)
 );
 
+skipif config local-schema-locked
 query T
 SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 ----
@@ -167,6 +168,143 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
         "replacementOf": {
             "time": {}
         },
+        "unexposedParentSchemaId": 105,
+        "version": "1"
+    }
+}
+
+onlyif config local-schema-locked
+query T
+SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
+----
+{
+    "table": {
+        "columns": [
+            {
+                "defaultExpr": "_:::INT8",
+                "id": 1,
+                "name": "i",
+                "onUpdateExpr": "_:::INT8",
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            },
+            {
+                "computeExpr": "_:::INT8",
+                "id": 2,
+                "name": "j",
+                "nullable": true,
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            }
+        ],
+        "createAsOfTime": {},
+        "families": [
+            {
+                "columnIds": [
+                    1,
+                    2
+                ],
+                "columnNames": [
+                    "i",
+                    "j"
+                ],
+                "defaultColumnId": 2,
+                "name": "primary"
+            }
+        ],
+        "formatVersion": 3,
+        "id": 107,
+        "indexes": [
+            {
+                "createdAtNanos": "0",
+                "foreignKey": {},
+                "geoConfig": {},
+                "id": 2,
+                "interleave": {},
+                "keyColumnDirections": [
+                    "ASC"
+                ],
+                "keyColumnIds": [
+                    2
+                ],
+                "keyColumnNames": [
+                    "j"
+                ],
+                "keySuffixColumnIds": [
+                    1
+                ],
+                "name": "foo_j_idx",
+                "partitioning": {},
+                "predicate": "i = _:::INT8",
+                "sharded": {},
+                "vecConfig": {},
+                "version": 3
+            }
+        ],
+        "modificationTime": {},
+        "name": "foo",
+        "nextColumnId": 3,
+        "nextConstraintId": 2,
+        "nextFamilyId": 1,
+        "nextIndexId": 3,
+        "nextMutationId": 1,
+        "parentId": 104,
+        "primaryIndex": {
+            "constraintId": 1,
+            "createdAtNanos": "0",
+            "encodingType": 1,
+            "foreignKey": {},
+            "geoConfig": {},
+            "id": 1,
+            "interleave": {},
+            "keyColumnDirections": [
+                "ASC"
+            ],
+            "keyColumnIds": [
+                1
+            ],
+            "keyColumnNames": [
+                "i"
+            ],
+            "name": "foo_pkey",
+            "partitioning": {},
+            "sharded": {},
+            "storeColumnIds": [
+                2
+            ],
+            "storeColumnNames": [
+                "j"
+            ],
+            "unique": true,
+            "vecConfig": {},
+            "version": 4
+        },
+        "privileges": {
+            "ownerProto": "root",
+            "users": [
+                {
+                    "privileges": "2",
+                    "userProto": "admin",
+                    "withGrantOption": "2"
+                },
+                {
+                    "privileges": "2",
+                    "userProto": "root",
+                    "withGrantOption": "2"
+                }
+            ],
+            "version": 3
+        },
+        "replacementOf": {
+            "time": {}
+        },
+        "schemaLocked": true,
         "unexposedParentSchemaId": 105,
         "version": "1"
     }

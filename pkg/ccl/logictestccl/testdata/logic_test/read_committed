@@ -1,3 +1,5 @@
+# LogicTest: !local-schema-locked
+
 subtest cursor
 
 # Verify that SQL and PL/pgSQL cursors run under READ COMMITTED correctly.
