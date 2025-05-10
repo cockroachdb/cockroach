@@ -88,7 +88,7 @@ func (knobs *TestingKnobs) GetAOSTClause() string {
 
 // CreateTestingKnobs creates a testing knob in the unit tests.
 //
-// Note: SQL Stats’s read path uses follower read (AS OF SYSTEM TIME
+// Note: SQL Stats read path uses follower read (AS OF SYSTEM TIME
 // follower_read_timestamp()) to ensure that contention between reads and writes
 // (SQL Stats flush / SQL Stats cleanup) is minimized.
 //

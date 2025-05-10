@@ -36,6 +36,9 @@ SELECT 1, 1
 COMMIT
 ----
 
+wait-for-txn-stats app=test count=3 execCount=4
+----
+
 # Ensure we records both explicit transactions with correct statement
 # fingerprint IDs. We filter out transactions that has less than 3 statements
 # in order to ignore the implicit transactions.

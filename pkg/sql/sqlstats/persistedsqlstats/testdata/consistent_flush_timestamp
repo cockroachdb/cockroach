@@ -13,6 +13,10 @@ exec-sql
 SELECT 1
 ----
 
+wait-for-stmt-stats app=consistent-test count=1
+----
+
+
 observe-sql
 SELECT
   aggregated_ts,
@@ -72,6 +76,11 @@ ORDER BY aggregated_ts
 exec-sql
 SELECT 1
 ----
+
+# This waits for in-memory stats, which should be 1 since we flushed the previous statement.
+wait-for-stmt-stats app=consistent-test count=1
+----
+
 
 observe-sql
 SELECT

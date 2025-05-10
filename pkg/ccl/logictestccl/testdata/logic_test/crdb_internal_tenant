@@ -403,6 +403,7 @@ SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-509618906946614289
 /Table/32/???/9/6/81
 
 subtest max_retry_counter
+
 # Verify that the max_retry counter in statement stats actually increases with retries.
 
 statement ok
@@ -439,7 +440,7 @@ RESET application_name
 # (#22847).
 #
 
-query TII
+query TII retry
 SELECT key, max_retries, failure_count
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'test_max_retry'
@@ -509,11 +510,15 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames,rowsort
+statement ok
+RESET application_name
+
+query ITTTI colnames,rowsort,retry
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
 node_id  application_name     key                   statement_ids                                                  count
-0        test_txn_statistics  9852458619443781049   {6504861979500726990,6504861979500726990,6504861979500726990} 1
+0        test_txn_statistics  79149212088773624     {12572515814643342375}                                         1
+0        test_txn_statistics  9852458619443781049   {6504861979500726990,6504861979500726990,6504861979500726990}  1
 0        test_txn_statistics  17664899828239596817  {6504861979500726990}                                          1
 0        test_txn_statistics  17664899828239596829  {6504861979500726978}                                          1
 0        test_txn_statistics  17976145939037309168  {6204733445766643503}                                          1
