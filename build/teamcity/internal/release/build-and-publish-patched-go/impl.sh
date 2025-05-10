@@ -76,26 +76,32 @@ for CONFIG in $CONFIGS; do
         linux_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-c++
+            GO_GCFLAGS="-I /usr/include/x86_64-linux-gnu"
         ;;
         linux_arm64)
             CC_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/aarch64-unknown-linux-gnu/bin/aarch64-unknown-linux-gnu-c++
+            GO_GCFLAGS="-I /usr/include/x86_64-linux-gnu"
             ;;
         linux_s390x)
             CC_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-c++
+            GO_GCFLAGS="-I /usr/include/x86_64-linux-gnu"
         ;;
         darwin_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-cc
             CXX_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-c++
+            GO_GCFLAGS=
             ;;
         darwin_arm64)
             CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/aarch64-apple-darwin21.2-cc
             CXX_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/aarch64-apple-darwin21.2-c++
+            GO_GCFLAGS=
         ;;
         windows_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-w64-mingw32/bin/x86_64-w64-mingw32-cc
             CXX_FOR_TARGET=/x-tools/x86_64-w64-mingw32/bin/x86_64-w64-mingw32-c++
+            GO_GCFLAGS=
         ;;
     esac
     GOOS=$(echo $CONFIG | cut -d_ -f1)
@@ -105,7 +111,7 @@ for CONFIG in $CONFIGS; do
         export LD_LIBRARY_PATH=/x-tools/x86_64-apple-darwin21.2/lib
     fi
     GOOS=$GOOS GOARCH=$GOARCH CC=clang CXX=clang++ CC_FOR_TARGET=$CC_FOR_TARGET CXX_FOR_TARGET=$CXX_FOR_TARGET \
-               GOROOT_BOOTSTRAP=$(go env GOROOT) CGO_ENABLED=1 ./make.bash
+               GOROOT_BOOTSTRAP=$(go env GOROOT) CGO_ENABLED=1 GO_GCFLAGS="$GO_GCFLAGS" ./make.bash
     if [ $GOOS == darwin ]; then
         unset LD_LIBRARY_PATH
     fi
