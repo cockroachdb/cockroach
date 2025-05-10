@@ -3047,6 +3047,7 @@ optimizer_push_limit_into_project_filtered_scan            on                  N
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
 optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
 optimizer_use_delete_range_fast_path                       on                  NULL      NULL        NULL        string
+optimizer_use_exists_filter_hoist_rule                     on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
@@ -3276,6 +3277,7 @@ optimizer_push_limit_into_project_filtered_scan            on                  N
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
 optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
 optimizer_use_delete_range_fast_path                       on                  NULL  user     NULL      on                  on
+optimizer_use_exists_filter_hoist_rule                     on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
@@ -3496,6 +3498,7 @@ optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
 optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_delete_range_fast_path                       NULL    NULL     NULL     NULL        NULL
+optimizer_use_exists_filter_hoist_rule                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
