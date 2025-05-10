@@ -137,6 +137,21 @@ func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
 	return false
 }
 
+// IsNullScalar returns true if the input scalar expression always evaluates to NULL.
+func (c *CustomFuncs) IsNullScalar(scalar opt.ScalarExpr) bool {
+	_, ok := scalar.(*memo.NullExpr)
+	return ok
+}
+
+func (c *CustomFuncs) IsTupleScalar(scalar opt.ScalarExpr) bool {
+	_, ok := scalar.(*memo.TupleExpr)
+	return ok
+}
+
+func (c *CustomFuncs) IdenticalTypes(left, right opt.ScalarExpr) bool {
+	return left.DataType().Equal(right.DataType())
+}
+
 // IsFloatDatum returns true if the given tree.Datum is a DFloat.
 func (c *CustomFuncs) IsFloatDatum(datum tree.Datum) bool {
 	_, ok := datum.(*tree.DFloat)

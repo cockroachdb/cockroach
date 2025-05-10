@@ -93,8 +93,7 @@ select
  └── filters
       └── (k:1 = 1) OR (i:2 = 2) [outer=(1,2)]
 
-# Simplify IS True to its left input.
-norm expect=SimplifySelectFilters
+norm expect=NormalizeIsToEq expect-not=SimplifySelectFilters
 SELECT * FROM c WHERE a IS True
 ----
 select
@@ -105,8 +104,7 @@ select
  └── filters
       └── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
 
-# Simplify IS False to the negation of its left input.
-norm expect=SimplifySelectFilters
+norm expect=NormalizeIsToEq expect-not=SimplifySelectFilters
 SELECT * FROM c WHERE a IS False
 ----
 select
@@ -151,7 +149,7 @@ norm expect-not=SimplifySelectFilters
 Select a IS True FROM c WHERE b
 ----
 project
- ├── columns: "?column?":9!null
+ ├── columns: "?column?":9
  ├── select
  │    ├── columns: a:1 b:2!null
  │    ├── fd: ()-->(2)
@@ -160,7 +158,7 @@ project
  │    └── filters
  │         └── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
  └── projections
-      └── a:1 IS true [as="?column?":9, outer=(1)]
+      └── a:1 [as="?column?":9, outer=(1)]
 
 # Don't simplify an IS NOT expression.
 norm expect-not=SimplifySelectFilters
