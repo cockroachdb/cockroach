@@ -44,6 +44,7 @@ const (
 const (
 	LabelQueryType     = "query_type"
 	LabelQueryInternal = "query_internal"
+	LabelStatus        = "status"
 )
 
 type LabelConfig uint64
