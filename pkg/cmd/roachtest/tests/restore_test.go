@@ -6,7 +6,7 @@
 package tests
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -53,22 +53,19 @@ func TestRestoreRegisteredNames(t *testing.T) {
 	expectedRestoreTests := []string{
 		"restore/nodeShutdown/coordinator",
 		"restore/nodeShutdown/worker",
-		"restore/pause/tpce/15GB/aws/nodes=4/cpus=8",
-		"restore/tpce/15GB/aws/nodes=4/cpus=8",
-		"restore/tpce/32TB/aws/inc-count=400/nodes=15/cpus=16",
-		"restore/tpce/32TB/aws/nodes=15/cpus=16",
-		"restore/tpce/32TB/gce/inc-count=400/nodes=15/cpus=16",
-		"restore/tpce/400GB/aws/inc-count=48/nodes=4/cpus=8",
-		"restore/tpce/400GB/aws/nodes=4/cpus=16",
-		"restore/tpce/400GB/aws/nodes=4/cpus=8",
-		"restore/tpce/400GB/aws/nodes=8/cpus=8",
-		"restore/tpce/400GB/aws/nodes=9/cpus=8/zones=us-east-2b,us-west-2b,eu-west-1b",
-		"restore/tpce/400GB/gce/nodes=4/cpus=8",
-		"restore/tpce/400GB/gce/nodes=4/cpus=8/lowmem",
-		"restore/tpce/8TB/aws/nodes=10/cpus=8",
+		"restore/pause/tpcc-5k/gce/nodes=4/cpus=8",
+		"restore/tpcc-10/gce/nodes=4/cpus=8",
+		"restore/tpcc-300k/gce/nodes=15/cpus=16",
+		"restore/tpcc-30k/aws/nodes=4/cpus=8",
+		"restore/tpcc-30k/aws/nodes=9/cpus=8/zones=us-east-2b,us-west-2b,eu-west-1b",
+		"restore/tpcc-30k/gce/fullOnly/nodes=10/cpus=8",
+		"restore/tpcc-30k/gce/nodes=4/cpus=16",
+		"restore/tpcc-30k/gce/nodes=4/cpus=8",
+		"restore/tpcc-30k/gce/nodes=4/cpus=8/lowmem",
+		"restore/tpcc-30k/gce/nodes=8/cpus=8",
+		"restore/tpcc-5k/gce/fullOnly/nodes=4/cpus=8",
+		"restore/tpcc-5k/gce/nodes=4/cpus=8",
 	}
-	sort.Slice(r.testNames, func(i, j int) bool {
-		return r.testNames[i] < r.testNames[j]
-	})
+	slices.Sort(r.testNames)
 	require.Equal(t, expectedRestoreTests, r.testNames)
 }
