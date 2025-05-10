@@ -215,7 +215,7 @@ func (t tenantNameSetter) Set(v string) error {
 	tenantScopes := strings.Split(v, "," /* separator */)
 	for _, tenantScope := range tenantScopes {
 		tenant := roachpb.TenantName(tenantScope)
-		if err := tenant.IsValid(); err != nil {
+		if err := tenant.Validate(); err != nil {
 			return err
 		}
 		*t.tenantNames = append(*t.tenantNames, roachpb.TenantName(tenantScope))
@@ -675,6 +675,10 @@ func init() {
 			// PKCS8 key format is only available for the client cert command.
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
 			cliflagcfg.BoolFlag(f, &certCtx.disableUsernameValidation, cliflags.DisableUsernameValidation)
+		}
+
+		if cmd == mtCreateTenantCertCmd {
+			cliflagcfg.BoolFlag(f, &certCtx.tenantNameIdentity, cliflags.TenantNameIdentity)
 		}
 	}
 
