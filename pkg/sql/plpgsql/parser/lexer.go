@@ -181,10 +181,12 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	if target != nil && sqlStmt.AST.StatementReturnType() != tree.Rows {
 		return nil, pgerror.New(pgcode.Syntax, "INTO used with a command that cannot return data")
 	}
+	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Execute{
-		SqlStmt: sqlStmt.AST,
-		Strict:  haveStrict,
-		Target:  target,
+		SqlStmt:     sqlStmt.AST,
+		Strict:      haveStrict,
+		Target:      target,
+		Annotations: &ann,
 	}, nil
 }
 
@@ -295,10 +297,12 @@ func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) 
 	}
 	// Move past the semicolon.
 	l.lastPos++
+	ann := tree.MakeAnnotations(sqlStmt.NumAnnotations)
 	return &plpgsqltree.Fetch{
-		Cursor: cursor,
-		Target: target,
-		IsMove: isMove,
+		Cursor:      cursor,
+		Target:      target,
+		IsMove:      isMove,
+		Annotations: &ann,
 	}, nil
 }
 
@@ -396,7 +400,11 @@ func (l *lexer) ParseReturnQuery() (plpgsqltree.Statement, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &plpgsqltree.ReturnQuery{SqlStmt: stmt.AST}, nil
+	ann := tree.MakeAnnotations(stmt.NumAnnotations)
+	return &plpgsqltree.ReturnQuery{
+		SqlStmt:     stmt.AST,
+		Annotations: &ann,
+	}, nil
 }
 
 // peekForExecute checks whether the next token is EXECUTE, used to identify

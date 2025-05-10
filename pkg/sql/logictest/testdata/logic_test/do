@@ -274,3 +274,16 @@ CALL p();
 NOTICE: Hello, world!
 
 subtest end
+
+subtest regression_143974
+
+statement error pgcode 0A000 unimplemented: CREATE TYPE usage inside a function definition.*\n.*\n.*issue-v/110080
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mood') THEN
+    CREATE TYPE mood AS ENUM ('happy', 'sad', 'neutral');
+  END IF;
+END
+$$;
+
+subtest end

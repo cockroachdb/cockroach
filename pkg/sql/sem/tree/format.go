@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -464,6 +466,17 @@ func (ctx *FmtCtx) WithoutConstantRedaction(fn func()) {
 	fn()
 }
 
+// WithAnnotations modifies FmtCtx to use the provided Annotations, calls fn,
+// then restores the original ones.
+func (ctx *FmtCtx) WithAnnotations(ann *Annotations, fn func()) {
+	defer func(oldAnn *Annotations) {
+		ctx.ann = oldAnn
+	}(ctx.ann)
+	ctx.ann = ann
+
+	fn()
+}
+
 // HasFlags returns true iff all of the given flags are set in the formatter
 // context.
 func (ctx *FmtCtx) HasFlags(f FmtFlags) bool {
@@ -599,6 +612,27 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
+	// Guard against crashes in the formatting code in non-test builds (e.g.
+	// #143974). This is only possible because the code does not update shared
+	// state and does not manipulate locks.
+	if !buildutil.CrdbTestBuild {
+		defer func() {
+			if r := recover(); r != nil {
+				if ok, e := errorutil.ShouldCatch(r); ok {
+					// We don't have an easy way to propagate this error out, so
+					// instead we'll write it into the buffer. This can lead to
+					// different unfortunate outcomes (like some queries failing
+					// because of incorrect serialized form, or misleading or
+					// confusing telemetry), yet it seems better than crashing
+					// the node altogether.
+					ctx.WriteString(e.Error())
+				} else {
+					panic(r)
+				}
+			}
+		}()
+	}
+
 	f := ctx.flags
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
@@ -675,7 +709,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 // number of characters to be printed.
 func (ctx *FmtCtx) formatLimitLength(n NodeFormatter, maxLength int) {
 	temp := NewFmtCtx(ctx.flags)
-	temp.FormatNodeSummary(n)
+	temp.formatNodeSummary(n)
 	s := temp.CloseAndGetString()
 	if len(s) > maxLength {
 		truncated := s[:maxLength] + "..."
@@ -731,7 +765,7 @@ func (ctx *FmtCtx) formatSummaryInsert(node *Insert) {
 	expr := rows.Select
 	if _, ok := expr.(*SelectClause); ok {
 		ctx.WriteByte(' ')
-		ctx.FormatNodeSummary(rows)
+		ctx.formatNodeSummary(rows)
 	} else if node.Columns != nil {
 		ctx.WriteByte('(')
 		ctx.formatLimitLength(&node.Columns, ColumnLimit)
@@ -754,8 +788,8 @@ func (ctx *FmtCtx) formatSummaryUpdate(node *Update) {
 	}
 }
 
-// FormatNodeSummary recurses into a node for pretty-printing a summarized version.
-func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
+// formatNodeSummary recurses into a node for pretty-printing a summarized version.
+func (ctx *FmtCtx) formatNodeSummary(n NodeFormatter) {
 	switch node := n.(type) {
 	case *Insert:
 		ctx.formatSummaryInsert(node)
@@ -775,7 +809,7 @@ func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
 	ctx := NewFmtCtx(fl, opts...)
 	if fl.HasFlags(FmtSummary) {
-		ctx.FormatNodeSummary(n)
+		ctx.formatNodeSummary(n)
 	} else {
 		ctx.FormatNode(n)
 	}
