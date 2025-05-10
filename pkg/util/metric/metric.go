@@ -42,8 +42,12 @@ const (
 // Maintaining a list of static label names here to avoid duplication and
 // encourage reuse of label names across the codebase.
 const (
-	LabelQueryType     = "query_type"
-	LabelQueryInternal = "query_internal"
+	LabelQueryType       = "query_type"
+	LabelQueryInternal   = "query_internal"
+	LabelStatus          = "status"
+	LabelCertificateType = "certificate_type"
+	LabelName            = "name"
+	LabelType            = "type"
 )
 
 type LabelConfig uint64

@@ -41,6 +41,9 @@ var LicenseTTLMetadata = metric.Metadata{
 	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
 	Unit:        metric.Unit_SECONDS,
+	Essential:   true,
+	Category:    metric.Metadata_EXPIRATIONS,
+	HowToUse:    "See Description.",
 }
 
 var AdditionalLicenseTTLMetadata = metric.Metadata{
@@ -48,6 +51,9 @@ var AdditionalLicenseTTLMetadata = metric.Metadata{
 	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
 	Unit:        metric.Unit_SECONDS,
+	Essential:   true,
+	Category:    metric.Metadata_EXPIRATIONS,
+	HowToUse:    "See Description.",
 }
 
 // GetLicenseTTL is a function which returns the TTL for the active cluster.
