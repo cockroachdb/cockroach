@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -354,6 +355,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	for i := 0; ; i++ {
 		initialScan := i == 0
 		initialScanOnly := f.endTime == f.initialHighWater
+
 		scannedSpans, scannedTS, err := f.scanIfShould(ctx, initialScan, initialScanOnly, rangeFeedResumeFrontier.Frontier())
 		if err != nil {
 			return err
@@ -484,6 +486,9 @@ func filterCheckpointSpans(
 func (f *kvFeed) scanIfShould(
 	ctx context.Context, initialScan bool, initialScanOnly bool, highWater hlc.Timestamp,
 ) ([]roachpb.Span, hlc.Timestamp, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.scan_if_should")
+	defer sp.Finish()
+
 	scanTime := highWater.Next()
 
 	events, err := f.tableFeed.Peek(ctx, scanTime)
@@ -576,6 +581,9 @@ func (f *kvFeed) scanIfShould(
 // If the function returns a nil error, resumeFrontier.Frontier() will be
 // ts.Prev() where ts is the schema change timestamp.
 func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Frontier) (err error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.run_until_table_event")
+	defer sp.Finish()
+
 	startFrom := resumeFrontier.Frontier()
 
 	// Determine whether to request the previous value of each update from
@@ -707,6 +715,9 @@ func copyFromSourceToDestUntilTableEvent(
 	knobs TestingKnobs,
 	st *timers.ScopedTimers,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.copy_from_source_to_dest_until_table_event")
+	defer sp.Finish()
+
 	// Initially, the only copy boundary is the end time if one is specified.
 	// Once we discover a table event (which is before the end time), that will
 	// become the new boundary.
