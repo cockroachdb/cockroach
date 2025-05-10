@@ -187,10 +187,17 @@ func okToStress(testName string) bool {
 }
 
 func getDiff(ctx context.Context, sha string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "merge-base", "origin/master", sha)
+	// We could also use `git merge-base <release-branch>` here, but then we'd
+	// need to know the release branch. As long as we force a merge-based PR
+	// workflow and nobody puts merges into their PR commit history, this will
+	// work just fine.
+	args := []string{"git", "log", "--merges", "-n", "1", sha + "~"}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	var stdErr strings.Builder
+	cmd.Stderr = &stdErr
 	baseShaBytes, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "%v failed: %s", args, cmd.Stderr)
 	}
 	baseSha := strings.TrimSpace(string(baseShaBytes))
 	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--", ":!pkg/acceptance/compose/**")
