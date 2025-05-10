@@ -944,9 +944,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			now := timeutil.Now()
 			pacer.StartTask(now)
 			// Update the liveness map.
-			if s.cfg.NodeLiveness != nil {
-				s.updateLivenessMap()
-			}
+			s.updateLivenessMap()
 			s.updateIOThresholdMap()
 
 			s.unquiescedOrAwakeReplicas.Lock()
