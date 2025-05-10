@@ -66,46 +66,55 @@ func registerOnlineRestorePerf(r registry.Registry) {
 	// latency relative to online restore (prefix restore/control/*).
 	for _, sp := range []onlineRestoreSpecs{
 		{
-			// 400GB tpce Online Restore
-			restoreSpecs: restoreSpecs{
-				hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 1000 /* MB/s */, workloadNode: true}),
-				backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: fixtureFromMasterVersion, numBackupsInChain: 5}),
-				timeout:                1 * time.Hour,
-				suites:                 registry.Suites(registry.Nightly),
-				restoreUptoIncremental: 1,
-				skip:                   "fails because of #118283",
-			},
-		},
-		{
 			// 350 GB tpcc Online Restore
 			restoreSpecs: restoreSpecs{
 				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
-				backup: makeRestoringBackupSpecs(backupSpecs{
-					nonRevisionHistory: true,
-					cloud:              spec.GCE,
-					version:            "24.1",
-					workload:           tpccRestore{tpccRestoreOptions{warehouses: 5000, waitFraction: 0, workers: 100, maxRate: 300}},
-					customFixtureDir:   `'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=5k?AUTH=implicit'`}),
-				timeout:                1 * time.Hour,
-				suites:                 registry.Suites(registry.Nightly),
-				restoreUptoIncremental: 0,
+				backup: backupSpecs{
+					cloud: spec.GCE,
+					workload: tpccRestore{
+						fixture: SmallFixture,
+						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
+					},
+				},
+				timeout:             1 * time.Hour,
+				suites:              registry.Suites(registry.Nightly),
+				numBackupsToRestore: 1,
 			},
-			linkPhaseTimeout:     30 * time.Second, // typically takes 15 seconds
+			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes. Should get faster once we address #124767.
 		},
 		{
-			// 8.5TB tpcc Online Restore
+			// 350 GB tpcc Online Restore with 48 incrementals
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+				backup: backupSpecs{
+					cloud: spec.GCE,
+					workload: tpccRestore{
+						fixture: SmallFixture,
+						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
+					},
+				},
+				timeout:             1 * time.Hour,
+				suites:              registry.Suites(registry.Nightly),
+				numBackupsToRestore: 0,
+			},
+			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
+			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes. Should get faster once we address #124767.
+		},
+		{
+			// 2TB tpcc Online Restore
 			restoreSpecs: restoreSpecs{
 				hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
-				backup: makeRestoringBackupSpecs(backupSpecs{
-					nonRevisionHistory: true,
-					cloud:              spec.GCE,
-					version:            "24.1",
-					workload:           tpccRestore{tpccRestoreOptions{warehouses: 150000, waitFraction: 0, workers: 100, maxRate: 1000}},
-					customFixtureDir:   `'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit'`}),
-				timeout:                3 * time.Hour,
-				suites:                 registry.Suites(registry.Nightly),
-				restoreUptoIncremental: 0,
+				backup: backupSpecs{
+					cloud: spec.GCE,
+					workload: tpccRestore{
+						fixture: MediumFixture,
+						opts:    tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
+					},
+				},
+				timeout:             3 * time.Hour,
+				suites:              registry.Suites(registry.Nightly),
+				numBackupsToRestore: 1,
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
 			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours. Should get faster once we address #124767.
@@ -210,15 +219,18 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 	sp := onlineRestoreSpecs{
 		restoreSpecs: restoreSpecs{
 			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
-			backup: makeRestoringBackupSpecs(backupSpecs{
-				nonRevisionHistory: true,
-				version:            fixtureFromMasterVersion,
-				workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 10, workers: 1, waitFraction: 0, maxOps: 1000}}}),
-			timeout:                15 * time.Minute,
-			suites:                 registry.Suites(registry.Nightly),
-			restoreUptoIncremental: 1,
-			namePrefix:             "online/correctness",
-			skip:                   "skip for now - flaky",
+			backup: backupSpecs{
+				cloud: spec.AWS,
+				workload: tpccRestore{
+					fixture: TinyFixture,
+					opts:    tpccRunOpts{workers: 1, waitFraction: 0, maxOps: 1000},
+				},
+			},
+			timeout:             15 * time.Minute,
+			suites:              registry.Suites(registry.Nightly),
+			numBackupsToRestore: 2,
+			namePrefix:          "online/correctness",
+			skip:                "skip for now - flaky",
 		}}
 	sp.initTestName()
 	r.Add(
@@ -579,7 +591,7 @@ func runRestore(
 			return errors.Wrapf(err, "failed to add some empty tables")
 		}
 		restoreStartTime = timeutil.Now()
-		restoreCmd := rd.restoreCmd(fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)
+		restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)
 		t.L().Printf("Running %s", restoreCmd)
 		if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
 			return err
@@ -602,7 +614,7 @@ func runRestore(
 			return nil
 		}
 		workloadStartTime = timeutil.Now()
-		err := sp.backup.workload.run(ctx, t, c, sp.hardware)
+		err := sp.backup.workload.Run(ctx, t, c, sp.hardware)
 		// We expect the workload to return a context cancelled error because
 		// the roachtest driver cancels the monitor's context after the download job completes
 		if err != nil && ctx.Err() == nil {
