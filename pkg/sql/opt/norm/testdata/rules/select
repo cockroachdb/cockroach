@@ -15,6 +15,10 @@ CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 ----
 
 exec-ddl
+CREATE TABLE d (k INT PRIMARY KEY, a INT NOT NULL, b INT, c INT, d FLOAT)
+----
+
+exec-ddl
 CREATE TABLE e
 (
     k INT PRIMARY KEY,
@@ -1637,6 +1641,144 @@ scan b
 exec-ddl
 DROP INDEX partial_idx
 ----
+
+# --------------------------------------------------
+# SimplifyIsCondition
+# --------------------------------------------------
+
+norm expect=SimplifyIsCondition
+SELECT * FROM d WHERE a = 1 AND k IS NOT DISTINCT FROM 1 AND d = 1.0
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d:5 = 1.0 [outer=(5), constraints=(/5: [/1.0 - /1.0]; tight), fd=()-->(5)]
+
+# The rule applies if at least one of the operands is non-nullable.
+norm expect=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM b
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 = b:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
+# The rule does not apply if both operands are nullable.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NOT DISTINCT FROM NULL
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE NULL IS NOT DISTINCT FROM b
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NOT DISTINCT FROM c
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NOT DISTINCT FROM c:4 [outer=(3,4)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NULL
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+# The rule does not apply if the operands are tuples.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE (k, a) IS NOT DISTINCT FROM (a, k)
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (k:1, a:2) IS NOT DISTINCT FROM (a:2, k:1) [outer=(1,2), immutable]
+
+# The rule does not apply if the operands do not have identical types.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM 1.23
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 IS NOT DISTINCT FROM 1.23 [outer=(2)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM d
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 IS NOT DISTINCT FROM d:5 [outer=(2,5)]
 
 # --------------------------------------------------
 # PushSelectIntoProjectSet
