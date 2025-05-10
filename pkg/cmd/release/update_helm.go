@@ -15,7 +15,6 @@ import (
 func updateHelm(workDir string, version string) error {
 	commands := []*exec.Cmd{
 		exec.Command("bazel", "build", "//build"),
-		// Helm charts use the version without the "v" prefix, but the bumper trims it if present.
 		exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build bump %s", version)),
 	}
 	for _, cmd := range commands {
