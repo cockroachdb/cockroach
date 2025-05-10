@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,8 +65,12 @@ type senderGroup struct {
 }
 
 func (g *senderGroup) Send(rangeID roachpb.RangeID, request kvpb.Request) {
+	g.SendCtx(context.Background(), rangeID, request)
+}
+
+func (g *senderGroup) SendCtx(ctx context.Context, rangeID roachpb.RangeID, request kvpb.Request) {
 	g.g.Go(func() error {
-		_, err := g.b.Send(context.Background(), rangeID, request)
+		_, err := g.b.Send(ctx, rangeID, request)
 		return err
 	})
 }
@@ -353,6 +358,51 @@ func TestBatcherSend(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatalf("expected no errors, got %v", err)
 	}
+}
+
+func TestBatcherSend_WithTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	b := New(Config{
+		MaxMsgsPerBatch: 1,
+		Sender:          sc,
+		Stopper:         stopper,
+	})
+
+	assertTenantID := func(wantTenID roachpb.TenantID) {
+		select {
+		case s := <-sc:
+			require.Len(t, s.ba.Requests, 1)
+			// Assert that the tenant ID associated with the request was set on the
+			// context for the outbound request.
+			tenID, ok := roachpb.ClientTenantFromContext(s.ctx)
+			require.True(t, ok)
+			require.Equal(t, wantTenID, tenID)
+			s.respChan <- batchResp{}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("requests to r1 did not show up")
+		}
+	}
+
+	g := senderGroup{b: b}
+	ctx := context.Background()
+
+	// Send a request to a range without a tenant, which should be associated with
+	// the system tenant.
+	g.SendCtx(ctx, 1, &kvpb.GetRequest{})
+	assertTenantID(roachpb.SystemTenantID)
+
+	// Send a request to both range 2 and 3. The ranges are owned by separate
+	// tenants. Assert the batches were sent with the correct tenant ID set.
+	tenId := roachpb.MustMakeTenantID(100)
+	g.SendCtx(ctx, 2, kvpb.NewGet(keys.MakeTenantPrefix(tenId)))
+	assertTenantID(tenId)
+
+	tenId = roachpb.MustMakeTenantID(200)
+	g.SendCtx(ctx, 3, kvpb.NewGet(keys.MakeTenantPrefix(tenId)))
+	assertTenantID(tenId)
 }
 
 func TestSendAfterStopped(t *testing.T) {
