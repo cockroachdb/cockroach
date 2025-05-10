@@ -691,7 +691,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 // TODO(nvanbenschoten,andrei): Currently, the benchmark indicates that a call
 // takes about 130ns. This exceeds the latency budget we've allocated to the
 // call. However, it looks like there is some low-hanging fruit. 70% of the time
-// is spent in leaseStatusForRequestRLocked, within which 24% of the total time
+// is spent in leaseStatusForRequest, within which 24% of the total time
 // is spent zeroing and copying memory and 30% of the total time is spent in
 // (*NodeLiveness).GetLiveness, grabbing the current node's liveness record. If
 // we eliminate some memory copying and pass the node liveness record in to the
