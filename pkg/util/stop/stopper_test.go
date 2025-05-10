@@ -7,7 +7,6 @@ package stop_test
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -569,59 +568,6 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	}
 }
 
-func maybePrint(context.Context) {
-	if testing.Verbose() { // This just needs to be complicated enough not to inline.
-		fmt.Println("blah")
-	}
-}
-
-func BenchmarkDirectCall(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	s := stop.NewStopper()
-	ctx := context.Background()
-	defer s.Stop(ctx)
-	for i := 0; i < b.N; i++ {
-		maybePrint(ctx)
-	}
-}
-
-func BenchmarkStopper(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	ctx := context.Background()
-	s := stop.NewStopper()
-	defer s.Stop(ctx)
-	for i := 0; i < b.N; i++ {
-		if err := s.RunTask(ctx, "test", maybePrint); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-func BenchmarkDirectCallPar(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	s := stop.NewStopper()
-	ctx := context.Background()
-	defer s.Stop(ctx)
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			maybePrint(ctx)
-		}
-	})
-}
-
-func BenchmarkStopperPar(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	ctx := context.Background()
-	s := stop.NewStopper()
-	defer s.Stop(ctx)
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := s.RunTask(ctx, "test", maybePrint); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
 func TestCancelInCloser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -727,5 +673,72 @@ func TestStopperRunAsyncTaskCreatesRootSpans(t *testing.T) {
 			},
 		))
 		require.Equal(t, hasSpan, <-c != nil)
+	})
+}
+
+// TestHandleOnFinishedTraceSpan shows that we can successfully use the Stopper
+// in situations in which the trace span gets finished after creating the Handle
+// but before launching the task.
+func TestHandleOnFinishedTraceSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := tracing.NewTracer()
+	ctx := context.Background()
+	s := stop.NewStopper(stop.WithTracer(tr))
+	defer s.Stop(ctx)
+
+	ctx, sp := tr.StartSpanCtx(ctx, "root", tracing.WithForceRealSpan())
+	// NB: can't `defer sp.Finish()` here since we'd then double-finish the span
+	// in this test and trip the assertion.
+	ctx, hdl, err := s.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "test",
+		SpanOpt:  stop.ChildSpan,
+	})
+	require.NoError(t, err)
+
+	sp.Finish()
+	go func(ctx context.Context, hdl *stop.Handle) {
+		defer hdl.Activate(ctx).Release(ctx)
+	}(ctx, hdl)
+}
+
+// TestHandleWithoutActivateOrRelease demonstrates that acquiring a Handle
+// without releasing it blocks the stopper on drain, meaning that such mistakes
+// are likely to be caught quickly.
+func TestHandleWithoutActivateOrRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "activate", func(t *testing.T, activate bool) {
+		s := stop.NewStopper()
+		defer s.Stop(ctx)
+
+		ctx, hdl, err := s.GetHandle(ctx, stop.TaskOpts{})
+		require.NoError(t, err)
+
+		relCh := make(chan stop.ActiveHandle, 1)
+		go func() {
+			if activate {
+				relCh <- hdl.Activate(ctx)
+				// Oops, forgot release!
+			} // otherwise, forgot Activate too
+		}()
+
+		stopCh := make(chan struct{})
+		go func() {
+			s.Quiesce(ctx)
+			close(stopCh)
+		}()
+		select {
+		case <-time.After(time.Millisecond):
+			// Expected: we acquired a handle, but never released it.
+		case <-stopCh:
+			t.Fatal("stopper unexpectedly quiesced")
+		}
+		// Release the handle, allowing the deferred Stop to work.
+		if !activate {
+			hdl.Activate(ctx).Release(ctx)
+		} else {
+			(<-relCh).Release(ctx)
+		}
 	})
 }
