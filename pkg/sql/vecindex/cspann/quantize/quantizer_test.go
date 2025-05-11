@@ -106,6 +106,17 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 		rabitQ.EstimateDistances(
 			&s.Workspace, rabitQSet, queryVector, estimated, errorBounds)
 
+		// UnQuantizer and RaBitQuantizer should have calculated same centroid.
+		require.Equal(t, unQuantizedSet.GetCentroid(), rabitQSet.GetCentroid())
+
+		buf.WriteString("  Query = ")
+		utils.WriteVector(&buf, queryVector, 4)
+		buf.WriteByte('\n')
+
+		buf.WriteString("  Centroid = ")
+		utils.WriteVector(&buf, rabitQSet.GetCentroid(), 4)
+		buf.WriteByte('\n')
+
 		for i := range vectors.Count {
 			var errorBound string
 			if errorBounds[i] != 0 {
@@ -118,11 +129,7 @@ func (s *testState) estimateDistances(t *testing.T, d *datadriven.TestData) stri
 		}
 	}
 
-	centroid := vectors.Centroid(make(vector.T, vectors.Dims))
-	buf.WriteString("Centroid = ")
-	utils.WriteVector(&buf, centroid, 4)
-
-	buf.WriteString("\nL2Squared\n")
+	buf.WriteString("L2Squared\n")
 	doTest(vecdist.L2Squared)
 
 	buf.WriteString("InnerProduct\n")
@@ -220,11 +227,19 @@ func (s *testState) calculateRecall(t *testing.T, d *datadriven.TestData) string
 	fmt.Fprintf(&buf, "Euclidean: %.2f%% recall@%d\n",
 		calculateAvgRecall(vecdist.L2Squared)*100, topK)
 
-	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
-		calculateAvgRecall(vecdist.Cosine)*100, topK)
-
 	fmt.Fprintf(&buf, "InnerProduct: %.2f%% recall@%d\n",
 		calculateAvgRecall(vecdist.InnerProduct)*100, topK)
+
+	// For cosine distance, normalize the query and input vectors.
+	for i := range queryVectors.Count {
+		num32.Normalize(queryVectors.At(i))
+	}
+	for i := range dataVectors.Count {
+		num32.Normalize(dataVectors.At(i))
+	}
+
+	fmt.Fprintf(&buf, "Cosine: %.2f%% recall@%d\n",
+		calculateAvgRecall(vecdist.Cosine)*100, topK)
 
 	return buf.String()
 }

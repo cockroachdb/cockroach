@@ -5,7 +5,9 @@
 
 package quantize
 
-import "github.com/cockroachdb/cockroach/pkg/util/vector"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
+)
 
 // GetCount implements the QuantizedVectorSet interface.
 func (vs *UnQuantizedVectorSet) GetCount() int {

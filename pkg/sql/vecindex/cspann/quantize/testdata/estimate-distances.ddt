@@ -3,14 +3,19 @@ estimate-distances query=[0,2]
 [-2,0]
 [2,0]
 ----
-Centroid = (0, 0)
 L2Squared
+  Query = (0, 2)
+  Centroid = (0, 0)
   (-2, 0): exact is 8, estimate is 0 ± 5.66
   (2, 0): exact is 8, estimate is 0 ± 5.66
 InnerProduct
+  Query = (0, 2)
+  Centroid = (0, 0)
   (-2, 0): exact is 0, estimate is -4 ± 2.83
   (2, 0): exact is 0, estimate is -4 ± 2.83
 Cosine
+  Query = (0, 1)
+  Centroid = (0, 0)
   (-1, 0): exact is 1, estimate is 0 ± 0.71
   (1, 0): exact is 1, estimate is 0 ± 0.71
 
@@ -19,30 +24,40 @@ estimate-distances query=[2,4]
 [0,2]
 [4,2]
 ----
-Centroid = (2, 2)
 L2Squared
+  Query = (2, 4)
+  Centroid = (2, 2)
   (0, 2): exact is 8, estimate is 0 ± 5.66
   (4, 2): exact is 8, estimate is 0 ± 5.66
 InnerProduct
-  (0, 2): exact is -8, estimate is -12 ± 2.83
-  (4, 2): exact is -16, estimate is -20 ± 2.83
+  Query = (2, 4)
+  Centroid = (0.7071, 0.7071)
+  (0, 2): exact is -8, estimate is -6.828 ± 3.69
+  (4, 2): exact is -16, estimate is -20 ± 8.85
 Cosine
-  (0, 1): exact is 0.106, estimate is 0.088 ± 0.06
-  (0.8944, 0.4472): exact is 0.2, estimate is 0.218 ± 0.06
+  Query = (0.4472, 0.8944)
+  Centroid = (0.5257, 0.8507)
+  (0, 1): exact is 0.106, estimate is 0.099 ± 0.03
+  (0.8944, 0.4472): exact is 0.2, estimate is 0.201 ± 0.03
 
 # Centroid is [0,0], query vector equals one of the data vectors.
 estimate-distances query=[2,0]
 [-2,0]
 [2,0]
 ----
-Centroid = (0, 0)
 L2Squared
+  Query = (2, 0)
+  Centroid = (0, 0)
   (-2, 0): exact is 16, estimate is 16 ± 5.66
   (2, 0): exact is 0, estimate is 0 ± 5.66
 InnerProduct
+  Query = (2, 0)
+  Centroid = (0, 0)
   (-2, 0): exact is 4, estimate is 4 ± 2.83
   (2, 0): exact is -4, estimate is -4 ± 2.83
 Cosine
+  Query = (1, 0)
+  Centroid = (0, 0)
   (-1, 0): exact is 2, estimate is 2 ± 0.71
   (1, 0): exact is 0, estimate is 0 ± 0.71
 
@@ -51,30 +66,40 @@ estimate-distances query=[4,2]
 [0,2]
 [4,2]
 ----
-Centroid = (2, 2)
 L2Squared
+  Query = (4, 2)
+  Centroid = (2, 2)
   (0, 2): exact is 16, estimate is 16 ± 5.66
   (4, 2): exact is 0, estimate is 0 ± 5.66
 InnerProduct
-  (0, 2): exact is -4, estimate is -4 ± 2.83
-  (4, 2): exact is -20, estimate is -20 ± 2.83
+  Query = (4, 2)
+  Centroid = (0.7071, 0.7071)
+  (0, 2): exact is -4, estimate is -2.485 ± 3.69
+  (4, 2): exact is -20, estimate is -20 ± 8.85
 Cosine
-  (0, 1): exact is 0.553, estimate is 0.553 ± 0.2
-  (0.8944, 0.4472): exact is 0, estimate is 0 ± 0.2
+  Query = (0.8944, 0.4472)
+  Centroid = (0.5257, 0.8507)
+  (0, 1): exact is 0.553, estimate is 0.64 ± 0.21
+  (0.8944, 0.4472): exact is 0, estimate is 0 ± 0.21
 
 # Query vector is parallel, but longer, than one of the data vectors.
 estimate-distances query=[4,0]
 [-2,0]
 [2,0]
 ----
-Centroid = (0, 0)
 L2Squared
+  Query = (4, 0)
+  Centroid = (0, 0)
   (-2, 0): exact is 36, estimate is 36 ± 11.31
   (2, 0): exact is 4, estimate is 4 ± 11.31
 InnerProduct
+  Query = (4, 0)
+  Centroid = (0, 0)
   (-2, 0): exact is 8, estimate is 8 ± 5.66
   (2, 0): exact is -8, estimate is -8 ± 5.66
 Cosine
+  Query = (1, 0)
+  Centroid = (0, 0)
   (-1, 0): exact is 2, estimate is 2 ± 0.71
   (1, 0): exact is 0, estimate is 0 ± 0.71
 
@@ -83,16 +108,21 @@ estimate-distances query=[2,2]
 [0,2]
 [4,2]
 ----
-Centroid = (2, 2)
 L2Squared
+  Query = (2, 2)
+  Centroid = (2, 2)
   (0, 2): exact is 4, estimate is 4
   (4, 2): exact is 4, estimate is 4
 InnerProduct
-  (0, 2): exact is -4, estimate is -4
-  (4, 2): exact is -12, estimate is -12
+  Query = (2, 2)
+  Centroid = (0.7071, 0.7071)
+  (0, 2): exact is -4, estimate is -3.243 ± 1.91
+  (4, 2): exact is -12, estimate is -13.128 ± 4.57
 Cosine
-  (0, 1): exact is 0.293, estimate is 0.278 ± 0.1
-  (0.8944, 0.4472): exact is 0.051, estimate is 0.067 ± 0.1
+  Query = (0.7071, 0.7071)
+  Centroid = (0.5257, 0.8507)
+  (0, 1): exact is 0.293, estimate is 0.32 ± 0.09
+  (0.8944, 0.4472): exact is 0.051, estimate is 0.05 ± 0.09
 
 # All data vectors are the same, query is the same.
 estimate-distances query=[2,2]
@@ -100,19 +130,24 @@ estimate-distances query=[2,2]
 [2,2]
 [2,2]
 ----
-Centroid = (2, 2)
 L2Squared
+  Query = (2, 2)
+  Centroid = (2, 2)
   (2, 2): exact is 0, estimate is 0
   (2, 2): exact is 0, estimate is 0
   (2, 2): exact is 0, estimate is 0
 InnerProduct
-  (2, 2): exact is -8, estimate is -8
-  (2, 2): exact is -8, estimate is -8
-  (2, 2): exact is -8, estimate is -8
+  Query = (2, 2)
+  Centroid = (0.7071, 0.7071)
+  (2, 2): exact is -8, estimate is -8 ± 2.36
+  (2, 2): exact is -8, estimate is -8 ± 2.36
+  (2, 2): exact is -8, estimate is -8 ± 2.36
 Cosine
-  (0.7071, 0.7071): exact is 0, estimate is 0
-  (0.7071, 0.7071): exact is 0, estimate is 0
-  (0.7071, 0.7071): exact is 0, estimate is 0
+  Query = (0.7071, 0.7071)
+  Centroid = (0.7071, 0.7071)
+  (0.7071, 0.7071): exact is 0, estimate is 0 ± 0
+  (0.7071, 0.7071): exact is 0, estimate is 0 ± 0
+  (0.7071, 0.7071): exact is 0, estimate is 0 ± 0
 
 # All data vectors are the same, query is different.
 estimate-distances query=[3,4]
@@ -120,19 +155,24 @@ estimate-distances query=[3,4]
 [2,2]
 [2,2]
 ----
-Centroid = (2, 2)
 L2Squared
+  Query = (3, 4)
+  Centroid = (2, 2)
   (2, 2): exact is 5, estimate is 5
   (2, 2): exact is 5, estimate is 5
   (2, 2): exact is 5, estimate is 5
 InnerProduct
-  (2, 2): exact is -14, estimate is -14
-  (2, 2): exact is -14, estimate is -14
-  (2, 2): exact is -14, estimate is -14
+  Query = (3, 4)
+  Centroid = (0.7071, 0.7071)
+  (2, 2): exact is -14, estimate is -14 ± 5.19
+  (2, 2): exact is -14, estimate is -14 ± 5.19
+  (2, 2): exact is -14, estimate is -14 ± 5.19
 Cosine
-  (0.7071, 0.7071): exact is 0.01, estimate is 0.01
-  (0.7071, 0.7071): exact is 0.01, estimate is 0.01
-  (0.7071, 0.7071): exact is 0.01, estimate is 0.01
+  Query = (0.6, 0.8)
+  Centroid = (0.7071, 0.7071)
+  (0.7071, 0.7071): exact is 0.01, estimate is 0.01 ± 0
+  (0.7071, 0.7071): exact is 0.01, estimate is 0.01 ± 0
+  (0.7071, 0.7071): exact is 0.01, estimate is 0.01 ± 0
 
 # All data vectors and query vector are zeros.
 estimate-distances query=[0,0]
@@ -140,19 +180,24 @@ estimate-distances query=[0,0]
 [0,0]
 [0,0]
 ----
-Centroid = (0, 0)
 L2Squared
+  Query = (0, 0)
+  Centroid = (0, 0)
   (0, 0): exact is 0, estimate is 0
   (0, 0): exact is 0, estimate is 0
   (0, 0): exact is 0, estimate is 0
 InnerProduct
+  Query = (0, 0)
+  Centroid = (0, 0)
   (0, 0): exact is 0, estimate is 0
   (0, 0): exact is 0, estimate is 0
   (0, 0): exact is 0, estimate is 0
 Cosine
-  (0.7071, 0.7071): exact is 0, estimate is 0
-  (0.7071, 0.7071): exact is 0, estimate is 0
-  (0.7071, 0.7071): exact is 0, estimate is 0
+  Query = (0, 0)
+  Centroid = (0, 0)
+  (0, 0): exact is 1, estimate is 1
+  (0, 0): exact is 1, estimate is 1
+  (0, 0): exact is 1, estimate is 1
 
 # All data vectors are colinear, but at different scales.
 estimate-distances query=[10,0]
@@ -160,16 +205,21 @@ estimate-distances query=[10,0]
 [4,0]
 [16,0]
 ----
-Centroid = (7, 0)
 L2Squared
+  Query = (10, 0)
+  Centroid = (7, 0)
   (1, 0): exact is 81, estimate is 81 ± 25.46
   (4, 0): exact is 36, estimate is 36 ± 12.73
   (16, 0): exact is 36, estimate is 36 ± 38.18
 InnerProduct
-  (1, 0): exact is -10, estimate is -10 ± 12.73
-  (4, 0): exact is -40, estimate is -40 ± 6.36
-  (16, 0): exact is -160, estimate is -160 ± 19.09
+  Query = (10, 0)
+  Centroid = (1, 0)
+  (1, 0): exact is -10, estimate is -10
+  (4, 0): exact is -40, estimate is -40 ± 19.09
+  (16, 0): exact is -160, estimate is -160 ± 95.46
 Cosine
+  Query = (1, 0)
+  Centroid = (1, 0)
   (1, 0): exact is 0, estimate is 0
   (1, 0): exact is 0, estimate is 0
   (1, 0): exact is 0, estimate is 0
@@ -183,8 +233,9 @@ estimate-distances query=[3,4]
 [1,8]
 [12,5]
 ----
-Centroid = (4.5, 3.5)
 L2Squared
+  Query = (3, 4)
+  Centroid = (4.5, 3.5)
   (5, -1): exact is 29, estimate is 39.4 ± 10.12
   (2, 2): exact is 5, estimate is 6.75 ± 6.52
   (3, 4): exact is 0, estimate is 0 ± 3.54
@@ -192,19 +243,23 @@ L2Squared
   (1, 8): exact is 20, estimate is 18.75 ± 12.75
   (12, 5): exact is 82, estimate is 74 ± 17.1
 InnerProduct
-  (5, -1): exact is -11, estimate is -5.8 ± 5.06
-  (2, 2): exact is -14, estimate is -13.125 ± 3.26
-  (3, 4): exact is -25, estimate is -25 ± 1.77
-  (4, 3): exact is -24, estimate is -24 ± 0.79
-  (1, 8): exact is -35, estimate is -35.625 ± 6.37
-  (12, 5): exact is -56, estimate is -60 ± 8.55
+  Query = (3, 4)
+  Centroid = (0.7894, 0.6139)
+  (5, -1): exact is -11, estimate is -3.053 ± 12.89
+  (2, 2): exact is -14, estimate is -13.93 ± 5.26
+  (3, 4): exact is -25, estimate is -25 ± 11.56
+  (4, 3): exact is -24, estimate is -24.825 ± 11.44
+  (1, 8): exact is -35, estimate is -49.749 ± 21.13
+  (12, 5): exact is -56, estimate is -68.367 ± 34.42
 Cosine
-  (0.9806, -0.1961): exact is 0.569, estimate is 0.565 ± 0.15
-  (0.7071, 0.7071): exact is 0.01, estimate is 0.025 ± 0.03
+  Query = (0.6, 0.8)
+  Centroid = (0.7827, 0.6224)
+  (0.9806, -0.1961): exact is 0.569, estimate is 0.638 ± 0.15
+  (0.7071, 0.7071): exact is 0.01, estimate is 0.01 ± 0.02
   (0.6, 0.8): exact is 0, estimate is 0 ± 0.05
-  (0.8, 0.6): exact is 0.04, estimate is 0.028 ± 0.02
-  (0.124, 0.9923): exact is 0.132, estimate is 0.119 ± 0.14
-  (0.9231, 0.3846): exact is 0.138, estimate is 0.146 ± 0.05
+  (0.8, 0.6): exact is 0.04, estimate is 0.04 ± 0.01
+  (0.124, 0.9923): exact is 0.132, estimate is 0.118 ± 0.14
+  (0.9231, 0.3846): exact is 0.138, estimate is 0.143 ± 0.05
 
 # Query is far outside the data cloud.
 estimate-distances query=[100,100]
@@ -215,8 +270,9 @@ estimate-distances query=[100,100]
 [1,8]
 [12,5]
 ----
-Centroid = (4.5, 3.5)
 L2Squared
+  Query = (100, 100)
+  Centroid = (4.5, 3.5)
   (5, -1): exact is 19226, estimate is 18461.199 ± 869.33
   (2, 2): exact is 19208, estimate is 19257 ± 559.78
   (3, 4): exact is 18625, estimate is 18432.5 ± 303.58
@@ -224,19 +280,23 @@ L2Squared
   (1, 8): exact is 18265, estimate is 18456.875 ± 1094.58
   (12, 5): exact is 16769, estimate is 15995 ± 1468.54
 InnerProduct
-  (5, -1): exact is -400, estimate is -782.4 ± 434.66
-  (2, 2): exact is -400, estimate is -375.5 ± 279.89
-  (3, 4): exact is -700, estimate is -796.25 ± 151.79
-  (4, 3): exact is -700, estimate is -700 ± 67.88
-  (1, 8): exact is -900, estimate is -804.063 ± 547.29
-  (12, 5): exact is -1700, estimate is -2087 ± 734.27
+  Query = (100, 100)
+  Centroid = (0.7894, 0.6139)
+  (5, -1): exact is -400, estimate is -142.05 ± 447.77
+  (2, 2): exact is -400, estimate is -401.161 ± 182.74
+  (3, 4): exact is -700, estimate is -724.409 ± 401.54
+  (4, 3): exact is -700, estimate is -712.136 ± 397.21
+  (1, 8): exact is -900, estimate is -1572.364 ± 733.72
+  (12, 5): exact is -1700, estimate is -1997.125 ± 1195.37
 Cosine
-  (0.9806, -0.1961): exact is 0.445, estimate is 0.419 ± 0.09
-  (0.7071, 0.7071): exact is 0, estimate is 0 ± 0.02
-  (0.6, 0.8): exact is 0.01, estimate is 0.019 ± 0.03
-  (0.8, 0.6): exact is 0.01, estimate is 0.004 ± 0.01
-  (0.124, 0.9923): exact is 0.211, estimate is 0.199 ± 0.08
-  (0.9231, 0.3846): exact is 0.075, estimate is 0.082 ± 0.03
+  Query = (0.7071, 0.7071)
+  Centroid = (0.7827, 0.6224)
+  (0.9806, -0.1961): exact is 0.445, estimate is 0.473 ± 0.07
+  (0.7071, 0.7071): exact is 0, estimate is 0 ± 0.01
+  (0.6, 0.8): exact is 0.01, estimate is 0.01 ± 0.02
+  (0.8, 0.6): exact is 0.01, estimate is 0.01 ± 0
+  (0.124, 0.9923): exact is 0.211, estimate is 0.203 ± 0.06
+  (0.9231, 0.3846): exact is 0.075, estimate is 0.077 ± 0.02
 
 # Data cloud is far away from origin.
 estimate-distances query=[108,108]
@@ -247,22 +307,27 @@ estimate-distances query=[108,108]
 [101,108]
 [112,105]
 ----
-Centroid = (104.5, 103.5)
 L2Squared
+  Query = (108, 108)
+  Centroid = (104.5, 103.5)
   (105, 99): exact is 90, estimate is 61.2 ± 36.5
   (102, 102): exact is 72, estimate is 75 ± 23.51
   (103, 104): exact is 41, estimate is 32.5 ± 12.75
   (104, 103): exact is 41, estimate is 41 ± 5.7
   (101, 108): exact is 49, estimate is 56.875 ± 45.96
-  (112, 105): exact is 25, estimate is 0 ± 61.66
+  (112, 105): exact is 25, estimate is 0 ± 48.66
 InnerProduct
-  (105, 99): exact is -22032, estimate is -22046.398 ± 18.25
-  (102, 102): exact is -22032, estimate is -22030.5 ± 11.75
-  (103, 104): exact is -22356, estimate is -22360.25 ± 6.37
-  (104, 103): exact is -22356, estimate is -22356 ± 2.85
-  (101, 108): exact is -22572, estimate is -22568.062 ± 22.98
-  (112, 105): exact is -23436, estimate is -23455 ± 30.83
+  Query = (108, 108)
+  Centroid = (0.7105, 0.7037)
+  (105, 99): exact is -22032, estimate is -22051.043 ± 15376.41
+  (102, 102): exact is -22032, estimate is -22031.998 ± 15369.69
+  (103, 104): exact is -22356, estimate is -22356.523 ± 15597.48
+  (104, 103): exact is -22356, estimate is -22356.52 ± 15597.47
+  (101, 108): exact is -22572, estimate is -22597.348 ± 15757.99
+  (112, 105): exact is -23436, estimate is -23460.359 ± 16364.57
 Cosine
+  Query = (0.7071, 0.7071)
+  Centroid = (0.7104, 0.7038)
   (0.7276, 0.686): exact is 0, estimate is 0 ± 0
   (0.7071, 0.7071): exact is 0, estimate is 0 ± 0
   (0.7037, 0.7105): exact is 0, estimate is 0 ± 0
@@ -279,8 +344,9 @@ estimate-distances query=[4,3,7,8]
 [1,8,10,12]
 [12,5,6,-4]
 ----
-Centroid = (4.5, 3.5, 4.8333, 6.1667)
 L2Squared
+  Query = (4, 3, 7, 8)
+  Centroid = (4.5, 3.5, 4.8333, 6.1667)
   (5, -1, 3, 10): exact is 37, estimate is 49.681 ± 18.16
   (2, 2, -5, 4): exact is 165, estimate is 159.348 ± 30.66
   (3, 4, 8, 7): exact is 4, estimate is 4.246 ± 10.64
@@ -288,16 +354,20 @@ L2Squared
   (1, 8, 10, 12): exact is 59, estimate is 62.744 ± 28.24
   (12, 5, 6, -4): exact is 213, estimate is 182.124 ± 37.37
 InnerProduct
-  (5, -1, 3, 10): exact is -118, estimate is -111.659 ± 9.08
-  (2, 2, -5, 4): exact is -11, estimate is -13.826 ± 15.33
-  (3, 4, 8, 7): exact is -136, estimate is -135.877 ± 5.32
-  (4, 3, 7, 8): exact is -138, estimate is -137.962 ± 4.28
-  (1, 8, 10, 12): exact is -194, estimate is -192.128 ± 14.12
-  (12, 5, 6, -4): exact is -73, estimate is -88.438 ± 18.68
+  Query = (4, 3, 7, 8)
+  Centroid = (0.4644, 0.3612, 0.4988, 0.6364)
+  (5, -1, 3, 10): exact is -118, estimate is -116.824 ± 58.08
+  (2, 2, -5, 4): exact is -11, estimate is -39.973 ± 36.75
+  (3, 4, 8, 7): exact is -136, estimate is -138.041 ± 58.1
+  (4, 3, 7, 8): exact is -138, estimate is -137.801 ± 57.98
+  (1, 8, 10, 12): exact is -194, estimate is -218.043 ± 89.78
+  (12, 5, 6, -4): exact is -73, estimate is -59.739 ± 77.34
 Cosine
-  (0.4303, -0.0861, 0.2582, 0.8607): exact is 0.135, estimate is 0.225 ± 0.08
-  (0.2857, 0.2857, -0.7143, 0.5714): exact is 0.866, estimate is 0.708 ± 0.17
-  (0.2554, 0.3405, 0.681, 0.5959): exact is 0.014, estimate is 0.024 ± 0.07
-  (0.3405, 0.2554, 0.5959, 0.681): exact is 0, estimate is 0 ± 0.06
-  (0.0569, 0.4551, 0.5689, 0.6827): exact is 0.061, estimate is 0.062 ± 0.08
-  (0.8072, 0.3363, 0.4036, -0.2691): exact is 0.582, estimate is 0.414 ± 0.15
+  Query = (0.3405, 0.2554, 0.5959, 0.681)
+  Centroid = (0.4839, 0.3529, 0.3988, 0.6944)
+  (0.4303, -0.0861, 0.2582, 0.8607): exact is 0.135, estimate is 0.152 ± 0.06
+  (0.2857, 0.2857, -0.7143, 0.5714): exact is 0.866, estimate is 0.619 ± 0.15
+  (0.2554, 0.3405, 0.681, 0.5959): exact is 0.014, estimate is 0 ± 0.05
+  (0.3405, 0.2554, 0.5959, 0.681): exact is 0, estimate is 0 ± 0.03
+  (0.0569, 0.4551, 0.5689, 0.6827): exact is 0.061, estimate is 0.06 ± 0.06
+  (0.8072, 0.3363, 0.4036, -0.2691): exact is 0.582, estimate is 0.408 ± 0.13
