@@ -100,6 +100,17 @@ func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
 		rabitQ.EstimateDistances(
 			&workspace, rabitQSet, queryVector, estimated, errorBounds)
 
+		// UnQuantizer and RaBitQuantizer should have calculated same centroid.
+		require.Equal(t, unQuantizedSet.GetCentroid(), rabitQSet.GetCentroid())
+
+		buf.WriteString("  Query = ")
+		utils.WriteVector(&buf, queryVector, 4)
+		buf.WriteByte('\n')
+
+		buf.WriteString("  Centroid = ")
+		utils.WriteVector(&buf, rabitQSet.GetCentroid(), 4)
+		buf.WriteByte('\n')
+
 		for i := range vectors.Count {
 			var errorBound string
 			if errorBounds[i] != 0 {
@@ -112,11 +123,7 @@ func testDistanceEstimation(t *testing.T, d *datadriven.TestData) string {
 		}
 	}
 
-	centroid := vectors.Centroid(make(vector.T, vectors.Dims))
-	buf.WriteString("Centroid = ")
-	utils.WriteVector(&buf, centroid, 4)
-
-	buf.WriteString("\nL2Squared\n")
+	buf.WriteString("L2Squared\n")
 	doTest(vecdist.L2Squared)
 
 	buf.WriteString("InnerProduct\n")
