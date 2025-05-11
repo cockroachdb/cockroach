@@ -281,6 +281,14 @@ func MakeController(
 func (n *controllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) (handle Handle, retErr error) {
+	// Pause CPU measurement for SQL work if it is happening locally on this
+	// goroutine.
+	sqlHandle := admission.SQLCPUAdmissionHandleFromContext(ctx)
+	if sqlHandle != nil {
+		gh := sqlHandle.TryRegisterGoroutine()
+		gh.PauseMeasuring()
+		defer gh.UnpauseMeasuring()
+	}
 	ah := Handle{tenantID: tenantID}
 	if n.kvAdmissionQ == nil {
 		return ah, nil
