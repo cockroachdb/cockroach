@@ -20,35 +20,30 @@ func TestSearchResult(t *testing.T) {
 	r1 := SearchResult{
 		QueryDistance:      1,
 		ErrorBound:         0.5,
-		CentroidDistance:   10,
 		ParentPartitionKey: 100,
 		ChildKey:           ChildKey{KeyBytes: []byte{10}},
 	}
 	r2 := SearchResult{
 		QueryDistance:      2,
 		ErrorBound:         0,
-		CentroidDistance:   20,
 		ParentPartitionKey: 200,
 		ChildKey:           ChildKey{KeyBytes: []byte{20}},
 	}
 	r3 := SearchResult{
 		QueryDistance:      2,
 		ErrorBound:         1,
-		CentroidDistance:   20,
 		ParentPartitionKey: 200,
 		ChildKey:           ChildKey{KeyBytes: []byte{30}},
 	}
 	r4 := SearchResult{
 		QueryDistance:      2,
 		ErrorBound:         1,
-		CentroidDistance:   30,
 		ParentPartitionKey: 300,
 		ChildKey:           ChildKey{KeyBytes: []byte{40}},
 	}
 	r5 := SearchResult{
 		QueryDistance:      4,
 		ErrorBound:         1,
-		CentroidDistance:   30,
 		ParentPartitionKey: 300,
 		ChildKey:           ChildKey{KeyBytes: []byte{40}},
 	}
@@ -96,21 +91,21 @@ func TestSearchSet(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	result1 := SearchResult{
-		QueryDistance: 3, ErrorBound: 0.5, CentroidDistance: 10, ParentPartitionKey: 100, ChildKey: ChildKey{KeyBytes: []byte{10}}}
+		QueryDistance: 3, ErrorBound: 0.5, ParentPartitionKey: 100, ChildKey: ChildKey{KeyBytes: []byte{10}}}
 	result2 := SearchResult{
-		QueryDistance: 6, ErrorBound: 1, CentroidDistance: 20, ParentPartitionKey: 200, ChildKey: ChildKey{KeyBytes: []byte{20}}}
+		QueryDistance: 6, ErrorBound: 1, ParentPartitionKey: 200, ChildKey: ChildKey{KeyBytes: []byte{20}}}
 	result3 := SearchResult{
-		QueryDistance: 1, ErrorBound: 0.5, CentroidDistance: 30, ParentPartitionKey: 300, ChildKey: ChildKey{KeyBytes: []byte{30}}}
+		QueryDistance: 1, ErrorBound: 0.5, ParentPartitionKey: 300, ChildKey: ChildKey{KeyBytes: []byte{30}}}
 	result4 := SearchResult{
-		QueryDistance: 4, ErrorBound: 0.5, CentroidDistance: 40, ParentPartitionKey: 400, ChildKey: ChildKey{KeyBytes: []byte{40}}}
+		QueryDistance: 4, ErrorBound: 0.5, ParentPartitionKey: 400, ChildKey: ChildKey{KeyBytes: []byte{40}}}
 	result5 := SearchResult{
-		QueryDistance: 6, ErrorBound: 1.5, CentroidDistance: 50, ParentPartitionKey: 500, ChildKey: ChildKey{KeyBytes: []byte{50}}}
+		QueryDistance: 6, ErrorBound: 1.5, ParentPartitionKey: 500, ChildKey: ChildKey{KeyBytes: []byte{50}}}
 	result6 := SearchResult{
-		QueryDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{KeyBytes: []byte{60}}}
+		QueryDistance: 5, ErrorBound: 1, ParentPartitionKey: 600, ChildKey: ChildKey{KeyBytes: []byte{60}}}
 	result7 := SearchResult{
-		QueryDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{KeyBytes: []byte{70}}}
+		QueryDistance: 4, ErrorBound: 1.5, ParentPartitionKey: 700, ChildKey: ChildKey{KeyBytes: []byte{70}}}
 	result8 := SearchResult{
-		QueryDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{KeyBytes: []byte{80}}}
+		QueryDistance: 0.5, ErrorBound: 0.5, ParentPartitionKey: 800, ChildKey: ChildKey{KeyBytes: []byte{80}}}
 
 	t.Run("empty set", func(t *testing.T) {
 		searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}

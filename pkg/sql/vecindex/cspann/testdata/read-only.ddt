@@ -33,10 +33,10 @@ Loaded 13 vectors.
 search max-results=2 beam-size=3
 (1, 6)
 ----
-vec4: 2 (centroid=1.25)
-vec10: 4 (centroid=1.75)
-vec5: 4 (centroid=2.02)
-vec8: 4 (centroid=2.25)
+vec4: 2
+vec10: 4
+vec5: 4
+vec8: 4
 13 leaf vectors, 16 vectors, 10 full vectors, 4 partitions
 
 format-tree
@@ -68,9 +68,9 @@ format-tree
 search max-results=3 beam-size=3
 (8, 5)
 ----
-vec9: 18 (centroid=4.95)
-vec11: 25 (centroid=2.36)
-vec5: 26 (centroid=2.02)
+vec9: 18
+vec11: 25
+vec5: 26
 13 leaf vectors, 16 vectors, 11 full vectors, 4 partitions
 
 format-tree

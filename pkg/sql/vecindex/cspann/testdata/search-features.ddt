@@ -13,70 +13,70 @@ CV stats:
 # Search with small beam size.
 search max-results=1 use-feature=5000 beam-size=1
 ----
-vec302: 0.6601 (centroid=0.53)
+vec302: 0.6601
 25 leaf vectors, 46 vectors, 15 full vectors, 4 partitions
 
 # Search for additional results.
 search max-results=6 use-feature=5000 beam-size=1
 ----
-vec302: 0.6601 (centroid=0.53)
-vec329: 0.6871 (centroid=0.67)
-vec386: 0.7301 (centroid=0.57)
-vec240: 0.7723 (centroid=0.66)
-vec347: 0.7745 (centroid=0.5)
-vec340: 0.7858 (centroid=0.59)
+vec302: 0.6601
+vec329: 0.6871
+vec386: 0.7301
+vec240: 0.7723
+vec347: 0.7745
+vec340: 0.7858
 25 leaf vectors, 46 vectors, 15 full vectors, 4 partitions
 
 # Use a larger beam size.
 search max-results=6 use-feature=5000 beam-size=4
 ----
-vec640: 0.6525 (centroid=0.55)
-vec302: 0.6601 (centroid=0.53)
-vec329: 0.6871 (centroid=0.67)
-vec386: 0.7301 (centroid=0.57)
-vec117: 0.7576 (centroid=0.51)
-vec25: 0.761 (centroid=0.45)
+vec640: 0.6525
+vec302: 0.6601
+vec329: 0.6871
+vec386: 0.7301
+vec117: 0.7576
+vec25: 0.761
 80 leaf vectors, 116 vectors, 23 full vectors, 11 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-feature=5000 beam-size=4 skip-rerank
 ----
-vec640: 0.6404 ± 0.04 (centroid=0.55)
-vec302: 0.6539 ± 0.03 (centroid=0.53)
-vec329: 0.6734 ± 0.04 (centroid=0.67)
-vec386: 0.7114 ± 0.04 (centroid=0.57)
-vec340: 0.7533 ± 0.04 (centroid=0.59)
-vec347: 0.7588 ± 0.03 (centroid=0.5)
+vec640: 0.6404 ± 0.04
+vec302: 0.6539 ± 0.03
+vec329: 0.6734 ± 0.04
+vec386: 0.7114 ± 0.04
+vec340: 0.7533 ± 0.04
+vec347: 0.7588 ± 0.03
 80 leaf vectors, 116 vectors, 0 full vectors, 11 partitions
 
 # Return top 25 results with large beam size.
 search max-results=25 use-feature=5000 beam-size=16
 ----
-vec771: 0.5624 (centroid=0.66)
-vec356: 0.5976 (centroid=0.49)
-vec640: 0.6525 (centroid=0.55)
-vec302: 0.6601 (centroid=0.53)
-vec329: 0.6871 (centroid=0.67)
-vec95: 0.7008 (centroid=0.6)
-vec249: 0.7268 (centroid=0.4)
-vec386: 0.7301 (centroid=0.57)
-vec309: 0.7311 (centroid=0.48)
-vec633: 0.7513 (centroid=0.42)
-vec117: 0.7576 (centroid=0.51)
-vec556: 0.7595 (centroid=0.5)
-vec25: 0.761 (centroid=0.45)
-vec872: 0.7707 (centroid=0.6)
-vec859: 0.7708 (centroid=0.5)
-vec240: 0.7723 (centroid=0.66)
-vec347: 0.7745 (centroid=0.5)
-vec11: 0.777 (centroid=0.52)
-vec340: 0.7858 (centroid=0.59)
-vec239: 0.7878 (centroid=0.5)
-vec848: 0.7958 (centroid=0.6)
-vec387: 0.8038 (centroid=0.45)
-vec637: 0.8039 (centroid=0.49)
-vec410: 0.8062 (centroid=0.46)
-vec979: 0.8066 (centroid=0.55)
+vec771: 0.5624
+vec356: 0.5976
+vec640: 0.6525
+vec302: 0.6601
+vec329: 0.6871
+vec95: 0.7008
+vec249: 0.7268
+vec386: 0.7301
+vec309: 0.7311
+vec633: 0.7513
+vec117: 0.7576
+vec556: 0.7595
+vec25: 0.761
+vec872: 0.7707
+vec859: 0.7708
+vec240: 0.7723
+vec347: 0.7745
+vec11: 0.777
+vec340: 0.7858
+vec239: 0.7878
+vec848: 0.7958
+vec387: 0.8038
+vec637: 0.8039
+vec410: 0.8062
+vec979: 0.8066
 313 leaf vectors, 391 vectors, 92 full vectors, 39 partitions
 
 # Search for an "easy" result, where adaptive search inspects less partitions.

@@ -66,9 +66,7 @@ message UnQuantizedVectorSet {
   // is not updated when vectors are added or removed.
   // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
-  // CentroidDistances is a slice of the exact distances of the vectors in the
-  // set from the centroid.
-  repeated float centroid_distances = 2;
+  reserved 2; // CentroidDistances
   // Vectors is the set of original full-size vectors.
   cockroach.util.vector.Set vectors = 3 [(gogoproto.nullable) = false];
 }
