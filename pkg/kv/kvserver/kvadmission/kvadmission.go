@@ -236,6 +236,7 @@ type Handle struct {
 	storeWorkHandle      admission.StoreWorkHandle
 	elasticCPUWorkHandle *admission.ElasticCPUWorkHandle
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
+	ghToUnpause          *admission.GoroutineCPUHandle
 
 	regularKVAdmissionQResp admission.AdmitResponse
 	cpuStart                time.Duration
@@ -449,11 +450,21 @@ func (n *controllerImpl) AdmitKVWork(
 			ah.regularKVAdmissionQResp = resp
 		}
 	}
+	// Pause CPU measurement for SQL work if it is happening locally on this
+	// goroutine.
+	sqlHandle := admission.SQLCPUAdmissionHandleFromContext(ctx)
+	if sqlHandle != nil {
+		ah.ghToUnpause = sqlHandle.TryRegisterGoroutine()
+		ah.ghToUnpause.PauseMeasuring()
+	}
 	return ah, nil
 }
 
 // AdmittedKVWorkDone implements the Controller interface.
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
+	if ah.ghToUnpause != nil {
+		ah.ghToUnpause.UnpauseMeasuring()
+	}
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.regularKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
