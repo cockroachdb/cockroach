@@ -157,22 +157,22 @@ func (p *Partition) Search(
 	defer w.FreeFloats(tempFloats)
 
 	// Estimate distances of the data vectors from the query vector.
-	tempSquaredDistances := tempFloats[:count]
+	tempDistances := tempFloats[:count]
 	tempErrorBounds := tempFloats[count : count*2]
 	p.quantizer.EstimateDistances(
-		w, p.quantizedSet, queryVector, tempSquaredDistances, tempErrorBounds)
+		w, p.quantizedSet, queryVector, tempDistances, tempErrorBounds)
 	centroidDistances := p.quantizedSet.GetCentroidDistances()
 
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
-	for i := range tempSquaredDistances {
+	for i := range tempDistances {
 		searchSet.tempResult = SearchResult{
-			QuerySquaredDistance: tempSquaredDistances[i],
-			ErrorBound:           tempErrorBounds[i],
-			CentroidDistance:     centroidDistances[i],
-			ParentPartitionKey:   partitionKey,
-			ChildKey:             p.childKeys[i],
-			ValueBytes:           p.valueBytes[i],
+			QueryDistance:      tempDistances[i],
+			ErrorBound:         tempErrorBounds[i],
+			CentroidDistance:   centroidDistances[i],
+			ParentPartitionKey: partitionKey,
+			ChildKey:           p.childKeys[i],
+			ValueBytes:         p.valueBytes[i],
 		}
 		searchSet.Add(&searchSet.tempResult)
 	}

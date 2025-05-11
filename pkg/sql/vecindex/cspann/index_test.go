@@ -240,7 +240,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 			errorBound = fmt.Sprintf("± %s ", utils.FormatFloat(result.ErrorBound, 2))
 		}
 		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QuerySquaredDistance, 4),
+			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QueryDistance, 4),
 			errorBound, utils.FormatFloat(result.CentroidDistance, 2))
 	}
 
@@ -285,7 +285,7 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 	s.Index.UnRandomizeVector(result.Vector, original)
 	utils.WriteVector(&buf, original, 4)
 
-	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QuerySquaredDistance, 4))
+	fmt.Fprintf(&buf, ", sqdist=%s", utils.FormatFloat(result.QueryDistance, 4))
 	if result.ErrorBound != 0 {
 		fmt.Fprintf(&buf, "±%s", utils.FormatFloat(result.ErrorBound, 2))
 	}

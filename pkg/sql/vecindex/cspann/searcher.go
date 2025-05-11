@@ -335,7 +335,7 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 		var zscore float64
 		if len(s.parentResults) >= s.idx.options.QualitySamples {
 			for i := range s.idx.options.QualitySamples {
-				s.idxCtx.tempQualitySamples[i] = float64(s.parentResults[i].QuerySquaredDistance)
+				s.idxCtx.tempQualitySamples[i] = float64(s.parentResults[i].QueryDistance)
 			}
 			samples := s.idxCtx.tempQualitySamples[:s.idx.options.QualitySamples]
 			zscore = s.idx.stats.ReportSearch(s.parent.Level(), samples, s.idxCtx.options.UpdateStats)
