@@ -161,7 +161,6 @@ func (p *Partition) Search(
 	tempErrorBounds := tempFloats[count : count*2]
 	p.quantizer.EstimateDistances(
 		w, p.quantizedSet, queryVector, tempDistances, tempErrorBounds)
-	centroidDistances := p.quantizedSet.GetCentroidDistances()
 
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
@@ -169,7 +168,6 @@ func (p *Partition) Search(
 		searchSet.tempResult = SearchResult{
 			QueryDistance:      tempDistances[i],
 			ErrorBound:         tempErrorBounds[i],
-			CentroidDistance:   centroidDistances[i],
 			ParentPartitionKey: partitionKey,
 			ChildKey:           p.childKeys[i],
 			ValueBytes:         p.valueBytes[i],

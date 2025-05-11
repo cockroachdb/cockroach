@@ -88,9 +88,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 						switch quantizedSet := quantizedSet.(type) {
 						case *quantize.UnQuantizedVectorSet:
 							var err error
-							buf, err = vecencoding.EncodeUnquantizerVector(buf,
-								quantizedSet.GetCentroidDistances()[i], set.At(i),
-							)
+							buf, err = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
 							require.NoError(t, err)
 						case *quantize.RaBitQuantizedVectorSet:
 							buf = vecencoding.EncodeRaBitQVector(buf,
@@ -150,7 +148,6 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 	q1, q2 := l.QuantizedSet(), r.QuantizedSet()
 	require.Equal(t, q1.GetCentroid(), q2.GetCentroid(), "centroids do not match")
 	require.Equal(t, q1.GetCount(), q2.GetCount(), "counts do not match")
-	require.Equal(t, q1.GetCentroidDistances(), q2.GetCentroidDistances(), "distances do not match")
 	switch leftSet := q1.(type) {
 	case *quantize.UnQuantizedVectorSet:
 		rightSet, ok := q2.(*quantize.UnQuantizedVectorSet)
@@ -162,6 +159,8 @@ func testingAssertPartitionsEqual(t *testing.T, l, r *cspann.Partition) {
 		require.Equal(t, leftSet.CodeCounts, rightSet.CodeCounts, "code counts do not match")
 		require.Equal(t, leftSet.Codes, rightSet.Codes, "codes do not match")
 		require.Equal(t, leftSet.QuantizedDotProducts, rightSet.QuantizedDotProducts, "dot products do not match")
+		require.Equal(t, leftSet.CentroidDistances, rightSet.CentroidDistances,
+			"centroid distances do not match")
 	default:
 		t.Fatalf("unexpected type %T", q1)
 	}

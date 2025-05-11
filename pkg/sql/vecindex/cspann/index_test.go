@@ -237,11 +237,10 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		result := &results[i]
 		var errorBound string
 		if result.ErrorBound != 0 {
-			errorBound = fmt.Sprintf("± %s ", utils.FormatFloat(result.ErrorBound, 2))
+			errorBound = fmt.Sprintf(" ± %s", utils.FormatFloat(result.ErrorBound, 2))
 		}
-		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QueryDistance, 4),
-			errorBound, utils.FormatFloat(result.CentroidDistance, 2))
+		fmt.Fprintf(&buf, "%s: %s%s\n",
+			string(result.ChildKey.KeyBytes), utils.FormatFloat(result.QueryDistance, 4), errorBound)
 	}
 
 	buf.WriteString(fmt.Sprintf("%d leaf vectors, ", searchSet.Stats.QuantizedLeafVectorCount))

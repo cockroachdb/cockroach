@@ -25,21 +25,16 @@ func TestUnQuantizerSimple(t *testing.T) {
 	vectors := vector.MakeSet(2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
 	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
-	require.Equal(t, []float32(nil), testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Add 3 vectors and verify centroid and centroid distances.
 	vectors = vector.MakeSetFromRawData([]float32{5, 2, 1, 2, 6, 5}, 2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
 	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
-	require.Equal(t, []float32{1.41, 3.16, 2.83},
-		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Add 2 more vectors to existing set.
 	vectors = vector.MakeSetFromRawData([]float32{4, 3, 6, 5}, 2)
 	quantizer.QuantizeInSet(&workspace, quantizedSet, vectors)
 	require.Equal(t, 5, quantizedSet.GetCount())
-	require.Equal(t, []float32{1.41, 3.16, 2.83, 0, 2.83},
-		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 
 	// Ensure distances and error bounds are correct.
 	distances := make([]float32, quantizedSet.GetCount())
@@ -61,8 +56,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	quantizedSet.ReplaceWithLast(3)
 	quantizedSet.ReplaceWithLast(1)
 	require.Equal(t, 2, quantizedSet.GetCount())
-	require.Equal(t, []float32{1.41, 2.83},
-		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:2]
 	errorBounds = errorBounds[:2]
 	quantizer.EstimateDistances(
@@ -75,7 +68,6 @@ func TestUnQuantizerSimple(t *testing.T) {
 	quantizedSet.ReplaceWithLast(0)
 	require.Equal(t, 0, quantizedSet.GetCount())
 	require.Equal(t, vector.T{4, 3}, quantizedSet.GetCentroid())
-	require.Equal(t, []float32{}, testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:0]
 	errorBounds = errorBounds[:0]
 	quantizer.EstimateDistances(
@@ -85,14 +77,11 @@ func TestUnQuantizerSimple(t *testing.T) {
 	vectors = vector.MakeSet(2)
 	quantizedSet = quantizer.Quantize(&workspace, vectors)
 	require.Equal(t, vector.T{0, 0}, quantizedSet.GetCentroid())
-	require.Equal(t, []float32(nil), quantizedSet.GetCentroidDistances())
 
 	// Add single vector to quantized set.
 	vectors = vector.T{4, 4}.AsSet()
 	quantizer.QuantizeInSet(&workspace, quantizedSet, vectors)
 	require.Equal(t, 1, quantizedSet.GetCount())
-	require.Equal(t, []float32{5.66},
-		testutils.RoundFloats(quantizedSet.GetCentroidDistances(), 2))
 	distances = distances[:1]
 	errorBounds = errorBounds[:1]
 	quantizer.EstimateDistances(

@@ -26,9 +26,6 @@ type SearchResult struct {
 	// ErrorBound captures the uncertainty of the distance estimate, which is
 	// highly likely to fall within QueryDistance ± ErrorBound.
 	ErrorBound float32
-	// CentroidDistance is the (non-squared) exact distance of the data vector
-	// from its partition's centroid.
-	CentroidDistance float32
 	// ParentPartitionKey is the key of the parent of the partition that contains
 	// the data vector.
 	ParentPartitionKey PartitionKey

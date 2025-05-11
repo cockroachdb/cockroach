@@ -77,10 +77,6 @@ type QuantizedVectorSet interface {
 	// Since it is immutable, this method is thread-safe.
 	GetCentroid() vector.T
 
-	// GetCentroidDistances returns the exact distances of each full-size vector
-	// from the centroid.
-	GetCentroidDistances() []float32
-
 	// ReplaceWithLast removes the quantized vector at the given offset from the
 	// set, replacing it with the last quantized vector in the set. The modified
 	// set has one less element and the last quantized vector's position changes.
