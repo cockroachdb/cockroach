@@ -23,12 +23,12 @@ func TestNormalize(t *testing.T) {
 		res []float32
 	}{
 		{v: []float32{}, res: []float32{}},
-		{v: []float32{0}, res: []float32{1}},
+		{v: []float32{0}, res: []float32{0}},
 		{v: []float32{1}, res: []float32{1}},
-		{v: []float32{0, 0}, res: []float32{0.7071, 0.7071}},
+		{v: []float32{0, 0}, res: []float32{0, 0}},
 		{v: []float32{0, 1}, res: []float32{0, 1}},
 		{v: []float32{1, 1}, res: []float32{0.7071, 0.7071}},
-		{v: []float32{0, 0, 0}, res: []float32{0.5774, 0.5774, 0.5774}},
+		{v: []float32{0, 0, 0}, res: []float32{0, 0, 0}},
 		{v: []float32{1, 2, 3}, res: []float32{0.2673, 0.5345, 0.8018}},
 	}
 

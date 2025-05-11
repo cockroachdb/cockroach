@@ -72,6 +72,9 @@ type QuantizedVectorSet interface {
 
 	// GetCentroid returns the full-size centroid vector for the set. The
 	// centroid is the average of the vectors across all dimensions.
+	// NOTE: By default, this is the mean centroid for the L2Squared distance
+	// metric, but is the spherical centroid for InnerProduct and Cosine metrics.
+	// The spherical centroid is simply the mean centroid, but normalized.
 	// NOTE: This centroid is calculated once, when the set is first created. It
 	// is not updated when quantized vectors are added to or removed from the set.
 	// Since it is immutable, this method is thread-safe.

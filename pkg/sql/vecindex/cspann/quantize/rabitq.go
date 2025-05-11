@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/vecdist"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -107,6 +108,11 @@ func (q *RaBitQuantizer) Quantize(w *workspace.T, vectors vector.Set) QuantizedV
 	} else {
 		// Compute the centroid.
 		centroid = vectors.Centroid(make(vector.T, vectors.Dims))
+		if q.distanceMetric == vecdist.InnerProduct || q.distanceMetric == vecdist.Cosine {
+			// Use spherical centroid for inner product and cosine distances,
+			// which is the mean centroid, but normalized.
+			num32.Normalize(centroid)
+		}
 	}
 
 	quantizedSet := q.NewQuantizedVectorSet(vectors.Count, centroid)
@@ -123,6 +129,10 @@ func (q *RaBitQuantizer) QuantizeInSet(
 
 // NewQuantizedVectorSet implements the Quantizer interface
 func (q *RaBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVector(centroid)
+	}
+
 	codeWidth := RaBitQCodeSetWidth(q.GetDims())
 	dataBuffer := make([]uint64, 0, capacity*codeWidth)
 	if capacity <= 1 {
@@ -158,6 +168,10 @@ func (q *RaBitQuantizer) EstimateDistances(
 	distances []float32,
 	errorBounds []float32,
 ) {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVector(queryVector)
+	}
+
 	raBitSet := quantizedSet.(*RaBitQuantizedVectorSet)
 
 	// Allocate temp space for calculations.
@@ -303,13 +317,18 @@ func (q *RaBitQuantizer) EstimateDistances(
 			distance += queryCentroidDistance * queryCentroidDistance
 			multiplier := 2 * dataCentroidDistance * queryCentroidDistance
 			distance -= multiplier * estimator
+
+			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
+			// that must be scaled by the amount the estimator is scaled by. Ensure
+			// the distance is >= 0, adjusting the error bound accordingly.
+			errorBound := multiplier / q.sqrtDims
 			if distance < 0 {
+				errorBound = max(errorBound+distance, 0)
 				distance = 0
 			}
+
 			distances[i] = distance
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by.
-			errorBounds[i] = multiplier / q.sqrtDims
+			errorBounds[i] = errorBound
 
 		case vecdist.InnerProduct, vecdist.Cosine:
 			// Note that the cosine similarity of two vectors is equal to their
@@ -322,18 +341,32 @@ func (q *RaBitQuantizer) EstimateDistances(
 			multiplier := dataCentroidDistance * queryCentroidDistance
 			innerProduct := multiplier*estimator +
 				raBitSet.CentroidDotProducts[i] + queryCentroidDotProduct - squaredCentroidNorm
+
+			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
+			// that must be scaled by the amount the estimator is scaled by.
+			errorBound := multiplier / q.sqrtDims
+
+			var distance float32
 			if q.distanceMetric == vecdist.InnerProduct {
 				// Negate the inner product so that the more similar the vectors,
 				// the lower the distance.
-				distances[i] = -innerProduct
+				distance = -innerProduct
 			} else {
 				// Cosine distance is 1 - cosine similarity (which is the inner
-				// product for unit vectors).
-				distances[i] = 1 - innerProduct
+				// product for unit vectors). Cap the distance between 0 and 2,
+				// adjusting the error bound accordingly.
+				distance = 1 - innerProduct
+				if distance < 0 {
+					errorBound = max(errorBound+distance, 0)
+					distance = 0
+				} else if distance > 2 {
+					errorBound = max(min(errorBound-(distance-2), 2), 0)
+					distance = 2
+				}
 			}
-			// Error bounds for the estimator are +- 1/√dims. For the entire distance,
-			// that must be scaled by the amount the estimator is scaled by.
-			errorBounds[i] = multiplier / q.sqrtDims
+
+			distances[i] = distance
+			errorBounds[i] = errorBound
 
 		default:
 			panic(errors.AssertionFailedf("unknown distance function %d", q.distanceMetric))
@@ -346,6 +379,10 @@ func (q *RaBitQuantizer) EstimateDistances(
 func (q *RaBitQuantizer) quantizeHelper(
 	w *workspace.T, qs *RaBitQuantizedVectorSet, vectors vector.Set,
 ) {
+	if buildutil.CrdbTestBuild && q.distanceMetric == vecdist.Cosine {
+		validateUnitVectors(vectors)
+	}
+
 	// Extend any existing slices in the vector set.
 	count := vectors.Count
 	oldCount := qs.GetCount()
@@ -369,7 +406,7 @@ func (q *RaBitQuantizer) quantizeHelper(
 		num32.SubTo(tempDiffs.At(i), vectors.At(i), qs.Centroid)
 	}
 
-	// Calculate distance from each input vector to the centroid.
+	// Calculate Euclidean distance from each input vector to the centroid.
 	// Paper: ||o_raw - c||
 	centroidDistances := qs.CentroidDistances[oldCount:]
 	for i := range len(centroidDistances) {
