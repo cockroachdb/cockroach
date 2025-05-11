@@ -793,7 +793,7 @@ func (vi *Index) fallbackOnTargets(
 
 		// Calculate the distance of the query vector to the centroids.
 		for i := range tempResults {
-			tempResults[i].QuerySquaredDistance = num32.L2SquaredDistance(vec, tempResults[i].Vector)
+			tempResults[i].QueryDistance = num32.L2SquaredDistance(vec, tempResults[i].Vector)
 			searchSet.Add(&tempResults[i])
 		}
 
@@ -899,7 +899,7 @@ func (vi *Index) rerankSearchResults(
 	// Compute exact distances for the vectors.
 	for i := range candidates {
 		candidate := &candidates[i]
-		candidate.QuerySquaredDistance = num32.L2SquaredDistance(candidate.Vector, queryVector)
+		candidate.QueryDistance = num32.L2SquaredDistance(candidate.Vector, queryVector)
 		candidate.ErrorBound = 0
 	}
 
