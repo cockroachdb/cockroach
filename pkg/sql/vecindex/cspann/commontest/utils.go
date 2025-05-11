@@ -59,7 +59,7 @@ func RunTransaction(
 func RoundResults(results cspann.SearchResults, prec int) cspann.SearchResults {
 	for i := range results {
 		result := &results[i]
-		result.QuerySquaredDistance = float32(scalar.Round(float64(result.QuerySquaredDistance), prec))
+		result.QueryDistance = float32(scalar.Round(float64(result.QueryDistance), prec))
 		result.ErrorBound = float32(scalar.Round(float64(result.ErrorBound), prec))
 		result.CentroidDistance = float32(scalar.Round(float64(result.CentroidDistance), prec))
 		result.Vector = testutils.RoundFloats(result.Vector, prec)

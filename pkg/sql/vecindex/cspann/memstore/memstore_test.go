@@ -140,7 +140,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 				err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 				require.NoError(t, err)
 				result1 := cspann.SearchResult{
-					QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
+					QueryDistance: 25, ErrorBound: 0, CentroidDistance: 5,
 					ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
 				require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
 				require.Equal(t, 2, toSearch[0].Count)
