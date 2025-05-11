@@ -136,17 +136,17 @@ force-split partition-key=9 parent-partition-key=10
 search max-results=3 beam-size=1
 (4, 7)
 ----
-vec7: 2 (centroid=2.12)
-vec4: 32 (centroid=2.12)
+vec7: 2
+vec4: 32
 2 leaf vectors, 6 vectors, 2 full vectors, 3 partitions
 
 # Search for closest vectors with beam-size=3.
 search max-results=3 beam-size=3
 (4, 7)
 ----
-vec7: 2 (centroid=2.12)
-vec10: 5 (centroid=0.71)
-vec12: 9 (centroid=0.71)
+vec7: 2
+vec10: 5
+vec12: 9
 6 leaf vectors, 14 vectors, 6 full vectors, 6 partitions
 
 # ----------------------------------------------------------------------

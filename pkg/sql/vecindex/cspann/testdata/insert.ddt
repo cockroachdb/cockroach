@@ -100,13 +100,13 @@ vec2: (-5, -5)
 search max-results=10 beam-size=8
 (-5, -5)
 ----
-vec2: 0 (centroid=8.8)
-vec7: 50 (centroid=2.03)
-vec1: 85 (centroid=0.67)
-vec8: 106 (centroid=2.03)
-vec3: 145 (centroid=2.6)
-vec4: 145 (centroid=2.6)
-vec9: 178 (centroid=5.21)
-vec6: 397 (centroid=7.07)
-vec5: 425 (centroid=5.1)
+vec2: 0
+vec7: 50
+vec1: 85
+vec8: 106
+vec3: 145
+vec4: 145
+vec9: 178
+vec6: 397
+vec5: 425
 10 leaf vectors, 13 vectors, 9 full vectors, 4 partitions
