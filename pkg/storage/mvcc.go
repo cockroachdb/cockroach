@@ -2396,6 +2396,7 @@ func mvccPutInternal(
 	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
+	exclusionTimestamp := hlc.Timestamp{}
 	if opts.Txn != nil {
 		readTimestamp = opts.Txn.ReadTimestamp
 		if readTimestamp != timestamp {
@@ -2403,6 +2404,7 @@ func mvccPutInternal(
 				"mvccPutInternal: txn's read timestamp %s does not match timestamp %s",
 				readTimestamp, timestamp)
 		}
+		exclusionTimestamp = opts.ExclusionTimestamp
 		writeTimestamp = opts.Txn.WriteTimestamp
 	}
 
@@ -2665,6 +2667,18 @@ func mvccPutInternal(
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
+		} else if !exclusionTimestamp.IsEmpty() && exclusionTimestamp.LessEq(metaTimestamp) {
+			// TODO(ssd): We need to think about the type of error here, perhaps
+			// adding a new error. This error should not be eligible for per-statement
+			// retries in RC transactions, but should probably be eligible for transaction
+			// level retries.
+			err := errors.Errorf(
+				"write exclusion on key %s expected since %s but found more recent write at %s",
+				key,
+				exclusionTimestamp,
+				metaTimestamp,
+			)
+			return false, roachpb.LockAcquisition{}, err
 		} else /* meta.Txn == nil && metaTimestamp.Less(readTimestamp) */ {
 			// If a valueFn is specified, read the existing value using iter.
 			opts := MVCCGetOptions{
@@ -4707,6 +4721,7 @@ type MVCCWriteOptions struct {
 	// See the comment on mvccPutInternal for details on these parameters.
 	Txn                            *roachpb.Transaction
 	LocalTimestamp                 hlc.ClockTimestamp
+	ExclusionTimestamp             hlc.Timestamp
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
 	OmitInRangefeeds               bool
