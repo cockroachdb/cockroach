@@ -2396,6 +2396,7 @@ func mvccPutInternal(
 	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
+	exclusionTimestamp := opts.ExclusionTimestamp
 	if opts.Txn != nil {
 		readTimestamp = opts.Txn.ReadTimestamp
 		if readTimestamp != timestamp {
@@ -2665,6 +2666,8 @@ func mvccPutInternal(
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
+		} else if !exclusionTimestamp.IsEmpty() && exclusionTimestamp.LessEq(metaTimestamp) {
+			return false, roachpb.LockAcquisition{}, kvpb.NewExclusionViolationError(exclusionTimestamp, metaTimestamp, key)
 		} else /* meta.Txn == nil && metaTimestamp.Less(readTimestamp) */ {
 			// If a valueFn is specified, read the existing value using iter.
 			opts := MVCCGetOptions{
@@ -4612,6 +4615,7 @@ type MVCCWriteOptions struct {
 	// See the comment on mvccPutInternal for details on these parameters.
 	Txn                            *roachpb.Transaction
 	LocalTimestamp                 hlc.ClockTimestamp
+	ExclusionTimestamp             hlc.Timestamp
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
 	OmitInRangefeeds               bool
