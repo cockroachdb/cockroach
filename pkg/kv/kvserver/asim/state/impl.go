@@ -430,6 +430,7 @@ func (s *state) AddNode() Node {
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
+		as:          kvserver.NewAllocatorSync(sp, mmAllocator),
 		storepool:   sp,
 	}
 	s.nodes[nodeID] = node
@@ -1409,6 +1410,7 @@ type node struct {
 
 	mmAllocator mma.Allocator
 	storepool   *storepool.StorePool
+	as          *kvserver.AllocatorSync
 }
 
 // NodeID returns the ID of this node.
@@ -1428,6 +1430,10 @@ func (n *node) Descriptor() roachpb.NodeDescriptor {
 
 func (n *node) MMAllocator() mma.Allocator {
 	return n.mmAllocator
+}
+
+func (n *node) AllocatorSync() *kvserver.AllocatorSync {
+	return n.as
 }
 
 // store is an implementation of the Store interface.

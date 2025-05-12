@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
@@ -216,8 +217,10 @@ type Node interface {
 	Stores() []StoreID
 	// Descriptor returns the descriptor for this node.
 	Descriptor() roachpb.NodeDescriptor
-	// TODO: Move this to be external.
+	// TODO: Move these to be external.
 	MMAllocator() mma.Allocator
+	// AllocatorSync returns the AllocatorSync for this node.
+	AllocatorSync() *kvserver.AllocatorSync
 }
 
 // Store is a container for replicas.

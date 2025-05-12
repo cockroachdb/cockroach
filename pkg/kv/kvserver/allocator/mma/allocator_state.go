@@ -279,7 +279,7 @@ func (a *allocatorState) rebalanceStores(
 					NodeID:  ss.NodeID,
 					StoreID: ss.StoreID,
 				}
-				leaseChanges := makeLeaseTransferChanges(
+				leaseChanges := MakeLeaseTransferChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 				pendingChanges := a.cs.createPendingChanges(leaseChanges[:]...)
 				changes = append(changes, PendingRangeChange{
@@ -506,8 +506,12 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 
 // RegisterExternalChanges implements the Allocator interface.
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
-	// TODO: integration component to register external changes.
-	panic("unimplemented")
+	pendingChanges := a.cs.createPendingChanges(changes...)
+	changeIDs := make([]ChangeID, len(pendingChanges))
+	for i, pendingChange := range pendingChanges {
+		changeIDs[i] = pendingChange.ChangeID
+	}
+	return changeIDs
 }
 
 // ComputeChanges implements the Allocator interface.

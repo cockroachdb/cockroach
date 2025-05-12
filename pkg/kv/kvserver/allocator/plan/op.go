@@ -29,7 +29,7 @@ type AllocationOp interface {
 // AllocationTransferLeaseOp represents an operation to transfer a range lease to another
 // store, from the current one.
 type AllocationTransferLeaseOp struct {
-	Target, Source     roachpb.StoreID
+	Target, Source     roachpb.ReplicationTarget
 	Usage              allocator.RangeUsageInfo
 	bypassSafetyChecks bool
 }
