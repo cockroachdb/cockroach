@@ -2166,18 +2166,11 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 		unique.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID()))
 }
 
-// muxRangeFeedStreamer defines the minimal interface for MuxRangeFeed.
-type muxRangeFeedStreamer interface {
-	Context() context.Context
-	Recv() (*kvpb.RangeFeedRequest, error)
-	Send(*kvpb.MuxRangeFeedEvent) error
-}
-
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
 type lockedMuxStream struct {
-	wrapped muxRangeFeedStreamer
+	wrapped kvpb.RPCInternal_MuxRangeFeedStream
 	sendMu  syncutil.Mutex
 }
 
@@ -2199,7 +2192,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	return n.muxRangeFeed(muxStream)
 }
 
-func (n *Node) muxRangeFeed(muxStream muxRangeFeedStreamer) error {
+func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is
@@ -2412,11 +2405,6 @@ func (n *Node) ResetQuorum(
 	return &kvpb.ResetQuorumResponse{}, nil
 }
 
-type gossipSubscriptionStreamer interface {
-	Context() context.Context
-	Send(*kvpb.GossipSubscriptionEvent) error
-}
-
 // GossipSubscription implements the kvpb.DRPCInternalServer interface.
 func (n *drpcNode) GossipSubscription(
 	request *kvpb.GossipSubscriptionRequest, stream kvpb.DRPCInternal_GossipSubscriptionStream,
@@ -2432,7 +2420,7 @@ func (n *Node) GossipSubscription(
 }
 
 func (n *Node) gossipSubscription(
-	args *kvpb.GossipSubscriptionRequest, stream gossipSubscriptionStreamer,
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.RPCInternal_GossipSubscriptionStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2519,11 +2507,6 @@ func (n *Node) waitForTenantWatcherReadiness(
 	return settingsWatcher, infoWatcher, nil
 }
 
-type tenantSettingsStreamer interface {
-	Context() context.Context
-	Send(*kvpb.TenantSettingsEvent) error
-}
-
 // TenantSettings implements the kvpb.DRPCInternalServer interface.
 func (n *drpcNode) TenantSettings(
 	request *kvpb.TenantSettingsRequest, stream kvpb.DRPCInternal_TenantSettingsStream,
@@ -2540,7 +2523,7 @@ func (n *Node) TenantSettings(
 
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) tenantSettings(
-	args *kvpb.TenantSettingsRequest, stream tenantSettingsStreamer,
+	args *kvpb.TenantSettingsRequest, stream kvpb.RPCInternal_TenantSettingsStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2987,11 +2970,6 @@ func (n *Node) SpanConfigConformance(
 	return &roachpb.SpanConfigConformanceResponse{Report: report}, nil
 }
 
-type rangeDescStreamer interface {
-	Context() context.Context
-	Send(*kvpb.GetRangeDescriptorsResponse) error
-}
-
 // GetRangeDescriptors implements the kvpb.InternalServer interface.
 func (n *drpcNode) GetRangeDescriptors(
 	request *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCInternal_GetRangeDescriptorsStream,
@@ -3007,7 +2985,7 @@ func (n *Node) GetRangeDescriptors(
 }
 
 func (n *Node) getRangeDescriptors(
-	args *kvpb.GetRangeDescriptorsRequest, stream rangeDescStreamer,
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.RPCInternal_GetRangeDescriptorsStream,
 ) error {
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
