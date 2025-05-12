@@ -118,6 +118,22 @@ func registerCreateSQLOperations(r registry.Registry) {
 				return fmt.Sprintf("CREATE SEQUENCE %s", name)
 			},
 		},
+		{
+			name:       "create-materialized-view",
+			objectType: "MATERIALIZED VIEW",
+			prefix:     "roachtest_mv_sales",
+			createSQL: func(name string) string {
+				return fmt.Sprintf(`
+			CREATE MATERIALIZED VIEW %s AS
+			SELECT
+				ol_w_id AS warehouse_id,
+				ol_d_id AS district_id,
+				sum(ol_amount) AS total_sales,
+				count(*) AS num_orders
+			FROM order_line
+			GROUP BY ol_w_id, ol_d_id`, name)
+			},
+		},
 	}
 
 	for _, obj := range objs {
