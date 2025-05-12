@@ -16629,18 +16629,18 @@ layers:
       exported_name: storage_write_stall_nanos
       description: Total write stall duration in nanos
       y_axis_label: Nanoseconds
-      type: GAUGE
+      type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.write-stalls
       exported_name: storage_write_stalls
       description: Number of instances of intentional write stalls to backpressure incoming writes
       y_axis_label: Events
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storeliveness.callbacks.processing_duration
       exported_name: storeliveness_callbacks_processing_duration
       description: Duration of support withdrawal callback processing
