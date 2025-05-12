@@ -4,12 +4,14 @@ db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(2), sv(2)) // @0.000000002,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.SetIsoLevel(isolation.Serializable)
+  txn.SetBufferedWritesEnabled(false)
   txn.Del(ctx, tk(1) /* @s3 */) // <nil>
   txn.Del(ctx, tk(2) /* @s4 */) // <nil>
   return nil
 }) // @0.000000003,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.SetIsoLevel(isolation.Serializable)
+  txn.SetBufferedWritesEnabled(false)
   txn.Get(ctx, tk(1)) // (<nil>, <nil>)
   txn.Get(ctx, tk(2)) // (v2, <nil>)
   txn.Get(ctx, tk(3)) // (<nil>, <nil>)

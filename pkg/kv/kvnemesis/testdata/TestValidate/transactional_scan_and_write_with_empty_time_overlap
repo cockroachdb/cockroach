@@ -4,6 +4,7 @@ db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(1), sv(2)) // @0.000000002,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.SetIsoLevel(isolation.Serializable)
+  txn.SetBufferedWritesEnabled(false)
   txn.Scan(ctx, tk(1), tk(3), 0) // (/Table/100/"0000000000000001":v1, <nil>)
   txn.Put(ctx, tk(2), sv(3)) // <nil>
   return nil
