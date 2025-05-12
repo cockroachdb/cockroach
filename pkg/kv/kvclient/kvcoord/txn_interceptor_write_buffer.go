@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -1079,6 +1080,12 @@ type requestRecord struct {
 func (rr requestRecord) toResp(
 	ctx context.Context, twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
 ) (kvpb.ResponseUnion, *kvpb.Error) {
+	assertTrue(txn != nil, "unexpectedly nil transaction")
+
+	// NB: This constant is for experimentation during development. May be removed
+	// in the future.
+	// exclusionTimestampRequired := txn.IsoLevel.ToleratesWriteSkew()
+	exclusionTimestampRequired := true
 	var ru kvpb.ResponseUnion
 	switch req := rr.origRequest.(type) {
 	case *kvpb.ConditionalPutRequest:
@@ -1109,14 +1116,23 @@ func (rr requestRecord) toResp(
 			pErr.SetErrorIndex(int32(rr.index))
 			return kvpb.ResponseUnion{}, pErr
 		}
+		exclusionTS := hlc.Timestamp{}
+		if exclusionTimestampRequired {
+			exclusionTS = txn.ReadTimestamp
+		}
+
 		// The condition was satisfied; buffer the write and return a
 		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, exclusionTS)
 
 	case *kvpb.PutRequest:
+		exclusionTS := hlc.Timestamp{}
+		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
+			exclusionTS = txn.ReadTimestamp
+		}
 		ru.MustSetInner(&kvpb.PutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, exclusionTS)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
@@ -1148,10 +1164,15 @@ func (rr requestRecord) toResp(
 			// clarify the behaviour on DeleteRequest.
 			foundKey = false
 		}
+		exclusionTS := hlc.Timestamp{}
+		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
+			exclusionTS = txn.ReadTimestamp
+		}
+
 		ru.MustSetInner(&kvpb.DeleteResponse{
 			FoundKey: foundKey,
 		})
-		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq)
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, exclusionTS)
 
 	case *kvpb.GetRequest:
 		val, served := twb.maybeServeRead(req.Key, req.Sequence)
@@ -1248,7 +1269,11 @@ func (rr requestRecords) Summary() string {
 
 // addToBuffer adds a write to the given key to the buffer.
 func (twb *txnWriteBuffer) addToBuffer(
-	key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq, kvNemSeq kvnemesisutil.Container,
+	key roachpb.Key,
+	val roachpb.Value,
+	seq enginepb.TxnSeq,
+	kvNemSeq kvnemesisutil.Container,
+	ts hlc.Timestamp,
 ) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
@@ -1259,12 +1284,18 @@ func (twb *txnWriteBuffer) addToBuffer(
 		bw := it.Cur()
 		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
 		bw.vals = append(bw.vals, val)
+		if bw.ts.IsEmpty() {
+			bw.ts = ts
+		} else {
+			assertTrue(bw.ts.LessEq(ts), "unexpected exclusion timestamp regression")
+		}
 		twb.bufferSize += val.size()
 	} else {
 		twb.bufferIDAlloc++
 		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
+			ts:   ts,
 			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
 		}
 		twb.buffer.Set(bw)
@@ -1403,6 +1434,14 @@ type bufferedWrite struct {
 	// endKey as a comparator. We could then remove this unnecessary field here,
 	// and also in the keyLocks struct.
 	endKey roachpb.Key // used in btree iteration
+
+	// ts, if non-zero, is lowest timestamp at which we had exclusive access.
+	//
+	// TODO(review): Are we OK with requiring exclusion across savepoint
+	// rollbacks? If not, we'll need to track this on a per-value level and then
+	// and flush time send the lowest value when writing in the key. That's not hard
+	// but it isn't clear to me what behavior we expect.
+	ts hlc.Timestamp
 	// TODO(arul): instead of this slice, consider adding a small (fixed size,
 	// maybe 1) array instead.
 	vals []bufferedValue // sorted in increasing sequence number order
@@ -1440,7 +1479,7 @@ func (bv *bufferedValue) size() int64 {
 	return int64(len(bv.val.RawBytes)) + bufferedValueStructOverhead
 }
 
-func (bv *bufferedValue) toRequestUnion(key roachpb.Key) kvpb.RequestUnion {
+func (bv *bufferedValue) toRequestUnion(key roachpb.Key, ts hlc.Timestamp) kvpb.RequestUnion {
 	var ru kvpb.RequestUnion
 	if bv.val.IsPresent() {
 		// TODO(arul): we could allocate PutRequest objects all at once when we're
@@ -1457,6 +1496,7 @@ func (bv *bufferedValue) toRequestUnion(key roachpb.Key) kvpb.RequestUnion {
 		putAlloc.put.Value = bv.val
 		putAlloc.put.Sequence = bv.seq
 		putAlloc.put.KVNemesisSeq = bv.kvNemesisSeq
+		putAlloc.put.ExpectExclusionSince = ts
 		putAlloc.union.Put = &putAlloc.put
 		ru.Value = &putAlloc.union
 	} else {
@@ -1467,6 +1507,7 @@ func (bv *bufferedValue) toRequestUnion(key roachpb.Key) kvpb.RequestUnion {
 		delAlloc.del.Key = key
 		delAlloc.del.Sequence = bv.seq
 		delAlloc.del.KVNemesisSeq = bv.kvNemesisSeq
+		delAlloc.del.ExpectExclusionSince = ts
 		delAlloc.union.Delete = &delAlloc.del
 		ru.Value = &delAlloc.union
 	}
@@ -1494,7 +1535,7 @@ func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
 func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 	// As we store values in increasing sequence number order, the most recent
 	// write should be the last value in the slice.
-	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key)
+	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key, bw.ts)
 }
 
 // toAllRevisionRequests returns requests for all revisions of the buffered
@@ -1504,7 +1545,7 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
 	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
 	for _, val := range bw.vals {
-		rus = append(rus, val.toRequestUnion(bw.key))
+		rus = append(rus, val.toRequestUnion(bw.key, bw.ts))
 	}
 	return rus
 }
