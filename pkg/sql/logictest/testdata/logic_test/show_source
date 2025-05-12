@@ -473,7 +473,7 @@ system.public.descriptor  CREATE TABLE public.descriptor (
                             CONSTRAINT "primary" PRIMARY KEY (id ASC),
                             FAMILY "primary" (id),
                             FAMILY fam_2_descriptor (descriptor)
-                          )
+                          );
 
 query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
@@ -481,7 +481,7 @@ CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VI
 table_name  create_statement
 v           CREATE VIEW public.v (
               id
-            ) AS SELECT id FROM system.public.descriptor
+            ) AS SELECT id FROM system.public.descriptor;
 
 
 query TTT colnames

@@ -57,7 +57,7 @@ CREATE TABLE public.regional_by_row_table (
   INDEX new_idx (a ASC, b ASC),
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region2)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 
 statement ok
 CREATE TABLE regional_by_row_table_as (
@@ -91,4 +91,4 @@ CREATE TABLE public.regional_by_row_table_as (
   INDEX regional_by_row_table_as_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
   FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, cr)
-) LOCALITY REGIONAL BY ROW AS cr
+) LOCALITY REGIONAL BY ROW AS cr;

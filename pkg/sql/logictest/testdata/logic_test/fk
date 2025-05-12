@@ -507,7 +507,7 @@ delivery  CREATE TABLE public.delivery (
             CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
             CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
             INDEX delivery_item_idx (item ASC)
-          )
+          );
 
 statement ok
 INSERT INTO delivery ("order", shipment, item) VALUES
@@ -830,7 +830,7 @@ refpairs  CREATE TABLE public.refpairs (
             CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
             CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
             INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
-          )
+          );
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
@@ -1050,7 +1050,7 @@ refers  CREATE TABLE public.refers (
           CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
           INDEX another_idx (b ASC),
           INDEX foo (a ASC)
-        )
+        );
 
 statement ok
 DROP INDEX refers@another_idx
@@ -1130,7 +1130,7 @@ pkref_b  CREATE TABLE public.pkref_b (
            b INT8 NOT NULL,
            CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
            CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
-         )
+         );
 
 subtest 20042
 
@@ -4281,7 +4281,7 @@ t2_fk  CREATE TABLE public.t2_fk (
          CONSTRAINT t2_fk_pkey PRIMARY KEY (pk ASC),
          CONSTRAINT t2_fk_t1_fk_col1_t1_fk_col2_fkey FOREIGN KEY (t1_fk_col1, t1_fk_col2) REFERENCES public.t1_fk(col1, col2),
          FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
-       )
+       );
 
 statement ok
 DROP TABLE t2_fk;

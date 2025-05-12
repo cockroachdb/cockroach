@@ -24,4 +24,4 @@ CREATE TABLE public.t (
   c BPCHAR NOT NULL,
   CONSTRAINT t_pkey PRIMARY KEY (c ASC),
   FAMILY fam_0_c (c)
-)
+);

@@ -283,7 +283,7 @@ b  CREATE TABLE public.b (
      CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
      INDEX foo (parent_id ASC),
      UNIQUE INDEX bar (parent_id ASC)
-   )
+   );
 
 # table b is not visible to the transaction #17949
 statement error pgcode 55000 table "b" is being added

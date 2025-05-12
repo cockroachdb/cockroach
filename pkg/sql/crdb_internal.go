@@ -4084,7 +4084,7 @@ func showRowLevelSecurityStatements(
 	rlsStmts *tree.DArray,
 ) error {
 	// Add the row level security ALTER statements to the rls_statements column.
-	if alterRLSStatements, err := showRLSAlterStatement(tn, table, false); err != nil {
+	if alterRLSStatements, err := showRLSAlterStatement(tn, table); err != nil {
 		return err
 	} else if len(alterRLSStatements) != 0 {
 		if err = rlsStmts.Append(tree.NewDString(alterRLSStatements)); err != nil {
@@ -4094,12 +4094,10 @@ func showRowLevelSecurityStatements(
 
 	// Add the row level security policy statements to the rls_statements column.
 	for _, policy := range table.GetPolicies() {
-		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy, false); err != nil {
+		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy); err != nil {
 			return err
-		} else if len(policyStatement) != 0 {
-			if err := rlsStmts.Append(tree.NewDString(policyStatement)); err != nil {
-				return err
-			}
+		} else if err = rlsStmts.Append(tree.NewDString(policyStatement)); err != nil {
+			return err
 		}
 	}
 

@@ -230,7 +230,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
      UNIQUE INDEX t_rowid_key (rowid ASC),
      FAMILY fam_0_rowid_y (rowid, y)
-   )
+   );
 
 subtest index_rewrites
 # Test that indexes that need to get rewritten indeed get rewritten.
@@ -280,7 +280,7 @@ t  CREATE TABLE public.t (
      INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
      UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
-   )
+   );
 
 # Test that the indexes we expect got rewritten. All should have been rewritten,
 # so all indexID should be larger than 7.
@@ -449,7 +449,7 @@ t  CREATE TABLE public.t (
      INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
      UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z (x, y, z)
-   )
+   );
 
 query T nosort
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
@@ -514,7 +514,7 @@ t  CREATE TABLE public.t (
      INDEX i (z ASC),
      UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
      FAMILY fam_0_x_y_z (x, y, z)
-   )
+   );
 
 query III
 SELECT * FROM t@t_x_key
@@ -540,7 +540,7 @@ t  CREATE TABLE public.t (
      rowid INT8 NOT NULL,
      rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
-   )
+   );
 
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
@@ -553,7 +553,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      rowid INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
 
 # Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
 subtest encoding_bug
@@ -643,7 +643,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC)
-   )
+   );
 
 statement ok
 DROP TABLE IF EXISTS t;
@@ -662,7 +662,7 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
-   )
+   );
 
 statement ok
 DROP TABLE IF EXISTS t;
@@ -681,7 +681,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      CONSTRAINT my_pk PRIMARY KEY (x ASC)
-   )
+   );
 
 statement ok
 CREATE INDEX i ON t (x);
@@ -759,7 +759,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey_v2 PRIMARY KEY (y ASC),
      FAMILY fam_0_x (x),
      FAMILY fam_1_y (y)
-   )
+   );
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT IF NOT EXISTS "t_pkey" PRIMARY KEY (x)
@@ -813,7 +813,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey_v2 PRIMARY KEY (y ASC),
      FAMILY fam_0_x (x),
      FAMILY fam_1_y (y)
-   )
+   );
 
 # Ensure that we can't use a table with a dropped primary key
 # in any DML statements.
@@ -983,7 +983,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC),
      INDEX t_y_idx (y ASC),
      FAMILY fam_0_x_y_rowid (x, y, rowid)
-   )
+   );
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
@@ -1021,7 +1021,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (x ASC),
      INDEX t_y_idx (y ASC),
      FAMILY fam_0_x_y_rowid (x, y, rowid)
-   )
+   );
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
@@ -1069,7 +1069,7 @@ t  CREATE TABLE public.t (
      UNIQUE INDEX i2 (z ASC),
      INDEX i3 (w ASC) STORING (y, z),
      FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
-   )
+   );
 
 # All index id's should be larger than 4.
 query IT
@@ -1101,7 +1101,7 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
-   )
+   );
 
 # Changes on a hash sharded index that change the columns will cause the old
 # primary key to be copied.
@@ -1125,7 +1125,7 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
      UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
      FAMILY fam_0_x_y (x, y)
-   )
+   );
 
 # Regression for #49079.
 statement ok
@@ -1324,7 +1324,7 @@ table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
                            CONSTRAINT table_with_virtual_cols_pkey PRIMARY KEY (new_pk ASC),
                            UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
                            FAMILY fam_0_id_new_pk (id, new_pk)
-                         )
+                         );
 
 # Test that we do not create new indexes for the old primary key when going
 # from sharded to non-sharded and back.
@@ -1439,7 +1439,7 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_idx_b_k (b ASC, k ASC),
   UNIQUE INDEX t_a_key (a ASC)
-)
+);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1476,7 +1476,7 @@ CREATE TABLE public.t (
   INDEX t_idx_b_k (b ASC, k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   UNIQUE INDEX t_k_key (k ASC)
-)
+);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1521,7 +1521,7 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_a_key (a ASC),
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_b_k_key (b ASC, k ASC)
-)
+);
 
 query III colnames,rowsort
 SELECT * FROM t@t_pkey
@@ -1593,7 +1593,7 @@ CREATE TABLE public.t_test_param (
   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
-)
+);
 
 subtest pkey-comment-carry-over
 
@@ -1620,7 +1620,7 @@ SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SH
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
-COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
 
 # Altering the primary key should carry over the comment.
 statement ok
@@ -1925,7 +1925,7 @@ t_96730  CREATE TABLE public.t_96730 (
            crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
            CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
            UNIQUE INDEX t_96730_i_key (i ASC)
-         )
+         );
 
 # If we had a partial unique index on the old primary key columns, and after a
 # ALTER PRIMARY KEY, we will create a unique secondary index on the old primary
@@ -1948,7 +1948,7 @@ t_99303  CREATE TABLE public.t_99303 (
            CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
            UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
            UNIQUE INDEX t_99303_i_key1 (i ASC)
-         )
+         );
 
 subtest end
 
@@ -2063,6 +2063,6 @@ CREATE TABLE public.table_w0_66 (
   CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
-)
+);
 
 subtest end
