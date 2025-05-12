@@ -599,6 +599,13 @@ func mustRetrieveKeyIndexColumns(
 		}
 	})
 	if keyIndexCols == nil {
+		scpb.ForEachIndexColumn(b.QueryByID(tableID), func(
+			current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn,
+		) {
+			if e.IndexID == indexID && e.Kind == scpb.IndexColumn_KEY {
+				fmt.Printf("GHOST KEY: %v", e)
+			}
+		})
 		panic(errors.AssertionFailedf("programming error: cannot find any KEY index columns in "+
 			"index %v from table %v", indexID, tableID))
 	}
@@ -792,7 +799,7 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	rowidToDrop *scpb.Column,
 ) {
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-		b, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
 	) {
 		return
 	}
@@ -925,6 +932,7 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 //   - There is no existing secondary index on the old primary key columns.
 func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	b BuildCtx,
+	n tree.NodeFormatter,
 	tbl *scpb.Table,
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
@@ -979,7 +987,14 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	alreadyHasSecondaryIndexOnPKColumns := func(
 		b BuildCtx, tableID catid.DescID, oldPrimaryIndexID catid.IndexID,
 	) (found bool) {
-		scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
+		// Rules on older versions do not deal with scenarios where we add a UNIQUE
+		// index and alter ALTER PRIMARY KEY. Versions before 25.2 will fail at
+		// planning, so return a not implemented error, which is safer.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) &&
+			!b.QueryByID(tableID).Filter(ghostElementFilter).FilterSecondaryIndex().IsEmpty() {
+			panic(scerrors.NotImplementedErrorf(n, "ghost secondary index elements found"))
+		}
+		scpb.ForEachSecondaryIndex(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
 			current scpb.Status, target scpb.TargetStatus, candidate *scpb.SecondaryIndex,
 		) {
 			if !mustRetrieveIndexElement(b, tableID, candidate.IndexID).IsUnique {
