@@ -32,7 +32,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 			b.MarkNameAsNonExistent(name)
 			continue
 		}
-		checkTableSchemaChangePrerequisites(b, elts, n)
+		maybeCleanupSchemaLocked := checkTableSchemaChangePrerequisites(b, elts, n)
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
 		name.ObjectNamePrefix = b.NamePrefix(tbl)
@@ -66,6 +66,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		b.LogEventForExistingTarget(tbl)
 		b.IncrementSubWorkID()
 		b.IncrementSchemaChangeDropCounter("table")
+		maybeCleanupSchemaLocked()
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, tableID := range toCheckBackrefs {
