@@ -365,6 +365,9 @@ func (mb *mutationBuilder) buildUpdate(
 	// This includes:
 	// - Columns needed for the initial fetch (SET/WHERE).
 	// - Columns read post-mutation (e.g., for RETURNING).
+	//
+	// These checks only matter if the target table has RLS enabled, so we gate
+	// the logic behind that for performance reasons.
 	includeSelectPolicies := false
 	if mb.tab.IsRowLevelSecurityEnabled() && colRefs != nil {
 		for _, colID := range mb.fetchColIDs {
