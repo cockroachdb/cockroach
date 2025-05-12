@@ -8,7 +8,6 @@ package kvserver
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -146,8 +145,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	shouldInitQuotaPool := false
 	if r.shMu.leaderID != lastLeaderID {
 		if r.replicaID == r.shMu.leaderID {
-			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
 			r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 			// We're the new leader but we only create the quota pool if it's enabled
@@ -163,7 +160,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			}
 		} else {
 			// We're becoming a follower.
-			r.mu.lastUpdateTimes = nil
 			r.mu.replicaFlowControlIntegration.onBecameFollower(ctx)
 			if r.mu.proposalQuota != nil {
 				// We unblock all ongoing and subsequent quota acquisition goroutines
