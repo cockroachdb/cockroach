@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -383,7 +384,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		PrevLeaseExpired:      status.IsExpired(),
 		NextLeaseHolder:       nextLeaseHolder,
 		BypassSafetyChecks:    bypassSafetyChecks,
-		DesiredLeaseType:      p.repl.desiredLeaseTypeRLocked(),
+		DesiredLeaseType:      p.repl.desiredLeaseType(p.repl.descRLocked()),
 	}
 	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
@@ -739,11 +740,18 @@ func (r *Replica) LeaseStatusAt(
 func (r *Replica) leaseStatusAtRLocked(
 	ctx context.Context, now hlc.ClockTimestamp,
 ) kvserverpb.LeaseStatus {
-	return r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
+	return r.leaseStatusForRequest(ctx, now, hlc.Timestamp{}, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 }
 
-func (r *Replica) leaseStatusForRequestRLocked(
-	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
+func (r *Replica) leaseStatusForRequest(
+	ctx context.Context,
+	now hlc.ClockTimestamp,
+	reqTS hlc.Timestamp,
+	minLeaseProposedTS hlc.ClockTimestamp,
+	minValidObservedTimestamp hlc.ClockTimestamp,
+	lease *roachpb.Lease,
+	basicStatus raft.BasicStatus,
 ) kvserverpb.LeaseStatus {
 	if reqTS.IsEmpty() {
 		// If the request timestamp is empty, return the status that
@@ -754,14 +762,14 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		LocalStoreID:       r.StoreID(),
 		MaxOffset:          r.Clock().MaxOffset(),
 		Now:                now,
-		MinProposedTs:      r.mu.minLeaseProposedTS,
-		MinValidObservedTs: r.mu.minValidObservedTimestamp,
+		MinProposedTs:      minLeaseProposedTS,
+		MinValidObservedTs: minValidObservedTimestamp,
 		RequestTs:          reqTS,
-		Lease:              r.shMu.state.Lease,
+		Lease:              lease,
 	}
 
 	if in.Lease.Type() == roachpb.LeaseLeader {
-		in.RaftStatus = r.raftBasicStatusRLocked()
+		in.RaftStatus = basicStatus
 	}
 	return leases.Status(ctx, r.store.cfg.NodeLiveness, in)
 }
@@ -785,7 +793,7 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 
 func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 	// TODO(nvanbenschoten): push a DesiredLeaseType option into leases.Settings.
-	desiredLeaseType := r.desiredLeaseTypeRLocked()
+	desiredLeaseType := r.desiredLeaseType(r.descRLocked())
 	return leases.Settings{
 		UseExpirationLeases:                       desiredLeaseType == roachpb.LeaseExpiration,
 		PreferLeaderLeasesOverEpochLeases:         desiredLeaseType == roachpb.LeaseLeader,
@@ -807,29 +815,29 @@ func (r *Replica) GetRangeLeaseDuration() time.Duration {
 	return r.store.cfg.RangeLeaseDuration
 }
 
-// requiresExpirationLeaseRLocked returns whether this range unconditionally
-// uses an expiration-based lease. Ranges located before or including the node
+// requiresExpirationLease returns whether this range unconditionally uses an
+// expiration-based lease. Ranges located before or including the node
 // liveness table must always use expiration leases to avoid circular
 // dependencies on the node liveness table. All other ranges typically use
 // epoch-based leases, but may temporarily use expiration based leases during
 // lease transfers.
 //
 // TODO(erikgrinaker): It isn't always clear when to use this and when to use
-// shouldUseExpirationLeaseRLocked. We can merge these once there are no more
-// callers: when expiration leases don't quiesce and are always eagerly renewed.
-func (r *Replica) requiresExpirationLeaseRLocked() bool {
+// shouldUseExpirationLease. We can merge these once there are no more callers:
+// when expiration leases don't quiesce and are always eagerly renewed.
+func (r *Replica) requiresExpirationLease(desc *roachpb.RangeDescriptor) bool {
 	return r.store.cfg.NodeLiveness == nil ||
-		r.shMu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+		desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
-// shouldUseExpirationLeaseRLocked returns true if this range should be using an
+// shouldUseExpirationLease returns true if this range should be using an
 // expiration-based lease.
 //
 // We use an expiration-based lease if the range requires one or if the
 // kv.expiration_leases_only.enabled setting is enabled and the number of ranges
 // (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
-func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	expirationLeaseRequired := r.requiresExpirationLeaseRLocked()
+func (r *Replica) shouldUseExpirationLease(desc *roachpb.RangeDescriptor) bool {
+	expirationLeaseRequired := r.requiresExpirationLease(desc)
 	expirationLeaseOnly := func() bool {
 		settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
 		maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
@@ -845,16 +853,16 @@ func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
 	return false
 }
 
-// desiredLeaseTypeRLocked returns the desired lease type for this replica.
-func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
-	if r.shouldUseExpirationLeaseRLocked() {
+// desiredLeaseType returns the desired lease type for this replica.
+func (r *Replica) desiredLeaseType(desc *roachpb.RangeDescriptor) roachpb.LeaseType {
+	if r.shouldUseExpirationLease(desc) {
 		return roachpb.LeaseExpiration
 	}
 
 	// If we're not using expiration leases, we need to decide between
 	// LeaderLeases and LeaseEpoch. We use LeaderLeases if the range is using the
 	// raft fortification protocol and the cluster setting is enabled.
-	raftFortificationEnabled := (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
+	raftFortificationEnabled := r.SupportFromEnabled(desc)
 	leaderLeasesEnabled := LeaderLeasesEnabled.Get(&r.store.ClusterSettings().SV)
 	if raftFortificationEnabled && leaderLeasesEnabled {
 		return roachpb.LeaseLeader
@@ -1061,7 +1069,7 @@ func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 	}
 }
 
-// checkRequestTimeRLocked checks that the provided request timestamp is not
+// checkRequestTime checks that the provided request timestamp is not
 // too far in the future. We define "too far" as a time that would require a
 // lease extension even if we were perfectly proactive about extending our
 // lease asynchronously to always ensure at least a "leaseRenewal" duration
@@ -1071,9 +1079,11 @@ func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 // This serves as a stricter version of a check that if we were to perform
 // a lease extension at now, the request would be contained within the new
 // lease's expiration (and stasis period).
-func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
+func (r *Replica) checkRequestTime(
+	now hlc.ClockTimestamp, reqTS hlc.Timestamp, desc *roachpb.RangeDescriptor,
+) error {
 	var leaseRenewal time.Duration
-	if r.desiredLeaseTypeRLocked() == roachpb.LeaseEpoch {
+	if r.desiredLeaseType(desc) == roachpb.LeaseEpoch {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
 	} else {
 		// TODO(mira): consider adding a RaftConfig.StoreLivenessDurations method
@@ -1128,18 +1138,23 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 func (r *Replica) leaseGoodToGoRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, error) {
-	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
-	err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	st := r.leaseStatusForRequest(ctx, now, reqTS, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
+	err := r.leaseGoodToGoForStatus(ctx, now, reqTS, st, r.descRLocked())
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
 	return st, err
 }
 
-func (r *Replica) leaseGoodToGoForStatusRLocked(
-	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp, st kvserverpb.LeaseStatus,
+func (r *Replica) leaseGoodToGoForStatus(
+	ctx context.Context,
+	now hlc.ClockTimestamp,
+	reqTS hlc.Timestamp,
+	st kvserverpb.LeaseStatus,
+	desc *roachpb.RangeDescriptor,
 ) error {
-	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
+	if err := r.checkRequestTime(now, reqTS, desc); err != nil {
 		// Case (1): invalid request.
 		return err
 	}
@@ -1149,7 +1164,7 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 	}
 	if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Case (3): not leaseholder.
-		_, stillMember := r.shMu.state.Desc.GetReplicaDescriptor(st.Lease.Replica.StoreID)
+		_, stillMember := desc.GetReplicaDescriptor(st.Lease.Replica.StoreID)
 		if !stillMember {
 			// This would be the situation in which the lease holder gets removed when
 			// holding the lease, or in which a lease request erroneously gets accepted
@@ -1188,7 +1203,7 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 		// Otherwise, if the lease is currently held by another replica, redirect
 		// to the holder.
 		return kvpb.NewNotLeaseHolderError(
-			st.Lease, r.store.StoreID(), r.descRLocked(), "lease held by different store",
+			st.Lease, r.store.StoreID(), desc, "lease held by different store",
 		)
 	}
 	// Case (4): all good.
@@ -1285,7 +1300,8 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			}
 
 			now := r.store.Clock().NowAsClockTimestamp()
-			status := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+			status := r.leaseStatusForRequest(ctx, now, reqTS, r.mu.minLeaseProposedTS,
+				r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
@@ -1375,7 +1391,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// assume that we have the lease. This is clearly not the case when
 		// waiting on a lease transfer and also not the case if our request
 		// timestamp is not covered by the new lease (though we try to protect
-		// against this in checkRequestTimeRLocked). So instead of assuming
+		// against this in checkRequestTime). So instead of assuming
 		// anything, we iterate and check again.
 		log.Eventf(ctx, "waiting for acquisition/transfer after status %+v", status)
 		pErr = func() (pErr *kvpb.Error) {
@@ -1565,7 +1581,7 @@ func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 }
 
 func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
-	return lease.Type() == r.desiredLeaseTypeRLocked()
+	return lease.Type() == r.desiredLeaseType(r.descRLocked())
 }
 
 // LeasePreferencesStatus represents the state of satisfying lease preferences.

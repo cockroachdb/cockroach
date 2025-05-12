@@ -2373,7 +2373,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(),
-		r.requiresExpirationLeaseRLocked(), now.ToTimestamp()) {
+		r.requiresExpirationLease(r.descRLocked()), now.ToTimestamp()) {
 		r.campaignLocked(ctx)
 	}
 }

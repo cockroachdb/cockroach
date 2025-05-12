@@ -1484,38 +1484,41 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.entireSpanExcludedFromBackupRLocked(ctx, sp)
+	return entireSpanExcludedFromBackup(ctx, sp, r.mu.conf.ExcludeDataFromBackup, r.mu.confSpan)
 }
 
-func (r *Replica) excludeReplicaFromBackupRLocked(ctx context.Context, rspan roachpb.RSpan) bool {
+func excludeReplicaFromBackup(
+	ctx context.Context, rspan roachpb.RSpan, excludeDataFromBackup bool, confSpan roachpb.Span,
+) bool {
 	// We ignore the error here to avoid failing requests that
 	// don't need to fail.
-	excluded, _ := r.entireSpanExcludedFromBackupRLocked(ctx, rspan.AsRawSpanWithNoLocals())
+	excluded, _ := entireSpanExcludedFromBackup(ctx, rspan.AsRawSpanWithNoLocals(),
+		excludeDataFromBackup, confSpan)
 	return excluded
 }
 
-// entireSpanExcludedFromBackupRLocked returns true if this replica
+// entireSpanExcludedFromBackup returns true if this replica
 // has ExcludeDataFromBackup set in its span configuration and that
 // span configuration covers the entire given span.
-func (r *Replica) entireSpanExcludedFromBackupRLocked(
-	ctx context.Context, sp roachpb.Span,
+func entireSpanExcludedFromBackup(
+	ctx context.Context, sp roachpb.Span, excludeDataFromBackup bool, confSpan roachpb.Span,
 ) (bool, error) {
-	if r.mu.conf.ExcludeDataFromBackup {
+	if excludeDataFromBackup {
 		// If ExcludeDataFromBackup is set, we also want to ensure that
 		// we only elide data if the span configuration we currently
 		// have actually contains the requested span.
-		if r.mu.confSpan.Equal(roachpb.Span{}) {
+		if confSpan.Equal(roachpb.Span{}) {
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
-		if !r.mu.confSpan.Contains(sp) {
+		if !confSpan.Contains(sp) {
 			log.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
 				sp,
-				r.mu.confSpan)
+				confSpan)
 
 			return false, nil
 		}
 	}
-	return r.mu.conf.ExcludeDataFromBackup, nil
+	return excludeDataFromBackup, nil
 }
 
 // Version returns the replica version.
@@ -1574,19 +1577,25 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	}
 }
 
-// getImpliedGCThresholdRLocked returns the gc threshold of the replica which
+// getImpliedGCThreshold returns the gc threshold of the replica which
 // should be used to determine the validity of commands. The returned timestamp
 // may be newer than the replica's true GC threshold if strict enforcement
 // is enabled and the TTL has passed. If this is an admin command or this range
 // opts out of strict GC enforcement (typically data outside the user keyspace),
 // we return the true GC threshold.
-func (r *Replica) getImpliedGCThresholdRLocked(
-	st kvserverpb.LeaseStatus, isAdmin bool,
+func (r *Replica) getImpliedGCThreshold(
+	st kvserverpb.LeaseStatus,
+	isAdmin bool,
+	spanConfigExplicitlySet bool,
+	ignoreStrictEnforcement bool,
+	gcThreshold hlc.Timestamp,
+	cachedProtectedTS cachedProtectedTimestampState,
+	confTTL time.Duration,
 ) hlc.Timestamp {
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
-		r.shouldIgnoreStrictGCEnforcementRLocked() {
-		return *r.shMu.state.GCThreshold
+		r.shouldIgnoreStrictGCEnforcement(spanConfigExplicitlySet, ignoreStrictEnforcement) {
+		return gcThreshold
 	}
 
 	// In order to make this check inexpensive, we keep a copy of the reading of
@@ -1597,26 +1606,26 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// has technically expired. Fortunately this strict enforcement is merely a
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
-	c := r.mu.cachedProtectedTS
-	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
-		return *r.shMu.state.GCThreshold
+	if st.State != kvserverpb.LeaseState_VALID ||
+		cachedProtectedTS.readAt.Less(st.Lease.Start.ToTimestamp()) {
+		return gcThreshold
 	}
 
-	gcTTL := r.mu.conf.TTL()
-	gcThreshold := gc.CalculateThreshold(c.readAt, gcTTL)
-	if !c.earliestProtectionTimestamp.IsEmpty() {
+	gcTTL := confTTL
+	newGCThreshold := gc.CalculateThreshold(cachedProtectedTS.readAt, gcTTL)
+	if !cachedProtectedTS.earliestProtectionTimestamp.IsEmpty() {
 		// We want to allow GC up to the timestamp preceding the earliest valid
 		// protection timestamp.
-		impliedGCThreshold := c.earliestProtectionTimestamp.Prev()
+		impliedGCThreshold := cachedProtectedTS.earliestProtectionTimestamp.Prev()
 		// If we have a protected timestamp record which precedes the gcThreshold,
 		// use the threshold it implies instead.
-		if impliedGCThreshold.Less(gcThreshold) {
-			gcThreshold = impliedGCThreshold
+		if impliedGCThreshold.Less(newGCThreshold) {
+			newGCThreshold = impliedGCThreshold
 		}
 	}
-	gcThreshold.Forward(*r.shMu.state.GCThreshold)
+	newGCThreshold.Forward(gcThreshold)
 
-	return gcThreshold
+	return newGCThreshold
 }
 
 func (r *Replica) isRangefeedEnabled() (ret bool) {
@@ -1633,8 +1642,10 @@ func (r *Replica) isRangefeedEnabledRLocked() (ret bool) {
 	return r.mu.conf.RangefeedEnabled
 }
 
-func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
-	if !r.mu.spanConfigExplicitlySet {
+func (r *Replica) shouldIgnoreStrictGCEnforcement(
+	spanConfigExplicitlySet bool, ignoreStrictEnforcement bool,
+) (ret bool) {
+	if !spanConfigExplicitlySet {
 		return true
 	}
 
@@ -1642,7 +1653,7 @@ func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
 		return true
 	}
 
-	return r.mu.conf.GCPolicy.IgnoreStrictEnforcement
+	return ignoreStrictEnforcement
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -1680,11 +1691,20 @@ func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
 // getReplicaDescriptorRLocked is like getReplicaDescriptor, but assumes that
 // r.mu is held for either reading or writing.
 func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, error) {
-	repDesc, ok := r.shMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
+	return getReplicaDescriptor(r.descRLocked(), r.RangeID, r.store.StoreID())
+}
+
+// getReplicaDescriptor is similar to getReplicaDescriptorRLocked but doesn't
+// require the caller to hold the replica mutex. It takes everything it needs
+// as a function argument.
+func getReplicaDescriptor(
+	desc *roachpb.RangeDescriptor, rangeID roachpb.RangeID, storeID roachpb.StoreID,
+) (roachpb.ReplicaDescriptor, error) {
+	repDesc, ok := desc.GetReplicaDescriptor(storeID)
 	if ok {
 		return repDesc, nil
 	}
-	return roachpb.ReplicaDescriptor{}, kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID())
+	return roachpb.ReplicaDescriptor{}, kvpb.NewRangeNotFoundError(rangeID, storeID)
 }
 
 func (r *Replica) getMergeCompleteCh() chan struct{} {
@@ -2072,9 +2092,6 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	// Has the replica been initialized?
 	// NB: this should have already been checked in Store.Send, so we don't need
 	// to handle this case particularly well, but if we do reach here (as some
@@ -2084,21 +2101,38 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
 	}
 
+	r.mu.RLock()
 	// Is the replica destroyed?
 	if _, err := r.isDestroyedRLocked(); err != nil {
+		r.mu.RUnlock()
 		return kvserverpb.LeaseStatus{}, err
 	}
+
+	// In order to reduce replica mutex contention, we take everything we need
+	// from the replica while we hold the RLock and then release it.
+	desc := r.descRLocked()
+	mergeInProgress := r.mergeInProgressRLocked()
+	mergeTxnID := r.mu.mergeTxnID
+	minLeaseProposedTS := r.mu.minLeaseProposedTS
+	minValidObservedTimestamp := r.mu.minValidObservedTimestamp
+	raftBasicStatus := r.raftBasicStatusRLocked()
+	lease := r.shMu.state.Lease
+	lai := r.shMu.state.LeaseAppliedIndex
+	closedTS := r.shMu.state.RaftClosedTimestamp
+	r.mu.RUnlock()
 
 	// Is the request fully contained in the range?
 	// NB: we only need to check that the request is in the Range's key bounds
 	// at evaluation time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	cachedClosedTimestampPolicy := *r.cachedClosedTimestampPolicy.Load()
+	if err := checkSpanInRange(ctx, rSpan, desc, lease, cachedClosedTimestampPolicy); err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	st, err := r.checkLeaseRLocked(ctx, ba)
+	st, err := r.checkLease(ctx, ba, desc, minLeaseProposedTS, minValidObservedTimestamp,
+		lease, raftBasicStatus, lai, closedTS)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -2108,14 +2142,24 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	// Tests such as TestClosedTimestampFrozenAfterSubsumption also rely on this late-checking of
 	// merges by checking for a NotLeaseholderError on replicas in a critical phase for certain
 	// requests.
-	if r.mergeInProgressRLocked() && g.HoldingLatches() {
+	if mergeInProgress && g.HoldingLatches() {
 		// We only check for a merge if we are holding latches. In practice,
 		// this means that any request where concurrency.shouldAcquireLatches()
 		// is false (e.g. RequestLeaseRequests) will not wait for a pending
 		// merge before executing and, as such, can execute while a range is in
 		// a merge's critical phase (i.e. while the RHS of the merge is
 		// subsumed).
-		if err := r.shouldWaitForPendingMergeRLocked(ctx, ba); err != nil {
+		//
+		// Note that we are not relying on r.mu synchronization here. On the
+		// RHS leaseholder that originally sees the Subsume, we hold latches
+		// across all keys[1a] while calling WatchForMerge[1b].
+		// When a new leaseholder steps up, it installs the merge watcher channel in
+		// leasePostApply, before the lease can be used to serve requests.
+		//
+		// [1a]: see batcheval.declareKeysSubsume.
+		// [1b]: see batcheval.Subsume.
+		// [2]: see leasePostApply.
+		if err := shouldWaitForPendingMerge(ctx, ba, desc, mergeInProgress, mergeTxnID); err != nil {
 			// TODO(nvanbenschoten): we should still be able to serve reads
 			// below the closed timestamp in this case.
 			return kvserverpb.LeaseStatus{}, err
@@ -2139,7 +2183,16 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	}
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	lease := r.shMu.state.Lease
+	spanConfExplicitlySet := r.mu.spanConfigExplicitlySet
+	ignoreStrictEnforcement := r.mu.conf.GCPolicy.IgnoreStrictEnforcement
+	gcThreshold := *r.shMu.state.GCThreshold
+	cachedProtectedTS := r.mu.cachedProtectedTS
+	confTTL := r.mu.conf.TTL()
+	desc := r.descRLocked()
+	confSpan := r.mu.confSpan
+	excludeDataFromBackup := r.mu.conf.ExcludeDataFromBackup
+	r.mu.RUnlock()
 
 	// Ensure the request is entirely contained within the range's key bounds
 	// (even) after the storage engine has been pinned by the iterator. Given we
@@ -2147,7 +2200,8 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// meaningful in the context of follower reads. This is because latches on
 	// followers don't provide the synchronization with concurrent splits like
 	// they do on leaseholders.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	cachedClosedTimestampPolicy := *r.cachedClosedTimestampPolicy.Load()
+	if err := checkSpanInRange(ctx, rSpan, desc, lease, cachedClosedTimestampPolicy); err != nil {
 		return err
 	}
 
@@ -2164,7 +2218,9 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// TODO(aayush): The above description intentionally omits some details, as
 	// they are going to be changed as part of
 	// https://github.com/cockroachdb/cockroach/issues/55293.
-	return r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
+	return r.checkTSAboveGCThreshold(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan,
+		spanConfExplicitlySet, ignoreStrictEnforcement, gcThreshold, cachedProtectedTS, confTTL,
+		desc, confSpan, excludeDataFromBackup)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -2182,12 +2238,20 @@ func (r *Replica) checkExecutionCanProceedRWOrAdmin(
 	return st, nil
 }
 
-// checkLeaseRLocked checks the provided batch against the GC
-// threshold and lease. A nil error indicates to go ahead with the batch, and
-// is accompanied either by a valid or zero lease status, the latter case
-// indicating that the request was permitted to bypass the lease check.
-func (r *Replica) checkLeaseRLocked(
-	ctx context.Context, ba *kvpb.BatchRequest,
+// checkLease checks the provided batch against the GC threshold and lease. A
+// nil error indicates to go ahead with the batch, and is accompanied either by
+// a valid or zero lease status, the latter case indicating that the request was
+// permitted to bypass the lease check.
+func (r *Replica) checkLease(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	desc *roachpb.RangeDescriptor,
+	minLeaseProposedTS hlc.ClockTimestamp,
+	minValidObservedTimestamp hlc.ClockTimestamp,
+	lease *roachpb.Lease,
+	basicStatus raft.BasicStatus,
+	lai kvpb.LeaseAppliedIndex,
+	raftClosed hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, error) {
 	now := r.Clock().NowAsClockTimestamp()
 	// If the request is a write or a consistent read, it requires the
@@ -2198,7 +2262,8 @@ func (r *Replica) checkLeaseRLocked(
 	// For INCONSISTENT requests (which are always pure reads), this coincides
 	// with the read timestamp.
 	reqTS := ba.WriteTimestamp()
-	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+	st := r.leaseStatusForRequest(ctx, now, reqTS, minLeaseProposedTS, minValidObservedTimestamp,
+		lease, basicStatus)
 
 	// Write commands that skip the lease check in practice are exactly
 	// RequestLease and TransferLease. Both use the provided previous lease for
@@ -2210,11 +2275,11 @@ func (r *Replica) checkLeaseRLocked(
 	// doesn't check the lease.
 	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != kvpb.INCONSISTENT {
 		// Check the lease.
-		err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+		err := r.leaseGoodToGoForStatus(ctx, now, reqTS, st, desc)
 		if err != nil {
 			// No valid lease, but if we can serve this request via follower reads,
 			// we may continue.
-			if !r.canServeFollowerReadRLocked(ctx, ba) {
+			if !r.canServeFollowerRead(ctx, ba, desc, lai, lease.Replica.NodeID, raftClosed) {
 				// If not, return the error.
 				return kvserverpb.LeaseStatus{}, err
 			}
@@ -2238,66 +2303,88 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	status := r.leaseStatusForRequestRLocked(ctx, now, ts)
+	status := r.leaseStatusForRequest(ctx, now, ts, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	} else if err := checkSpanInRange(ctx, rSpan, r.descRLocked(), r.shMu.state.Lease,
+		*r.cachedClosedTimestampPolicy.Load()); err != nil {
 		return err
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-	} else if err := r.checkTSAboveGCThresholdRLocked(ctx, ts, status, false /* isAdmin */, rSpan); err != nil {
+	} else if err := r.checkTSAboveGCThreshold(ctx, ts, status, false /* isAdmin */, rSpan,
+		r.mu.spanConfigExplicitlySet, r.mu.conf.GCPolicy.IgnoreStrictEnforcement,
+		*r.shMu.state.GCThreshold, r.mu.cachedProtectedTS, r.mu.conf.TTL(), r.descRLocked(),
+		r.mu.confSpan, r.mu.conf.ExcludeDataFromBackup); err != nil {
 		return err
 	}
 	return nil
 }
 
-// checkSpanInRangeRLocked returns an error if a request (identified by its
-// key span) can not be run on the replica.
-func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
-	desc := r.shMu.state.Desc
+// checkSpanInRange returns an error if a request (identified by its key span)
+// can not be run on the replica.
+func checkSpanInRange(
+	ctx context.Context,
+	rspan roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	lease *roachpb.Lease,
+	cachedClosedTimestampPolicy ctpb.RangeClosedTimestampPolicy,
+) error {
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, toClientClosedTsPolicy(closedTimestampPolicy(
-			desc, *r.cachedClosedTimestampPolicy.Load())))
+		lease, toClientClosedTsPolicy(closedTimestampPolicy(
+			desc, cachedClosedTimestampPolicy)))
 }
 
-// checkTSAboveGCThresholdRLocked returns an error if a request (identified by
+// checkTSAboveGCThreshold returns an error if a request (identified by
 // its read timestamp) wants to read below the range's GC threshold.
-func (r *Replica) checkTSAboveGCThresholdRLocked(
+func (r *Replica) checkTSAboveGCThreshold(
 	ctx context.Context,
 	ts hlc.Timestamp,
 	st kvserverpb.LeaseStatus,
 	isAdmin bool,
 	rspan roachpb.RSpan,
+	spanConfigExplicitlySet bool,
+	ignoreStrictEnforcement bool,
+	gcThreshold hlc.Timestamp,
+	cachedProtectedTS cachedProtectedTimestampState,
+	confTTL time.Duration,
+	desc *roachpb.RangeDescriptor,
+	confSpan roachpb.Span,
+	excludeDataFromBackup bool,
 ) error {
-	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
+	threshold := r.getImpliedGCThreshold(st, isAdmin, spanConfigExplicitlySet,
+		ignoreStrictEnforcement, gcThreshold, cachedProtectedTS, confTTL)
 	if threshold.Less(ts) {
 		return nil
 	}
-	desc := r.descRLocked()
 	return &kvpb.BatchTimestampBeforeGCError{
 		Timestamp:              ts,
 		Threshold:              threshold,
-		DataExcludedFromBackup: r.excludeReplicaFromBackupRLocked(ctx, rspan),
+		DataExcludedFromBackup: excludeReplicaFromBackup(ctx, rspan, excludeDataFromBackup, confSpan),
 		RangeID:                desc.RangeID,
 		StartKey:               desc.StartKey.AsRawKey(),
 		EndKey:                 desc.EndKey.AsRawKey(),
 	}
 }
 
-// shouldWaitForPendingMergeRLocked determines whether the given batch request
+// shouldWaitForPendingMerge determines whether the given batch request
 // should wait for an on-going merge to conclude before being allowed to proceed.
 // If not, an error is returned to prevent the request from proceeding until the
 // merge completes.
-func (r *Replica) shouldWaitForPendingMergeRLocked(
-	ctx context.Context, ba *kvpb.BatchRequest,
+func shouldWaitForPendingMerge(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	desc *roachpb.RangeDescriptor,
+	mergeInProgress bool,
+	mergeTxnID uuid.UUID,
 ) error {
-	if !r.mergeInProgressRLocked() {
-		log.Fatal(ctx, "programming error: shouldWaitForPendingMergeRLocked should"+
+	if !mergeInProgress {
+		log.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
 			" only be called when a range merge is in progress")
 		return nil
 	}
@@ -2375,9 +2462,8 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 	// refresh. Such an improvement would eliminate the need for this special
 	// case, but until we generalize the mechanism to prune refresh spans based
 	// on intent spans, we're forced to live with this.
-	if ba.Txn != nil && ba.Txn.ID == r.mu.mergeTxnID {
+	if ba.Txn != nil && ba.Txn.ID == mergeTxnID {
 		if ba.IsSingleRefreshRequest() {
-			desc := r.descRLocked()
 			descKey := keys.RangeDescriptorKey(desc.StartKey)
 			if ba.Requests[0].GetRefresh().Key.Equal(descKey) {
 				return nil
