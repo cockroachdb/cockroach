@@ -423,11 +423,14 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 func (s *state) AddNode() Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
+	mmAllocator := mma.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
+	sp, _ := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
 	node := &node{
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
 		stores:      []StoreID{},
-		mmAllocator: mma.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed))),
+		mmAllocator: mmAllocator,
+		storepool:   sp,
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -526,15 +529,23 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	}
 
 	node := s.nodes[nodeID]
+	sp := node.storepool
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
-	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
+	allocator := allocatorimpl.MakeAllocator(
+		cluster.MakeClusterSettings(),
+		sp.IsDeterministic(),
+		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
+		&allocator.TestingKnobs{
+			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+		},
+	)
 	store := &store{
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
 		storepool: sp,
-		settings:  st,
+		allocator: allocator,
 		replicas:  make(map[RangeID]ReplicaID),
 	}
 
@@ -1135,27 +1146,26 @@ func (s *state) Clock() timeutil.TimeSource {
 	return s.clock
 }
 
-// UpdateStorePool modifies the state of the StorePool for the Store with
-// ID StoreID.
+// UpdateStorePool modifies the state of the StorePool for the Node with
+// ID NodeID.
 func (s *state) UpdateStorePool(
-	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetailMu,
+	nodeID NodeID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetailMu,
 ) {
 	var storeIDs roachpb.StoreIDSlice
 	for storeIDA := range storeDescriptors {
 		storeIDs = append(storeIDs, storeIDA)
 	}
 	sort.Sort(storeIDs)
-	store := s.stores[storeID]
+	node := s.nodes[nodeID]
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := detail.Copy()
-		s.stores[storeID].storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
-		copiedDesc := *detail.Desc
-		copiedDetail.Desc = &copiedDesc
-		// TODO: Support origin timestamps.
+		node.storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
+		copiedDesc := *copiedDetail.Desc
+		// TODO(mma): Support origin timestamps.
 		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, s.clock.Now().UnixNano())
-		s.nodes[store.nodeID].mmAllocator.SetStore(copiedDesc)
-		s.nodes[store.nodeID].mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
+		node.mmAllocator.SetStore(copiedDesc)
+		node.mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
 	}
 }
 
@@ -1203,22 +1213,14 @@ func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	}
 }
 
-// MakeAllocator returns an allocator for the Store with ID StoreID, it
-// populates the storepool with the current state.
-func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
-	return allocatorimpl.MakeAllocator(
-		s.stores[storeID].settings,
-		s.stores[storeID].storepool.IsDeterministic(),
-		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
-		&allocator.TestingKnobs{
-			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
-		},
-	)
+// Allocator returns an allocator for the Store with ID StoreID.
+func (s *state) Allocator(storeID StoreID) allocatorimpl.Allocator {
+	return s.stores[storeID].allocator
 }
 
 // StorePool returns the store pool for the given storeID.
 func (s *state) StorePool(storeID StoreID) storepool.AllocatorStorePool {
-	return s.stores[storeID].storepool
+	return s.nodes[s.stores[storeID].nodeID].storepool
 }
 
 // LeaseHolderReplica returns the replica which holds a lease for the range
@@ -1403,8 +1405,10 @@ type node struct {
 	desc            roachpb.NodeDescriptor
 	cpuRateCapacity int64
 
-	stores      []StoreID
+	stores []StoreID
+
 	mmAllocator mma.Allocator
+	storepool   *storepool.StorePool
 }
 
 // NodeID returns the ID of this node.
@@ -1432,6 +1436,7 @@ type store struct {
 	nodeID  NodeID
 	desc    roachpb.StoreDescriptor
 
+	allocator allocatorimpl.Allocator
 	storepool *storepool.StorePool
 	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
