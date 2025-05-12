@@ -208,10 +208,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// We're still the leader.
 	// Find the minimum index that active followers have acknowledged.
-
-	// commitIndex is used to determine whether a newly added replica has fully
-	// caught up.
-	commitIndex := kvpb.RaftIndex(status.Commit)
 	// Initialize minIndex to the currently applied index. The below progress
 	// checks will only decrease the minIndex. Given that the quotaReleaseQueue
 	// cannot correspond to values beyond the applied index there's no reason
@@ -287,13 +283,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 		if progress.Match > 0 && kvpb.RaftIndex(progress.Match) < minIndex {
 			minIndex = kvpb.RaftIndex(progress.Match)
-		}
-		// If this is the most recently added replica, and it has caught up, clear
-		// our state that was tracking it. This is unrelated to managing proposal
-		// quota, but this is a convenient place to do so.
-		if rep.ReplicaID == r.mu.lastReplicaAdded && kvpb.RaftIndex(progress.Match) >= commitIndex {
-			r.mu.lastReplicaAdded = 0
-			r.mu.lastReplicaAddedTime = time.Time{}
 		}
 	})
 
