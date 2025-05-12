@@ -2442,6 +2442,20 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: distsender.rpc.err.exclusionviolationerrtype
+      exported_name: distsender_rpc_err_exclusionviolationerrtype
+      description: |
+        Number of ExclusionViolationErrType errors received replica-bound RPCs
+
+        This counts how often error of the specified type was received back from replicas
+        as part of executing possibly range-spanning requests. Failures to reach the target
+        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
+        errors as 'roachpb.InternalErrType'.
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.indeterminatecommiterrtype
       exported_name: distsender_rpc_err_indeterminatecommiterrtype
       description: |
@@ -9610,6 +9624,14 @@ layers:
     - name: txn.restarts.commitdeadlineexceeded
       exported_name: txn_restarts_commitdeadlineexceeded
       description: Number of restarts due to a transaction exceeding its deadline
+      y_axis_label: Restarted Transactions
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: txn.restarts.exclusionviolation
+      exported_name: txn_restarts_exclusionviolation
+      description: Number of restarts due to an exclusion violation
       y_axis_label: Restarted Transactions
       type: COUNTER
       unit: COUNT
