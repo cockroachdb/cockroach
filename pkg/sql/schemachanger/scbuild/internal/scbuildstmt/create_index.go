@@ -164,7 +164,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 		))
 	}
-	checkTableSchemaChangePrerequisites(b, relationElements, n)
+	defer checkTableSchemaChangePrerequisites(b, relationElements, n)()
 
 	if !n.Type.SupportsSharding() && n.Sharded != nil {
 		panic(pgerror.Newf(pgcode.InvalidSQLStatementName,

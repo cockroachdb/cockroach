@@ -1,5 +1,6 @@
 setup
-CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
+CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8);
+CREATE TABLE defaultdb.t1_locked(id INT8 PRIMARY KEY,  name VARCHAR(256), money INT8, INDEX money_index (money)) WITH (schema_locked=true);
 ----
 
 build
@@ -144,3 +145,10 @@ CREATE INDEX id4
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
+
+
+# Validates that IF NOT EXISTS operation correctly behaves as a no-op
+# on schema_locked tables.
+build
+CREATE INDEX IF NOT EXISTS money_index ON defaultdb.t1_locked(money)
+----
