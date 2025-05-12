@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -612,27 +610,8 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
-	// Guard against crashes in the formatting code in non-test builds (e.g.
-	// #143974). This is only possible because the code does not update shared
-	// state and does not manipulate locks.
-	if !buildutil.CrdbTestBuild {
-		defer func() {
-			if r := recover(); r != nil {
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					// We don't have an easy way to propagate this error out, so
-					// instead we'll write it into the buffer. This can lead to
-					// different unfortunate outcomes (like some queries failing
-					// because of incorrect serialized form, or misleading or
-					// confusing telemetry), yet it seems better than crashing
-					// the node altogether.
-					ctx.WriteString(e.Error())
-				} else {
-					panic(r)
-				}
-			}
-		}()
-	}
-
+	// TODO(yuzefovich): consider adding a panic-catcher here and propagating
+	// the caught panics as return parameters.
 	f := ctx.flags
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {

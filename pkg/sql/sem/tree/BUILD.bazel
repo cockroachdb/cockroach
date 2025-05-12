@@ -161,7 +161,6 @@ go_library(
         "//pkg/util/collatedstring",
         "//pkg/util/duration",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/intsets",
         "//pkg/util/ipaddr",
