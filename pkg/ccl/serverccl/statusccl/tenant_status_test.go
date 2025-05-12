@@ -51,7 +51,6 @@ func TestTenantStatusAPI(t *testing.T) {
 	defer s.Close(t)
 	defer s.SetupSingleFileLogging()()
 
-	skip.WithIssue(t, 146387)
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderRace(t, "expensive tests")
 
@@ -73,6 +72,10 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
+	// If we happen to enable buffered writes metamorphically, we must have the
+	// split lock reliability enabled (which can be tweaked metamorphically too,
+	// #146387).
+	tdb.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		skip.UnderDeadlockWithIssue(t, 99559)
@@ -884,7 +887,6 @@ WHERE tablename = 'test' AND indexname = $1`
 		requireAfter(t, &resp.Statistics[0].Statistics.Stats.LastRead, &timePreRead)
 		indexName := resp.Statistics[0].IndexName
 		createStmt := cluster.TenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
-		print(createStmt)
 		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
 	})
